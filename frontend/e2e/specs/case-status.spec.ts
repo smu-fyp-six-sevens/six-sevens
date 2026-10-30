@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
 import { makeCase, makeDocument, type CaseRow, type MockBackend } from '../support/mockBackend';
+import { REQUIRED_DOCUMENT_TYPES } from '../../src/services/uploadService/documentTypes';
 
 /**
  * Track case status (SCRUM-80): each case moves through clear stages, and every change is recorded and shown.
@@ -143,20 +144,23 @@ test.describe('Track case status @SCRUM-80', () => {
     await expect(progressCard(page).getByRole('button', { name: 'Finalise Case' })).toBeEnabled();
   });
 
-  test('a case missing a required document is incomplete and names what is missing @SCRUM-80', async ({ page, backend }) => {
-    // No documents on file, so every required checklist item is missing.
-    seedCase(backend, { status: 'documents_incomplete' });
+  test('a case that enforces the checklist is incomplete until every required document is approved @SCRUM-80', async ({ page, backend }) => {
+    // No documents approved, so every required checklist item is outstanding.
+    seedCase(backend, {
+      status: 'documents_incomplete',
+      checklist_enforced: true,
+      unapproved_requirements: REQUIRED_DOCUMENT_TYPES.map((requirement) => requirement.value),
+    });
     await page.goto('/cases/GLDB-1200');
 
     await expect(stageBadge(page)).toHaveText('Documents Incomplete');
     const next = progressCard(page).locator('.case-status-next');
-    await expect(next).toContainText('Every required document is mandatory: 11 out of 11 still missing.');
+    await expect(next).toContainText('Every required document must be approved: 11 out of 11 not yet approved.');
 
     // The analysis waits for the same documents.
     await page.goto('/cases/GLDB-1200?section=analysis');
-    await expect(page.locator('.summary-message')).toContainText('Every required document must be on file first: 11 out of 11 still missing.');
+    await expect(page.locator('.summary-message')).toContainText('Every required document must be approved first: 11 out of 11 not yet approved.');
   });
-
   test('a failed case says which step failed @SCRUM-80', async ({ page, backend }) => {
     seedCase(backend, { status: 'failed', failure: 'fraud_detection' });
     await page.goto('/cases/GLDB-1200');

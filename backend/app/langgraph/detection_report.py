@@ -1,5 +1,5 @@
 """
-Reading a stored detection report. Reports are JSON in langgraph_trace, so a reader gets every key it
+Reading a stored detection report. Reports are JSON in detection_results, so a reader gets every key it
 indexes, with a safe default when a report lacks one (a run that stopped partway, or a later schema change).
 """
 

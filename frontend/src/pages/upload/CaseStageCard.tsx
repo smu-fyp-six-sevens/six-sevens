@@ -51,9 +51,9 @@ function nextStep({ stage, failure, analysisRunning, findingsToReview, missingRe
       return { text: 'Extracted documents are waiting for you to approve or reject them.', link: { label: 'Review documents', section: 'documents' } };
     case 'documents_incomplete':
       return {
-        // Every required checklist document is mandatory; with none missing, every document was rejected.
+        // This case needs every required document approved; with none outstanding, every document was rejected.
         text: missingRequirements
-          ? `Every required document is mandatory: ${missingRequirementsText(missingRequirements)}.`
+          ? `Every required document must be approved: ${missingRequirementsText(missingRequirements)}.`
           : 'Every document was rejected. Upload new documents to continue.',
         link: { label: 'Upload documents', section: 'documents' },
       };
@@ -71,7 +71,7 @@ function nextStep({ stage, failure, analysisRunning, findingsToReview, missingRe
         link: { label: 'Evaluate findings', section: 'risk' },
       };
     case 'case_analysed':
-      return { text: 'Every finding is evaluated. Check the risk summary, then finalise the case.', link: { label: 'View risk summary', section: 'risk' } };
+      return { text: 'The case has been analysed. Check the risk summary, then finalise the case.', link: { label: 'View risk summary', section: 'risk' } };
     case 'finalised':
       return { text: 'This case is finalised and closed. It is view-only, so no further edits can be made.' };
     case 'failed':

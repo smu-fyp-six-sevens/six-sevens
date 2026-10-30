@@ -164,7 +164,7 @@ export function caseSectionStatuses({
   return { documents, approved, analysis, risk: riskStatus, additional };
 }
 
-// How many required checklist documents are still missing, out of all of them: "8 out of 11 still missing".
+// How many required checklist documents aren't approved yet, out of all of them: "8 out of 11 not yet approved".
 export function missingRequirementsText(missing: number): string {
-  return `${missing} out of ${REQUIRED_DOCUMENT_TYPES.length} still missing`;
+  return `${missing} out of ${REQUIRED_DOCUMENT_TYPES.length} not yet approved`;
 }

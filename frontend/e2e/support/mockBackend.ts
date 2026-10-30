@@ -88,9 +88,11 @@ export interface CaseRow {
   failure?: string | null;
   // While analysed: findings without the officer's verdict; finalising waits for 0.
   findings_to_review?: number | null;
-  submission_finalized: boolean;
-  finalized_at: string | null;
+  // Whether the case needs every required document approved before analysis (set when it is created).
+  checklist_enforced: boolean;
   missing_requirements: string[];
+  // What the analysis waits for: required items no approved document covers; empty unless checklist_enforced.
+  unapproved_requirements: string[];
   created_at: string;
   updated_at: string;
   dev: boolean;
@@ -177,9 +179,9 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
     greenlink_case_id: overrides.greenlink_case_id ?? `GLDB-${Math.floor(Math.random() * 9000) + 1000}`,
     company_name: 'Harbor Light Shipping Pte Ltd',
     status: 'open',
-    submission_finalized: false,
-    finalized_at: null,
+    checklist_enforced: false,
     missing_requirements: [],
+    unapproved_requirements: [],
     created_at: ISO,
     updated_at: ISO,
     dev: true,

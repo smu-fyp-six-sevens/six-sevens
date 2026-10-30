@@ -30,6 +30,8 @@ async def _record_run_audit(document_id: str, run: RunContext) -> None:
         document_id, "run_audit",
         model_calls=run.calls, call_ceiling=run.max_model_calls, output_repairs=run.repairs,
     )
+    # The end of the run: its steps are saved once, here.
+    await asyncio.to_thread(trace.flush, document_id)
 
 
 async def process_document(document_id: str) -> None:

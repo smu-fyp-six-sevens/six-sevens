@@ -279,8 +279,9 @@ class CaseRecord(BaseModel):
     company_name: str | None = None
     # Validated, so the default is stored as its value too.
     status: CaseStage = Field(default=CaseStage.OPEN, validate_default=True)
-    submission_finalized: bool = False
-    finalized_at: datetime | None = None
+    # Whether every required checklist document must be approved before the case can be analysed. Set once, when the
+    # case is created, from that environment's REQUIRE_COMPLETE_CHECKLIST, so every environment judges it the same way.
+    checklist_enforced: bool = False
     # The list of documents to request, read from the recommended_additional_documents column (see the validator); only the case summary returns it.
     additional_documents: AdditionalDocuments | None = Field(default=None, exclude=True)
     created_at: datetime
@@ -523,6 +524,9 @@ class CaseSummary(CaseRecord):
     fulfilled_requirements: list[str] = Field(default_factory=list)
     # The checklist requirements no accepted document has fulfilled yet.
     missing_requirements: list[str] = Field(default_factory=list)
+    # What the case analysis waits for: required items no approved document covers. Always empty for a case that
+    # doesn't enforce the checklist (checklist_enforced).
+    unapproved_requirements: list[str] = Field(default_factory=list)
     proof_of_address_coverage: ProofOfAddressCoverage = Field(
         default_factory=lambda: ProofOfAddressCoverage(covered=0, total=0)
     )
@@ -602,10 +606,10 @@ MAX_COMPANY_NAME_LENGTH = 100
 class UpdateCaseRequest(BaseModel):
     """
     A loan officer updating the case's own identifying details. Only
-    company_name is officer-editable today — status, submission_finalized
-    and greenlink_case_id are system-managed (see case_service.py /
-    case_repository.set_submission_finalized) and deliberately excluded
-    here so they can't be overwritten through this endpoint.
+    company_name is officer-editable today — status, checklist_enforced
+    and greenlink_case_id are system-managed (see case_stage.py /
+    case_service.create_case) and deliberately excluded here so they
+    can't be overwritten through this endpoint.
     """
 
     company_name: str
@@ -949,12 +953,13 @@ def counts_towards_checklist(document: DocumentRecord) -> bool:
     addresses (case_service.compute_requirement_coverage, mapper.py). Same
     bar as approval for the type: routing_status alone isn't enough, since
     an officer's "Save fields" flips it to ACCEPTED without confirming the
-    type. A rejected document never counts, nor does a failed one: an officer's type pick
-    is recorded before its extraction rerun, so a rerun that fails (or a document the
-    content guard stopped) would otherwise keep the checklist item ticked.
+    type. A rejected or cancelled document never counts, nor does a failed one: an officer's
+    type pick is recorded before its extraction rerun, so a rerun that fails (or a document
+    the content guard stopped, or one cancelled midway) would otherwise keep the checklist
+    item ticked.
     """
     return (
         document.routing_status == RoutingStatus.ACCEPTED
-        and document.status not in (DocumentStatus.REJECTED, DocumentStatus.FAILED)
+        and document.status not in (DocumentStatus.REJECTED, DocumentStatus.FAILED, DocumentStatus.CANCELLED)
         and is_classification_confirmed(document)
     )

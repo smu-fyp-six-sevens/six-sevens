@@ -10,7 +10,7 @@ from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import fetch_all, row as _row
 
 
-def create_case(company_name: str | None = None) -> CaseRecord:
+def create_case(company_name: str | None = None, *, checklist_enforced: bool = False) -> CaseRecord:
     now = datetime.now(timezone.utc)
 
     # greenlink_case_id is intentionally omitted — it's assigned by a DB
@@ -20,7 +20,7 @@ def create_case(company_name: str | None = None) -> CaseRecord:
         "id": str(uuid.uuid4()),
         "company_name": company_name,
         "status": "open",
-        "submission_finalized": False,
+        "checklist_enforced": checklist_enforced,
         "recommended_additional_documents": [],
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
@@ -154,21 +154,6 @@ def set_recommended_additional_documents(case_id: str, additional: AdditionalDoc
     """Stores the latest complete analysis's whole list of documents to request on the case (jsonb); [] clears it."""
     value = additional.model_dump(mode="json") if additional else []
     supabase_client.table("cases").update({"recommended_additional_documents": value}).eq("id", case_id).execute()
-
-
-def set_submission_finalized(case_id: str, finalized: bool) -> None:
-    """
-    Kept in sync with actual requirement coverage rather than being a
-    one-way, officer-triggered action — see case_service.sync_submission_finalized,
-    called right after every classification result is recorded. Reversible:
-    if a later reclassification (e.g. via the /retry endpoint) drops
-    coverage back below 100%, this flips back to False/None automatically.
-    """
-    update = {
-        "submission_finalized": finalized,
-        "finalized_at": datetime.now(timezone.utc).isoformat() if finalized else None,
-    }
-    supabase_client.table("cases").update(update).eq("id", case_id).execute()
 
 
 def set_status(case_id: str, expected: str, status: str) -> bool:

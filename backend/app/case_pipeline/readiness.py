@@ -1,11 +1,13 @@
 """
-Per-case analysis (cross-document validation and the risk outlook), run on
-demand by an officer. See CROSS_DOCUMENT_AND_RISK_PLAN.md.
+When a case can be analysed: every approved document scanned, and, for a case that enforces the checklist,
+every required document approved. See CROSS_DOCUMENT_AND_RISK_PLAN.md.
 """
 
 from __future__ import annotations
 
-from ..models import APPROVED_STATUSES, DocumentRecord, DocumentStatus
+from ..mapper import compute_requirement_coverage
+from ..models import APPROVED_STATUSES, CaseRecord, DocumentRecord, DocumentStatus
+
 
 def is_ready_for_analysis(documents: list[DocumentRecord]) -> bool:
     """
@@ -16,3 +18,15 @@ def is_ready_for_analysis(documents: list[DocumentRecord]) -> bool:
     """
     approved = [d for d in documents if d.status in APPROVED_STATUSES]
     return bool(approved) and all(d.status == DocumentStatus.DETECTED for d in approved)
+
+
+def unapproved_requirements(case: CaseRecord, documents: list[DocumentRecord]) -> list[str]:
+    """
+    The required checklist items no approved document covers, in checklist order: what the case analysis waits
+    for. Only approved documents count, since only they are analysed; one uploaded but not yet approved doesn't.
+    Empty when the case doesn't enforce the checklist (cases.checklist_enforced). `documents` must carry their
+    extracted fields: proof of address and ID coverage are matched by name.
+    """
+    if not case.checklist_enforced:
+        return []
+    return compute_requirement_coverage([d for d in documents if d.status in APPROVED_STATUSES])[1]

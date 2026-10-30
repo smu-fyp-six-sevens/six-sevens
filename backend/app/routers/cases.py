@@ -269,8 +269,9 @@ async def download_case_report(case_id: str) -> Response:
 async def run_case_analysis(case_id: str, case: CaseRecord = Depends(get_editable_case_or_404)) -> CaseAnalysis:
     """
     Starts the per-case analysis (cross-document findings, risk outlook and
-    summary) in the background. Only once every required checklist document
-    is on file and every approved document has been scanned; poll
+    summary) in the background. Only once every approved document has been
+    scanned and, for a case that enforces the checklist, every required
+    document has been approved; poll
     GET .../analysis, or watch the case snapshot, for the result.
     """
     try:
@@ -282,7 +283,7 @@ async def run_case_analysis(case_id: str, case: CaseRecord = Depends(get_editabl
     except analysis_service.RequiredDocumentsMissing as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Every required document must be on file before the case can be analysed. Missing: "
+            detail="Every required document must be approved before the case can be analysed. Not yet approved: "
             + ", ".join(requirement_label(code) for code in exc.missing) + ".",
         ) from exc
     except analysis_service.AnalysisNotReady as exc:

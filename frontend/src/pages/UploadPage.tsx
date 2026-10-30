@@ -38,7 +38,6 @@ import {
   MAX_COMPANY_NAME_LENGTH,
 } from '../utils/caseValidation';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { REQUIRED_DOCUMENT_TYPES } from '../services/uploadService';
 
 
 const NAV_COLLAPSED_KEY = 'caseNav.collapsed';
@@ -68,6 +67,7 @@ export default function UploadPage({
   const {
     setDocumentDetails,
     fulfilledRequirements,
+    unapprovedRequirements,
     proofOfAddressCoverage,
     idDocumentCoverage,
     risk,
@@ -118,11 +118,8 @@ export default function UploadPage({
   const currentStage = snapshotLoaded ? stage : selectedCase.caseStatus;
   const isFinalised = currentStage === 'finalised';
 
-  // Every required checklist document is mandatory: the stage and the analysis wait for these.
-  const missingRequirements = useMemo(
-    () => REQUIRED_DOCUMENT_TYPES.filter((requirement) => !fulfilledRequirements.has(requirement.value)).length,
-    [fulfilledRequirements],
-  );
+  // For a case that enforces the checklist, the stage and the analysis wait for these to be approved.
+  const missingRequirements = unapprovedRequirements.length;
 
   const liveDocumentIds = useMemo(
     () => (snapshotLoaded ? new Set(documents.map((document) => document.id)) : null),

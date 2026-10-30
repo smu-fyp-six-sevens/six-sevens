@@ -46,7 +46,10 @@ from ...run_context import spend_model_call
 from ..detection_report import SCHEMA_VERSION
 from .specialists import SEVERITIES, SPECIALISTS, document_side, run_specialist, today_in_singapore
 from .. import trace
-from ... import document_repository, extracted_fields_repository, finding_reviews_repository, flags_repository, telemetry
+from ... import (
+    detection_results, document_repository, extracted_fields_repository, finding_reviews_repository, flags_repository,
+    telemetry,
+)
 from ...config import settings
 
 T = TypeVar("T", bound=BaseModel)
@@ -549,10 +552,7 @@ async def synthesize_node(state: DetectionState) -> dict:
         "Document %s: detection done — verdict %s, %d finding(s)",
         state["document_id"], result["verdict"], len(result["findings"]),
     )
-    trace.record(
-        state["document_id"], "detection_done",
-        detection_verdict=result["verdict"], detection_report=result,
-    )
+    trace.record(state["document_id"], "detection_done", detection_verdict=result["verdict"])
     return {"result": result}
 
 
@@ -589,7 +589,7 @@ def get_detection_graph():
 
 
 async def _store_flags(document_id: str, case_id: str | None, report: dict) -> None:
-    """The report in the trace is the source of truth, so a failure here is recorded, not raised."""
+    """The saved report (detection_results) is the source of truth, so a failure here is recorded, not raised."""
     try:
         count = await asyncio.to_thread(flags_repository.replace_for_document, document_id, case_id, report["findings"])
         logger.info("Document %s: %d flag(s) stored", document_id, count)
@@ -612,8 +612,9 @@ async def run_detection(document_id: str) -> dict:
 async def _run_detection(document_id: str) -> dict:
     logger.info("Document %s: detection run starting", document_id)
     await asyncio.to_thread(trace.resume, document_id)
+    trace.record(document_id, "detection_start")
     # Clears an error left by an earlier failed attempt, so a retry doesn't read as failed while running.
-    trace.record(document_id, "detection_start", detection_error=None)
+    await asyncio.to_thread(detection_results.mark_started, document_id)
     # Live in the documents table too, not just the trace, so "Scanning" is a real DB-backed status
     # rather than inferred from the absence of a report (which looked identical to a lost/crashed run).
     await asyncio.to_thread(document_repository.mark_detecting, document_id)
@@ -632,9 +633,11 @@ async def _run_detection(document_id: str) -> dict:
             # "crashed" apart from "never run" instead of both looking like a
             # silent 404 forever — see routers/detection.py.
             logger.exception("Detection graph run failed for document %s", document_id)
-            trace.record(document_id, "detection_error", error=f"{type(exc).__name__}: {exc}")
+            error = f"{type(exc).__name__}: {exc}"
+            trace.record(document_id, "detection_error", error=error)
             _record_run_audit(document_id)
             # Saved before the status changes, so the case's stage (case_stage.py) sees the failure.
+            await asyncio.to_thread(detection_results.save_error, document_id, error)
             await asyncio.to_thread(trace.flush, document_id)
             await asyncio.to_thread(document_repository.revert_to_approved, document_id)
             raise
@@ -642,6 +645,7 @@ async def _run_detection(document_id: str) -> dict:
         span.set_attribute("verdict", result["verdict"])
         span.set_attribute("finding_count", len(result["findings"]))
         # The report must be saved before the status says "detected", or a snapshot can show detected with no report.
+        await asyncio.to_thread(detection_results.save_report, document_id, result)
         await asyncio.to_thread(trace.flush, document_id)
         await _store_flags(document_id, final.get("case_id"), result)
         await asyncio.to_thread(document_repository.mark_detected, document_id)

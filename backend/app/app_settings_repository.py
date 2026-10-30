@@ -1,10 +1,11 @@
 """
-The `app_settings` table (backend/sql/app_settings.sql): app-wide switches an admin sets on the Settings page,
+The `app_settings` table (backend/sql/0001_schema.sql): app-wide switches an admin sets on the Settings page,
 one row per key with a JSON value.
 
-finding_reviews_enabled: whether loan officers review detection findings. Off, nobody sees the review controls
-or the precision and recall they give, and the review endpoints refuse (routers/finding_reviews.py). On by
-default, and while the table hasn't been created yet, so a deployment without it behaves as it always has.
+finding_reviews_enabled: whether loan officers review detection findings. On, an analysed case's findings must all
+be reviewed before it can be finalised (case_stage.analysis_stage). Off, nobody sees the review controls or the
+precision and recall they give, the review endpoints refuse (routers/finding_reviews.py), and an analysed case can
+be finalised straight away. On by default, and when the table can't be read.
 """
 
 from __future__ import annotations

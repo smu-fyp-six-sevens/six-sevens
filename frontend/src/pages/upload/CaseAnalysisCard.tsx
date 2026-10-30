@@ -145,7 +145,7 @@ export function CaseAnalysisCard({
             <strong>Not ready yet.</strong>
             <p>
               {missingRequirements
-                ? `Every required document must be on file first: ${missingRequirementsText(missingRequirements)}.`
+                ? `Every required document must be approved first: ${missingRequirementsText(missingRequirements)}.`
                 : 'The analysis can be run once every approved document has been scanned.'}
             </p>
           </div>

@@ -38,6 +38,7 @@ export type CaseRequirementCoverage = Pick<
   Schemas['CaseSummary'],
   | 'fulfilled_requirements'
   | 'missing_requirements'
+  | 'unapproved_requirements'
   | 'proof_of_address_coverage'
   | 'id_document_coverage'
   | 'additional_documents'

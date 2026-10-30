@@ -23,6 +23,8 @@ import { acceptedIdentityNames } from './uploadHelpers';
 export function useCaseSnapshot(caseId: string) {
   const [documentDetails, setDocumentDetails] = useState<Map<string, DocumentRecord>>(new Map());
   const [fulfilledRequirements, setFulfilledRequirements] = useState<Set<string>>(new Set());
+  // What the case analysis waits for: required items no approved document covers (empty unless the case enforces it).
+  const [unapprovedRequirements, setUnapprovedRequirements] = useState<string[]>([]);
   const [proofOfAddressCoverage, setProofOfAddressCoverage] = useState<{
     covered: number;
     total: number;
@@ -107,6 +109,7 @@ export function useCaseSnapshot(caseId: string) {
           new Map((caseMatch?.documents ?? []).map((match) => [match.document_id, match])),
         );
         setFulfilledRequirements(new Set(caseSummary.fulfilled_requirements));
+        setUnapprovedRequirements(caseSummary.unapproved_requirements ?? []);
         setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
         setIdDocumentCoverage(caseSummary.id_document_coverage);
         setRisk(caseSummary.risk ?? null);
@@ -177,6 +180,7 @@ export function useCaseSnapshot(caseId: string) {
     documentDetails,
     setDocumentDetails,
     fulfilledRequirements,
+    unapprovedRequirements,
     proofOfAddressCoverage,
     idDocumentCoverage,
     risk,

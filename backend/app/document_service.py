@@ -202,12 +202,7 @@ def field_changes(before: dict[str, object], after: dict[str, object]) -> list[d
 
 
 async def _resync_case(case_id: str) -> None:
-    """Persists submission_finalized and the stage, and pushes a snapshot, for any change to a case's document set.
-    Never raises."""
-    try:
-        await asyncio.to_thread(case_service.sync_submission_finalized, case_id)
-    except Exception:
-        logger.exception("Failed to resync submission_finalized for case %s", case_id)
+    """Updates the stage and pushes a snapshot, for any change to a case's document set. Never raises."""
     try:
         await asyncio.to_thread(case_stage.sync_case_stage, case_id)
     except Exception:

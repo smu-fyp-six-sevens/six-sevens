@@ -9,18 +9,8 @@ TEST_USER = "test-user"  # who the bypassed login says is acting
 
 
 @pytest.fixture(autouse=True)
-def _reset_case_sync_memo():
-    """case_service remembers the last submission_finalized it wrote per case; tests reuse case ids."""
-    from app import case_service
-
-    case_service._synced_finalized.clear()
-    yield
-    case_service._synced_finalized.clear()
-
-
-@pytest.fixture(autouse=True)
 def _sync_case_immediately(monkeypatch: pytest.MonkeyPatch):
-    """document_repository batches the case flag refresh in production; tests expect it after each write."""
+    """document_repository batches the case stage refresh in production; tests expect it after each write."""
     from app import document_repository
 
     monkeypatch.setattr(document_repository, "SYNC_DEBOUNCE_SECONDS", 0)

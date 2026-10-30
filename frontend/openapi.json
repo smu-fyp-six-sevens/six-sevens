@@ -1869,6 +1869,11 @@
       "CaseListItem": {
         "description": "One row of the case queue: only what the list shows, so it needs no extracted fields.",
         "properties": {
+          "checklist_enforced": {
+            "default": false,
+            "title": "Checklist Enforced",
+            "type": "boolean"
+          },
           "company_name": {
             "anyOf": [
               {
@@ -1905,18 +1910,6 @@
           },
           "documents_status": {
             "$ref": "#/components/schemas/CaseDocumentsStatus"
-          },
-          "finalized_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finalized At"
           },
           "flags": {
             "items": {
@@ -1972,11 +1965,6 @@
             "$ref": "#/components/schemas/CaseStage",
             "default": "open"
           },
-          "submission_finalized": {
-            "default": false,
-            "title": "Submission Finalized",
-            "type": "boolean"
-          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -1988,8 +1976,7 @@
           "greenlink_case_id",
           "company_name",
           "status",
-          "submission_finalized",
-          "finalized_at",
+          "checklist_enforced",
           "created_at",
           "updated_at",
           "documents_status",
@@ -2155,6 +2142,11 @@
       },
       "CaseRecord": {
         "properties": {
+          "checklist_enforced": {
+            "default": false,
+            "title": "Checklist Enforced",
+            "type": "boolean"
+          },
           "company_name": {
             "anyOf": [
               {
@@ -2171,18 +2163,6 @@
             "title": "Created At",
             "type": "string"
           },
-          "finalized_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finalized At"
-          },
           "greenlink_case_id": {
             "title": "Greenlink Case Id",
             "type": "string"
@@ -2195,11 +2175,6 @@
             "$ref": "#/components/schemas/CaseStage",
             "default": "open"
           },
-          "submission_finalized": {
-            "default": false,
-            "title": "Submission Finalized",
-            "type": "boolean"
-          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -2211,8 +2186,7 @@
           "greenlink_case_id",
           "company_name",
           "status",
-          "submission_finalized",
-          "finalized_at",
+          "checklist_enforced",
           "created_at",
           "updated_at"
         ],
@@ -2431,6 +2405,11 @@
             "title": "Analysis Ready",
             "type": "boolean"
           },
+          "checklist_enforced": {
+            "default": false,
+            "title": "Checklist Enforced",
+            "type": "boolean"
+          },
           "company_name": {
             "anyOf": [
               {
@@ -2459,18 +2438,6 @@
                 "type": "null"
               }
             ]
-          },
-          "finalized_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finalized At"
           },
           "findings_to_review": {
             "anyOf": [
@@ -2532,10 +2499,12 @@
             "title": "Status History",
             "type": "array"
           },
-          "submission_finalized": {
-            "default": false,
-            "title": "Submission Finalized",
-            "type": "boolean"
+          "unapproved_requirements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unapproved Requirements",
+            "type": "array"
           },
           "updated_at": {
             "format": "date-time",
@@ -2548,14 +2517,14 @@
           "greenlink_case_id",
           "company_name",
           "status",
-          "submission_finalized",
-          "finalized_at",
+          "checklist_enforced",
           "additional_documents",
           "created_at",
           "updated_at",
           "documents_status",
           "fulfilled_requirements",
           "missing_requirements",
+          "unapproved_requirements",
           "proof_of_address_coverage",
           "id_document_coverage",
           "risk",
@@ -7176,7 +7145,7 @@
         "type": "object"
       },
       "UpdateCaseRequest": {
-        "description": "A loan officer updating the case's own identifying details. Only\ncompany_name is officer-editable today \u2014 status, submission_finalized\nand greenlink_case_id are system-managed (see case_service.py /\ncase_repository.set_submission_finalized) and deliberately excluded\nhere so they can't be overwritten through this endpoint.",
+        "description": "A loan officer updating the case's own identifying details. Only\ncompany_name is officer-editable today \u2014 status, checklist_enforced\nand greenlink_case_id are system-managed (see case_stage.py /\ncase_service.create_case) and deliberately excluded here so they\ncan't be overwritten through this endpoint.",
         "properties": {
           "company_name": {
             "title": "Company Name",
@@ -8336,7 +8305,7 @@
     },
     "/cases/{case_id}/analysis/run": {
       "post": {
-        "description": "Starts the per-case analysis (cross-document findings, risk outlook and\nsummary) in the background. Only once every required checklist document\nis on file and every approved document has been scanned; poll\nGET .../analysis, or watch the case snapshot, for the result.",
+        "description": "Starts the per-case analysis (cross-document findings, risk outlook and\nsummary) in the background. Only once every approved document has been\nscanned and, for a case that enforces the checklist, every required\ndocument has been approved; poll\nGET .../analysis, or watch the case snapshot, for the result.",
         "operationId": "run_case_analysis_cases__case_id__analysis_run_post",
         "parameters": [
           {
@@ -8580,70 +8549,6 @@
         "summary": "Get Case Match",
         "tags": [
           "cases"
-        ]
-      }
-    },
-    "/cases/{case_id}/detection/reports": {
-      "get": {
-        "description": "Every stored detection report for a case's documents, for one combined view.",
-        "operationId": "get_case_detection_reports_cases__case_id__detection_reports_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "case_id",
-            "required": true,
-            "schema": {
-              "title": "Case Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  "title": "Response Get Case Detection Reports Cases  Case Id  Detection Reports Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Case Detection Reports",
-        "tags": [
-          "detection"
         ]
       }
     },

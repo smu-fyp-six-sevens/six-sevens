@@ -191,9 +191,9 @@ async def record_classification_result(document_id: str, classification: dict, g
     own needs_manual_review flag is OR'd in as an extra signal, and so is any
     content guard risk above none (hidden text, or instruction wording anywhere
     that didn't block the document), whatever the classifier was told.
-    document_repository.record_classification resyncs the case's
-    submission_finalized flag itself, since this is where a document's
-    fulfilled_requirements (and so the case's coverage) first changes.
+    document_repository.record_classification resyncs the case's stage
+    itself, since this is where a document's fulfilled_requirements (and so
+    the case's coverage) first changes.
 
     Extraction always runs after this. A genuinely typeless response is
     normalised to "unrecognised" (general field list). A *named* but

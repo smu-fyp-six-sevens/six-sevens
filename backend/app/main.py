@@ -122,12 +122,13 @@ async def count_queries(request: Request, call_next):
     request_id.set(request.headers.get("x-request-id"))
     started = time.perf_counter()
     status_code = 500
+    synced_cases = document_repository.track_request_syncs()
     try:
         with query_stats.scope(f"{request.method} {query_stats.label_path(request.url.path)}"):
             response = await call_next(request)
             # A push's work runs inside its request, so this also covers the workers.
-            if document_repository.has_pending_syncs():
-                await asyncio.to_thread(document_repository.flush_pending_syncs)
+            if synced_cases:
+                await asyncio.to_thread(document_repository.flush_syncs, synced_cases)
         status_code = response.status_code
         return response
     finally:
@@ -168,7 +169,6 @@ if "api" in ROLES:
     app.include_router(documents.router, dependencies=_protected)
     app.include_router(monitoring.router, dependencies=_protected)
     app.include_router(detection.router, dependencies=_protected)
-    app.include_router(detection.cases_router, dependencies=_protected)
     app.include_router(notes.router, dependencies=_protected)
     app.include_router(finding_reviews.router, dependencies=_protected)
     app.include_router(settings_router.router, dependencies=_protected)

@@ -8,9 +8,11 @@ from collections import Counter, defaultdict
 from typing import Any, Literal
 
 from . import (
+    app_settings_repository,
     audit,
     case_repository,
     case_stage,
+    detection_results,
     document_repository,
     extracted_fields_repository,
     finding_reviews_repository,
@@ -19,9 +21,9 @@ from . import (
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
 from .case_pipeline import repository as analysis_repository, state as analysis_state
 from .case_pipeline.models import CaseAnalysis
-from .case_pipeline.readiness import is_ready_for_analysis
+from .case_pipeline.readiness import is_ready_for_analysis, unapproved_requirements
 from .case_pipeline.risk import store as risk_store
-from .langgraph import trace as langgraph_trace
+from .config import settings
 from .langgraph.extraction_prompts import EXTRACTION_SCHEMAS
 
 from .mapper import (
@@ -89,7 +91,7 @@ def is_case_finalised(case_id: str) -> bool:
 
 
 def create_case(company_name: str | None = None, created_by: str = case_stage.SYSTEM) -> CaseRecord:
-    case = case_repository.create_case(company_name)
+    case = case_repository.create_case(company_name, checklist_enforced=settings.REQUIRE_COMPLETE_CHECKLIST)
     case_stage.record_created(case, created_by)
     return case
 
@@ -108,44 +110,17 @@ def delete_case(case_id: str) -> None:
     documents = document_repository.list_documents(case_id=case_id, include_fields=False)
     document_repository.remove_documents(documents)
     case_repository.delete_case(case_id)
-    _synced_finalized.pop(case_id, None)
-
-
-# The value last written per case by this process, so an unchanged flag costs no write (and no
-# Realtime event, and doesn't restamp finalized_at). Only ever a shortcut: a miss just writes.
-_synced_finalized: dict[str, bool] = {}
-
-
-def sync_submission_finalized(case_id: str) -> None:
-    """
-    Persists whether this case's requirement checklist is currently fully
-    satisfied. Called right after every classification result is recorded
-    (a document's first classification, or a /retry reclassification —
-    either can change coverage), rather than only computing this at read
-    time like documents_status. Reversible by design: recomputes from
-    scratch every call, so if coverage has dropped back below 100% since
-    it was last synced (e.g. a retry reclassifies a document away from a
-    requirement nothing else covers), this correctly flips back to
-    False/None rather than leaving a stale True in place.
-    """
-    documents = document_repository.list_documents(case_id=case_id)
-    _, missing = compute_requirement_coverage(documents)
-    finalized = not missing
-    if _synced_finalized.get(case_id) == finalized:
-        return
-    case_repository.set_submission_finalized(case_id, finalized=finalized)
-    _synced_finalized[case_id] = finalized
 
 
 # (reports by document_id, ids whose last detection run failed) — see
-# langgraph_trace.get_detection_states.
+# detection_results.get_states.
 DetectionStates = tuple[dict[str, dict[str, Any]], set[str]]
 
 
 def _load_detection_states(documents: list[DocumentRecord], *, slim: bool = False) -> DetectionStates | None:
     """None when the trace table can't be read — the case still loads, without detection states."""
     try:
-        return langgraph_trace.get_detection_states([document.id for document in documents], slim=slim)
+        return detection_results.get_states([document.id for document in documents], slim=slim)
     except Exception:
         logger.exception("Failed to load detection reports for %d document(s)", len(documents))
         return None
@@ -172,10 +147,15 @@ def _load_last_complete(case_id: str, analysis: CaseAnalysis | None) -> CaseAnal
 
 
 def _load_reviews(case: CaseRecord) -> list[FindingReview] | None:
-    """The officer's finding verdicts, only while the case is being evaluated; None when they can't be read."""
+    """
+    The officer's finding verdicts, only while the case is being evaluated; None when they can't be read, or when an
+    admin has turned finding reviews off (nothing is counted then: see case_stage.analysis_stage).
+    """
     if case.status not in (CaseStage.CASE_ANALYSED.value, CaseStage.PENDING_EVALUATION.value):
         return []
     try:
+        if not app_settings_repository.get_finding_reviews_enabled():
+            return None
         return finding_reviews_repository.list_for_case(case.id)
     except Exception:
         logger.exception("Failed to load the finding reviews of case %s", case.id)
@@ -218,6 +198,7 @@ def build_summary(
     needed to tell whether the latest analysis is stale.
     """
     fulfilled, missing = compute_requirement_coverage(documents)
+    unapproved = unapproved_requirements(case, documents)
     covered, total = compute_identity_proof_of_address_progress(documents)
     unmatched_names = compute_unmatched_proof_of_address_names(documents)
     id_covered, id_total = compute_id_document_identity_progress(documents)
@@ -241,6 +222,7 @@ def build_summary(
         documents_status=compute_documents_status(documents),
         fulfilled_requirements=fulfilled,
         missing_requirements=missing,
+        unapproved_requirements=unapproved,
         proof_of_address_coverage=ProofOfAddressCoverage(
             covered=covered, total=total, unmatched_names=unmatched_names
         ),
@@ -249,8 +231,8 @@ def build_summary(
         ),
         risk=completed.risk if completed else None,
         additional_documents=case.additional_documents,
-        # Every required document is mandatory: the analysis waits for a complete checklist as well as the scans.
-        analysis_ready=is_ready_for_analysis(documents) and not missing,
+        # A case that enforces the checklist also waits for every required document to be approved.
+        analysis_ready=is_ready_for_analysis(documents) and not unapproved,
         analysis=overview,
         status_history=status_history or [],
         failure=(

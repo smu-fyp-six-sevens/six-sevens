@@ -11,9 +11,8 @@ from pydantic import BaseModel
 
 from ..langgraph import trace as langgraph_trace
 from ..langgraph.detection import tools as detection_tools
-from ..langgraph.detection_report import read_report
 from ..models import DocumentRecord, DocumentStatus, skips_detection
-from .. import case_service, document_repository, events, extracted_fields_repository, storage_service
+from .. import case_service, detection_results, document_repository, events, extracted_fields_repository, storage_service
 from ..events import Stopwatch, officer_event, types
 from ..cpu_pool import run_cpu
 from ._dependencies import (
@@ -52,7 +51,6 @@ from ..fraud_detection.spelling.spelling_anomaly import SpellingAnomalyResult, c
 from ..fraud_detection.external_validation.runner import ExternalValidationResult, run_external_validation
 
 router = APIRouter(prefix="/documents", tags=["detection"])
-cases_router = APIRouter(prefix="/cases", tags=["detection"])
 logger = logging.getLogger(__name__)
 
 
@@ -86,6 +84,7 @@ async def _trace_check(document_id: str, step: str, **fields: object) -> None:
     table classify/extract/detection-run steps land on (see langgraph/trace.py)."""
     await asyncio.to_thread(langgraph_trace.resume, document_id)
     langgraph_trace.record(document_id, step, **fields)
+    await asyncio.to_thread(langgraph_trace.flush, document_id)
 
 
 async def _require_detection_has_run(
@@ -107,16 +106,15 @@ async def _check_detection_has_run(document_id: str, document: DocumentRecord) -
     pass (triggered automatically on approval — see
     workers/detection.py) has completed at least once
     for this document — never the other way round. Checked by looking for
-    a stored detection_report on the document's langgraph trace (same
-    signal GET .../detection/report uses).
+    a stored report (same signal GET .../detection/report uses).
     """
     if skips_detection(document):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection doesn't run on documents with no type.",
         )
-    trace_data = await asyncio.to_thread(langgraph_trace.load, document_id)
-    if not (trace_data or {}).get("detection_report"):
+    report, _ = await asyncio.to_thread(detection_results.get, document_id)
+    if not report:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Run full detection first before running an individual check.",
@@ -363,15 +361,16 @@ async def _with_finding_locations(document_id: str, report: dict) -> dict:
 
 @router.get("/{document_id}/detection/report")
 async def get_document_detection_report(document_id: str) -> dict:
-    trace = await asyncio.to_thread(langgraph_trace.load, document_id)
-    report = read_report((trace or {}).get("detection_report"))
+    report, error = await to_thread_or_502(
+        detection_results.get, document_id,
+        detail="Failed to load the detection report.", log=("Failed to load the detection report of %s", document_id),
+    )
     if report:
         return await _with_finding_locations(document_id, report)
     # A report always wins over a stale error from an earlier failed attempt
     # (above) — only fall back to reporting the error when there's no report
     # at all, so the frontend can tell "crashed" apart from "never run yet"
     # instead of both looking like the same 404 forever.
-    error = (trace or {}).get("detection_error")
     if error:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -425,10 +424,8 @@ async def retry_document_detection(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection is already running for this document.",
         )
-    trace_data = await asyncio.to_thread(langgraph_trace.load, document_id)
-    has_report = bool((trace_data or {}).get("detection_report"))
-    has_error = bool((trace_data or {}).get("detection_error"))
-    if has_report or not has_error:
+    report, error = await asyncio.to_thread(detection_results.get, document_id)
+    if report or not error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection can only be retried after a cancelled or failed run.",
@@ -438,17 +435,6 @@ async def retry_document_detection(
         detail={"document_type": document.document_type},
     ))
     return {"status": "retrying"}
-
-
-@cases_router.get("/{case_id}/detection/reports")
-async def get_case_detection_reports(case_id: str) -> list[dict]:
-    """Every stored detection report for a case's documents, for one combined view."""
-    return await to_thread_or_502(
-        langgraph_trace.get_case_detection_reports,
-        case_id,
-        detail="Failed to load detection reports.",
-        log=("Failed to load detection reports for case %s", case_id),
-    )
 
 
 @router.get("/{document_id}/detection/case-match", response_model=DocumentCaseMatch)

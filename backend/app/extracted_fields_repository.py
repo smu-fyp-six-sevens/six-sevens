@@ -6,10 +6,11 @@ from datetime import datetime
 from typing import cast
 
 from .supabase_client import service_supabase_client, supabase_client
-from .supabase_rows import row as _row
+from .supabase_rows import fetch_all, row as _row
 from .fraud_detection.font_consistency import ExtractedField
 
 
+_DOCUMENT_CHUNK = 100  # keeps the in.(...) filter well under URL length limits
 _NUMBER_TEXT_RE = re.compile(r"^-?\(?\d[\d,]*(\.\d+)?\)?$")
 _DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d %b %Y", "%d %B %Y")
 
@@ -123,19 +124,13 @@ def get_extracted_fields_for_documents(
     (routers/ws.py), which re-fetches every connected case on each poll
     tick and would otherwise issue one query per document per tick.
     """
-    if not document_ids:
-        return {}
-
-    result = (
-        supabase_client.table("extracted_fields")
-        .select("*")
-        .in_("document_id", document_ids)
-        .execute()
-    )
     by_document: dict[str, list[ExtractedField]] = defaultdict(list)
-    for raw_row in result.data:
-        row = _row(raw_row)
-        by_document[row["document_id"]].append(ExtractedField(**row))
+    # Paged: a case's statements alone can hold more rows than PostgREST returns in one response.
+    for start in range(0, len(document_ids), _DOCUMENT_CHUNK):
+        chunk = document_ids[start : start + _DOCUMENT_CHUNK]
+        rows = fetch_all(lambda chunk=chunk: supabase_client.table("extracted_fields").select("*").in_("document_id", chunk), "id")
+        for row in rows:
+            by_document[row["document_id"]].append(ExtractedField(**row))
     return by_document
 
 def get_extracted_fields_dict(document_id: str) -> dict:

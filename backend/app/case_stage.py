@@ -4,7 +4,7 @@ change — the stage, when, and who — in case_status_history.
 
 Stages before FINALISED follow from the case itself, so the system moves the
 case through them (recorded as SYSTEM) whenever a document or the case
-analysis changes — see document_repository._sync_case_now and
+analysis changes — see document_repository._sync_case and
 case_pipeline/service.py. A loan officer finalises an analysed case, recorded
 under their username; finalising is permanent and the case is then view-only.
 
@@ -17,13 +17,12 @@ from __future__ import annotations
 import logging
 import threading
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import case_repository, document_repository, finding_reviews_repository
+from . import app_settings_repository, case_repository, detection_results, document_repository, finding_reviews_repository
 from .case_pipeline import repository as analysis_repository, state as analysis_state
-from .langgraph import trace as langgraph_trace
-from .mapper import compute_requirement_coverage
+from .case_pipeline.readiness import unapproved_requirements
 from .models import (
     APPROVED_STATUSES,
     CaseFailure,
@@ -73,18 +72,18 @@ def _failed(failure: CaseFailure) -> StageResult:
 def document_stage(
     documents: list[DocumentRecord],
     *,
-    missing_requirements: Sequence[str],
+    requirements_missing: Callable[[], bool] = lambda: False,
     failed_detection_ids: frozenset[str] = frozenset(),
 ) -> StageResult | None:
     """
     The stage the documents put the case at, most urgent first: any document
     still processing holds the whole case there, then a failure, then one
-    waiting for the officer, then a required document that is missing (every
-    REQUIRED_DOCUMENT_TYPES item is mandatory: missing_requirements, from
-    mapper.compute_requirement_coverage), then one being scanned.
-    failed_detection_ids: approved documents whose last detection run crashed
-    or was cancelled. None once every approved document is scanned and the
-    checklist is complete: the case analysis then decides (see analysis_stage).
+    waiting for the officer, then a required document not yet approved (only
+    for a case that enforces the checklist: requirements_missing, asked only
+    once every document is decided, since it needs their fields), then one
+    being scanned. failed_detection_ids: approved documents whose last
+    detection run crashed or was cancelled. None once every approved document
+    is scanned: the case analysis then decides (see analysis_stage).
     """
     active = [d for d in documents if d.status not in _SET_ASIDE]
     if not active:
@@ -99,9 +98,9 @@ def document_stage(
     if any(d.status == DocumentStatus.ANALYZED for d in active):
         return StageResult(CaseStage.PENDING_REVIEW)
     # Every document is now approved (waiting for, in or past detection) or rejected. With none approved, or a
-    # required document missing, the case can't be analysed until the officer uploads more.
+    # required document not approved, the case can't be analysed until the officer uploads more.
     approved = [d for d in active if d.status in APPROVED_STATUSES]
-    if not approved or missing_requirements:
+    if not approved or requirements_missing():
         return StageResult(CaseStage.DOCUMENTS_INCOMPLETE)
     if any(d.status != DocumentStatus.DETECTED for d in approved):
         return StageResult(CaseStage.FRAUD_DETECTION)
@@ -116,7 +115,9 @@ def analysis_stage(case: CaseRecord, documents: list[DocumentRecord]) -> StageRe
     shows (case_pipeline/state.py); otherwise the case is ready to be
     analysed again. A running analysis keeps the case at Ready for Analysis. A
     complete one is Pending Evaluation until the officer has marked every
-    finding correct or wrong (precision and recall), then Case Analysed.
+    finding correct or wrong (precision and recall), then Case Analysed. With
+    finding reviews turned off by an admin, nobody can mark findings, so a
+    complete analysis is Case Analysed straight away.
     """
     analysis = analysis_repository.get_latest_summary(case.id)
     if analysis is None:
@@ -125,7 +126,7 @@ def analysis_stage(case: CaseRecord, documents: list[DocumentRecord]) -> StageRe
         if analysis_state.is_live(analysis.status, analysis.started_at):
             return StageResult(CaseStage.READY_FOR_ANALYSIS)
         return _failed(CaseFailure.CASE_ANALYSIS)  # the worker was lost; the sweeper marks it failed
-    reports, _ = langgraph_trace.get_detection_states([d.id for d in documents])
+    reports, _ = detection_results.get_states([d.id for d in documents])
     if analysis.fingerprint != analysis_state.compute_fingerprint(documents, reports):
         return StageResult(CaseStage.READY_FOR_ANALYSIS)
     if analysis.status == "failed":
@@ -133,21 +134,40 @@ def analysis_stage(case: CaseRecord, documents: list[DocumentRecord]) -> StageRe
     if analysis.status != "complete":
         return StageResult(CaseStage.READY_FOR_ANALYSIS)
     findings = analysis.risk.contributing_findings if analysis.risk else []
-    if findings and count_unreviewed(findings, finding_reviews_repository.list_for_case(case.id)):
+    if (
+        findings
+        and app_settings_repository.get_finding_reviews_enabled()
+        and count_unreviewed(findings, finding_reviews_repository.list_for_case(case.id))
+    ):
         return StageResult(CaseStage.PENDING_EVALUATION)
     return StageResult(CaseStage.CASE_ANALYSED)
 
 
 def derive(case: CaseRecord) -> StageResult:
-    # With fields: the analysis fingerprint reads them.
-    documents = document_repository.list_documents(case_id=case.id)
+    # Fields are read only once a stage needs them, and only for the approved documents: the checklist's name
+    # matching and the analysis fingerprint read nothing else.
+    documents = document_repository.list_documents(case_id=case.id, include_fields=False)
     waiting = [d.id for d in documents if d.status == DocumentStatus.APPROVED]
-    failed_detection_ids = frozenset(langgraph_trace.get_detection_states(waiting, slim=True)[1]) if waiting else frozenset()
-    _, missing = compute_requirement_coverage(documents)
-    return (
-        document_stage(documents, missing_requirements=missing, failed_detection_ids=failed_detection_ids)
-        or analysis_stage(case, documents)
-    )
+    failed_detection_ids = frozenset(detection_results.get_states(waiting, slim=True)[1]) if waiting else frozenset()
+    fields_read = False
+
+    def read_fields() -> None:
+        nonlocal fields_read
+        if not fields_read:
+            document_repository.attach_extracted_fields([d for d in documents if d.status in APPROVED_STATUSES])
+            fields_read = True
+
+    def requirements_missing() -> bool:
+        if not case.checklist_enforced:
+            return False
+        read_fields()
+        return bool(unapproved_requirements(case, documents))
+
+    stage = document_stage(documents, requirements_missing=requirements_missing, failed_detection_ids=failed_detection_ids)
+    if stage is not None:
+        return stage
+    read_fields()
+    return analysis_stage(case, documents)
 
 
 def failure_of(documents: list[DocumentRecord], failed_detection_ids: set[str] | frozenset[str]) -> CaseFailure:

@@ -260,8 +260,9 @@ export interface paths {
         /**
          * Run Case Analysis
          * @description Starts the per-case analysis (cross-document findings, risk outlook and
-         *     summary) in the background. Only once every required checklist document
-         *     is on file and every approved document has been scanned; poll
+         *     summary) in the background. Only once every approved document has been
+         *     scanned and, for a case that enforces the checklist, every required
+         *     document has been approved; poll
          *     GET .../analysis, or watch the case snapshot, for the result.
          */
         post: operations["run_case_analysis_cases__case_id__analysis_run_post"];
@@ -325,26 +326,6 @@ export interface paths {
          *     case_match.py. Computed live on every call; nothing is written.
          */
         get: operations["get_case_match_cases__case_id__case_match_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/cases/{case_id}/detection/reports": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Case Detection Reports
-         * @description Every stored detection report for a case's documents, for one combined view.
-         */
-        get: operations["get_case_detection_reports_cases__case_id__detection_reports_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2205,6 +2186,11 @@ export interface components {
          * @description One row of the case queue: only what the list shows, so it needs no extracted fields.
          */
         CaseListItem: {
+            /**
+             * Checklist Enforced
+             * @default false
+             */
+            checklist_enforced: boolean;
             /** Company Name */
             company_name: string | null;
             /**
@@ -2217,8 +2203,6 @@ export interface components {
             /** Document Types */
             document_types: string[];
             documents_status: components["schemas"]["CaseDocumentsStatus"];
-            /** Finalized At */
-            finalized_at: string | null;
             /** Flags */
             flags: components["schemas"]["CaseFlagCount"][];
             /** Greenlink Case Id */
@@ -2232,11 +2216,6 @@ export interface components {
             risk: components["schemas"]["CaseRisk"] | null;
             /** @default open */
             status: components["schemas"]["CaseStage"];
-            /**
-             * Submission Finalized
-             * @default false
-             */
-            submission_finalized: boolean;
             /**
              * Updated At
              * Format: date-time
@@ -2299,6 +2278,11 @@ export interface components {
         };
         /** CaseRecord */
         CaseRecord: {
+            /**
+             * Checklist Enforced
+             * @default false
+             */
+            checklist_enforced: boolean;
             /** Company Name */
             company_name: string | null;
             /**
@@ -2306,19 +2290,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /** Finalized At */
-            finalized_at: string | null;
             /** Greenlink Case Id */
             greenlink_case_id: string;
             /** Id */
             id: string;
             /** @default open */
             status: components["schemas"]["CaseStage"];
-            /**
-             * Submission Finalized
-             * @default false
-             */
-            submission_finalized: boolean;
             /**
              * Updated At
              * Format: date-time
@@ -2416,6 +2393,11 @@ export interface components {
              * @default false
              */
             analysis_ready: boolean;
+            /**
+             * Checklist Enforced
+             * @default false
+             */
+            checklist_enforced: boolean;
             /** Company Name */
             company_name: string | null;
             /**
@@ -2425,8 +2407,6 @@ export interface components {
             created_at: string;
             documents_status: components["schemas"]["CaseDocumentsStatus"];
             failure: components["schemas"]["CaseFailure"] | null;
-            /** Finalized At */
-            finalized_at: string | null;
             /** Findings To Review */
             findings_to_review: number | null;
             /** Fulfilled Requirements */
@@ -2444,11 +2424,8 @@ export interface components {
             status: components["schemas"]["CaseStage"];
             /** Status History */
             status_history: components["schemas"]["CaseStageChange"][];
-            /**
-             * Submission Finalized
-             * @default false
-             */
-            submission_finalized: boolean;
+            /** Unapproved Requirements */
+            unapproved_requirements: string[];
             /**
              * Updated At
              * Format: date-time
@@ -4175,10 +4152,10 @@ export interface components {
         /**
          * UpdateCaseRequest
          * @description A loan officer updating the case's own identifying details. Only
-         *     company_name is officer-editable today — status, submission_finalized
-         *     and greenlink_case_id are system-managed (see case_service.py /
-         *     case_repository.set_submission_finalized) and deliberately excluded
-         *     here so they can't be overwritten through this endpoint.
+         *     company_name is officer-editable today — status, checklist_enforced
+         *     and greenlink_case_id are system-managed (see case_stage.py /
+         *     case_service.create_case) and deliberately excluded here so they
+         *     can't be overwritten through this endpoint.
          */
         UpdateCaseRequest: {
             /** Company Name */
@@ -4891,41 +4868,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseMatchResult"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_case_detection_reports_cases__case_id__detection_reports_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                case_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
                 };
             };
             /** @description Validation Error */

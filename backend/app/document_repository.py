@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
 
 from . import extracted_fields_repository, finding_reviews_repository, notes_repository, storage_service
@@ -12,14 +13,16 @@ from .supabase_rows import fetch_all, row as _row
 
 logger = logging.getLogger(__name__)
 
-# Writes in a burst (a batch upload classifying several documents) share one recompute of the case's
-# submission_finalized flag. 0 recomputes after every write (the tests do this).
+# Writes in a burst (a batch upload classifying several documents) share one recompute of the case's stage.
+# 0 recomputes after every write (the tests do this).
 SYNC_DEBOUNCE_SECONDS = 1.5
 _sync_timers: dict[str, threading.Timer] = {}
 _sync_lock = threading.Lock()
+# The cases the current request scheduled a sync for (see track_request_syncs).
+_request_cases: ContextVar[set[str] | None] = ContextVar("_request_cases", default=None)
 
 
-# Reads skip the large exiftool `metadata` blob and the retired extracted_fields column; only the metadata checks ask for it.
+# Reads skip the large exiftool `metadata` blob; only the metadata checks ask for it.
 _LIST_COLUMNS = (
     "id, case_id, filename, document_type, classification_confidence, routing_status, storage_path, status, "
     "retry_count, uploaded_at, queued_at, processing_started_at, failure_reason, evidence, "
@@ -28,45 +31,33 @@ _LIST_COLUMNS = (
 
 
 def _sync_case(case_id: str | None) -> None:
-    """Schedules the refresh below; a case with one already pending shares it, since it reads the latest state."""
-    _schedule(case_id, "case", _sync_case_now)
-
-
-def _sync_stage(case_id: str | None) -> None:
-    """
-    For a write that only changes a document's status: that can move the
-    case's stage (see case_stage.py) but not its checklist coverage.
-    """
-    _schedule(case_id, "stage", _sync_stage_now)
-
-
-def _schedule(case_id: str | None, kind: str, sync) -> None:
+    """Schedules a stage refresh for the case; one already pending is shared, since it reads the latest state."""
     if case_id is None:
         return
     if SYNC_DEBOUNCE_SECONDS <= 0:
-        sync(case_id)
+        _sync_now(case_id)
         return
-    key = f"{kind}:{case_id}"
+    requested = _request_cases.get()
+    if requested is not None:
+        requested.add(case_id)
     with _sync_lock:
-        if key in _sync_timers:
+        if case_id in _sync_timers:
             return
-        timer = _sync_timers[key] = threading.Timer(
-            SYNC_DEBOUNCE_SECONDS, _run_scheduled_sync, args=(key, sync, case_id)
-        )
+        timer = _sync_timers[case_id] = threading.Timer(SYNC_DEBOUNCE_SECONDS, _run_scheduled_sync, args=(case_id,))
         timer.daemon = True
     timer.start()
 
 
-def _run_scheduled_sync(key: str, sync, case_id: str) -> None:
+def _run_scheduled_sync(case_id: str) -> None:
     with _sync_lock:
-        _sync_timers.pop(key, None)  # a write from here on schedules the next run
-    sync(case_id)
+        _sync_timers.pop(case_id, None)  # a write from here on schedules the next run
+    _sync_now(case_id)
 
 
-def _sync_stage_now(case_id: str | None) -> None:
-    """Best-effort, like _sync_case_now: the document write already succeeded. Imported locally for the same reason."""
-    if case_id is None:
-        return
+def _sync_now(case_id: str) -> None:
+    """
+    Best-effort: the document write already succeeded. Imported locally: case_stage imports this module.
+    """
     try:
         from . import case_stage
 
@@ -75,51 +66,24 @@ def _sync_stage_now(case_id: str | None) -> None:
         logger.exception("Document write succeeded but failed to update the stage of case %s", case_id)
 
 
-def has_pending_syncs() -> bool:
-    return bool(_sync_timers)
+def track_request_syncs() -> set[str]:
+    """Starts collecting the cases this request (and the threads it starts) schedules a sync for."""
+    cases: set[str] = set()
+    _request_cases.set(cases)
+    return cases
 
 
-def flush_pending_syncs() -> None:
+def flush_syncs(case_ids: set[str]) -> None:
     """
-    Runs every scheduled refresh now. Called before a request or push returns: Cloud Run throttles CPU
-    once nothing is in flight, so a timer left behind could stall until the instance's next request.
+    Runs these cases' scheduled refreshes now. Called before a request or push returns: Cloud Run throttles CPU
+    once nothing is in flight, so a timer left behind could stall until the instance's next request. Other
+    requests' timers are theirs to flush.
     """
     with _sync_lock:
-        pending = list(_sync_timers.items())
-        _sync_timers.clear()
-    for _key, timer in pending:
+        pending = [(case_id, _sync_timers.pop(case_id)) for case_id in case_ids if case_id in _sync_timers]
+    for case_id, timer in pending:
         timer.cancel()
-        # The timer's own arguments: the refresh it was scheduled for and its case (the key is "kind:case_id").
-        _, sync, case_id = timer.args
-        sync(case_id)
-
-
-def _sync_case_now(case_id: str | None) -> None:
-    """
-    Best-effort refresh of the case-level submission_finalized cache after a
-    write that can change a document's routing_status or
-    fulfilled_requirements. Never raises: the document write above already
-    succeeded and is the source of truth, and get_case_summary/build_summary
-    always recompute requirement coverage live from the documents themselves
-    rather than trusting this cached flag — so a failed resync here just
-    leaves it stale until the next successful write to this case's documents
-    self-heals it, not something worth failing the caller's request over.
-
-    Imports case_service locally rather than at module level — case_service
-    itself imports this module (it needs document_repository's own CRUD to
-    assemble a case's documents), and this is the only thing here that needs
-    case_service, so deferring it avoids a module-level circular import
-    between the two.
-    """
-    if case_id is None:
-        return
-    try:
-        from . import case_service
-
-        case_service.sync_submission_finalized(case_id)
-    except Exception:
-        logger.exception("Document write succeeded but failed to resync case %s", case_id)
-    _sync_stage_now(case_id)
+        _sync_now(case_id)
 
 
 def create_document(
@@ -136,7 +100,7 @@ def create_document(
         "uploaded_at": now.isoformat(),
     }
     result = supabase_client.table("documents").insert(row).execute()
-    _sync_stage(case_id)
+    _sync_case(case_id)
     return DocumentRecord(**_row(result.data[0]))
 
 
@@ -157,7 +121,7 @@ def update_status(
     expected_current_statuses turns this into an atomic compare-and-swap:
     the WHERE clause requires the row's current status to still be one of
     these, so a caller that read a document's status and now wants to act
-    on it (cancel, retry) can't race a concurrent transition — e.g. two
+    on it (cancel, retry) can't race a concurrent transition â€” e.g. two
     simultaneous cancel requests, or a cancel landing after the pipeline
     already reached ANALYZED. Returns whether the update actually matched a
     row; callers that pass this should check it and treat False as
@@ -184,19 +148,9 @@ def update_status(
     if expected_current_statuses is not None:
         query = query.in_("status", [s.value for s in expected_current_statuses])
     result = query.execute()
-    # Coverage depends on routing_status, the confirmed type, rejection, failure and the
-    # fields (see models.counts_towards_checklist). record_classification /
-    # update_extracted_fields resync when they write those; here only a move into or out of
-    # FAILED can change it (out of it only by a compare-and-swap from FAILED, i.e. a retry).
-    # Any status change can move the case's stage; the case resync refreshes the stage too.
+    # Any status change can move the case's stage.
     if result.data:
-        case_id = _row(result.data[0]).get("case_id")
-        if status == DocumentStatus.FAILED or (
-            expected_current_statuses is not None and DocumentStatus.FAILED in expected_current_statuses
-        ):
-            _sync_case(case_id)
-        else:
-            _sync_stage(case_id)
+        _sync_case(_row(result.data[0]).get("case_id"))
     return bool(result.data)
 
 def approve_document(document_id: str) -> DocumentRecord | None:
@@ -240,21 +194,21 @@ def _set_detection_status(document_id: str, status: DocumentStatus) -> None:
         {"status": status.value}
     ).eq("id", document_id).execute()
     if result.data:
-        _sync_stage(_row(result.data[0]).get("case_id"))
+        _sync_case(_row(result.data[0]).get("case_id"))
 
 
 def mark_detecting(document_id: str) -> None:
-    """The Detection Agent has started — shown live as "Scanning" (see langgraph/detection/graph.py)."""
+    """The Detection Agent has started â€” shown live as "Scanning" (see langgraph/detection/graph.py)."""
     _set_detection_status(document_id, DocumentStatus.DETECTING)
 
 
 def mark_detected(document_id: str) -> None:
-    """The Detection Agent finished and produced a report — terminal."""
+    """The Detection Agent finished and produced a report â€” terminal."""
     _set_detection_status(document_id, DocumentStatus.DETECTED)
 
 
 def revert_to_approved(document_id: str) -> None:
-    """A detection run crashed or was cancelled: back to APPROVED — still locked, eligible for Retry."""
+    """A detection run crashed or was cancelled: back to APPROVED â€” still locked, eligible for Retry."""
     _set_detection_status(document_id, DocumentStatus.APPROVED)
 
 
@@ -265,9 +219,6 @@ def reject_document(document_id: str) -> DocumentRecord | None:
         .eq("id", document_id)
         .execute()
     )
-    # A rejected document no longer fulfils the checklist (see
-    # case_service.compute_requirement_coverage), so the case's
-    # submission_finalized flag can change here too.
     if not result.data:
         return None
     _sync_case(_row(result.data[0]).get("case_id"))
@@ -281,12 +232,12 @@ def get_documents_by_ids(
         return []
     result = supabase_client.table("documents").select(_LIST_COLUMNS).in_("id", document_ids).execute()
     documents = [DocumentRecord(**_row(row)) for row in result.data]
-    return _attach_extracted_fields(documents) if include_fields else documents
+    return attach_extracted_fields(documents) if include_fields else documents
 
 
 def move_documents(document_ids: list[str], case_id: str) -> None:
     """
-    Bulk version of move_document — one UPDATE for every document, and no
+    Bulk version of move_document â€” one UPDATE for every document, and no
     per-document case resync: a caller moving N documents resyncs each
     affected case once after the whole batch lands, not once per document
     (see routers/documents.py's bulk_move_documents).
@@ -302,10 +253,10 @@ def move_documents(document_ids: list[str], case_id: str) -> None:
 
 def move_document(document_id: str, case_id: str) -> None:
     """
-    Reassigns a document to a different case — e.g. corrects a document
+    Reassigns a document to a different case â€” e.g. corrects a document
     uploaded under the wrong case. Syncs both ends: the old case no longer
     counts it (see routers/documents.py's move_document, which also pushes a
-    fresh snapshot for the old case over the websocket — Realtime's own
+    fresh snapshot for the old case over the websocket â€” Realtime's own
     change event only carries the document's new case_id, so the old case
     would otherwise never hear about losing it), the new case now does.
     """
@@ -333,7 +284,7 @@ def record_classification(
     """
     Persists the classification-stage decision (type, confidence, and
     whether it was accepted or sent to manual review) independently of
-    document status — this can happen well before the document reaches a
+    document status â€” this can happen well before the document reaches a
     terminal ANALYZED/FAILED status, since Extraction is a separate stage
     that runs afterward and can fail on its own.
     """
@@ -361,14 +312,14 @@ def update_extracted_fields(
     Returns the updated document row, so a caller that must answer with it needn't read it back.
 
     Persists the Extraction-stage confidence into its own extraction_confidence
-    column — kept separate from record_classification's confidence (the
+    column â€” kept separate from record_classification's confidence (the
     Classifier's confidence in document_type) so neither stage's number
     overwrites the other's; both remain readable after the fact. Also used
     for a loan officer's manual correction (see routers/documents.py's PATCH
     endpoint), which passes extraction_confidence=1.0 since a human has now
     verified the values.
 
-    Does NOT write the field values themselves — the extracted_fields table
+    Does NOT write the field values themselves â€” the extracted_fields table
     (see extracted_fields_repository.replace_extracted_fields, called
     alongside this by every one of this function's callers) is the only
     place those are persisted; get_document/list_documents read them back
@@ -376,7 +327,7 @@ def update_extracted_fields(
 
     fulfilled_requirements is optional (rather than always written here)
     since callers compute it from the extracted_fields they're passing in
-    (see models.compute_fulfilled_requirements) — kept out of this
+    (see models.compute_fulfilled_requirements) â€” kept out of this
     function's own responsibility so it stays a pure "persist what I was
     given" write.
     """
@@ -387,7 +338,7 @@ def update_extracted_fields(
     }
     if fulfilled_requirements is not None:
         update["fulfilled_requirements"] = fulfilled_requirements
-    # Only a loan officer's "Save fields" passes this — their review
+    # Only a loan officer's "Save fields" passes this â€” their review
     # resolves the document's manual review, so it's now ACCEPTED.
     if routing_status is not None:
         update["routing_status"] = routing_status
@@ -423,8 +374,8 @@ def record_escalation(document_id: str, reason: str) -> None:
 def update_metadata(document_id: str, metadata: dict) -> None:
     """
     Persists the file metadata pulled by ingestion.metadata_extractor
-    (exiftool — author/creation-date/software/etc.) alongside the raw-text
-    extraction step, independent of classification/Extraction succeeding —
+    (exiftool â€” author/creation-date/software/etc.) alongside the raw-text
+    extraction step, independent of classification/Extraction succeeding â€”
     it's captured as soon as the file is read, not gated on downstream
     stages.
     """
@@ -454,7 +405,9 @@ def get_guard_result(document_id: str) -> dict | None:
 
 
 # Tables whose rows belong to one document, besides extracted_fields (which has its own helper).
-_DOCUMENT_CHILD_TABLES = ("flags", "langgraph_trace", notes_repository.TABLE, finding_reviews_repository.TABLE)
+_DOCUMENT_CHILD_TABLES = (
+    "flags", "langgraph_trace", "detection_results", notes_repository.TABLE, finding_reviews_repository.TABLE,
+)
 
 
 def _delete_document_children(document_ids: list[str]) -> None:
@@ -498,9 +451,9 @@ def remove_documents(documents: list[DocumentRecord]) -> None:
     """
     Batch version of remove_document, for deleting every document under a
     case in one pass instead of one round-trip per document per step. Skips
-    the per-document _sync_case call — callers doing this in bulk (case
+    the per-document _sync_case call â€” callers doing this in bulk (case
     deletion) are removing the case itself right after, so resyncing its
-    submission_finalized flag in between would be wasted work.
+    stage in between would be wasted work.
     """
     if not documents:
         return
@@ -515,11 +468,12 @@ def remove_documents(documents: list[DocumentRecord]) -> None:
     service_supabase_client().table("documents").delete().in_("id", document_ids).execute()
 
 
-def _attach_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRecord]:
+def attach_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRecord]:
     """
-    Populates extracted_fields from the extracted_fields table — the only
+    Populates extracted_fields from the extracted_fields table â€” the only
     place field values are persisted (see update_extracted_fields). None when
-    a document has no rows there.
+    a document has no rows there. For documents read with include_fields=False
+    whose fields turn out to be needed after all.
     """
     if not documents:
         return documents
@@ -537,7 +491,7 @@ def get_document(
     """
     include_fields=False skips the extracted_fields table round-trip for
     callers that only need status/document_type/etc. (the langgraph pipeline
-    nodes, the queue worker, detection's context loader) — cheap to opt out
+    nodes, the queue worker, detection's context loader) â€” cheap to opt out
     of since it's a separate query, not part of the documents-table read
     itself. Defaults to True since most callers (API responses, case-match,
     mapper) do need it and forgetting to ask for it would silently produce
@@ -550,7 +504,7 @@ def get_document(
         return None
     document = DocumentRecord(**_row(result.data[0]))
     if include_fields:
-        _attach_extracted_fields([document])
+        attach_extracted_fields([document])
     return document
 
 
@@ -564,7 +518,7 @@ def get_documents_in_status(
         .execute()
     )
     documents = [DocumentRecord(**_row(row)) for row in result.data]
-    return _attach_extracted_fields(documents) if include_fields else documents
+    return attach_extracted_fields(documents) if include_fields else documents
 
 
 def list_documents(
@@ -580,7 +534,7 @@ def list_documents(
         query = query.eq("status", status.value)
     result = query.execute()
     documents = [DocumentRecord(**_row(row)) for row in result.data]
-    return _attach_extracted_fields(documents) if include_fields else documents
+    return attach_extracted_fields(documents) if include_fields else documents
 
 
 # What the case queue's status rollup reads (the status and monitoring.is_stuck's timestamps), and the type the dashboard counts.

@@ -13,12 +13,13 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, cast
 
-from .. import audit, case_repository, case_stage, document_repository, events, finding_reviews_repository, read_pool
+from .. import (
+    audit, case_repository, case_stage, detection_results, document_repository, events, finding_reviews_repository,
+    read_pool,
+)
 from ..config import settings
 from ..snapshots import push_case_snapshot
-from ..langgraph import trace as langgraph_trace
 from ..llm_io import ModelRefused
-from ..mapper import compute_requirement_coverage
 from ..models import DocumentRecord
 from ..run_context import end_run, start_run
 from . import repository, state
@@ -28,7 +29,7 @@ from .cross_document.graph import run_cross_document_analysis
 from .models import AgentDecision, AnalysisAudit, AnalysisStatus, CaseAnalysis, CaseAnalysisRunItem
 from .risk import store as risk_store
 from .trace import RunTrace
-from .readiness import is_ready_for_analysis
+from .readiness import is_ready_for_analysis, unapproved_requirements
 from .risk.case_risk import compute_case_risk, scoring_breakdown
 from .risk.additional_documents import build_additional_documents
 from .risk.outlook import build_outlook, outlook_trace, propose_requests_with_status
@@ -46,7 +47,7 @@ class AnalysisDisabled(Exception):
 
 
 class RequiredDocumentsMissing(Exception):
-    """Every required checklist document is mandatory before a case can be analysed."""
+    """A case that enforces the checklist needs every required document approved before it can be analysed."""
 
     def __init__(self, missing: list[str]):
         super().__init__(", ".join(missing))
@@ -85,8 +86,9 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
     """The api side: checks, records a running run, and asks the case-worker to run it."""
     if not settings.CASE_ANALYSIS_ENABLED:
         raise AnalysisDisabled()
+    case = await asyncio.to_thread(case_repository.get_case, case_id)
     documents = await asyncio.to_thread(document_repository.list_documents, case_id=case_id)
-    _, missing = compute_requirement_coverage(documents)
+    missing = unapproved_requirements(case, documents) if case else []
     if missing:
         raise RequiredDocumentsMissing(missing)
     if not is_ready_for_analysis(documents):
@@ -96,7 +98,7 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
         raise AnalysisAlreadyRunning()
 
     reports, _ = await asyncio.to_thread(
-        langgraph_trace.get_detection_states, [d.id for d in documents]
+        detection_results.get_states, [d.id for d in documents]
     )
     run_id = str(uuid.uuid4())
     fingerprint = state.compute_fingerprint(documents, reports)
@@ -124,7 +126,7 @@ async def run_requested(case_id: str, run_id: str, fingerprint: str, started_at:
     """The case-worker side: runs a requested analysis over the documents as they are now."""
     documents = await asyncio.to_thread(document_repository.list_documents, case_id=case_id)
     reports, failed_ids = await asyncio.to_thread(
-        langgraph_trace.get_detection_states, [d.id for d in documents]
+        detection_results.get_states, [d.id for d in documents]
     )
     analysis = CaseAnalysis(
         run_id=run_id, case_id=case_id, status="running", fingerprint=fingerprint, started_at=started_at,
@@ -245,7 +247,7 @@ async def _store_result(analysis: CaseAnalysis) -> None:
 
 def _documents_and_reports(case_id: str) -> tuple[list[DocumentRecord], dict[str, dict[str, Any]]]:
     documents = document_repository.list_documents(case_id=case_id)
-    reports, _ = langgraph_trace.get_detection_states([d.id for d in documents])
+    reports, _ = detection_results.get_states([d.id for d in documents])
     return documents, reports
 
 
@@ -286,7 +288,7 @@ def list_runs(case_id: str) -> list[CaseAnalysisRunItem]:
     if not rows:
         return []
     documents = document_repository.list_documents(case_id=case_id)
-    reports, _ = langgraph_trace.get_detection_states([d.id for d in documents])
+    reports, _ = detection_results.get_states([d.id for d in documents])
     current = state.compute_fingerprint(documents, reports)
     starters = _starters(case_id)
 

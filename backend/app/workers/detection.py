@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from .. import audit, document_repository, events, metrics, query_stats
+from .. import audit, detection_results, document_repository, events, metrics, query_stats
 from ..config import settings
 from ..events import Event, Stopwatch, types
 from ..events.envelope import Outcome, officer_of
@@ -56,6 +56,8 @@ async def run(document_id: str, case_id: str | None, requested_by: str | None = 
         logger.info("Detection cancelled for document %s", document_id)
         reason = "Cancelled by loan officer" if by_officer else "Interrupted: the service was stopping"
         langgraph_trace.record(document_id, "detection_error", error=reason)
+        await asyncio.to_thread(detection_results.save_error, document_id, reason)
+        await asyncio.to_thread(langgraph_trace.flush, document_id)
         await asyncio.to_thread(document_repository.revert_to_approved, document_id)
         if not by_officer:
             raise
@@ -103,10 +105,10 @@ async def on_recovery_requested(event: Event) -> None:
         logger.info("Document %s is no longer detecting; nothing to recover", document_id)
         return
     if recovery.exhausted(event):
-        langgraph_trace.record(
-            document_id, "detection_error",
-            error=f"Detection stopped responding; automatic recovery gave up after {settings.RECOVERY_MAX_ATTEMPTS} attempts.",
-        )
+        error = f"Detection stopped responding; automatic recovery gave up after {settings.RECOVERY_MAX_ATTEMPTS} attempts."
+        langgraph_trace.record(document_id, "detection_error", error=error)
+        await asyncio.to_thread(detection_results.save_error, document_id, error)
+        await asyncio.to_thread(langgraph_trace.flush, document_id)
         await recovery.report(event, _ACTOR, types.RECOVERY_EXHAUSTED, "failed")
         if event.case_id:
             await push_case_snapshot(event.case_id)

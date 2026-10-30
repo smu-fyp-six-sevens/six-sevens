@@ -312,7 +312,7 @@ def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[
         fulfilled.discard(id_document)
 
     # Additional items are reported as fulfilled (so the UI can tick them) but
-    # never as missing, so they can't block submission_finalized.
+    # never as missing, so they can't block the case analysis.
     return (
         [req for req in [*REQUIRED_DOCUMENT_TYPES, *ADDITIONAL_DOCUMENT_TYPES] if req in fulfilled],
         [req for req in REQUIRED_DOCUMENT_TYPES if req not in fulfilled],
