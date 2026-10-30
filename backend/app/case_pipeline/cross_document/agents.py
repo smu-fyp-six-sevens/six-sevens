@@ -118,7 +118,7 @@ _PLAN_TOOL: dict[str, Any] = {
     "input_schema": {
         "type": "object",
         "properties": {
-            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            "confidence": {"type": "number", "description": "Confidence from 0 to 1."},
             "hypotheses": {
                 "type": "array",
                 "maxItems": MAX_HYPOTHESES,
@@ -126,7 +126,7 @@ _PLAN_TOOL: dict[str, Any] = {
                     "type": "object",
                     "properties": {
                         "claim": {"type": "string", "description": "One sentence."},
-                        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                        "confidence": {"type": "number", "description": "Confidence from 0 to 1."},
                         "documents": {"type": "array", "items": {"type": "string"}},
                         "proof": {"type": "string", "description": "What result would prove it."},
                         "refutation_document": {"type": "string"},
@@ -170,7 +170,7 @@ _VERDICT_TOOL: dict[str, Any] = {
                     "properties": {
                         "id": {"type": "string"},
                         "conclusive": {"type": "boolean"},
-                        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                        "confidence": {"type": "number", "description": "Confidence from 0 to 1."},
                         "severity": {"type": "string", "enum": ["low", "medium", "high"]},
                         "category": {"type": "string", "enum": ["behavioural_anomaly", "unsupported_claim"]},
                         "summary": {"type": "string", "description": "One plain sentence for a loan officer."},

@@ -726,9 +726,51 @@
         "title": "AdditionalDocuments",
         "type": "object"
       },
+      "AgentDecision": {
+        "description": "One model agent's decision and its bounded self-reported confidence.",
+        "properties": {
+          "agent": {
+            "enum": [
+              "hypothesis_planner",
+              "hypothesis_judge"
+            ],
+            "title": "Agent",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent",
+          "decision_id",
+          "decision",
+          "confidence"
+        ],
+        "title": "AgentDecision",
+        "type": "object"
+      },
       "AnalysisAudit": {
         "description": "What produced a result, so a past run can be reconstructed.",
         "properties": {
+          "agent_decisions": {
+            "items": {
+              "$ref": "#/components/schemas/AgentDecision"
+            },
+            "title": "Agent Decisions",
+            "type": "array"
+          },
           "findings_discarded": {
             "default": 0,
             "title": "Findings Discarded",
@@ -765,7 +807,8 @@
           "prompt_version",
           "hypotheses_tried",
           "findings_discarded",
-          "tool_calls"
+          "tool_calls",
+          "agent_decisions"
         ],
         "title": "AnalysisAudit",
         "type": "object"
@@ -1226,6 +1269,13 @@
             "title": "Clean Checks",
             "type": "array"
           },
+          "confidence": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
           "consistent_checks": {
             "items": {
               "type": "string"
@@ -1356,6 +1406,7 @@
           "started_at",
           "finished_at",
           "error",
+          "confidence",
           "findings",
           "outlook",
           "summary",
@@ -2980,6 +3031,13 @@
             "title": "Citations",
             "type": "array"
           },
+          "confidence": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
           "document_ids": {
             "items": {
               "type": "string"
@@ -3025,6 +3083,7 @@
           "rationale",
           "severity",
           "category",
+          "confidence",
           "citations",
           "document_ids",
           "probe_summary",
