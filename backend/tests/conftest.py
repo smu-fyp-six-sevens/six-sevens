@@ -1,27 +1,11 @@
 from pathlib import Path
 
-import pymupdf
 import pytest
 
 from app.auth import require_auth
 from app.main import app
 
 TEST_USER = "test-user"  # who the bypassed login says is acting
-PDF_DOC_ID = "C001_CertIncumbency"
-IMAGE_DOC_ID = "ocbc_sample"
-
-# app/injection/* is a dev-only synthetic fraud-injection tool used to
-# generate test documents for the detector — not part of the graded
-# detection pipeline (see CLAUDE.md). Deliberately not unit-tested for now;
-# the files below are left in place (not deleted) in case that changes.
-collect_ignore = [
-    "test_field_text.py",
-    "test_fraud_injections.py",
-    "test_injection_router.py",
-    "test_injectors.py",
-    "test_pdf.py",
-    "test_store.py",
-]
 
 
 @pytest.fixture(autouse=True)
@@ -188,105 +172,10 @@ async def _refuse_real_realtime(*args, **kwargs):
     )
 
 
-def _write_sample_pdf(path: Path) -> None:
-    doc = pymupdf.open()
-    page = doc.new_page(width=400, height=300)
-    page.insert_text((72, 100), "Golden Harvest Trading Pte Ltd", fontsize=12, fontname="helv")
-    page.insert_text((72, 140), "100 000", fontsize=12, fontname="helv")
-    page.insert_text((72, 180), "Account No. 12345678", fontsize=12, fontname="helv")
-    page.insert_text((72, 220), "Opening Balance", fontsize=12, fontname="helv")
-    logo = pymupdf.open()
-    logo_page = logo.new_page(width=64, height=32)
-    logo_page.draw_rect(
-        logo_page.rect, color=(0.8, 0.1, 0.1), fill=(0.8, 0.1, 0.1)
-    )
-    pixmap = logo_page.get_pixmap()
-    logo.close()
-    page.insert_image(pymupdf.Rect(24, 18, 88, 50), pixmap=pixmap)
-    doc.set_metadata(
-        {
-            "title": "Certificate of Incumbency",
-            "author": "Corporate Secretary",
-            "subject": "KYC",
-            "creator": "pymupdf",
-        }
-    )
-    doc.save(path)
-    doc.close()
-
-
-def _write_sample_png(path: Path) -> None:
-    doc = pymupdf.open()
-    page = doc.new_page(width=612, height=792)
-    lines = (
-        "OCBC",
-        "STATEMENT",
-        "Account Number",
-        "12345678",
-        "Account No. 87654321",
-        "Available Balance",
-        "1000.00",
-        "Customer Name",
-        "Jane Citizen",
-        "Opening Balance",
-        "Branch Code",
-        "001",
-    )
-    y = 72
-    for line in lines:
-        page.insert_text((72, y), line, fontsize=22, fontname="helv")
-        y += 40
-    page.draw_rect(
-        pymupdf.Rect(430, 36, 560, 120),
-        color=(0.85, 0.05, 0.05),
-        fill=(0.85, 0.05, 0.05),
-    )
-    page.draw_rect(
-        pymupdf.Rect(444, 50, 492, 106),
-        color=(0.05, 0.05, 0.85),
-        fill=(0.05, 0.05, 0.85),
-    )
-    pix = page.get_pixmap(dpi=150)
-    pix.save(str(path))
-    doc.close()
-
-
-@pytest.fixture(scope="session")
-def _injection_template_files(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """
-    Session-scoped so the PDF/PNG live at a stable path for the whole test
-    run. app.injection.pdf.discover_fields_from_image caches OCR results by
-    (path, mtime, size) — with a fresh tmp_path (and therefore a fresh OCR
-    run) on every single test, that cache never hit, and RapidOCR ran once
-    per test (~5-14s each, dominating test_fraud_injections.py's runtime).
-    Reusing the same files across the session lets the existing cache do
-    its job: only the first test pays the OCR cost.
-    """
-    templates = tmp_path_factory.mktemp("document_templates")
-    _write_sample_pdf(templates / f"{PDF_DOC_ID}.pdf")
-    _write_sample_png(templates / f"{IMAGE_DOC_ID}.png")
-    return templates
-
-
-@pytest.fixture
-def isolated_injection_templates(
-    tmp_path: Path, _injection_template_files: Path, monkeypatch: pytest.MonkeyPatch
-) -> Path:
-    """Use generated PDF/PNG fixtures instead of document_templates/."""
-    generated = tmp_path / "documents_generated"
-    generated.mkdir()
-
-    monkeypatch.setattr("app.injection.pdf.TEMPLATES_DIR", _injection_template_files)
-    monkeypatch.setattr("app.injection.pdf.DOCUMENTS_GENERATED_DIR", generated)
-    monkeypatch.setattr("app.injection.store.TEMPLATES_DIR", _injection_template_files)
-    monkeypatch.setattr("app.injection.store.DOCUMENTS_GENERATED_DIR", generated)
-    return _injection_template_files
-
-
-# --- Regression suite tags (SCRUM-206, SCRUM-246) ---------------------------
+# --- Regression suite tags (SCRUM-206, SCRUM-246, SCRUM-296) ----------------
 # Existing tests that also serve as regression tests for a sprint's manual test
 # cases, tagged here centrally (rather than editing each file) so that
-# `pytest -m sprint1` / `-m sprint2` / `-m sprint3` run each sprint's full set. The
+# `pytest -m sprint1` … `-m sprint4` run each sprint's full set. The
 # regression-specific test files tag themselves with @pytest.mark.sprintN.
 # Keys are a test file, or file::test_name for a single test.
 _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
@@ -342,7 +231,31 @@ _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
     "test_image_manipulation.py": [("sprint3", "SCRUM-64", "FD-013 / FD-014")],
     "test_font_consistency.py": [("sprint3", "SCRUM-61", "FD-021 – FD-024")],
     "test_spelling_anomaly.py": [("sprint3", "SCRUM-70", "FD-025 / FD-026")],
-    "test_company_identity.py": [("sprint3", "SCRUM-70", "FD-025")],
+    "test_company_identity.py": [("sprint3", "SCRUM-70", "FD-025"), ("sprint4", "SCRUM-255", "CD-001 – CD-007")],
+    # --- Sprint 4 (SCRUM-296) ---
+    # SCRUM-81 Attach officer notes (CM-029 – CM-036)
+    "test_notes.py::test_note_is_signed_by_the_officer_and_timestamped": [("sprint4", "SCRUM-81", "CM-031 / CM-033")],
+    "test_notes.py::test_note_on_a_document_from_another_case_is_refused": [("sprint4", "SCRUM-81", "CM-030")],
+    "test_notes.py::test_reload_returns_the_saved_notes_unchanged": [("sprint4", "SCRUM-81", "CM-034 / CM-035")],
+    "test_notes.py::test_note_on_an_approved_document_is_saved_and_leaves_the_document_alone": [
+        ("sprint4", "SCRUM-81", "CM-036"),
+    ],
+    "test_notes.py::test_reply_takes_its_notes_document_and_keeps_the_original": [("sprint4", "SCRUM-81", "CM-036")],
+    "test_notes.py::test_author_can_edit_their_note_and_it_shows_as_edited": [("sprint4", "SCRUM-81", "CM-036")],
+    # SCRUM-84 / SCRUM-90 Case risk score and its reasons (RS-001 – RS-008)
+    "test_case_risk.py": [("sprint4", "SCRUM-84", "RS-001 – RS-008")],
+    # SCRUM-52 Run case analysis only once every approved document is scanned (MA-013 / MA-014)
+    "test_case_analysis.py": [("sprint4", "SCRUM-52", "MA-013 / MA-014")],
+    # SCRUM-54 Handle invalid agent output (MA-024 – MA-027): every agent's reply is validated, never raised
+    "test_output_validation.py": [("sprint4", "SCRUM-54", "MA-024 – MA-027")],
+    # SCRUM-253 / SCRUM-254 / SCRUM-255 Cross-document comparisons (CD-001 – CD-007, CD-012 – CD-021)
+    "test_cross_document_deterministic.py": [("sprint4", "SCRUM-253", "CD-001 – CD-021")],
+    "test_cross_document_mismatches.py": [("sprint4", "SCRUM-253", "CD-012 – CD-021")],
+    "test_address_matching.py": [("sprint4", "SCRUM-254", "CD-018 – CD-021")],
+    # SCRUM-256 Public reference checks: addresses against OneMap/HDB (CD-008 / CD-009)
+    "test_registry_lookups.py": [("sprint4", "SCRUM-256", "CD-008 / CD-009")],
+    # SCRUM-67 AI-generated content (FD-027 / FD-028), the deterministic layer under ai_generation_tool
+    "test_ai_generation.py": [("sprint4", "SCRUM-67", "FD-027 / FD-028")],
 }
 
 

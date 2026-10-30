@@ -51,6 +51,9 @@ work_input = Counter("work_llm_input_tokens_total", "All input tokens (cached or
 
 detection_tool_calls = Counter("detection_tool_calls_total", "Detection tool results", ["tool", "outcome"])
 detection_verdicts = Counter("detection_verdicts_total", "Detection runs by verdict", ["verdict"])
+content_guard_results = Counter("content_guard_results_total", "Content guard results by risk", ["risk"])
+content_guard_blocks = Counter("content_guard_blocks_total", "Documents stopped at ingest by the content guard")
+llm_prompt_leaks = Counter("llm_prompt_leaks_total", "Model replies that repeat their own instructions", ["agent"])
 
 supabase_calls = Counter("supabase_calls_total", "Supabase calls", ["target"])
 
@@ -67,13 +70,18 @@ def set_info(roles: Iterable[str]) -> None:
 
 def record_llm(
     agent: str, model: str, uncached_input: int, output: int, cache_read: int, cache_write: int, seconds: float | None,
+    *, cache_write_1h: int = 0,
 ) -> float:
     """Counts one finished call; returns its cost in USD."""
     llm_calls.labels(agent, model, "ok").inc()
-    for kind, n in (("input", uncached_input), ("output", output), ("cache_read", cache_read), ("cache_write", cache_write)):
+    tokens = (
+        ("input", uncached_input), ("output", output), ("cache_read", cache_read),
+        ("cache_write", cache_write + cache_write_1h),
+    )
+    for kind, n in tokens:
         if n:
             llm_tokens.labels(agent, model, kind).inc(n)
-    cost = pricing.cost(model, uncached_input, output, cache_read, cache_write)
+    cost = pricing.cost(model, uncached_input, output, cache_read, cache_write, cache_write_1h)
     llm_cost.labels(agent, model).inc(cost.usd)
     llm_cache_savings.labels(agent, model).inc(cost.saved_by_cache_usd)
     if seconds is not None:

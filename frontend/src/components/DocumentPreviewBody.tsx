@@ -1,4 +1,5 @@
 import type { PreviewKind } from '../services/uploadService';
+import { ErrorMessage } from './ErrorMessage';
 
 interface DocumentPreviewBodyProps {
   filename: string;
@@ -12,7 +13,11 @@ interface DocumentPreviewBodyProps {
 export default function DocumentPreviewBody({ filename, previewKind, previewUrl, error }: DocumentPreviewBodyProps) {
   return (
     <div className="preview-modal-body">
-      {error && <div className="preview-modal-error">{error}</div>}
+      {error && (
+        <div className="preview-modal-error">
+          <ErrorMessage message={error} />
+        </div>
+      )}
 
       {!error && previewKind === 'unsupported' && (
         <div className="preview-modal-message">

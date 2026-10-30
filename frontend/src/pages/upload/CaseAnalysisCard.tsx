@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CaseAnalysis, CaseAnalysisOverview } from '../../services/uploadService';
-import { getCaseAnalysis, runCaseAnalysis } from '../../services/uploadService';
+import type { CaseAnalysisRunItem } from '../../services/uploadService';
+import { getCaseAnalysis, getCaseAnalysisRun, listCaseAnalysisRuns, runCaseAnalysis } from '../../services/uploadService';
+import { AnalysisSummaryBlock } from './AnalysisSummaryBlock';
+import { analysisFindingAnchor } from './analysisSummary';
+import { PreviousRuns } from './PreviousRuns';
 import { CaseAnalysisTracePanel } from './CaseAnalysisTracePanel';
+import { ErrorMessage } from '../../components/ErrorMessage';
+import { outOfDateMessage } from './caseSections';
 
 const CATEGORY_LABELS: Record<string, string> = {
   identity_entity_conflict: 'Identity conflict',
@@ -12,7 +18,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const SEVERITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
-// "Run case analysis": cross-document findings, and a plain-language summary.
+// "Run case analysis": a structured summary, cross-document findings, and every earlier run to open read-only.
 export function CaseAnalysisCard({
   caseId,
   analysisReady,
@@ -26,6 +32,10 @@ export function CaseAnalysisCard({
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [runs, setRuns] = useState<CaseAnalysisRunItem[]>([]);
+  // An earlier run opened read-only; the latest is shown when null.
+  const [viewing, setViewing] = useState<CaseAnalysis | null>(null);
+  const [openingRunId, setOpeningRunId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsRefreshing(true);
@@ -38,14 +48,56 @@ export function CaseAnalysisCard({
     }
   }, [caseId]);
 
-  // The case snapshot carries the overview over the socket, so a change in it means the result moved.
+  const loadRuns = useCallback(async () => {
+    try {
+      setRuns(await listCaseAnalysisRuns(caseId));
+    } catch {
+      // Only the list of earlier runs is missing; the latest result still shows.
+    }
+  }, [caseId]);
+
+  async function openRun(runId: string | null) {
+    setError(null);
+    if (runId === null) {
+      setViewing(null);
+      return;
+    }
+    setOpeningRunId(runId);
+    try {
+      setViewing(await getCaseAnalysisRun(caseId, runId));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to load that analysis');
+    } finally {
+      setOpeningRunId(null);
+    }
+  }
+
+  // The case snapshot carries the overview over the socket, so a change in it means the result moved. Each
+  // snapshot is a new object, so the effect watches these fields, not the object.
+  const hasOverview = overview !== null;
+  const runId = overview?.run_id;
+  const runStatus = overview?.status;
+  const stale = overview?.stale;
   useEffect(() => {
-    if (overview) {
+    if (hasOverview) {
       void load();
+      void loadRuns();
     } else {
       setAnalysis(null);
+      setRuns([]);
     }
-  }, [overview?.run_id, overview?.status, overview?.stale, load]);
+  }, [hasOverview, runId, runStatus, stale, load, loadRuns]);
+
+  // A new run is the card's result again.
+  useEffect(() => {
+    setViewing(null);
+  }, [runId]);
+
+  // A failed run's stored error is an exception's text: the console has it, the card says to run it again.
+  const failedError = analysis?.status === 'failed' ? analysis.error : null;
+  useEffect(() => {
+    if (failedError) console.error(`Case analysis for case ${caseId} failed:`, failedError);
+  }, [caseId, failedError]);
 
   const running = starting || overview?.status === 'running';
 
@@ -61,10 +113,12 @@ export function CaseAnalysisCard({
     }
   }
 
-  const findings = [...(analysis?.findings ?? [])].sort(
+  // What the card shows: an earlier run opened read-only, or the latest.
+  const shown = viewing ?? analysis;
+  const findings = [...(shown?.findings ?? [])].sort(
     (a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
   );
-  const showResult = analysis?.status === 'complete';
+  const showResult = shown?.status === 'complete';
 
   return (
     <>
@@ -91,35 +145,53 @@ export function CaseAnalysisCard({
         </div>
       )}
 
-      {error && (
-        <p className="analysis-error" role="alert">
-          {error}
-        </p>
+      {error && <ErrorMessage className="card-error" message={error} />}
+
+      {viewing && (
+        <div className="summary-message summary-message--info">
+          <span className="summary-message-icon">ⓘ</span>
+          <div>
+            <strong>
+              Earlier run from{' '}
+              {new Date(viewing.started_at).toLocaleString('en-SG', {
+                day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+              })}
+              , read-only.
+            </strong>
+            <p>
+              It reflects the documents as they were then.{' '}
+              <button type="button" className="text-button" onClick={() => void openRun(null)}>
+                Back to the latest
+              </button>
+            </p>
+          </div>
+        </div>
       )}
 
-      {overview?.stale && (
+      {!viewing && overview?.stale && (
         <div className="summary-message summary-message--warning">
           <span className="summary-message-icon">⚠</span>
           <div>
             <strong>Out of date.</strong>
-            <p>Documents changed since this analysis ran. The risk score and recommendations are from before that; run it again to update them.</p>
+            <p title={outOfDateMessage(overview).waitingList || undefined}>{outOfDateMessage(overview).detail}</p>
+            <p>The risk score and recommendations below are from before the documents changed.</p>
           </div>
         </div>
       )}
 
-      {analysis?.status === 'failed' && (
+      {!viewing && analysis?.status === 'failed' && (
         <div className="summary-message summary-message--warning">
           <span className="summary-message-icon">⚠</span>
           <div>
             <strong>The analysis did not finish.</strong>
-            <p>{analysis.error ?? 'Run it again.'}</p>
+            <p>Run it again.</p>
           </div>
         </div>
       )}
 
-      {showResult && analysis && (
+      {showResult && shown && (
         <>
-          {analysis.summary && <p className="analysis-summary">{analysis.summary}</p>}
+          <AnalysisSummaryBlock analysis={shown} linkToRiskTab={!viewing} />
 
           {findings.length === 0 ? (
             <div className="summary-message summary-message--success">
@@ -132,7 +204,7 @@ export function CaseAnalysisCard({
           ) : (
             <ul className="risk-findings">
               {findings.map((finding) => (
-                <li key={finding.id}>
+                <li key={finding.id} id={analysisFindingAnchor(finding.id)}>
                   <span className={`risk-severity risk-severity--${finding.severity}`}>{finding.severity}</span>
                   <span className="risk-finding-text">
                     <span className="risk-finding-summary">
@@ -147,22 +219,15 @@ export function CaseAnalysisCard({
               ))}
             </ul>
           )}
-
-          {(analysis.consistent_checks ?? []).length > 0 && (
-            <>
-              <h3 className="analysis-heading">Checked and consistent</h3>
-              <ul className="risk-findings">
-                {(analysis.consistent_checks ?? []).map((line) => (
-                  <li key={line}>
-                    <span className="risk-finding-text">
-                      <span className="risk-finding-rationale">{line}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
         </>
+      )}
+
+      {runs.length > 1 && (
+        <PreviousRuns
+          runs={runs}
+          viewingRunId={viewing?.run_id ?? openingRunId}
+          onOpen={(id) => void openRun(id)}
+        />
       )}
     </section>
     <CaseAnalysisTracePanel analysis={analysis} isRefreshing={isRefreshing} onRefresh={load} />

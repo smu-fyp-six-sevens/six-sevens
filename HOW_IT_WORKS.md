@@ -43,7 +43,7 @@ PDF, PNG or JPEG, up to 25 MB each, up to 20 per batch. For each file: store it,
 ### Step 3: Per-document pipeline (read, classify, extract)
 The doc-worker takes each `document.uploaded` (or an officer's `document.retry_requested`), claims the document with a compare-and-swap from `queued` to `processing` (so a repeated event is skipped), and runs the LangGraph document graph, `QUEUE_WORKER_CONCURRENCY` at once per process. When it ends it publishes `document.analyzed` or `document.failed`:
 
-1. **Ingest (`processing`, shown as "Classifying").** Download the file; read native PDF text or OCR it, and read file metadata with `exiftool` at the same time (it is a subprocess, so it runs in its own thread while the text extraction uses the single PDF/OCR worker, `cpu_pool.py`, which keeps PyMuPDF off two threads at once). A failed metadata read is stored as an error record, never as "no metadata".
+1. **Ingest (`processing`, shown as "Classifying").** Download the file; read native PDF text or OCR it, and read file metadata with `exiftool` at the same time (it is a subprocess, so it runs in its own thread while the text extraction uses the PDF/OCR pool, `cpu_pool.py`: one thread locally, which keeps PyMuPDF off two threads at once, and two processes on the deployed workers, each with its own PyMuPDF). A failed metadata read is stored as an error record, never as "no metadata".
 2. **Classify.** A rule-based classifier first (free); then a Sonnet agent that may ask a Haiku classifier for a second opinion and, on a later turn, vision. Confidence below **0.85** routes the document to manual review.
 3. **Extract (`extracting`).** One Sonnet call fills the type's schema, with a confidence per field. Fields are stored one row each in `extracted_fields` **before** the document row is updated, so a snapshot never sees a document without its fields. For a document that can belong to a company or a person (a bank statement, a source-of-wealth document) the model also says which it is (`entity_type`).
 4. **Disagreement loop.** If extraction says the type is wrong, the document returns to the classifier once; if still unresolved it is marked `failed`. An unreadable reply fails the document (retryable) without reclassifying it.
@@ -64,7 +64,7 @@ Approval publishes `document.approved`; the detection-worker runs it, **two runs
 | Specialist | Tools (plain code) | Looks for |
 |---|---|---|
 | **Layout & Rendering** | font consistency, layout anomalies, image manipulation, image tampering | odd fonts and sizes, misalignment, text over text, spliced or edited images |
-| **Content Validation** | spelling, date consistency, numerical checks, external validation | typos, impossible dates, sums and balances that don't add up, broken NRIC/UEN/MRZ checksums, a company missing from ACRA, a postal code missing from OneMap, a home address at an office or industrial unit, wrong CPF/GST rates |
+| **Content Validation** | spelling, date consistency, page consistency, numerical checks, external validation | typos, impossible dates, a page missing, swapped in or copied in a multi-page statement, sums and balances that don't add up, broken NRIC/UEN/MRZ checksums, a company missing from ACRA, a postal code missing from OneMap, a home address at an office or industrial unit, wrong CPF/GST rates |
 | **Digital Authenticity** | metadata, AI generation | editing software in the metadata, modified-after-created dates, AI-generated images |
 
    A tool returns *candidate* findings. The specialist gives each a severity or dismisses it as a false positive; it cannot invent findings or change a tool's facts.
@@ -72,7 +72,7 @@ Approval publishes `document.approved`; the detection-worker runs it, **two runs
    - **A hard breach cannot be dismissed.** A finding a check marked `impossible` (an arithmetic that cannot hold, an identifier absent from its register) with confident extraction stays on the report as high, marked not approved by the specialist, with the specialist's note. A finding that needs review, or is only a signal, can still be dismissed.
    - **Font check.** Besides comparing a piece of text with the neighbours in its column, it compares a number with the other cells in its row (a lone table value has no column) and flags a number in a typeface no other number uses. Both fire only for a style that at most two runs in the document use, so a legitimate repeated style is not flagged.
    - **Metadata.** Subject and title are read out for the specialist to judge. No rule inspects them, and they do not affect whether the check can assess a document. A specialist can mention them in its summary but cannot create a scored finding.
-   - **Tool time limits** count the time a tool works, not the time its job waits for the single CPU worker; a wait has its own cap (`CPU_QUEUE_TIMEOUT_SECONDS`).
+   - **Tool time limits** count the time a tool works, not the time its job waits for a free CPU worker; a wait has its own cap (`CPU_QUEUE_TIMEOUT_SECONDS`).
 4. **Lead reviews**, and may request one second look from another specialist.
 5. **Merge (code).** One report with a verdict: `flagged`, `inconclusive` or `clean`. When a second look dismisses a finding the first pass kept, the later view stands: the finding is removed from the report, the flags and the score (the dismissal stays visible under the specialist). A check that failed and then ran in a retry or the second look is not listed as unable to assess.
 6. **Save.** The report is written to the document's trace, then the findings a specialist **approved** are written to `flags`, then the document becomes `detected`.
@@ -108,6 +108,26 @@ A case that was never analysed shows "Not scored yet". If documents change after
 - Total ≥ 8 → High, ≥ 3 → Medium, otherwise Low. **Critical** needs scoring high findings on 3 or more different documents.
 - The 0–100 number is anchored to the level, so a Critical case always outscores a High one.
 
+### Checking what the models return
+Every model reply and tool result is checked against an expected shape before anything uses it. A bad one is repaired, replaced by a safe default, or recorded as "could not assess": it never crashes a run, and a check that couldn't run never counts as clean.
+- **`app/llm_io.py`** reads replies: `message_text` (ignores thinking blocks), `parse_json_object` (tolerates fences and prose around the object), `forced_args` for tool calls, `was_cut_off` and `salvage_*` for replies cut off at the token limit, and `validate(Model, data)`, which never raises and returns `ok`, `degraded` (unusable fields dropped, defaults apply) or `failed` (the caller's fallback). Lenient on shape, strict on meaning: a test fails if a contract gains a numeric field, so coercion can't make up a number.
+- **`app/llm_contracts.py`** has one model per reply: `ClassifierReply`, `ExtractionReply`, `LeadPlan`, `LeadReview`, `SpecialistAssessment`, `EvidenceRequests`, `SummaryReply`. Hypotheses and verdicts are checked item by item, then in `verify.py`.
+- **Tool calls:** Haiku can be forced to call a tool (the evidence requests; each specialist's first turn). Sonnet 5.5 can't, so the cross-document planner and judge use `tool_choice: auto`, a `strict` tool, a prompt line naming it, and one retry if the reply didn't call it. The detection lead and extraction answer in JSON text.
+- **Refusals:** a `stop_reason` of `refusal` fails the step with its own reason (`ModelRefused`): the document fails with a plain message for the officer, and a specialist marks its findings unassessed.
+- **Detection tools** all return `ToolResult` (`unable_to_assess`, `nothing_to_check`, `findings`, …). A finding without a summary gets a placeholder rather than being dropped, so a flagged document can't read as clean. Stored reports carry a `schema_version` and are read through `read_report()`.
+
+| Reply | When it's unusable |
+|---|---|
+| Classifier agent | One cheap re-ask, then `unrecognised` and manual review; an unreadable `confidence` alone takes 0 |
+| LLM classifier, vision | Empty candidates; the rule classifier decides |
+| Extraction | Retried once with its own reply shown (not when cut off); then the document fails, retryable. A cut-off reply keeps its complete fields. Nothing is written without usable output, so a failed rerun doesn't wipe stored fields. Confidence is clamped to 0–1, anything else is unknown |
+| Lead plan / review | Default briefs / no summary and no second look |
+| Specialist | Findings stay unassessed, `uncertain=True` |
+| Hypotheses, verdicts, evidence requests | Empty list |
+| Summary | The deterministic summary |
+
+**Bounds:** a run may make at most `DOCUMENT_MAX_MODEL_CALLS` (24) or `DETECTION_MAX_MODEL_CALLS` (30) calls, and a case analysis 6 (`run_context.py`). Past the detection limit the verdict can't be clean. Every tool has a time limit (`TOOL_TIMEOUT_SECONDS` 60, `SLOW_TOOL_TIMEOUT_SECONDS` 120 for model and registry tools); a timeout is `unable_to_assess`. Transient API errors are retried by the client (`LLM_MAX_RETRIES`, 1). Every repaired reply is written to the trace (`run_audit`), with the raw reply capped at 4,000 characters.
+
 ---
 
 ## 4. How live updates work
@@ -136,7 +156,7 @@ uploaded → queued → processing → extracting → analyzed ──approve─�
 
 | Table | Holds |
 |---|---|
-| `cases` | company name, GreenLink ID, `submission_finalized` (the `dev` column is no longer used). `recommended_additional_documents` (jsonb) holds `[]` until a case is analysed, then the whole `additional_documents` result of its latest complete run; the case summary returns it as `additional_documents`. The summary's `missing_requirements` (the checklist types no accepted document covers yet) is computed on every read, not stored |
+| `cases` | company name, GreenLink ID, `submission_finalized` (the old `dev` column was dropped on 2026-10-24). `recommended_additional_documents` (jsonb) holds `[]` until a case is analysed, then the whole `additional_documents` result of its latest complete run; the case summary returns it as `additional_documents`. The summary's `missing_requirements` (the checklist types no accepted document covers yet) is computed on every read, not stored |
 | `documents` | one row per file: status, type, confidences, routing, requirements fulfilled, file metadata (read only by the metadata checks) |
 | `extracted_fields` | one row per field per document |
 | `langgraph_trace` | one JSON trace per document: pipeline steps and the **full detection report** |
@@ -165,6 +185,7 @@ Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `AN
 | `QUEUE_WORKER_CONCURRENCY` | 4 | documents one doc-worker process runs at once |
 | `DETECTION_CONCURRENCY` | 2 | detection runs at once |
 | `CPU_WORKER_CONCURRENCY` | 1 | threads for PDF, OCR and forensic work; PyMuPDF is not thread-safe |
+| `CPU_WORKER_PROCESSES` | 0 | processes for that work instead, each with its own PyMuPDF (2 on the doc-worker and detection-worker); a bound method or closure still uses the thread |
 | `DOCUMENT_MAX_MODEL_CALLS` | 24 | model calls one document's classify and extract run may make |
 | `DETECTION_MAX_MODEL_CALLS` | 30 | model calls one detection run may make; past it the verdict can't be clean |
 | `LLM_MAX_RETRIES`, `LLM_TIMEOUT_SECONDS` | 1, 300 | the Anthropic client's own retries (each is billed) and one request's time limit |
@@ -172,7 +193,7 @@ Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `AN
 | `CPU_QUEUE_TIMEOUT_SECONDS` | 300 | the most a tool waits for the CPU worker before it starts |
 | `CASE_ANALYSIS_ENABLED` | true | kill switch for the case analysis |
 | `LOG_HTTP_REQUESTS` | false | httpx's one line per Supabase call |
-| `LANGGRAPH_SONNET_MODEL`, `LANGGRAPH_HAIKU_MODEL` | `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` | model overrides |
+| `LANGGRAPH_SONNET_MODEL`, `LANGGRAPH_HAIKU_MODEL` | `claude-sonnet-5-5`, `claude-haiku-5-5` | model overrides. Every call sets its effort in code (`low`, or `medium` for the detection lead and the cross-document planner and judge) and sends no `temperature`; a refusal fails the step with its own reason |
 | `SUPABASE_STORAGE_BUCKET` | `documents` | bucket name |
 | `DATA_GOV_SG_API_KEY` | — | data.gov.sg lookups and the zoning download |
 | `URA_API_KEY` | — | URA approved residential use; skipped without it |
@@ -196,7 +217,7 @@ The same counts are also on `GET /metrics` for Prometheus (`metrics.py`), togeth
 - Claude calls, tokens, cost and latency per agent and model, with list prices from `pricing.py`;
 - cost and calls per unit of work, and detection tool outcomes.
 
-Labels are routes, event types, stages, agents and models, never ids. Kong blocks `/metrics` from outside. Grafana's four dashboards (services, pipeline, agents, cost) read these metrics (`deploy/grafana`, `CLOUD_ARCHITECTURE_PLAN.md` section 8).
+Labels are routes, event types, stages, agents and models, never ids. Kong blocks `/metrics` from outside. Grafana's four dashboards (services, pipeline, agents, cost) read these metrics (`deploy/grafana`, `CLOUD_ARCHITECTURE_PLAN.md` section 7).
 
 **Traces.** OpenTelemetry (`telemetry.py`) is off unless `OTEL_ENABLED=true`, which Terraform sets in the cloud. Spans go to:
 1. OTLP, when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (Jaeger locally);
@@ -205,7 +226,7 @@ Labels are routes, event types, stages, agents and models, never ids. Kong block
 
 Each event's Pub/Sub message carries `traceparent`, so one upload is one trace across services. `OTEL_TRACES_SAMPLE_RATIO` (default 1.0) samples fewer.
 
-**Stuck work** (`sweeper.py`, `CLOUD_ARCHITECTURE_PLAN.md` section 16). In the cloud, Cloud Scheduler publishes `sweep.requested` every 2 minutes and audit-metrics runs the sweeper (`SWEEPER_ENABLED`; off locally, because the database is shared).
+**Stuck work** (`sweeper.py`, `CLOUD_ARCHITECTURE_PLAN.md` section 5). In the cloud, Cloud Scheduler publishes `sweep.requested` every 2 minutes and audit-metrics runs the sweeper (`SWEEPER_ENABLED`; off locally, because the database is shared).
 - **What counts as stuck:** a document uploaded or queued for over 5 minutes (its event was lost), or processing, extracting or detecting for over 15 minutes (its run died); or a case analysis still running past `CASE_ANALYSIS_TIMEOUT_SECONDS`.
 - **What happens:** the sweeper publishes `recovery.requested` to the worker that owns the stage. That worker resets the status (compare-and-swap) and reruns it. After 3 attempts it fails the document (detection: back to approved with an error) and publishes `recovery.exhausted`. A stuck case analysis is marked failed, not rerun.
 - **Locally:** `python -m app.sweeper --once --case <id>` runs one pass for one case and does the recovery in the same process.
@@ -218,9 +239,9 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 ## 9. What is built and what isn't
 
-**Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks; per-document flags; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; cost logging; the service split (roles, domain events, Pub/Sub push, audit trail, `/metrics`), Kong, the compose stack, Terraform and the deploy workflow (`CLOUD_ARCHITECTURE_PLAN.md`; not yet applied to GCP).
+**Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks; per-document flags; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; case notes; cost logging and per-case Claude cost; the service split on Cloud Run (roles, domain events, Pub/Sub push, audit trail, stuck-work recovery, `/metrics`, Grafana, traces, alerts), Kong, the compose stack, Terraform, and CI/CD that deploys every green push to `main` (`CLOUD_ARCHITECTURE_PLAN.md`).
 
-**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused). Open items are in `PENDING_WORK.md`.
+**Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused); the case dashboard (`/dashboard` is mock data). Open items are in `PENDING_WORK.md` and the cloud plan's section 9.
 
 ## 10. Known rough edges
 
@@ -245,7 +266,7 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 | Events and their transport | `events/` (`types.py`, `bus.py`, `push.py`, `registry.py`) |
 | Upload and the doc-worker | `routers/upload.py`, `workers/documents.py` |
 | Classify and extract | `langgraph/pipeline.py`, `graph.py`, `classify_graph.py`, `extract.py` |
-| Approve and detection | `routers/documents.py` (`approve_document`), `workers/detection.py`, `langgraph/detection/graph.py`, `specialists.py`, `tools.py` |
+| Approve and detection | `document_service.py` (`approve`), `workers/detection.py`, `langgraph/detection/graph.py`, `specialists.py`, `tools.py` |
 | The forensic checks | `fraud_detection/` |
 | Flags | `flags_repository.py` |
 | Case snapshot, checklist, case list | `case_service.py` |

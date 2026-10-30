@@ -27,6 +27,7 @@ An approved "Other" (unrecognised) document is scanned like any other. Checks th
 | `authenticity/` | `metadata_analysis.py` (file metadata tamper signals), `ai_generation.py` (traces of AI generation) |
 | `dates/` | `date_anomalies.py` (future dates, end-before-start), `date_parsing.py` (reads a date in any printed form; shared by every date check) |
 | `spelling/` | `spelling_anomaly.py` (SymSpell, one finding per distinct word), `domain_terms.py` (allow-list of legal/financial jargon) |
+| `pages/` | Cross-page consistency of one multi-page document, no model calls: `PAGE.NUMBERING` (gaps, repeats, reordering in "Page x of y"), `PAGE.CARRY_FORWARD` (carry lines vs each other and their page; quiet where the rows break, which `BS.RUNNING_BALANCE` reports), `PAGE.HEADER_IDENTITY` (account number, holder, UEN the same on every page; periods not compared), `PAGE.SOURCE` (other page size, or a scan among digital pages; a signal), `PAGE.DUPLICATE`. Evidence about one page or boundary is merged into one finding. `page_view.py` reads each page and places transaction rows on pages. Test defects (delete, duplicate, swap a page, edit a carry line) are in `app/injection/page_defects.py` |
 | `images/` | `image_manipulation.py` (resolution and compression mismatches; `check_image_tampering`: overlay, scaling, visible boundary, quality mismatch) and `image_integrity.py` |
 | `external_validation/` | The document's facts against outside references. `runner.py` is the entry point; `registry_lookups/` holds the live ACRA, OneMap, HDB, URA (approved residential use, Master Plan zoning index) and MOM lookups; `sg_reference/` the published tables (CPF, GST, IRAS, bank identifiers, public holidays); `reference_checks/` the checks over them (`PAY.CPF_RATE`, `PAY.CPF_CEILING`, `PAY.CPF_BASE`, `POA.GST`, `NOA.PAYABLE`, `BS.BANK_IDENTIFIERS`, `BS.ACCOUNT_NUMBER_FORMAT`); `giro.py` the GIRO closed-day check |
 | `shared/` | Not checks: `field_values.py`, `field_catalogue.py` (what specialists see of the fields), `pdf_pages.py` |
@@ -61,7 +62,7 @@ Runs per case, on an officer's request, once every approved document has been sc
 | `cross_document/deterministic.py`, `identity_pairs.py` | The comparisons that always run first (company name, address, UEN, a person's ID, name and details across documents). One finding per difference (`xd-det-N`), merged by value, written as a plain sentence; also given to the agent grouped by value. `restates_a_code_finding` drops an agent finding that only repeats one |
 | `cross_document/evidence.py` | The case as the analysis sees it: dossier (protected fields removed), masked identifiers, the ledger of every ref id issued in a run, the model-call counter |
 | `cross_document/bias.py` | What the analysis may never reason from: protected field names and the text patterns for them. Used by the dossier, tools, hypothesis screen and verifier. The one exception is code: `deterministic.py` compares date of birth, race, sex and nationality, and those findings are withheld from every model (`withhold_if_protected`) |
-| `cross_document/agents.py`, `graph.py`, `verify.py` | Plan (at most 3 hypotheses, each with the checks to run), run the checks (code), judge all in one call, verify each verdict in code. Two Sonnet calls (`MAX_MODEL_CALLS_PER_RUN`), forced tool calls, one cached system prompt. `verify.plain_text` strips tool names, flags and ref ids from the judge's wording |
+| `cross_document/agents.py`, `graph.py`, `verify.py` | Plan (at most 3 hypotheses, each with the checks to run), run the checks (code), judge all in one call, verify each verdict in code. Two Sonnet calls at effort `medium`, each retried once if the reply calls no tool (`MAX_MODEL_CALLS_PER_RUN` 4); tool choice is left to the model (Sonnet 5.5 rejects a forced one) and the judge's tool is strict. One cached system prompt. `verify.plain_text` strips tool names, flags and ref ids from the judge's wording |
 | `cross_document/tools/` | Read-only evidence tools: `reading.py`, `transactions.py` (repeated payments, card usage, recurring payments), `comparisons.py` (including `compare_linked_people`), `consistency.py` |
 | `cross_document/company_identity.py`, `address_matching.py` | The strict company-name and address matching behind the consistency tools |
 | `risk/case_risk.py` | Deterministic score, level and findings; called only by an analysis run. The same check with the same stated value on several documents scores once (`repeat_of` / `also_on`); Critical counts only documents whose high finding scores |
@@ -73,7 +74,7 @@ Runs per case, on an officer's request, once every approved document has been sc
 
 API: `POST /cases/{id}/analysis/run` (409 unless ready or already running), `GET /cases/{id}/analysis`. A case's snapshot carries the risk and additional documents of its latest complete run.
 
-Shared: `app/identifiers.py` is a leaf module (it imports neither `case_match` nor `cross_document`) with the key functions `alnum`, `id_key`, `uen_key`, `name_key`, `company_key`, the lenient name matchers and the person extraction (`Person`, `linked_people`). `llm_io.py` reads a model reply and `llm_contracts.py` checks it, for every model call (`OUTPUT_VALIDATION.md`).
+Shared: `app/identifiers.py` is a leaf module (it imports neither `case_match` nor `cross_document`) with the key functions `alnum`, `id_key`, `uen_key`, `name_key`, `company_key`, the lenient name matchers and the person extraction (`Person`, `linked_people`). `llm_io.py` reads a model reply and `llm_contracts.py` checks it, for every model call (HOW_IT_WORKS.md, "Checking what the models return").
 
 ## 2. Detection Agent: files
 
@@ -82,7 +83,7 @@ Shared: `app/identifiers.py` is a leaf module (it imports neither `case_match` n
   - Company-name and address consistency are cross-document checks (`cross_document/tools/consistency.py`), attached to no specialist.
 - **`specialists.py`**: the three specialists, each a tool-calling loop (agent, tools, collect).
   - Layout & Rendering: font consistency, layout anomalies, image manipulation, image tampering.
-  - Content Validation: spelling, date consistency, `numerical_checks_tool`, `external_validation_tool`; its prompt also lists the document's fields and the two check menus.
+  - Content Validation: spelling, date consistency, page consistency, `numerical_checks_tool`, `external_validation_tool`; its prompt also lists the document's fields and the two check menus.
   - Digital Authenticity: metadata, AI generation.
   A finding the LLM doesn't assess is kept at `medium` with `ai_accepted: false`; one it assessed and kept has `ai_accepted: true`. A tool with a severity floor (`_MIN_SEVERITY_BY_TOOL`) keeps that floor even when dismissed. Only `ai_accepted` per-document findings become flags.
 - **Per-run fetch cache (`tools.py`)**: the document row, its fields and its file are each fetched once per run. The cache holds the in-flight fetch, so parallel specialists share one; a failed fetch is dropped and retried. `load_context` primes it.
@@ -130,7 +131,7 @@ Each is compiled once and cached. `agent → (tool calls ? tools : collect)`, `t
 
 ### Lead model call (`_ask_lead`)
 
-Sonnet, max 1500 tokens, temperature 0; the system prompt is one block with `cache_control`; cache keys `detection_lead_plan` and `detection_lead_review`. `parse_json_object` strips `<think>` blocks and fences and takes the first `{` to the last `}`; `validate` checks `LeadPlan` / `LeadReview`. A failed or unusable `lead_plan` gives every specialist the generic brief; from `lead_review`, no summary and no second look. All three specialists still run.
+Sonnet, effort `medium`, max 4000 tokens; the system prompt is one block with `cache_control`; cache keys `detection_lead_plan` and `detection_lead_review`. `parse_json_object` strips `<think>` blocks and fences and takes the first `{` to the last `}`; `validate` checks `LeadPlan` / `LeadReview`. A failed or unusable `lead_plan` gives every specialist the generic brief; from `lead_review`, no summary and no second look. All three specialists still run.
 
 ### Prompts
 
@@ -189,20 +190,19 @@ Each check module has its own test file under `backend/tests/`; `test_detection.
 
 ## 6. Known bugs: Detection Agent
 
-Found by reading the code (2026-10-05); statuses re-checked 2026-10-19. None has been reproduced in the app.
+Found by reading the code (2026-10-05); re-checked 2026-10-24. None has been reproduced in the app. Remove a row once it's fixed.
 
 | # | Severity | Where | What happens |
 |---|---|---|---|
 | 1 | Low | `graph.py` `_normalise_plan` | If the lead's JSON can't be parsed, every specialist runs with the generic brief and nothing records the lead's failure |
-| 2 | High | `routers/detection.py` cancel/retry, `DetectionPanel.tsx` | If a run is lost (server restart, dropped task) before recording an error, the panel shows "Scanning…" forever: cancel returns 409 (no task), retry returns 409 (needs a recorded error), and nothing can restart it |
+| 2 | Medium (local only) | `routers/detection.py` cancel/retry, `DetectionPanel.tsx` | If a run is lost before recording an error, cancel and retry both return 409. In the cloud the sweeper recovers a document `detecting` for over 15 minutes; locally (uvicorn, sweeper off) the panel shows "Scanning…" until `python -m app.sweeper --once --case <id>` is run |
 | 3 | Medium–High | `specialists.py` `_collect_node`, merge | An unassessed finding becomes `medium` and can flag a document and count towards case risk ("unreviewed"); it is no longer stored as a flag |
 | 4 | Medium | `tools.py` `metadata_tool` | Calls the synchronous `check_metadata_anomalies` inside an `async` function, blocking the event loop while it runs (the other tools use `asyncio.to_thread`) |
 | 5 | Medium | `tools.py` `_with_ids`, `specialists.py` `_collect_node` | Finding ids are numbered per tool call; if a specialist calls the same tool twice, `_collect_node` keys by id and silently overwrites the first, and the second-look lookup assumes unique ids |
-| 6 | Low | `routers/documents.py` `_run_detection_task` | Its `finally` removes `_detection_tasks[document_id]`; if a new run started meanwhile, cancel can no longer find it |
 | 7 | Low | `specialists.py` `_collect_node` | `uncertain` is set whenever no tool ran, even when the specialist correctly judged none applicable; the lead may read that as doubt about the document |
 
 Design questions: a second look can only raise severity (the merge keeps the highest), so it can never clear a finding; "call each tool at most once" is in the prompt but not enforced; a wrongly dismissed finding disappears from the lead's view and the report (the raw output stays on the trace and the panel lists each dismissal with its reason). Check how often real documents get dismissals before trusting this.
 
 ## 7. Synthetic fraud data: `backend/app/injection/`
 
-Generates the test data the checks are validated against: `injectors.py` (defect classes that inject layout, font, text and metadata manipulations into PDFs, on `pdf.py` and `field_text.py`), `schemas.py`, `service.py`, `store.py`. Exposed through `routers/injection.py`. It ships in the production API today (see `REFACTORING_AUDIT.md` §2.6).
+Generates the test data the checks are validated against: `injectors.py` (defect classes that inject layout, font, text and metadata manipulations into PDFs, on `pdf.py` and `field_text.py`), `schemas.py`, `service.py`, `store.py`. Exposed through `routers/injection.py`, mounted only in uvicorn mode; no image ships it.

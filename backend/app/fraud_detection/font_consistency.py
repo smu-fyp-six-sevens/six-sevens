@@ -10,7 +10,6 @@ agree with each other, and a signature is never compared at all.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from collections import Counter
@@ -20,6 +19,8 @@ from typing import Any, Hashable, Literal, cast
 
 import pymupdf
 from pydantic import BaseModel
+from .shared.check_result import CheckResult
+from .shared.field_values import decode_field_value
 from .shared.pdf_pages import page as _page, pages as _pages
 
 logger = logging.getLogger("fraud_detection.font_consistency")
@@ -125,12 +126,10 @@ class _RawAnomaly(BaseModel):
     field_name: str | None = None
 
 
-class FontConsistencyResult(BaseModel):
+class FontConsistencyResult(CheckResult):
     document_id: str
     anomalies: list[FontAnomalyV2]
     all_detected_styles: list[DetectedStyle]
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
 
 
 def _empty_result(document_id: str, reason: str | None = None) -> FontConsistencyResult:
@@ -796,15 +795,7 @@ def _field_search_text(field: ExtractedField) -> str | None:
     string (decoding one level of JSON encoding if present), else None —
     a number, bool, list or dict has no single text span to search for.
     """
-    value = field.field_value
-    if isinstance(value, str):
-        try:
-            decoded = json.loads(value)
-        except (json.JSONDecodeError, TypeError):
-            decoded = value
-    else:
-        decoded = value
-
+    decoded = decode_field_value(field.field_value)
     if not isinstance(decoded, str):
         return None
     decoded = decoded.strip()

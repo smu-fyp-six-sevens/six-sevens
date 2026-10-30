@@ -40,7 +40,7 @@ from app.config import settings
 from app.langgraph import nodes, pipeline, text_cache, trace
 from app.langgraph.extract import _EXTRACTION_MAX_TOKENS
 from app.langgraph.extraction_prompts import EXTRACTION_SCHEMAS
-from app.models import DocumentRecord, DocumentStatus
+from app.models import DocumentRecord, DocumentStatus, RoutingStatus
 from app.events import Event, types
 from app.workers import documents as doc_worker
 
@@ -90,9 +90,9 @@ def _step_for(model: str, max_tokens: int) -> str:
     # — see classify_graph.agent_node/repair_node, llm_classify.classify_by_llm
     # and extract.run_extraction.
     return {
-        (settings.LANGGRAPH_SONNET_MODEL, 1024): "classify_agent",
-        (settings.LANGGRAPH_HAIKU_MODEL, 1024): "llm_classify",
-        (settings.LANGGRAPH_HAIKU_MODEL, 512): "repair",
+        (settings.LANGGRAPH_SONNET_MODEL, 2048): "classify_agent",
+        (settings.LANGGRAPH_HAIKU_MODEL, 2048): "llm_classify",
+        (settings.LANGGRAPH_HAIKU_MODEL, 1024): "repair",
         (settings.LANGGRAPH_SONNET_MODEL, _EXTRACTION_MAX_TOKENS): "extract",
     }[(model, max_tokens)]
 
@@ -178,7 +178,7 @@ class FakeStore:
         document = self.documents[document_id]
         document.document_type = recorded["document_type"]
         document.classification_confidence = recorded["classification_confidence"]
-        document.routing_status = recorded["routing_status"]
+        document.routing_status = RoutingStatus(recorded["routing_status"])
 
     def update_extracted_fields(self, document_id, extraction_confidence, fulfilled_requirements=None):
         self.extraction_confidence[document_id] = extraction_confidence
@@ -188,6 +188,9 @@ class FakeStore:
         self.escalations[document_id].append(reason)
 
     def update_metadata(self, document_id, metadata):
+        pass
+
+    def update_guard_result(self, document_id, guard_result):
         pass
 
     # extracted_fields_repository

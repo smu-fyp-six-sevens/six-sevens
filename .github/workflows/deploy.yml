@@ -1,19 +1,32 @@
 name: Deploy to Cloud Run
 
-# Manual only (Actions tab -> "Deploy to Cloud Run" -> "Run workflow").
-# Terraform (deploy/terraform) owns each service's configuration; this only builds one image per role,
-# rolls it out, checks the gateway, and rolls every service back if the check fails.
+# Runs after CI passes on a push to main (called from ci-cd.yml), or by hand (Actions tab -> "Deploy to
+# Cloud Run" -> "Run workflow"). Terraform (deploy/terraform) owns each service's configuration; this only
+# builds one image per role, rolls it out, checks the gateway, and rolls every service back if the check fails.
 on:
+  workflow_call: {}
   workflow_dispatch: {}
 
 permissions:
   contents: read
   id-token: write # Workload Identity Federation
 
+# One deploy at a time; a newer one waits, and a deploy is never cancelled halfway (that would skip the rollback).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION || 'asia-southeast1' }}
   REGISTRY: ${{ vars.GCP_REGION || 'asia-southeast1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/app
+  # The only list of services in this workflow; every step reads it. Adding one: docs/ADDING_A_SERVICE.md.
+  # Backend roles: a target each in backend/Dockerfile; their main container is named "app".
+  BACKEND_ROLES: api doc-worker detection-worker case-worker audit-metrics
+  # Other services, as name=Dockerfile. Their main container is named after the service (they have a sidecar),
+  # except the ones in SINGLE_CONTAINER.
+  OTHER_SERVICES: kong=deploy/kong/Dockerfile frontend=frontend/Dockerfile grafana=deploy/grafana/Dockerfile
+  SINGLE_CONTAINER: frontend
 
 jobs:
   build:
@@ -60,20 +73,27 @@ jobs:
               echo "$image:$GITHUB_SHA is already built; skipping"
               return
             fi
-            docker buildx build -f "$file" "$@" \
+            # --provenance=false: one manifest per image, not an index with untagged children that Artifact
+            # Registry's clean-up policy (deploy/terraform/main.tf) could delete.
+            docker buildx build -f "$file" "$@" --provenance=false \
               --cache-from "type=registry,ref=$REGISTRY/buildcache:$image" \
               --cache-to "type=registry,ref=$REGISTRY/buildcache:$image,mode=max,image-manifest=true,oci-mediatypes=true" \
               -t "$REGISTRY/$image:$GITHUB_SHA" --push .
           }
-          for role in api doc-worker detection-worker case-worker audit-metrics; do
+          for role in $BACKEND_ROLES; do
             # Every role shares the dependency layers, so each may also start from api's cache.
             build "$role" backend/Dockerfile --target "$role" \
               --cache-from "type=registry,ref=$REGISTRY/buildcache:api" \
               --secret id=data_gov_sg_api_key,env=DATA_GOV_SG_API_KEY
           done
-          build kong deploy/kong/Dockerfile
-          build frontend frontend/Dockerfile --build-arg VITE_API_URL="$KONG_URL"
-          build grafana deploy/grafana/Dockerfile
+          for entry in $OTHER_SERVICES; do
+            name=${entry%%=*}; file=${entry#*=}
+            case "$name" in
+              # Vite bakes the API's URL in at build time.
+              frontend) build "$name" "$file" --build-arg VITE_API_URL="$KONG_URL" ;;
+              *) build "$name" "$file" ;;
+            esac
+          done
 
   deploy:
     needs: build
@@ -99,7 +119,8 @@ jobs:
       - name: Record the revisions now serving
         run: |
           : > previous.txt
-          for svc in api doc-worker detection-worker case-worker audit-metrics kong frontend grafana; do
+          others=""; for entry in $OTHER_SERVICES; do others="$others ${entry%%=*}"; done
+          for svc in $BACKEND_ROLES $others; do
             # The revision taking traffic, which after a rollback is not the newest one.
             rev=$(gcloud run services describe "$svc" --region "$REGION" --format='value(status.traffic[0].revisionName)')
             echo "$svc $rev" >> previous.txt
@@ -108,27 +129,36 @@ jobs:
 
       - name: Roll out the new images
         run: |
-          # Workers and audit-metrics first, so the api never publishes to an older consumer.
-          pids=""
-          for svc in audit-metrics doc-worker detection-worker case-worker api kong frontend grafana; do
-            # Services with a sidecar need the main container named. Every flag after --container belongs
-            # to that container, so the service-wide ones (--quiet) go before it.
-            case "$svc" in
-              frontend) container="" ;;
-              kong|grafana) container="--container $svc" ;;
-              *) container="--container app" ;;
-            esac
-            # update keeps the traffic split as it is, and a rollback pins traffic to an old revision,
-            # so traffic is moved to the new revision explicitly.
-            {
-              gcloud run services update "$svc" --region "$REGION" --quiet $container --image "$REGISTRY/$svc:$GITHUB_SHA" &&
-              gcloud run services update-traffic "$svc" --region "$REGION" --quiet --to-latest
-            } &
-            pids="$pids $!"
-          done
-          fail=0
-          for pid in $pids; do wait "$pid" || fail=1; done
-          exit $fail
+          # shellcheck disable=SC2086 # the service lists and $container are split into words on purpose
+          # roll <service>...: rolls them out in parallel and fails if any did.
+          roll() {
+            pids=""
+            for svc in "$@"; do
+              # Services with a sidecar need the main container named. Every flag after --container belongs
+              # to that container, so the service-wide ones (--quiet) go before it.
+              case " $BACKEND_ROLES " in
+                *" $svc "*) container="--container app" ;;
+                *) case " $SINGLE_CONTAINER " in *" $svc "*) container="" ;; *) container="--container $svc" ;; esac ;;
+              esac
+              # update keeps the traffic split as it is, and a rollback pins traffic to an old revision,
+              # so traffic is moved to the new revision explicitly.
+              {
+                gcloud run services update "$svc" --region "$REGION" --quiet $container --image "$REGISTRY/$svc:$GITHUB_SHA" &&
+                gcloud run services update-traffic "$svc" --region "$REGION" --quiet --to-latest
+              } &
+              pids="$pids $!"
+            done
+            fail=0
+            for pid in $pids; do wait "$pid" || fail=1; done
+            return $fail
+          }
+          # Every backend role but api first, so the api never publishes to an older consumer; then the rest.
+          consumers=""; for role in $BACKEND_ROLES; do [ "$role" = api ] || consumers="$consumers $role"; done
+          others=""; for entry in $OTHER_SERVICES; do others="$others ${entry%%=*}"; done
+          # shellcheck disable=SC2086 # the lists are split into words on purpose
+          roll $consumers
+          # shellcheck disable=SC2086
+          roll api $others
 
       - name: Check the gateway (no LLM, no database writes)
         id: check

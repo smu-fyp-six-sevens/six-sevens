@@ -6,11 +6,10 @@ As a loan officer, I want the Content Validation Specialist to identify
 inconsistent or suspicious dates within submitted documents so that I can
 detect potentially altered or fabricated information.
 
-This module owns every date-focused check split out of
-numerical_validation.py (that module's `git log` covers their original
-design/verification notes — the check bodies here are unchanged, only
-relocated) plus one new capability that module never had: extracting every
-identifiable date with a human label (AC1/AC2 below).
+This module owns every date-focused check, originally split out of
+numerical_validation (its `git log` covers their first design notes), plus
+extracting every identifiable date with a human label (AC1/AC2 below).
+Reading a date in whatever form it was printed is date_parsing.py's job.
 
 AC1: every identifiable date is extracted from supported documents.
 AC2: each date is associated with a human label where one is known
@@ -50,6 +49,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel
 
+from ..shared.check_result import CheckResult
 from .date_parsing import date_in_period, parse_date_parts
 from ..font_consistency import ExtractedField
 from ..numerical_validation.common import officer_appointed, officer_role, _apply_needs_review, _as_number, _confidence_by_name, _fields_by_name, _parse_field_date, _rows, _skip_missing
@@ -103,11 +103,11 @@ class ExtractedDate(BaseModel):
     confidence: float | None = None
 
 
-class DateAnomalyResult(BaseModel):
+class DateAnomalyResult(CheckResult):
     """
-    Response for GET /documents/{id}/detection/date-anomalies. Nothing is
-    persisted — a pure read/compute, like the spelling/layout/numerical
-    checks.
+    Response for GET /documents/{id}/detection/date-anomalies. A pure
+    compute: no findings are stored, only a step entry on the document's
+    trace (routers/detection.py).
     """
 
     document_id: str
@@ -115,8 +115,6 @@ class DateAnomalyResult(BaseModel):
     dates_extracted: list[ExtractedDate]
     findings: list[DateFinding]
     skipped_checks: list[SkippedCheck]
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +261,6 @@ def _has_any_date_like_field(ctx: _Ctx) -> bool:
 
 # ---------------------------------------------------------------------------
 # GEN.* / ID.* — checks that apply to every document type
-# (relocated from numerical_validation.py, unchanged)
 # ---------------------------------------------------------------------------
 
 

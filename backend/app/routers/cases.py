@@ -2,16 +2,29 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 
 from .. import case_service, document_repository, events
+from ..case_service import CaseRiskFilter, CaseSort
 from ..events import officer_event, types
 from ._dependencies import get_case_or_404, to_thread_or_502
 from ..case_match import CaseMatchResult
 from ..case_pipeline import service as analysis_service
-from ..case_pipeline.models import CaseAnalysis
-from ..models import IN_FLIGHT_STATUSES, MAX_COMPANY_NAME_LENGTH, CaseListItem, CaseRecord, CaseSummary, UpdateCaseRequest
+from ..case_pipeline.models import CaseAnalysis, CaseAnalysisRunItem
+from ..models import (
+    IN_FLIGHT_STATUSES,
+    MAX_COMPANY_NAME_LENGTH,
+    CaseCounts,
+    CaseDocumentsStatus,
+    CaseListItem,
+    CaseListPage,
+    CaseRecord,
+    CaseSearchResult,
+    CaseSummary,
+    UpdateCaseRequest,
+)
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 logger = logging.getLogger(__name__)
@@ -24,17 +37,66 @@ async def create_case(company_name: str | None = Body(None, embed=True, max_leng
         detail="Failed to create the case. Check Supabase table access.",
         log=("Failed to create case",),
     )
-    await events.record(officer_event(types.CASE_CREATED, case_id=case.id, detail={"company_name": company_name}))
+    await events.record(officer_event(
+        types.CASE_CREATED, case_id=case.id,
+        detail={"company_name": company_name, "greenlink_case_id": case.greenlink_case_id},
+    ))
     return case
 
 
-@router.get("", response_model=list[CaseListItem])
-async def list_cases() -> list[CaseListItem]:
+@router.get("", response_model=CaseListPage)
+async def list_cases(
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    sort: CaseSort = "newest",
+    status_filter: list[CaseDocumentsStatus] = Query(default=[], alias="status"),
+    risk_filter: list[CaseRiskFilter] = Query(default=[], alias="risk"),
+    q: str | None = Query(None, max_length=MAX_COMPANY_NAME_LENGTH),
+) -> CaseListPage:
+    """One page of the case queue: newest or oldest first, or by risk either way; optionally only these documents
+    statuses, only these risk levels and only cases whose number or name contains q."""
     return await to_thread_or_502(
-        case_service.list_case_summaries,
+        case_service.list_cases_page, limit=limit, offset=offset, sort=sort, statuses=status_filter,
+        risks=risk_filter, q=q,
         detail="Failed to list cases. Check Supabase table access.",
         log=("Failed to list cases",),
     )
+
+
+# The fixed paths below come before /{case_id}, or "counts" would be read as a case id.
+@router.get("/counts", response_model=CaseCounts)
+async def case_counts() -> CaseCounts:
+    return await to_thread_or_502(
+        case_service.case_counts,
+        detail="Failed to count cases. Check Supabase table access.",
+        log=("Failed to count cases",),
+    )
+
+
+@router.get("/search", response_model=CaseSearchResult)
+async def search_cases(
+    q: str | None = Query(None, max_length=MAX_COMPANY_NAME_LENGTH),
+    limit: int = Query(8, ge=1, le=50),
+) -> CaseSearchResult:
+    """Jump-to-case suggestions, best match first; without q, the newest cases."""
+    return await to_thread_or_502(
+        case_service.search_cases, q, limit,
+        detail="Failed to search cases. Check Supabase table access.",
+        log=("Failed to search cases",),
+    )
+
+
+@router.get("/by-number/{number}", response_model=CaseListItem)
+async def get_case_by_number(number: str) -> CaseListItem:
+    """The case behind a URL such as /cases/GLDB-137."""
+    item = await to_thread_or_502(
+        case_service.get_case_item, number,
+        detail="Failed to fetch the case. Check Supabase table access.",
+        log=("Failed to fetch case %s", number),
+    )
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    return item
 
 
 @router.get("/{case_id}", response_model=CaseSummary)
@@ -171,4 +233,34 @@ async def get_case_analysis(case_id: str, case: CaseRecord = Depends(get_case_or
     )
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This case has not been analysed.")
+    return analysis
+
+
+@router.get("/{case_id}/analysis/runs", response_model=list[CaseAnalysisRunItem])
+async def list_case_analysis_runs(case_id: str, case: CaseRecord = Depends(get_case_or_404)) -> list[CaseAnalysisRunItem]:
+    """Every analysis of the case, newest first: when, who started it, status, score and its change, findings, stale."""
+    return await to_thread_or_502(
+        analysis_service.list_runs, case_id,
+        detail="Failed to fetch the case's analyses. Check Supabase table access.",
+        log=("Failed to list the analyses of case %s", case_id),
+    )
+
+
+@router.get("/{case_id}/analysis/runs/{run_id}", response_model=CaseAnalysis)
+async def get_case_analysis_run(
+    case_id: str, run_id: str, case: CaseRecord = Depends(get_case_or_404)
+) -> CaseAnalysis:
+    """One of the case's analyses, earlier or latest, whole, marked stale like the latest one."""
+    try:
+        UUID(run_id)
+    except ValueError:
+        # Not a run id at all: the database would reject it as a malformed uuid.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No analysis with that id for this case.")
+    analysis = await to_thread_or_502(
+        analysis_service.get_run, case_id, run_id,
+        detail="Failed to fetch the analysis. Check Supabase table access.",
+        log=("Failed to fetch analysis %s of case %s", run_id, case_id),
+    )
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No analysis with that id for this case.")
     return analysis

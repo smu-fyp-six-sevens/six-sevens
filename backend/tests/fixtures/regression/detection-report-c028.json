@@ -59,6 +59,7 @@
       "summary": "Reviewed within my expertise.",
       "title": "Layout & Rendering Analyst",
       "tools_called": [
+        "hidden_text_tool",
         "font_consistency_tool",
         "image_tampering_tool"
       ],
@@ -100,9 +101,10 @@
       "summary": "Reviewed within my expertise. | Second look: Reviewed within my expertise.",
       "title": "Digital Authenticity Analyst",
       "tools_called": [
-        "metadata_tool"
+        "metadata_tool",
+        "prompt_injection_tool"
       ],
-      "uncertain": true
+      "uncertain": false
     }
   ],
   "document_id": "doc-1",
@@ -117,6 +119,7 @@
       ],
       "ai_accepted": true,
       "confidence": 0.0,
+      "bbox_units": "pt",
       "detected": {
         "bold": false,
         "font": "Courier",
@@ -137,6 +140,12 @@
       "id": "font_consistency_tool-1",
       "locations": [
         {
+          "bbox": [
+            50.0,
+            107.61,
+            152.6,
+            118.85
+          ],
           "page": 1,
           "text": "Transport allowance"
         }

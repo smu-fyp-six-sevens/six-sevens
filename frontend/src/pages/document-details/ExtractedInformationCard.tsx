@@ -1,6 +1,8 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import type { DocumentRecord } from '../../services/uploadService';
 import type { ExtractedField } from './fieldDisplay';
+import type { FieldEditing } from './useFieldEditing';
 import {
   ArrayValueCell,
 } from './ArrayFieldModal';
@@ -11,53 +13,76 @@ import {
 } from '../../services/uploadService';
 import { buildFieldDraft, formatFieldDisplayValue, formatNumberWithCommas, isArrayOfLabelValueStrings, isArrayOfObjects, isArrayOfPrimitives, isPlainKeyValueObject, keyValueObjectRows, labelValueStringRows } from './fieldDisplay';
 import { humanizeFieldKey, normaliseFieldName } from '../../utils/fieldLabels';
+import { ErrorMessage } from '../../components/ErrorMessage';
 
 export function ExtractedInformationCard({
-  addFieldError,
-  canEditFields,
-  deleteFieldError,
-  deletingFieldId,
+  canAddOrDeleteFields,
   document,
   extractedFields,
-  isAddFieldOpen,
-  isAddingField,
   isInFlight,
   lowestConfidence,
-  newFieldName,
-  newFieldValue,
-  setAddFieldError,
-  setDeleteFieldError,
-  setDeletingFieldId,
   setDocument,
   setFieldDraft,
-  setIsAddFieldOpen,
-  setIsAddingField,
-  setNewFieldName,
-  setNewFieldValue,
+  editing,
 }: {
-  addFieldError: string | null;
-  canEditFields: boolean;
-  deleteFieldError: string | null;
-  deletingFieldId: string | null;
+  // Until the document is approved or rejected, even a verified one: the officer can always add what is missing.
+  canAddOrDeleteFields: boolean;
   document: DocumentRecord;
   extractedFields: [string, ExtractedField][];
-  isAddFieldOpen: boolean;
-  isAddingField: boolean;
   isInFlight: boolean;
   lowestConfidence: number | null;
-  newFieldName: string;
-  newFieldValue: string;
-  setAddFieldError: Dispatch<SetStateAction<string | null>>;
-  setDeleteFieldError: Dispatch<SetStateAction<string | null>>;
-  setDeletingFieldId: Dispatch<SetStateAction<string | null>>;
   setDocument: Dispatch<SetStateAction<DocumentRecord | null>>;
   setFieldDraft: Dispatch<SetStateAction<Record<string, string>>>;
-  setIsAddFieldOpen: Dispatch<SetStateAction<boolean>>;
-  setIsAddingField: Dispatch<SetStateAction<boolean>>;
-  setNewFieldName: Dispatch<SetStateAction<string>>;
-  setNewFieldValue: Dispatch<SetStateAction<string>>;
+  // The add and delete field state (useFieldEditing), passed as one object.
+  editing: FieldEditing;
 }) {
+  const {
+    addFieldError,
+    deleteFieldError,
+    deletingFieldId,
+    isAddFieldOpen,
+    isAddingField,
+    newFieldName,
+    newFieldValue,
+    setAddFieldError,
+    setDeleteFieldError,
+    setDeletingFieldId,
+    setIsAddFieldOpen,
+    setIsAddingField,
+    setNewFieldName,
+    setNewFieldValue,
+  } = editing;
   const [isCollapsed, setIsCollapsed] = useState(false);
+  // The field the officer asked to delete, until they confirm or cancel in the dialog.
+  const [fieldToDelete, setFieldToDelete] = useState<{ id: string; key: string } | null>(null);
+
+  async function confirmDeleteField() {
+    if (!fieldToDelete) return;
+
+    const { id: fieldId, key } = fieldToDelete;
+
+    setDeletingFieldId(fieldId);
+    setDeleteFieldError(null);
+
+    try {
+      const updated = await deleteExtractedField(document.id, fieldId);
+
+      setDocument(updated);
+      // Save sends the whole draft and replaces every field, so a
+      // deleted key left in it would be recreated, empty, on the
+      // next Save. Other unsaved edits are kept.
+      setFieldDraft((current) => {
+        const rest = { ...current };
+        delete rest[key];
+        return rest;
+      });
+    } catch (error) {
+      setDeleteFieldError(error instanceof Error ? error.message : 'Failed to delete field.');
+    } finally {
+      setDeletingFieldId(null);
+      setFieldToDelete(null);
+    }
+  }
 
   return (
         <section className="details-card">
@@ -75,7 +100,7 @@ export function ExtractedInformationCard({
             )}
 
             <div className="details-section-actions">
-              {canEditFields && !isInFlight && (
+              {canAddOrDeleteFields && !isInFlight && (
                 <button
                   type="button"
                   className="add-field-button"
@@ -106,7 +131,7 @@ export function ExtractedInformationCard({
             </div>
           </div>
 
-          {!isCollapsed && canEditFields && isAddFieldOpen && (
+          {!isCollapsed && canAddOrDeleteFields && isAddFieldOpen && (
             <div className="add-field-form">
               <div className="add-field-form-row">
                 <label htmlFor="new-field-name">Field name</label>
@@ -135,11 +160,7 @@ export function ExtractedInformationCard({
                 />
               </div>
 
-              {addFieldError && (
-                <div className="add-field-error">
-                  {addFieldError}
-                </div>
-              )}
+              {addFieldError && <ErrorMessage className="add-field-error" message={addFieldError} />}
 
               <div className="add-field-form-actions">
                 <button
@@ -203,11 +224,7 @@ export function ExtractedInformationCard({
             </div>
           )}
 
-          {!isCollapsed && deleteFieldError && (
-            <div className="add-field-error">
-              {deleteFieldError}
-            </div>
-          )}
+          {!isCollapsed && deleteFieldError && <ErrorMessage className="add-field-error" message={deleteFieldError} />}
 
           {isCollapsed ? null : extractedFields.length === 0 ? (
             <div className="review-message review-message--error">
@@ -269,58 +286,11 @@ export function ExtractedInformationCard({
                       '—'
                     )}
 
-                    {canEditFields && field.id && (
+                    {canAddOrDeleteFields && field.id && (
                       <button
                         type="button"
                         className="delete-field-button"
-                        onClick={async () => {
-                          const confirmed = window.confirm(
-                            'Are you sure you want to delete this field? This field will not be recoverable.',
-                          );
-
-                          if (!confirmed) {
-                            return;
-                          }
-
-                          const fieldId = field.id;
-
-                          if (!fieldId) {
-                            return;
-                          }
-
-                          if (!document) {
-                            setDeleteFieldError('Document is not loaded.');
-                            return;
-                          }
-
-                          setDeletingFieldId(fieldId);
-                          setDeleteFieldError(null);
-
-                          try {
-                            const updated = await deleteExtractedField(
-                              document.id,
-                              fieldId,
-                            );
-
-                            setDocument(updated);
-                            // Save sends the whole draft and replaces every field, so a
-                            // deleted key left in it would be recreated, empty, on the
-                            // next Save. Other unsaved edits are kept.
-                            setFieldDraft((current) => {
-                              const rest = { ...current };
-                              delete rest[key];
-                              return rest;
-                            });
-                          } catch (error) {
-                            setDeleteFieldError(
-                              error instanceof Error
-                                ? error.message
-                                : 'Failed to delete field.',
-                            );
-                          } finally {
-                            setDeletingFieldId(null);
-                          }
-                        }}
+                        onClick={() => setFieldToDelete({ id: field.id as string, key })}
                         disabled={deletingFieldId === field.id || isInFlight}
                         title="Delete field"
                         aria-label={`Delete ${humanizeFieldKey(key)}`}
@@ -332,6 +302,18 @@ export function ExtractedInformationCard({
                 </div>
               ))}
             </div>
+          )}
+
+          {fieldToDelete && (
+            <ConfirmDialog
+              title="Delete this field?"
+              message={`${humanizeFieldKey(fieldToDelete.key)} will be removed from this document and cannot be recovered.`}
+              isConfirming={deletingFieldId === fieldToDelete.id}
+              onCancel={() => {
+                if (deletingFieldId === null) setFieldToDelete(null);
+              }}
+              onConfirm={() => void confirmDeleteField()}
+            />
           )}
         </section>
   );

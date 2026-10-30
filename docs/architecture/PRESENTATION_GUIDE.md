@@ -1,6 +1,6 @@
 # The cloud architecture: a guide for presenting it
 
-What we built on the `microservices` branch, how it works, and how to show it. The diagrams are in [`six-sevens-architecture.drawio`](six-sevens-architecture.drawio), one page per diagram:
+What we built for the cloud, how it works, and how to show it. The diagrams are in [`six-sevens-architecture.drawio`](six-sevens-architecture.drawio), one page per diagram:
 
 1. System architecture
 2. GCP infrastructure
@@ -13,6 +13,7 @@ What we built on the `microservices` branch, how it works, and how to show it. T
 - **VS Code:** the "Draw.io Integration" extension (`hediet.vscode-drawio`) opens the file directly.
 - **Browser:** app.diagrams.net → File → Open from → Device.
 - **Slides:** export each page as PNG or SVG (File → Export as).
+- **Changing them:** edit `build_diagrams.py` (next to the file) and run `python docs/architecture/build_diagrams.py docs/architecture/six-sevens-architecture.drawio` from the repo root. Edits made in draw.io are lost the next time it runs.
 
 Details live in `CLOUD_ARCHITECTURE_PLAN.md` (design), `HOW_IT_WORKS.md` (behaviour) and `deploy/terraform/README.md` (operations).
 
@@ -136,7 +137,7 @@ The UI updates live: Supabase Realtime tells api a row changed, and api pushes a
 - **Services:** 6 backend roles (api, audit-metrics, doc-worker, detection-worker, case-worker; ingestion runs inside api), plus Kong, the frontend and Grafana. That's 8 Cloud Run services.
 - **Messaging:** 1 topic and 4 filtered push subscriptions, plus a dead-letter topic and a sweep every 2 minutes.
 - **Observability:** 4 Grafana dashboards and 4 alert policies.
-- **Tests:** about 1,760 backend test functions and 107 Playwright tests, run in CI on every push.
+- **Tests:** about 1,640 backend test functions and 116 Playwright tests, run in CI on every push.
 
 ## 10. The diagrams, page by page
 
@@ -191,6 +192,7 @@ Dashed arrows are data reads and writes; solid arrows are requests and events.
 
 **Page 6: CI and deploy.** The delivery pipeline.
 - **How to read it:**
-  - **Top row:** CI runs on every push (lint, type checks, tests, Playwright, security scans).
-  - **Bottom row:** the deploy, run on demand. It authenticates without a stored key, builds 8 images (5 role targets of the one backend Dockerfile, plus Kong, frontend and Grafana), rolls them out workers first, then checks the gateway: pass finishes the deploy, fail rolls every service back.
-- **Point to make:** a broken deploy undoes itself, and the deploy only changes images; Terraform owns everything else.
+  - **Top row:** CI runs four jobs in parallel on every push and pull request: backend (lint, type checks, tests), frontend (lint, build, 116 Playwright tests), security scans (Checkov, Snyk) and Terraform checks. A docs-only push skips all of it.
+  - **The gate:** when all four pass on a push to `main`, the deploy starts by itself. A pull request or another branch stops at CI.
+  - **Bottom row:** the deploy (it can also be started by hand). Only one runs at a time, and one is never cancelled halfway. It authenticates without a stored key, builds 8 images (5 role targets of the one backend Dockerfile, plus Kong, frontend and Grafana), rolls them out workers first, then checks the gateway: pass finishes the deploy, fail rolls every service back.
+- **Point to make:** it's continuous deployment, so every green change to `main` reaches production with no manual step, and a broken deploy undoes itself. The deploy only changes images; Terraform owns everything else.

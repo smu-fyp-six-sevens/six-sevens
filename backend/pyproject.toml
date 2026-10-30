@@ -33,12 +33,13 @@ asyncio_mode = "auto"
 # Puts backend/ on sys.path so tests can import `app` and `scripts` whichever
 # way pytest is launched (plain `pytest` in CI, `python -m pytest`, an IDE).
 pythonpath = ["."]
-# Regression suite tags (SCRUM-206, SCRUM-246): `pytest -m sprint1`, `-m sprint2`, `-m sprint3`.
+# Regression suite tags (SCRUM-206, SCRUM-246, SCRUM-296): `pytest -m sprint1` … `-m sprint4`.
 # story(...) records the Jira story and the sprint test sheet's test case ID.
 markers = [
   "sprint1: regression test for a Sprint 1 test case",
   "sprint2: regression test for a Sprint 2 test case",
   "sprint3: regression test for a Sprint 3 test case",
+  "sprint4: regression test for a Sprint 4 test case",
   "story(jira_id, test_case_id): the Jira story and manual test case ID this test covers",
 ]
 filterwarnings = [
@@ -70,9 +71,7 @@ select = ["E4", "E7", "E9", "F", "PGH003", "PGH004"]
 
 [tool.coverage.run]
 omit = [
-  # Dev-only synthetic fraud-injection tool, deliberately not unit-tested
-  # (see tests/conftest.py's collect_ignore) — omit so it doesn't show as a
-  # 0% coverage gap.
+  # Dev-only synthetic fraud-injection tool, not shipped and not unit-tested: omit so it isn't a 0% gap.
   "app/injection/*",
   "app/routers/injection.py",
 ]

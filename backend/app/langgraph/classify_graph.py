@@ -44,7 +44,7 @@ from .rule_classify import classify_by_rules
 from .state import DocumentGraphState
 from .vision_tool import vision_llm
 from ..config import settings
-from ..llm_io import message_text
+from ..llm_io import message_text, without_thinking
 from ..run_context import spend_model_call
 
 logger = logging.getLogger("classifier_pipeline.langgraph.classify")
@@ -99,7 +99,7 @@ async def agent_node(state: DocumentGraphState) -> dict:
     existing = state.get("agent_messages") or []
     spend_model_call("classify agent")
     available_tools = _available_tools(existing)
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 1024)
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 2048, effort="low")
     if available_tools:
         model = model.bind_tools(available_tools)
 
@@ -115,7 +115,9 @@ async def agent_node(state: DocumentGraphState) -> dict:
             # whichever call first warmed the cache for this key.
             # ChatAnthropic always returns an AIMessage; ainvoke's declared
             # return type is the more general BaseMessage.
-            response = cast(AIMessage, await model.ainvoke(existing))
+            # The tools offered change between turns (_available_tools), and a thinking block is only valid with
+            # the tools list it was made with, so the earlier turns go without theirs.
+            response = cast(AIMessage, await model.ainvoke(without_thinking(existing)))
             telemetry.record_usage(span, response)
             span.set_attribute("tool_calls", [tc["name"] for tc in (response.tool_calls or [])])
             trace.record(
@@ -255,7 +257,7 @@ async def repair_node(state: DocumentGraphState) -> dict:
 
     last = (state.get("agent_messages") or [])[-1]
     bad_output = message_text(last.content)
-    repair_model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 512)
+    repair_model = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 1024, effort="low")
     try:
         spend_model_call("classify repair")
         response = await repair_model.ainvoke([

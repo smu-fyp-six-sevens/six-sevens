@@ -1,0 +1,265 @@
+/* The case audit trail (pages/upload/AuditTrailCard.tsx): a vertical timeline, oldest first, grouped by day.
+   Each entry's marker sits on the line; its colour says who acted (a loan officer, or the System: an AI agent's
+   run), and it fills red or amber when a run failed or was cancelled. */
+
+.audit-count {
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.audit-card .text-button {
+  font-size: 12.5px;
+}
+
+.audit-empty {
+  margin: 0 20px 20px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+/* Who acted: the legend under the header and each entry's marker share these. */
+.audit-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 20px 14px;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.audit-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.audit-legend .audit-marker {
+  position: static;
+}
+
+.audit-timeline {
+  padding: 0 20px 20px;
+}
+
+.audit-day + .audit-day {
+  margin-top: 6px;
+}
+
+.audit-day-heading {
+  margin: 0 0 8px;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.audit-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The line runs through the day's markers, from the first to the last. */
+.audit-entry {
+  position: relative;
+  padding: 0 0 10px 30px;
+}
+
+.audit-entry::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 6px;
+  width: 2px;
+  background: var(--line);
+}
+
+.audit-entry:first-child::before {
+  top: 15px;
+}
+
+.audit-entry:last-child::before {
+  bottom: auto;
+  height: 15px;
+}
+
+.audit-entry:only-child::before {
+  display: none;
+}
+
+.audit-marker {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--steel);
+  border-radius: 50%;
+  background: #fff;
+}
+
+.audit-marker--user {
+  border-color: var(--steel);
+}
+
+.audit-marker--agent {
+  border-color: var(--teal);
+}
+
+/* An outcome overrides who acted: a filled marker stands out on the line. */
+.audit-marker--failed {
+  border-color: var(--red);
+  background: var(--red);
+}
+
+.audit-marker--cancelled {
+  border-color: var(--amber);
+  background: var(--amber);
+}
+
+.audit-entry-card {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.audit-entry--failed .audit-entry-card {
+  border-color: var(--red-bg);
+  background: #fffafa;
+}
+
+.audit-entry-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.audit-time {
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.audit-action {
+  color: var(--ink);
+  font-size: 13.5px;
+}
+
+.audit-document {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.audit-outcome {
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.audit-outcome--failed {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.audit-outcome--cancelled {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.audit-summary {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+/* A case analysis's risk level: the risk summary's badge, colours and all, at the start of its line. */
+.audit-risk-badge {
+  margin: 0 8px 0 0;
+}
+
+.audit-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 4px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.audit-officer {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* A field edit: each field's old value struck through, then its new one. */
+.audit-changes {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+}
+
+.audit-changes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  overflow-wrap: anywhere;
+}
+
+.audit-change-field {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.audit-changes del {
+  color: var(--red);
+}
+
+.audit-changes ins {
+  color: var(--teal);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+/* A list field's added (+) and removed (−) items, under its item counts. */
+.audit-list-items {
+  flex-basis: 100%;
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 0;
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--line);
+  list-style: none;
+}
+
+.audit-list-item--added {
+  color: var(--teal);
+}
+
+.audit-list-item--removed {
+  color: var(--red);
+  text-decoration: line-through;
+}
+
+.audit-list-item--removed span {
+  display: inline-block;
+  text-decoration: none;
+}

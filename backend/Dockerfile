@@ -23,9 +23,9 @@ RUN apt-get update && \
         fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
-# Dependencies first, so a code change doesn't reinstall them.
-COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
+# Dependencies first, so a code change doesn't reinstall them. The lock pins every version (requirements.txt holds the ranges).
+COPY backend/requirements.txt backend/requirements.lock ./
+RUN pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.lock
 
 COPY backend/pyproject.toml ./pyproject.toml
 COPY backend/app ./app
@@ -34,7 +34,8 @@ RUN pip install --no-cache-dir --no-deps -e .
 
 # --- test stage, not shipped ---
 FROM deps AS test
-RUN pip install --no-cache-dir .[dev]
+COPY backend/requirements-dev.lock ./
+RUN pip install --no-cache-dir -r requirements-dev.lock
 COPY backend/tests ./tests
 
 # --- what every role ships: no dev injection tool ---

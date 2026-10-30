@@ -1,0 +1,56 @@
+{
+  "consulted": [
+    {
+      "brief": "Brief for layout_rendering.",
+      "dismissed": [],
+      "second_look": false,
+      "specialist": "layout_rendering",
+      "summary": "Reviewed within my expertise.",
+      "title": "Layout & Rendering Analyst",
+      "tools_called": [
+        "hidden_text_tool",
+        "font_consistency_tool"
+      ],
+      "uncertain": false
+    },
+    {
+      "brief": "Brief for content_validation.",
+      "dismissed": [],
+      "second_look": false,
+      "specialist": "content_validation",
+      "summary": "Reviewed within my expertise.",
+      "title": "Content Validation Analyst",
+      "tools_called": [],
+      "uncertain": true
+    },
+    {
+      "brief": "Brief for digital_authenticity.",
+      "dismissed": [],
+      "second_look": false,
+      "specialist": "digital_authenticity",
+      "summary": "Reviewed within my expertise.",
+      "title": "Digital Authenticity Analyst",
+      "tools_called": [
+        "prompt_injection_tool",
+        "metadata_tool"
+      ],
+      "uncertain": false
+    }
+  ],
+  "document_id": "doc-1",
+  "document_type": "certificate_of_incorporation",
+  "findings": [],
+  "generated_at": "2026-10-14T00:00:00+00:00",
+  "nothing_to_check": [],
+  "schema_version": 1,
+  "second_look": null,
+  "summary": "No findings. The metadata check passed, but the fonts could not be checked.",
+  "unable_to_assess": [
+    {
+      "reason": "No extractable text spans found (1 page(s), has embedded images: True) -- likely a scanned/image-only PDF with no text layer, or an encrypted/corrupted one.",
+      "specialist": "layout_rendering",
+      "tool": "font_consistency_tool"
+    }
+  ],
+  "verdict": "inconclusive"
+}

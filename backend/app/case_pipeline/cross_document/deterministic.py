@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass, field
 
 from ...identifiers import uen_key
-from ...fraud_detection.numerical_validation.common import _decode
+from ...fraud_detection.shared.field_values import decode_field_value
 from ..models import CrossDocFinding, FindingCategory
 from .address_matching import find_address_mismatches, normalize_address
 from .bias import has_protected_text
@@ -163,7 +163,7 @@ def _addresses(context: CaseContext, out: DeterministicResult, add) -> None:
 def _uens(context: CaseContext, out: DeterministicResult, add) -> None:
     by_value: dict[str, list[str]] = {}
     for view in context.docs.values():
-        raw = _decode(view.fields.get("uen"))
+        raw = decode_field_value(view.fields.get("uen"))
         normalised = uen_key(str(raw)) if raw not in (None, "") else None
         if normalised:
             by_value.setdefault(normalised, []).append(view.id)

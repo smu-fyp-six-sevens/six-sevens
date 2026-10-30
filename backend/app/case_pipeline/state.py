@@ -12,13 +12,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ..config import settings
-from ..models import APPROVED_STATUSES, DocumentRecord
+from ..models import APPROVED_STATUSES, DocumentRecord, DocumentStatus, WaitingDocument
 from .models import CaseAnalysis
+from .risk.case_risk import counts_towards_risk
 
 
 def compute_fingerprint(documents: list[DocumentRecord], reports: dict[str, dict[str, Any]]) -> str:
-    """A hash of everything an analysis reads: the approved documents, their fields and their findings."""
-    parts = []
+    """A hash of everything an analysis reads: the approved documents, their fields and their findings, and the
+    documents its risk score still waits on."""
+    parts: list[Any] = []
     for document in sorted((d for d in documents if d.status in APPROVED_STATUSES), key=lambda d: d.id):
         report = reports.get(document.id) or {}
         findings = sorted((f.get("id"), f.get("severity")) for f in report.get("findings") or [])
@@ -26,7 +28,43 @@ def compute_fingerprint(documents: list[DocumentRecord], reports: dict[str, dict
             document.id, document.status.value, document.document_type,
             json.dumps(document.extracted_fields or {}, sort_keys=True, default=str), findings,
         ])
+    # Documents the risk score counts that no officer has approved yet (e.g. a bank statement that failed
+    # processing): the score waits on them ("5/6 scanned"), so retrying, rejecting or deleting one has to make
+    # the analysis out of date too. Added only when there are any, so other cases' fingerprints don't change.
+    waiting = sorted(
+        [d.id, d.status.value, d.document_type]
+        for d in documents
+        if d.status not in APPROVED_STATUSES and counts_towards_risk(d, reports, set())
+    )
+    if waiting:
+        parts.append(["awaiting", waiting])
     return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
+
+
+_IN_PIPELINE = frozenset({
+    DocumentStatus.UPLOADED, DocumentStatus.QUEUED, DocumentStatus.PROCESSING, DocumentStatus.EXTRACTING,
+})
+
+
+def waiting_documents(documents: list[DocumentRecord], reports: dict[str, dict[str, Any]]) -> list[WaitingDocument]:
+    """The documents the risk score counts that aren't scanned yet, each with what it is waiting for, in upload
+    order. Empty means a rerun now produces a score."""
+    waiting = []
+    for document in sorted(documents, key=lambda d: d.uploaded_at):
+        if not counts_towards_risk(document, reports, set()):
+            continue
+        if document.status == DocumentStatus.DETECTED and document.id in reports:
+            continue
+        if document.status == DocumentStatus.FAILED:
+            reason = "failed"
+        elif document.status in APPROVED_STATUSES:
+            reason = "scanning"
+        elif document.status in _IN_PIPELINE:
+            reason = "processing"
+        else:
+            reason = "needs_approval"
+        waiting.append(WaitingDocument(document_id=document.id, filename=document.filename, reason=reason))
+    return waiting
 
 
 def is_live(status: str, started_at: datetime) -> bool:

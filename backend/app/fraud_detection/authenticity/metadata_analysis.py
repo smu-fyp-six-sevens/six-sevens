@@ -22,6 +22,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from ..shared.check_result import CheckResult
 from ...ingestion.metadata_extractor import EXTRACTION_ERROR_KEY
 
 # Canonical field name -> the exiftool tag names that can supply it, tried
@@ -275,7 +276,7 @@ class MetadataAnomaly(BaseModel):
     severity: Literal["high", "medium", "low"]
 
 
-class MetadataAnalysisResult(BaseModel):
+class MetadataAnalysisResult(CheckResult):
     document_id: str
     # AC1/AC2/AC6: the normalised subset of raw exiftool output this check
     # actually looks at, not the full raw dict (already stored separately
@@ -288,8 +289,6 @@ class MetadataAnalysisResult(BaseModel):
     # anomalies) so a future lead agent can pull AI-generation signals
     # directly without re-scanning every anomaly's reason text.
     ai_generation_indicators: list[MetadataAnomaly]
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
 
 
 def _resolve_field(raw_metadata: dict, canonical: str) -> str | None:

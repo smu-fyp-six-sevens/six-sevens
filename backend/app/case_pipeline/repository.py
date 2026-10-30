@@ -8,14 +8,18 @@ from typing import Any
 from ..models import CaseRisk, SupportingDocumentRecommendation
 from ..supabase_client import supabase_client
 from ..supabase_rows import row as _row
-from .models import AnalysisAudit, CaseAnalysis, CrossDocFinding, RiskOutlook
+from .models import AnalysisAudit, AnalysisSummary, CaseAnalysis, CrossDocFinding, RiskOutlook
 
 _TABLE = "case_analysis_runs"
-_CHUNK = 100
-# What a case list needs from a run: no trace, outlook or audit, which are large and only read for one case.
+# What a snapshot or summary needs from a run: no trace, outlook or audit, which are large.
 _LIST_COLUMNS = (
     "run_id, case_id, status, fingerprint, started_at, finished_at, error, confidence:result->confidence, findings:result->findings, "
     "risk:result->risk, supporting_documents:result->supporting_documents"
+)
+# A case's list of runs: when, how it ended, its score and how many findings, without the result itself.
+_RUN_LIST_COLUMNS = (
+    "run_id, status, fingerprint, started_at, finished_at, risk_score:result->risk->score, "
+    "risk_level:result->risk->level, findings:result->findings"
 )
 
 
@@ -35,9 +39,11 @@ def _to_analysis(row: dict) -> CaseAnalysis:
         findings=[CrossDocFinding(**f) for f in result.get("findings") or []],
         outlook=RiskOutlook(**result["outlook"]) if result.get("outlook") else None,
         summary=result.get("summary"),
+        structured_summary=AnalysisSummary(**result["structured_summary"]) if result.get("structured_summary") else None,
         risk=CaseRisk(**result["risk"]) if result.get("risk") else None,
         supporting_documents=[SupportingDocumentRecommendation(**s) for s in result.get("supporting_documents") or []],
         consistent_checks=[str(c) for c in result.get("consistent_checks") or []],
+        clean_checks=[str(c) for c in result.get("clean_checks") or []],
         audit=AnalysisAudit(**(result.get("audit") or {})),
         trace=row.get("trace") or [],
     )
@@ -110,9 +116,11 @@ def finish_run(analysis: CaseAnalysis) -> bool:
         "confidence": analysis.confidence,
         "outlook": analysis.outlook.model_dump(mode="json") if analysis.outlook else None,
         "summary": analysis.summary,
+        "structured_summary": analysis.structured_summary.model_dump(mode="json") if analysis.structured_summary else None,
         "risk": analysis.risk.model_dump(mode="json") if analysis.risk else None,
         "supporting_documents": [s.model_dump(mode="json") for s in analysis.supporting_documents],
         "consistent_checks": analysis.consistent_checks,
+        "clean_checks": analysis.clean_checks,
         "audit": analysis.audit.model_dump(mode="json"),
     }
     supabase_client.table(_TABLE).update({
@@ -141,18 +149,28 @@ def get_latest_complete(case_id: str) -> CaseAnalysis | None:
     return _to_analysis(_row(rows[0])) if rows else None
 
 
-def get_latest_many(case_ids: list[str]) -> dict[str, CaseAnalysis]:
-    """The newest run of each case, in one query per 100 cases. Findings only: no trace, outlook or audit."""
-    latest: dict[str, CaseAnalysis] = {}
-    for start in range(0, len(case_ids), _CHUNK):
-        query = (
-            supabase_client.table(_TABLE).select(_LIST_COLUMNS).in_("case_id", case_ids[start : start + _CHUNK])
-            .order("started_at", desc=True)
-        )
-        if len(case_ids) == 1:
-            query = query.limit(1)  # the snapshot path: only the newest run, not every past one
-        rows = query.execute().data
-        for raw in rows:
-            row = _row(raw)
-            latest.setdefault(row["case_id"], _to_analysis(row))
-    return latest
+def get_latest_summary(case_id: str) -> CaseAnalysis | None:
+    """The case's newest run, findings only (no trace, outlook or audit): one row however many runs there are."""
+    rows = (
+        supabase_client.table(_TABLE).select(_LIST_COLUMNS).eq("case_id", case_id)
+        .order("started_at", desc=True).limit(1).execute().data
+    )
+    return _to_analysis(_row(rows[0])) if rows else None
+
+
+def list_runs(case_id: str) -> list[dict[str, Any]]:
+    """Every run of the case, newest first: status, times, fingerprint, score, level and findings (no trace)."""
+    rows = (
+        supabase_client.table(_TABLE).select(_RUN_LIST_COLUMNS).eq("case_id", case_id)
+        .order("started_at", desc=True).execute().data or []
+    )
+    return [_row(row) for row in rows]
+
+
+def get_run(case_id: str, run_id: str) -> CaseAnalysis | None:
+    """One of the case's runs, whole, or None when the case has no run with that id."""
+    rows = (
+        supabase_client.table(_TABLE).select("*").eq("case_id", case_id).eq("run_id", run_id)
+        .limit(1).execute().data
+    )
+    return _to_analysis(_row(rows[0])) if rows else None

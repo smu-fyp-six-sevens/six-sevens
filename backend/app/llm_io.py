@@ -13,6 +13,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
+from langchain_core.messages import AIMessage
 from pydantic import BaseModel, BeforeValidator, ValidationError
 
 from .run_context import record_repair
@@ -35,6 +36,18 @@ def message_text(content: Any) -> str:
         block if isinstance(block, str) else block.get("text", "") if isinstance(block, dict) else ""
         for block in content
     )
+
+
+def without_thinking(messages: list) -> list:
+    """The conversation with the assistant turns' thinking blocks removed, for a call that changes the tools offered."""
+    return [
+        message.model_copy(update={"content": [
+            block for block in message.content
+            if not (isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))
+        ]})
+        if isinstance(message, AIMessage) and isinstance(message.content, list) else message
+        for message in messages
+    ]
 
 
 def parse_json_object(text: str) -> dict | None:
@@ -124,6 +137,20 @@ def forced_args(response: Any, tool_name: str) -> dict | None:
 def was_cut_off(response: Any) -> bool:
     metadata = getattr(response, "response_metadata", None) or {}
     return metadata.get("stop_reason") == "max_tokens"
+
+
+class ModelRefused(Exception):
+    """Claude declined the request (stop_reason "refusal"). The message is written for a loan officer."""
+
+
+def refusal_reason(metadata: dict | None) -> str | None:
+    """Why Claude declined, from a reply's metadata, or None when it didn't."""
+    if not metadata or metadata.get("stop_reason") != "refusal":
+        return None
+    details = metadata.get("stop_details")
+    category = details.get("category") if isinstance(details, dict) else getattr(details, "category", None)
+    kind = f" ({category} safety category)" if category else ""
+    return f"Claude declined to process this content{kind}. Review the document manually."
 
 
 # --- field types that accept what a model tends to send ----------------------------------------

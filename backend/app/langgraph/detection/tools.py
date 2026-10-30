@@ -29,23 +29,30 @@ import logging
 import re
 from typing import Annotated, Any, Awaitable, Callable
 
+import pymupdf
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from ... import document_repository, extracted_fields_repository, storage_service
 from ...cpu_pool import run_cpu
+from ...guardrails import content_guard
+from ...ingestion.ingestion_service import content_type_from_filename, ingest_document
 from ...fraud_detection.authenticity.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
 from ...fraud_detection.dates.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
 from ...fraud_detection.images.image_manipulation import check_image_manipulation, check_image_tampering
 from ...fraud_detection.layout_anomalies import check_layout_anomalies
+from ...fraud_detection.layout_anomalies.extraction import _open_document as _open_layout_document
 from ...fraud_detection.shared.file_facts import describe_file
+from ...fraud_detection.shared.pdf_pages import pages as pdf_pages
+from ...fraud_detection.pages import check_page_consistency
 from ...fraud_detection.authenticity.metadata_analysis import (
     DESCRIPTIVE_METADATA_FIELDS,
     SUPPORTED_METADATA_FIELDS,
     check_metadata_anomalies,
 )
 from ...fraud_detection.spelling.spelling_anomaly import check_spelling_anomalies
+from . import value_locations
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.tools")
 
@@ -246,8 +253,11 @@ async def font_consistency_tool(document_id: Annotated[str, InjectedState("docum
             "expected": anomaly.expected,
             "occurrence_count": anomaly.occurrence_count,
             "field_name": anomaly.field_name,
+            # bbox (PDF points) is for the preview to highlight.
+            "bbox_units": "pt",
             "locations": [
-                {"page": loc.page + 1, "text": _short(loc.text)} for loc in anomaly.locations[:5]
+                {"page": loc.page + 1, "bbox": [round(v, 2) for v in loc.bbox], "text": _short(loc.text)}
+                for loc in anomaly.locations[:5]
             ],
             "summary": _font_deviation_summary(
                 anomaly.deviation_type, anomaly.detected, anomaly.expected,
@@ -280,8 +290,59 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
             "layout_anomalies_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
         )
 
-    findings = [anomaly.model_dump() for anomaly in result.anomalies]
+    # The JSON body leaves the bbox out, so it's added here for the preview to highlight; a photo's page
+    # is sized by its DPI, not its pixels, so the page size it was measured on goes with it.
+    page_sizes = await run_cpu(_layout_page_sizes, file_bytes) if result.anomalies else []
+    findings = [
+        {
+            **anomaly.model_dump(),
+            "bbox": list(anomaly.bbox),
+            "bbox_units": "pt",
+            "page_size": page_sizes[anomaly.page - 1] if 0 < anomaly.page <= len(page_sizes) else None,
+        }
+        for anomaly in result.anomalies
+    ]
     return _result("layout_anomalies_tool", _with_ids("layout_anomalies_tool", findings))
+
+
+# Text a reader can't see is never a design choice a genuine document needs explained away, so it can be rated
+# higher but not dismissed or rated below this.
+_HIDDEN_TEXT_SEVERITY = "medium"
+
+
+@tool
+async def hidden_text_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Reports text in a PDF that a reader can't see but text extraction still reads: invisible, white on a white page, under 2pt, or placed off the page. Often left behind when a figure or name was replaced. Found by the content guard at upload. Hidden text worded as an instruction to the AI is reported by prompt_injection_tool instead. Its findings cannot be dismissed."""
+    try:
+        result = await _guard_result(document_id)
+    except Exception as exc:
+        logger.exception("hidden_text_tool failed for %s", document_id)
+        return _result("hidden_text_tool", [], unable=f"Could not run the hidden text check: {type(exc).__name__}")
+    if result is None:
+        return _result("hidden_text_tool", [], unable="Document or file not found")
+    if "hidden_text" not in (result.get("checks_run") or []):
+        return _result("hidden_text_tool", [], unable=(
+            f"The hidden text check could not run: {result['error']}" if result.get("error")
+            else "Hidden text is checked in PDFs only; this file has no text layer to hide text in"
+        ))
+    findings = [
+        {
+            "page": span.get("page"),
+            "why_hidden": span.get("why_hidden") or [],
+            "text": _short(span.get("quote") or ""),
+            "summary": f'Hidden text ({_why_hidden(span)}, page {span.get("page")}): "{_short(span.get("quote") or "")}"',
+            "severity_hint": _HIDDEN_TEXT_SEVERITY,
+            "severity_floor": _HIDDEN_TEXT_SEVERITY,
+        }
+        for span in result.get("spans") or []
+        if span.get("where") == "hidden" and span.get("caught_by") == "hidden_text"
+    ]
+    return _result("hidden_text_tool", _with_ids("hidden_text_tool", findings))
+
+
+def _layout_page_sizes(file_bytes: bytes) -> list[list[float]]:
+    with _open_layout_document(file_bytes) as doc:
+        return [[round(page.rect.width, 2), round(page.rect.height, 2)] for page in doc]
 
 
 # --- Content Validation -----------------------------------------------------
@@ -303,6 +364,13 @@ async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")
     if result.unable_to_assess:
         return _result("spelling_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
 
+    # Where each word sits, for the preview to highlight. Only a PDF's own text has positions.
+    word_locations = (
+        await run_cpu(_word_locations, file_bytes, [anomaly.word for anomaly in result.anomalies])
+        if result.anomalies and file_bytes.startswith(b"%PDF")
+        else {}
+    )
+
     findings = [
         {
             "word": anomaly.word,
@@ -311,6 +379,8 @@ async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")
             # One finding per distinct word; how often it appears is for the specialist to weigh.
             "occurrences": anomaly.occurrences,
             "other_contexts": [_short(text) for text in anomaly.other_contexts],
+            "bbox_units": "pt",
+            "locations": word_locations.get(anomaly.word, []),
             "summary": (
                 f'Possible misspelling "{anomaly.word}"'
                 + (f' (suggested: "{anomaly.suggested_correction}")' if anomaly.suggested_correction else "")
@@ -321,6 +391,215 @@ async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")
         for anomaly in result.anomalies
     ]
     return _result("spelling_tool", _with_ids("spelling_tool", findings))
+
+
+_MAX_WORD_LOCATIONS = 5
+
+
+def _word_locations(file_bytes: bytes, words: list[str]) -> dict[str, list[dict]]:
+    """Each word's first few places in the PDF's text, as whole words ignoring case and punctuation."""
+    wanted = {word.casefold(): word for word in words}
+    found: dict[str, list[dict]] = {}
+    with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
+        for page_index, page in enumerate(pdf_pages(doc)):
+            for x0, y0, x1, y1, text, *_ in page.get_text("words"):
+                word = wanted.get(re.sub(r"^\W+|\W+$", "", text).casefold())
+                if word is None:
+                    continue
+                places = found.setdefault(word, [])
+                if len(places) < _MAX_WORD_LOCATIONS:
+                    places.append({"page": page_index + 1, "bbox": [round(float(v), 2) for v in (x0, y0, x1, y1)]})
+    return found
+
+
+def _missing_locations(finding: dict) -> bool:
+    if finding.get("tool") == "spelling_tool":
+        return "locations" not in finding and bool(finding.get("word"))
+    if finding.get("tool") == "font_consistency_tool":
+        return any("bbox" not in loc for loc in finding.get("locations") or [])
+    if finding.get("tool") == "layout_anomalies_tool":
+        return "bbox" not in finding and bool(finding.get("text"))
+    return value_locations.needs_locations(finding)
+
+
+def needs_locations(report: dict) -> bool:
+    """Whether a report has findings it can't place on the page by itself: font, spelling and layout
+    findings stored before they carried their places, and numerical and date findings, which never do."""
+    return any(_missing_locations(finding) for finding in report.get("findings", []))
+
+
+def needs_fields(report: dict) -> bool:
+    """Whether placing the report's findings needs the document's extracted fields."""
+    return any(value_locations.needs_locations(finding) for finding in report.get("findings", []))
+
+
+def add_missing_locations(
+    report: dict,
+    file_bytes: bytes,
+    fields: dict | None = None,
+    document_type: str | None = None,
+    classification_confidence: float | None = None,
+) -> dict:
+    """The report with its findings placed on the page. A font or layout finding stored before it carried
+    its area gets the exact one by running its check again (both are deterministic) and matching the
+    finding by page and text; a misspelt word is placed by its whole-word matches, a numerical, date or
+    registry finding by its value (value_locations). Not saved; worked out again on each read."""
+    if not file_bytes.startswith(b"%PDF"):
+        return report
+    findings = report.get("findings", [])
+    missing = {f.get("tool") for f in findings if _missing_locations(f)}
+    words = [f["word"] for f in findings if f.get("tool") == "spelling_tool" and _missing_locations(f)]
+    word_locations = _word_locations(file_bytes, words) if words else {}
+    font_areas = _font_areas(file_bytes) if "font_consistency_tool" in missing else {}
+    layout_areas = (
+        _layout_areas(file_bytes, document_type, classification_confidence)
+        if "layout_anomalies_tool" in missing
+        else {}
+    )
+    located = []
+    with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
+        for finding in findings:
+            if not _missing_locations(finding):
+                located.append(finding)
+            elif value_locations.needs_locations(finding):
+                located.append(value_locations.locate(doc, finding, fields or {}))
+            elif finding["tool"] == "spelling_tool":
+                located.append({**finding, "bbox_units": "pt", "locations": word_locations.get(finding["word"], [])})
+            elif finding["tool"] == "font_consistency_tool":
+                located.append({
+                    **finding,
+                    "bbox_units": "pt",
+                    "locations": [
+                        {**loc, "bbox": area} if (area := font_areas.get((loc.get("page"), loc.get("text"))))
+                        else _text_location(doc, loc)
+                        for loc in finding["locations"]
+                    ],
+                })
+            else:
+                area = layout_areas.get((finding.get("page"), finding["text"])) or _page_text_area(
+                    doc, finding.get("page"), finding["text"]
+                )
+                located.append({**finding, "bbox": area, "bbox_units": "pt"} if area else finding)
+    return {**report, "findings": located}
+
+
+def _font_areas(file_bytes: bytes) -> dict[tuple[int, str], list[float]]:
+    """Each place the font check flags, by (1-based page, text as the tool reports it)."""
+    try:
+        result = check_font_consistency("locations", file_bytes, [])
+    except Exception:
+        logger.warning("Font check failed while placing an older report's findings", exc_info=True)
+        return {}
+    return {
+        (loc.page + 1, _short(loc.text)): [round(v, 2) for v in loc.bbox]
+        for anomaly in result.anomalies
+        for loc in anomaly.locations
+    }
+
+
+def _layout_areas(
+    file_bytes: bytes, document_type: str | None, classification_confidence: float | None
+) -> dict[tuple[int, str], list[float]]:
+    """Each area the layout check flags, by (1-based page, text as the tool reports it)."""
+    try:
+        result = check_layout_anomalies("locations", file_bytes, document_type, classification_confidence)
+    except Exception:
+        logger.warning("Layout check failed while placing an older report's findings", exc_info=True)
+        return {}
+    return {(a.page, a.text): list(a.bbox) for a in result.anomalies}
+
+
+def _text_location(doc: pymupdf.Document, location: dict) -> dict:
+    area = _page_text_area(doc, location.get("page"), str(location.get("text") or ""))
+    return {**location, "bbox": area} if area else location
+
+
+def _page_text_area(doc: pymupdf.Document, page_number: Any, text: str) -> list[float] | None:
+    """Where text from a finding sits on its (1-based) page, when its check can't say: None unless it
+    is printed there once. Text overlay findings join the two overlapping texts with " ↔ ": the area
+    is the closest pair of their matches together."""
+    if not isinstance(page_number, int) or not 0 < page_number <= len(doc):
+        return None
+    page = doc[page_number - 1]
+    parts = [_text_matches(page, part) for part in text.split(" ↔ ")]
+    if not all(parts):
+        return None
+    if len(parts) == 1:
+        # Text printed more than once on the page (a figure repeated in a statement) could be any of
+        # them, so it isn't placed.
+        if len(parts[0]) > 1:
+            return None
+        area = parts[0][0]
+    else:
+        # Repeated text (a date, a name) matches in several places; the overlapping copies are the
+        # ones nearest each other.
+        area = min(
+            (a | b for a in parts[0] for b in parts[1]),
+            key=lambda rect: rect.width * rect.height,
+        )
+    return [round(v, 2) for v in (area.x0, area.y0, area.x1, area.y1)]
+
+
+def _text_matches(page: pymupdf.Page, text: str) -> list[pymupdf.Rect]:
+    """Each place the text appears on the page, a match wrapped over lines as one rect. Stored text is
+    cut short with an ellipsis and its line breaks become spaces, so if the whole of it isn't found,
+    its first few words are looked for instead."""
+    words = text.rstrip("…").split()
+    for count in (len(words), 6, 3):
+        needle = " ".join(words[:count])
+        if not needle:
+            return []
+        hits = page.search_for(needle)
+        if hits:
+            break
+    else:
+        return []
+    matches: list[pymupdf.Rect] = []
+    for rect in hits:
+        # The next line of the same match starts just below the last.
+        if matches and 0 <= rect.y0 - matches[-1].y1 <= 4 and count > 3:
+            matches[-1] |= rect
+        else:
+            matches.append(pymupdf.Rect(rect))
+    return matches
+
+
+@tool
+async def page_consistency_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Checks that a multi-page document's pages belong together: the printed page numbers run without gaps or repeats, the balance carried forward from one page is the balance the next page brings forward, identifiers (account number, holder name, UEN) are the same on every page that prints them, no page is a different size or a scan among digital pages, and no page is a copy of another. Catches a page deleted, swapped in from another statement, or duplicated, even when every page looks genuine on its own. Single-page documents have nothing to check."""
+    document = await _document(document_id)
+    if document is None:
+        return _result("page_consistency_tool", [], unable="Document not found")
+
+    file_bytes = await _file_bytes(document_id)
+    if file_bytes is None:
+        return _result("page_consistency_tool", [], unable="Document file is not available in storage")
+
+    fields = await _extracted_fields(document_id)
+    result = await check_page_consistency(document_id, file_bytes, document.filename, fields)
+    if result.unable_to_assess:
+        return _result("page_consistency_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+
+    findings = [
+        {
+            "check_code": finding.check_code,
+            "check_codes": finding.check_codes,
+            "severity_hint": finding.severity,
+            "pages": finding.pages,
+            "stated": finding.stated,
+            "expected": finding.expected,
+            "summary": finding.summary,
+            # Other checks that saw the same page or boundary: one cause, one finding.
+            "evidence": finding.evidence,
+        }
+        for finding in result.findings
+    ]
+    output = _result("page_consistency_tool", _with_ids("page_consistency_tool", findings))
+    output.update(
+        pages_checked=result.pages_checked,
+        skipped=[{"check": s.check_code, "reason": s.reason} for s in result.skipped_checks],
+    )
+    return output
 
 
 @tool
@@ -397,6 +676,76 @@ async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")
     return {
         **_result("metadata_tool", _with_ids("metadata_tool", findings)),
         "observed_metadata": _observed_metadata(result.extracted_metadata),
+    }
+
+
+_WHY_HIDDEN = {
+    "invisible": "invisible text", "white_on_white": "white on white", "tiny": "text under 2pt",
+    "off_page": "placed off the page",
+}
+# The design's severities (guardrails/content_guard._risk), per span. The specialist may raise one, never
+# lower it or dismiss it: an attempt to steer the review is evidence on its own.
+_INJECTION_SEVERITY = {
+    ("hidden", "dictionary"): "high", ("metadata", "dictionary"): "high", ("image", "dictionary"): "high",
+}
+
+
+def _why_hidden(span: dict) -> str:
+    return ", ".join(_WHY_HIDDEN.get(str(w), str(w)) for w in span.get("why_hidden") or []) or "hidden"
+
+
+def _injection_finding(span: dict) -> dict:
+    where, caught_by = str(span.get("where") or ""), str(span.get("caught_by") or "")
+    quote = _short(span.get("quote") or "")
+    if where == "hidden":
+        summary = f'Hidden text worded as an instruction to the AI ({_why_hidden(span)}, page {span.get("page")}): "{quote}"'
+    elif where == "metadata":
+        summary = f'Metadata field {span.get("field")} is worded as an instruction to the AI: "{quote}"'
+    elif where == "image":
+        summary = f'Text inside an image on page {span.get("page")} is worded as an instruction to the AI: "{quote}"'
+    elif where == "filename":
+        summary = f'The file name is worded as an instruction to the AI: "{quote}"'
+    else:
+        summary = f'Visible text worded as an instruction to the AI: "{quote}"'
+    severity = _INJECTION_SEVERITY.get((where, caught_by), "low")
+    return {**span, "severity_hint": severity, "severity_floor": severity, "summary": summary}
+
+
+async def _guard_result(document_id: str) -> dict | None:
+    """The guard_result saved at ingest; for a document without one (from before the guard, or not saved),
+    the guard run now on the stored file, so the check is never skipped."""
+    stored = await asyncio.to_thread(document_repository.get_guard_result, document_id)
+    if stored and stored.get("checks_run"):
+        return stored
+    document = await _document_with_metadata(document_id)
+    file_bytes = await _file_bytes(document_id)
+    if document is None or file_bytes is None:
+        return None
+    content_type = content_type_from_filename(document.filename)
+    ingested = await run_cpu(ingest_document, file_bytes, document.filename, content_type, with_metadata=False)
+    result, _ = await run_cpu(
+        content_guard.scan, file_bytes, content_type, ingested["raw_text"], document.metadata, document.filename,
+    )
+    return {**result, "computed_at_detection": True}
+
+
+@tool
+async def prompt_injection_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Reports text written to steer the AI reviewing the document: wording addressed to an AI as an instruction, in the visible text, hidden text, metadata, an embedded image or the file name. Found by the content guard at upload. Hidden text with no such wording is hidden_text_tool's. Its findings cannot be dismissed."""
+    try:
+        result = await _guard_result(document_id)
+    except Exception as exc:
+        logger.exception("prompt_injection_tool failed for %s", document_id)
+        return _result("prompt_injection_tool", [], unable=f"Could not run the content guard: {type(exc).__name__}")
+    if result is None:
+        return _result("prompt_injection_tool", [], unable="Document or file not found")
+    if not result.get("checks_run"):
+        return _result("prompt_injection_tool", [], unable=f"The content guard could not run: {result.get('error') or 'unknown'}")
+    findings = [_injection_finding(span) for span in result.get("spans") or [] if span.get("caught_by") == "dictionary"]
+    return {
+        **_result("prompt_injection_tool", _with_ids("prompt_injection_tool", findings)),
+        "guard_risk": result.get("risk"),
+        "checks_run": result.get("checks_run"),
     }
 
 

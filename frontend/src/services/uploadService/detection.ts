@@ -23,7 +23,10 @@ export async function getDetectionReport(documentId: string): Promise<DetectionR
   if (response.status === 404) {
     return null;
   }
-  await assertOk(response, 'Failed to fetch detection report');
+  // A 502 is a run that crashed or was cancelled; its error stays in the console.
+  await assertOk(response, 'Failed to fetch detection report', {
+    502: 'The last detection run did not finish. Run detection again.',
+  });
 
   return (await response.json()) as DetectionReport;
 }
@@ -51,10 +54,9 @@ export const INDIVIDUAL_DETECTION_CHECKS: { id: IndividualCheckId; label: string
   { id: 'company-name-consistency', label: 'Company name consistency' },
   { id: 'external-validation', label: 'External validation' },
   { id: 'metadata-anomaly', label: 'Metadata anomaly' },
-  // Runs both image checks (SCRUM-64 resolution/compression, SCRUM-65 tampering) and returns the result.
   { id: 'image-integrity', label: 'Image integrity' },
-  // SCRUM-67: AI-generation likelihood score with every indicator's value and contribution.
   { id: 'ai-generation', label: 'AI generation' },
+  { id: 'page-consistency', label: 'Page consistency' },
 ];
 
 // Each check has its own result shape (FontConsistencyResult, LayoutAnomalyResult, ...).
@@ -64,10 +66,7 @@ export async function runIndividualDetectionCheck(
 ): Promise<unknown> {
   const response = await authFetch(`/documents/${documentId}/detection/${checkId}`);
 
-  if (response.status === 409) {
-    const detail = await response.text();
-    throw new Error(detail || 'Run full detection first before running an individual check.');
-  }
+  // A 409's detail says why (no full report yet); assertOk shows it.
   await assertOk(response, 'Check failed');
 
   return await response.json();

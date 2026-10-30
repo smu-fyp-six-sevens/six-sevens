@@ -1,14 +1,16 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
-import CaseHeader, { CaseTitle, caseCrumb, caseQueueCrumb, documentCrumb } from '../components/CaseHeader';
-import { useCases } from '../casesContext';
+import CaseHeader, { CaseTitle } from '../components/CaseHeader';
+import { caseCrumb, caseQueueCrumb, documentCrumb } from '../components/caseCrumbs';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import DocumentPreviewPane, { ShowDocumentButton } from '../components/DocumentPreviewPane';
 import KebabMenu from '../components/KebabMenu';
+import { DocumentBodySkeleton } from '../components/Skeletons';
 import {
   canCancelDocument,
+  canRejectDocument,
   canRetryDocument,
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   EXTRACTION_CONFIDENCE_THRESHOLD,
@@ -16,6 +18,7 @@ import {
   formatDocumentType,
   hasBeenApproved,
   hasExtractedInformation,
+  isBlockedByContentGuard,
   isClassificationConfirmed,
   skipsDetection,
 } from '../services/uploadService';
@@ -33,7 +36,11 @@ import { useDocumentRecord } from './document-details/useDocumentRecord';
 import { useDocumentTypeEditing } from './document-details/useDocumentTypeEditing';
 import { useFieldEditing } from './document-details/useFieldEditing';
 import { useLangGraphTrace } from './document-details/useLangGraphTrace';
+import { useContentGuard } from './document-details/useContentGuard';
+import { ContentGuardWarning } from './document-details/ContentGuardWarning';
 import { humanizeFieldKey } from '../utils/fieldLabels';
+import { ErrorMessage } from '../components/ErrorMessage';
+import { LoadErrorState } from '../components/LoadErrorState';
 
 // Developer-only panels, so they load on demand.
 const DetectionPanel = lazy(() =>
@@ -74,7 +81,6 @@ export default function DocumentDetailsPage({
   documentId,
   onDocumentDeleted,
 }: DocumentDetailsPageProps) {
-  const cases = useCases();
   const {
     document,
     setDocument,
@@ -168,10 +174,22 @@ export default function DocumentDetailsPage({
     [extractedFields, absentRequiredFields],
   );
 
+  // No manual review or added fields on a document the content guard stopped: no model read it.
+  const isBlocked = document ? isBlockedByContentGuard(document) : false;
+
+  // A blocked document's reason is the content guard warning at the top of the page, so it isn't repeated here.
   const failureReason =
-    document?.status === 'failed' && document.failure_reason
+    document?.status === 'failed' && document.failure_reason && !isBlocked
       ? describeFailureReason(document.failure_reason)
       : null;
+  // The page shows the plain sentence; the stored reason, which can carry an exception's text, goes to the console.
+  const rawFailureReason = document?.status === 'failed' ? document.failure_reason : null;
+  useEffect(() => {
+    if (rawFailureReason) console.error(`Document ${documentId} failed:`, rawFailureReason);
+  }, [documentId, rawFailureReason]);
+
+  // The file itself couldn't be read: there are no fields to show or review, and a new type would fail the same way.
+  const isUnreadableFile = failureReason?.fileProblem ?? false;
 
   // Distinct from failureReason (a hard processing failure) and from needsManualReview below.
   const lowClassificationConfidence =
@@ -204,31 +222,12 @@ export default function DocumentDetailsPage({
   // approval, so a document that can't be approved yet can always be confirmed.
   const canCorrectType =
     !isLocked &&
+    !isBlocked &&
     (document?.status === 'analyzed' || document?.status === 'failed') &&
-    !isTypeConfirmed;
+    !isTypeConfirmed &&
+    !isUnreadableFile;
 
-  const {
-    isAddFieldOpen,
-    setIsAddFieldOpen,
-    newFieldName,
-    setNewFieldName,
-    newFieldValue,
-    setNewFieldValue,
-    isAddingField,
-    setIsAddingField,
-    addFieldError,
-    setAddFieldError,
-    deletingFieldId,
-    setDeletingFieldId,
-    deleteFieldError,
-    setDeleteFieldError,
-    isSaving,
-    saveMessage,
-    saveError,
-    handleFieldChange,
-    handleSaveFields,
-    clearSaveMessages,
-  } = useFieldEditing({
+  const fieldEditing = useFieldEditing({
     document,
     setDocument,
     fieldDraft,
@@ -239,6 +238,7 @@ export default function DocumentDetailsPage({
     absentRequiredFields,
     needsAttention,
   });
+  const { isSaving, saveMessage, saveError, handleFieldChange, handleSaveFields, clearSaveMessages } = fieldEditing;
 
   const {
     setSelectedType,
@@ -262,6 +262,7 @@ export default function DocumentDetailsPage({
     isRefreshingDetection,
     refreshDetectionReport,
     isCancellingDetection,
+    cancelDetectionError,
     handleCancelDetection,
     isRetryingDetection,
     handleRetryDetection,
@@ -269,9 +270,11 @@ export default function DocumentDetailsPage({
     individualCheckError,
     individualCheckResults,
     handleRunIndividualCheck,
-  } = useDetection(documentId);
+  } = useDetection(documentId, document?.status);
 
   const { langGraphTrace, isRefreshingTrace, refreshLangGraphTrace } = useLangGraphTrace(documentId);
+
+  const contentGuard = useContentGuard(documentId, document?.status);
 
   // The case-status websocket (useDocumentRecord) stays subscribed while status is 'detecting', so this
   // fires live the moment the server moves it to 'detected' (or back to 'approved' on a failed run) —
@@ -305,6 +308,8 @@ export default function DocumentDetailsPage({
     setDeleteConfirmOpen,
     confirmDeleteDocument,
   } = useDocumentActions({ document, setDocument, onDocumentDeleted });
+  // Rejecting is final (the document is locked), so it is confirmed first.
+  const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
 
   const hasDetectionReport = detectionReport !== null;
   const detectionStage = document
@@ -316,7 +321,7 @@ export default function DocumentDetailsPage({
     <CaseHeader
       crumbs={[
         caseQueueCrumb,
-        caseCrumb(cases, selectedCase),
+        caseCrumb(selectedCase),
         // The filename is known once the document has loaded.
         ...(document ? [documentCrumb(selectedCase, documentId, document.filename)] : []),
       ]}
@@ -332,11 +337,7 @@ export default function DocumentDetailsPage({
 
         {caseHeader}
 
-        <div className="document-details-body">
-          <div className="document-details-loading">
-            Loading document details…
-          </div>
-        </div>
+        <DocumentBodySkeleton />
       </div>
     );
   }
@@ -349,9 +350,7 @@ export default function DocumentDetailsPage({
         {caseHeader}
 
         <div className="document-details-body">
-          <div className="document-details-error">
-            {loadError ?? 'Document could not be found.'}
-          </div>
+          <LoadErrorState message={loadError ?? 'This document could not be found.'} />
         </div>
       </div>
     );
@@ -381,11 +380,9 @@ export default function DocumentDetailsPage({
         )}
 
         <div className="document-details-main">
-        {deleteDocumentError && (
-          <div className="toast show mixed" role="alert">
-            ⚠ {deleteDocumentError}
-          </div>
-        )}
+        {deleteDocumentError && <ErrorMessage className="toast-error" message={deleteDocumentError} />}
+
+        <ContentGuardWarning contentGuard={contentGuard} />
 
         {/* Notes: open on a locked document too, since a note never edits the document. */}
 
@@ -396,7 +393,7 @@ export default function DocumentDetailsPage({
           documentId={document.id}
           lockedNotice={
             isLocked
-              ? `Document ${isApproved ? 'approved' : 'rejected'} and locked · notes don't change it`
+              ? `Document ${isApproved ? 'approved' : 'rejected'} and locked`
               : undefined
           }
         />
@@ -450,33 +447,24 @@ export default function DocumentDetailsPage({
 
         {/* Extracted information */}
 
-        <ExtractedInformationCard
-          addFieldError={addFieldError}
-          canEditFields={canEditFields}
-          deleteFieldError={deleteFieldError}
-          deletingFieldId={deletingFieldId}
-          document={document}
-          extractedFields={extractedFields}
-          isAddFieldOpen={isAddFieldOpen}
-          isAddingField={isAddingField}
-          isInFlight={isInFlight}
-          lowestConfidence={lowestConfidence}
-          newFieldName={newFieldName}
-          newFieldValue={newFieldValue}
-          setAddFieldError={setAddFieldError}
-          setDeleteFieldError={setDeleteFieldError}
-          setDeletingFieldId={setDeletingFieldId}
-          setDocument={setDocument}
-          setFieldDraft={setFieldDraft}
-          setIsAddFieldOpen={setIsAddFieldOpen}
-          setIsAddingField={setIsAddingField}
-          setNewFieldName={setNewFieldName}
-          setNewFieldValue={setNewFieldValue}
-        />
+        {!isUnreadableFile && (
+          <ExtractedInformationCard
+            canAddOrDeleteFields={!isLocked && !isBlocked}
+            document={document}
+            extractedFields={extractedFields}
+            isInFlight={isInFlight}
+            lowestConfidence={lowestConfidence}
+            setDocument={setDocument}
+            setFieldDraft={setFieldDraft}
+            editing={fieldEditing}
+          />
+        )}
 
         {/* Manual review */}
 
-        {canEditFields && (needsManualReview || isUnrecognisedDocument) && (
+        {/* Not while a run is in flight: its fields are about to be replaced, and a retry of a blocked document
+            clears the failure for a moment, which would flash the card up and away again. */}
+        {canEditFields && !isBlocked && !isInFlight && !isUnreadableFile && (needsManualReview || isUnrecognisedDocument) && (
           <ManualReviewCard
             canEditFields={canEditFields}
             fieldDraft={fieldDraft}
@@ -512,6 +500,7 @@ export default function DocumentDetailsPage({
             isApproved={isApproved}
             isRetryingDetection={isRetryingDetection}
             isCancellingDetection={isCancellingDetection}
+            cancelError={cancelDetectionError}
             isRefreshingDetection={isRefreshingDetection}
             refreshDetectionReport={refreshDetectionReport}
             handleRetryDetection={handleRetryDetection}
@@ -525,17 +514,8 @@ export default function DocumentDetailsPage({
 
         {/* Document actions */}
 
-          {approveError && (
-            <div className="save-error">{approveError}</div>
-          )}
-          {cancelError && (
-            <div className="save-error">{cancelError}</div>
-          )}
-          {rejectError && (
-            <div className="save-error">{rejectError}</div>
-          )}
-          {retryError && (
-            <div className="save-error">{retryError}</div>
+          {[approveError, cancelError, rejectError, retryError].map(
+            (actionError, index) => actionError && <ErrorMessage key={index} className="action-error" message={actionError} />,
           )}
 
           {!hasBeenApproved(document.status) &&
@@ -621,8 +601,9 @@ export default function DocumentDetailsPage({
                 <button
                   type="button"
                   className="document-action--reject"
-                  disabled={isRejecting || isApproving}
-                  onClick={() => void handleRejectDocument()}
+                  disabled={isRejecting || isApproving || !canRejectDocument(document.status)}
+                  title={canRejectDocument(document.status) ? undefined : 'Cancel processing first, then reject it.'}
+                  onClick={() => setRejectConfirmOpen(true)}
                 >
                   {isRejecting ? 'Rejecting…' : '✕ Reject Document'}
                 </button>
@@ -651,6 +632,21 @@ export default function DocumentDetailsPage({
             if (!isDeletingDocument) setDeleteConfirmOpen(false);
           }}
           onConfirm={() => void confirmDeleteDocument()}
+        />
+      )}
+
+      {rejectConfirmOpen && document && (
+        <ConfirmDialog
+          title="Reject this document?"
+          message={`${document.filename} will be marked rejected and locked: it no longer counts towards the case, and it can't be approved, edited or scanned afterwards.`}
+          confirmLabel="Reject"
+          isConfirming={isRejecting}
+          onCancel={() => {
+            if (!isRejecting) setRejectConfirmOpen(false);
+          }}
+          onConfirm={() => {
+            void handleRejectDocument().finally(() => setRejectConfirmOpen(false));
+          }}
         />
       )}
 

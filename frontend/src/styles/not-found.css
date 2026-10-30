@@ -3,10 +3,10 @@
   max-width: 520px;
   margin: 56px auto 0;
   padding: 40px 36px 32px;
-  background: #ffffff;
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(18, 32, 61, 0.04), 0 8px 24px rgba(18, 32, 61, 0.06);
+  box-shadow: 0 1px 2px var(--ink-a04), 0 8px 24px rgba(18, 32, 61, 0.06);
   text-align: center;
 }
 
@@ -18,7 +18,7 @@
   height: 60px;
   margin-bottom: 18px;
   border-radius: 50%;
-  background: #eef2f7;
+  background: var(--slate-95);
   color: var(--steel);
 }
 
@@ -66,6 +66,16 @@
 
 .not-found__hints li + li {
   margin-top: 4px;
+}
+
+/* LoadErrorState: the same card for a page that couldn't load, with a red icon. */
+.not-found--error .not-found__icon {
+  background: var(--red-97);
+  color: var(--red-48);
+}
+
+.not-found__title--alone {
+  margin-bottom: 22px;
 }
 
 @media (max-width: 560px) {

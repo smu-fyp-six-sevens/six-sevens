@@ -482,6 +482,67 @@ def test_benford_unit_function_reports_all_nine_digits() -> None:
     assert analysis.unable_to_assess is False
 
 
+# Brought/carried-forward lines (SCRUM-288). These are the transactions extraction returned for PI-19 in
+# GLDB-134: the statement's "Balance brought forward" line comes through as a row with no amount, and the
+# running balance is 1,000.00 too high from 15 Aug onward, closing balance included.
+_STATEMENT = [
+    {"date": "01 Aug 2026", "amount": None, "balance": 58420.17, "description": "Balance brought forward"},
+    {"date": "03 Aug 2026", "amount": -6300.0, "balance": 52120.17, "description": "GIRO - Premises rental AUG26"},
+    {"date": "07 Aug 2026", "amount": 12480.5, "balance": 64600.67, "description": "Inward PayNow - Northwind Retail"},
+    {"date": "12 Aug 2026", "amount": -7243.36, "balance": 57357.31, "description": "Funds transfer - Kestrel Packaging"},
+    {"date": "15 Aug 2026", "amount": -644.42, "balance": 57712.89, "description": "GIRO - SP Services utilities"},
+    {"date": "21 Aug 2026", "amount": 9875.0, "balance": 67587.89, "description": "Inward PayNow - Harbourline"},
+    {"date": "25 Aug 2026", "amount": -6344.94, "balance": 61242.95, "description": "FAST payment - Salary"},
+    {"date": "31 Aug 2026", "amount": -35.0, "balance": 61207.95, "description": "Service charge"},
+]
+
+
+def _statement(rows: list[dict], **extra: str):
+    return _run([_field("transactions", rows), *(_field(k, v) for k, v in extra.items())], document_type="bank_statement")
+
+
+def _honest(rows: list[dict]) -> list[dict]:
+    """The same statement with the 1,000.00 taken back out of every balance from 15 Aug on."""
+    return [{**r, "balance": r["balance"] - 1000.0} if i >= 4 else r for i, r in enumerate(rows)]
+
+
+def test_open_close_runs_past_a_brought_forward_line() -> None:
+    result = _statement(_STATEMENT)
+    [open_close] = _codes(result, "BS.OPEN_CLOSE")
+    assert "58,420.17" in open_close.summary and "61,207.95" in open_close.summary
+    assert not any(s.check_code == "BS.OPEN_CLOSE" for s in result.skipped_checks)
+
+
+def test_a_brought_forward_line_on_an_honest_statement_raises_nothing() -> None:
+    result = _statement(_honest(_STATEMENT))
+    assert _codes(result, "BS.OPEN_CLOSE") == [] and _codes(result, "BS.RUNNING_BALANCE") == []
+
+
+def test_a_brought_forward_line_on_a_newest_first_statement_raises_nothing() -> None:
+    result = _statement(list(reversed(_honest(_STATEMENT))))
+    assert _codes(result, "BS.OPEN_CLOSE") == [] and _codes(result, "BS.RUNNING_BALANCE") == []
+
+
+def test_a_jump_hidden_at_a_carry_over_line_is_caught() -> None:
+    rows = _honest(_STATEMENT)
+    rows = [*rows[:4],
+            {"date": "14 Aug 2026", "amount": None, "balance": 57357.31, "description": "Balance carried forward"},
+            {"date": "14 Aug 2026", "amount": None, "balance": 58357.31, "description": "Balance brought forward"},
+            *[{**r, "balance": r["balance"] + 1000.0} for r in rows[4:]]]
+    [finding] = _codes(_statement(rows), "BS.RUNNING_BALANCE")
+    assert finding.severity == "impossible" and "58,357.31" in finding.summary and "57,357.31" in finding.summary
+
+
+def test_a_transaction_with_no_amount_is_reported_not_restarted_from() -> None:
+    # SCRUM-288 PI-23: the doctored 15 Aug line has its amount left blank.
+    rows = [{**r, "amount": None} if r["date"] == "15 Aug 2026" else r for r in _STATEMENT]
+    result = _statement(rows)
+    [gap] = _codes(result, "BS.RUNNING_BALANCE")
+    assert gap.severity == "inconsistent" and "15 Aug" not in gap.summary and "SP Services" in gap.summary
+    assert "+355.58" in gap.summary
+    assert any(s.check_code == "BS.OPEN_CLOSE" for s in result.skipped_checks)
+
+
 # ---------------------------------------------------------------------------
 # Source of wealth
 # ---------------------------------------------------------------------------
@@ -500,6 +561,42 @@ def test_portfolio_sum_reconciles() -> None:
         document_type="source_of_wealth",
     )
     assert _codes(result, "SOW.PORTFOLIO_SUM") == []
+
+
+def _portfolio(holdings: list[dict], portfolio_value: str):
+    return _codes(_run([_field("holdings", holdings), _field("portfolio_value", portfolio_value)],
+                       document_type="source_of_wealth"), "SOW.PORTFOLIO_SUM")
+
+
+def test_portfolio_sum_flags_a_total_resting_on_an_unvalued_holding() -> None:
+    # SCRUM-288 PI-24: a suspended counter with no price or value printed, and a total 120,000 too high.
+    holdings = [{"name": "Straits Industrial REIT", "market_value": 98000.0},
+                {"name": "Oriental Bank Holdings Ltd", "market_value": 114600.0},
+                {"name": "Kallang Data Centres Ltd", "market_value": 58200.0},
+                {"name": "Pacific Shipping Group Ltd (suspended)", "quantity": 25000, "market_value": None},
+                {"name": "SGD Money Market Fund", "market_value": 85000.0}]
+    [finding] = _portfolio(holdings, "475800")
+    assert finding.severity == "inconsistent"
+    assert "120,000.00" in finding.summary and "Pacific Shipping" in finding.summary
+
+
+def test_portfolio_sum_disproves_a_total_the_valued_holdings_already_exceed() -> None:
+    holdings = [{"market_value": 600.0}, {"market_value": 500.0}, {"name": "Suspended Co", "market_value": None}]
+    [finding] = _portfolio(holdings, "1000")
+    assert finding.severity == "impossible"
+
+
+def test_portfolio_sum_does_not_disprove_when_an_unvalued_holding_may_be_short() -> None:
+    holdings = [{"market_value": 600.0}, {"market_value": 500.0}, {"quantity": -100, "market_value": None}]
+    [finding] = _portfolio(holdings, "1000")
+    assert finding.severity == "inconsistent"
+
+
+def test_portfolio_sum_values_a_holding_from_quantity_and_price() -> None:
+    holdings = [{"market_value": 500.0}, {"quantity": 50, "closing_price": 10.0, "market_value": None}]
+    assert _portfolio(holdings, "1000") == []
+    [finding] = _portfolio(holdings, "1500")
+    assert finding.severity == "impossible"
 
 
 def test_fs_note_refs_flags_a_reference_with_no_matching_note() -> None:
@@ -579,6 +676,19 @@ def test_noa_ya2026_accepts_the_original_and_the_enhanced_rebate() -> None:
     assert _noa_for("2026", "500000", "40545") == []
     assert _noa_for("2026", "500000", "42045") == []
     assert len(_noa_for("2026", "500000", "50000")) == 1
+
+
+def test_payslip_net_passes_on_matching_totals_alone() -> None:
+    result = _run([_field("net_pay", "4680"), _field("total_earnings", "5850"), _field("total_deductions", "1170")],
+                  document_type="payslip")
+    assert _codes(result, "PAY.NET") == []
+    assert not any(s.check_code == "PAY.NET" for s in result.skipped_checks)
+
+
+def test_payslip_net_is_skipped_not_passed_with_nothing_to_compare() -> None:
+    result = _run([_field("net_pay", "4680"), _field("total_earnings", "5850")], document_type="payslip")
+    assert _codes(result, "PAY.NET") == []
+    assert any(s.check_code == "PAY.NET" for s in result.skipped_checks)
 
 
 def test_noa_skips_a_year_without_known_rules_or_no_year() -> None:
@@ -1000,6 +1110,12 @@ _FLAGGED_ONCE = [
              _field("total_deductions", "500"), _field("earnings_items", []),
              _field("deductions_items", [])],
         id='payslip_net_flags_earnings_minus_deductions_mismatch',
+    ),
+    pytest.param(
+        # A summary payslip: totals printed, no line items at all (SCRUM-288 PI-21).
+        'PAY.NET', "payslip", [_field("net_pay", "5680"), _field("total_earnings", "5850"),
+             _field("total_deductions", "1170")],
+        id='payslip_net_flags_mismatch_from_totals_alone',
     ),
     pytest.param(
         'PAY.EARNINGS_SUM', "payslip", [_field("net_pay", "5000"),

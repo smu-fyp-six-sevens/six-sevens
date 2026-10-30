@@ -1,10 +1,20 @@
 import { useState } from 'react';
 import AppHeader from '../components/AppHeader';
 import { authFetch } from '../lib/api';
+import { assertOk } from '../services/uploadService';
 import {
   MAX_COMPANY_NAME_LENGTH,
   validateCompanyName,
 } from '../utils/caseValidation';
+import { ErrorMessage } from '../components/ErrorMessage';
+
+// The case's path after it is created, as the case summary's progress stages show it.
+const NEXT_STEPS = [
+  { title: 'Upload documents', detail: 'Each file is classified and its fields extracted.' },
+  { title: 'Approve documents', detail: 'Check the extracted fields, then approve each document.' },
+  { title: 'Fraud detection', detail: 'Approved documents are scanned for signs of tampering.' },
+  { title: 'Case analysis', detail: 'Documents are cross-checked and the case is given a risk score.' },
+];
 
 interface CreateCasePageProps {
   onBack: () => void;
@@ -44,12 +54,7 @@ export default function CreateCasePage({
         }),
       });
 
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new Error(
-          `Failed to create case (${response.status}): ${detail}`,
-        );
-      }
+      await assertOk(response, 'Failed to create case');
 
       // Case was created successfully.
       onCreated();
@@ -65,7 +70,7 @@ export default function CreateCasePage({
   }
 
   return (
-    <main className="shell">
+    <main className="shell shell--create">
       <AppHeader />
 
       <section className="create-case-view">
@@ -78,68 +83,87 @@ export default function CreateCasePage({
           ← Back to case queue
         </button>
 
-        <p className="eyebrow">New case</p>
+        <div className="create-case-card">
+          <div className="create-case-intro">
+            <p className="eyebrow">New case</p>
 
-        <h1>Create Case</h1>
+            <h1>Create Case</h1>
 
-        <p className="sub">
-          Enter the company information to create a new corporate loan case.
-        </p>
-
-        <form className="create-case-form" onSubmit={handleSubmit}>
-          <div className="form-field">
-            <label htmlFor="company-name">
-              Company name
-            </label>
-
-            <input
-              id="company-name"
-              type="text"
-              value={companyName}
-              onChange={(event) => {
-                setCompanyName(event.target.value);
-
-                if (error) {
-                  setError(null);
-                }
-              }}
-              placeholder="Enter company name"
-              maxLength={MAX_COMPANY_NAME_LENGTH}
-              disabled={isSubmitting}
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? 'company-name-error' : undefined}
-            />
+            <p className="sub">
+              Enter the company information to create a new corporate loan case.
+            </p>
           </div>
 
-          {error && (
-            <div
-              id="company-name-error"
-              className="form-error"
-              role="alert"
-            >
-              ⚠ {error}
+          <form className="create-case-form" onSubmit={handleSubmit}>
+            <div className="form-field">
+              <label htmlFor="company-name">
+                Company name
+              </label>
+
+              <input
+                id="company-name"
+                type="text"
+                value={companyName}
+                onChange={(event) => {
+                  setCompanyName(event.target.value);
+
+                  if (error) {
+                    setError(null);
+                  }
+                }}
+                placeholder="e.g. Harbor Light Shipping Pte Ltd"
+                maxLength={MAX_COMPANY_NAME_LENGTH}
+                disabled={isSubmitting}
+                autoFocus
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? 'company-name-error' : 'company-name-hint'}
+              />
+
+              <div className="form-field-hint">
+                <span id="company-name-hint">
+                  Use the registered name. You can rename the case later.
+                </span>
+                <span aria-hidden="true">
+                  {companyName.length}/{MAX_COMPANY_NAME_LENGTH}
+                </span>
+              </div>
             </div>
-          )}
 
-          <div className="create-case-actions">
-            <button
-              type="button"
-              className="back-link"
-              onClick={onBack}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </button>
+            {error && <ErrorMessage id="company-name-error" className="form-error" message={error} />}
 
-            <button
-              type="submit"
-              className="upload-btn"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Creating…' : 'Create Case'}
-            </button>
-          </div>
-        </form>
+            <div className="create-case-actions">
+              <button
+                type="button"
+                className="back-link"
+                onClick={onBack}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="upload-btn"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Creating…' : 'Create Case'}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <section className="create-case-next" aria-labelledby="create-case-next-title">
+          <h2 id="create-case-next-title">What happens next</h2>
+          <ol>
+            {NEXT_STEPS.map((step) => (
+              <li key={step.title}>
+                <strong>{step.title}</strong>
+                <span>{step.detail}</span>
+              </li>
+            ))}
+          </ol>
+          <p>A GreenLink case ID is assigned when the case is created.</p>
+        </section>
       </section>
     </main>
   );

@@ -6,3 +6,7 @@ export * from './cases';
 export * from './documents';
 export * from './detection';
 export * from './notes';
+export * from './audit';
+export * from './findingReviews';
+export * from './settings';
+export { assertOk, RequestError } from './request';

@@ -29,9 +29,15 @@ def _check_payslip_sums(
     *, net_pay: Num, earnings_items: Any = None, deductions_items: Any = None,
     total_earnings: Num | None = None, total_deductions: Num | None = None,
 ) -> CheckResult:
-    """Earnings lines sum to total earnings, deductions to total deductions, and earnings minus deductions to net pay."""
-    if earnings_items is None and deductions_items is None:
-        return [], skipped(reason="Required field(s) not extracted: earnings_items, deductions_items")
+    """
+    Earnings lines sum to total earnings, deductions to total deductions, and earnings minus deductions
+    to net pay. A payslip that prints only its totals, with no line items, still has the last check:
+    skipping it there let a net pay 1,000.00 off pass as clean (SCRUM-288, PI-21).
+    """
+    if earnings_items is None and deductions_items is None and (total_earnings is None or total_deductions is None):
+        return [], skipped(
+            reason="Required field(s) not extracted: earnings_items, deductions_items, or total_earnings and total_deductions"
+        )
     findings = []
     if earnings_items is not None and total_earnings is not None:
         amounts = [_as_amount(r) for r in _rows(earnings_items)]

@@ -26,8 +26,11 @@ backend/test_files
 backend/.langgraph_api/
 
 # Playwright regression suite output
+frontend/dist-e2e/
 frontend/playwright-report/
 frontend/test-results/
+# Playwright run from another folder
+**/test-results/
 
 .ruff_cache/
 

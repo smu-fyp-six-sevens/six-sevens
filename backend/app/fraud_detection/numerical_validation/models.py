@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Literal
 from pydantic import BaseModel
 
+from ..shared.check_result import CheckResult
+
 
 Severity = Literal["impossible", "inconsistent", "implausible", "signal"]
 
@@ -20,9 +22,8 @@ class NumericalFinding(BaseModel):
     field: str | None = None
     stated: str | None = None
     expected: str | None = None
-    # True when the failing value has low extraction confidence, or its raw
-    # string can't be found anywhere in the document's own text — the
-    # failure might be an extraction artefact rather than a genuine anomaly.
+    # True when the failing value has low extraction confidence: the failure
+    # might be an extraction artefact rather than a genuine anomaly.
     needs_review: bool = False
     severity_note: str | None = None
     summary: str
@@ -43,27 +44,25 @@ class BenfordDigit(BaseModel):
     expected_percentage: float
 
 
-class BenfordAnalysis(BaseModel):
+class BenfordAnalysis(CheckResult):
     sample_size: int
     digits: list[BenfordDigit]
     mean_absolute_deviation: float | None = None
     chi_square: float | None = None
     chi_square_critical: float | None = None
     conforms: bool | None = None
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
 
 
-class NumericalValidationResult(BaseModel):
+class NumericalValidationResult(CheckResult):
     """
-    Response for GET /documents/{id}/detection/numerical-validation.
-    Nothing is persisted — a pure read/compute, like the spelling and
-    layout checks.
+    Response for GET /documents/{id}/detection/numerical-validation. A pure
+    compute: no findings are stored, only a step entry on the document's
+    trace (routers/detection.py).
 
     Two independent Benford passes over transaction amounts (all amounts,
     and amounts with likely bank fees excluded) are named benford /
-    benford_excluding_fees; both are None when the document type has no
-    transaction list to run them on.
+    benford_excluding_fees. Without a transaction list, benford says why it
+    couldn't run (unable_to_assess) and benford_excluding_fees is None.
     """
 
     document_id: str
@@ -73,8 +72,6 @@ class NumericalValidationResult(BaseModel):
     skipped_checks: list[SkippedCheck]
     benford: BenfordAnalysis
     benford_excluding_fees: BenfordAnalysis | None = None
-    unable_to_assess: bool
-    unable_to_assess_reason: str | None = None
     # Filled by the binder-driven endpoint; empty on the reference path.
     breakdown: list[dict] = []
     unassigned: list[dict] = []

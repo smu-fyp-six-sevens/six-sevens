@@ -2,6 +2,11 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
+# Dependencies first, so a source change doesn't reinstall them.
+# Exactly the lock file's versions; fails if package.json and the lock disagree.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
 # Vite inlines import.meta.env.VITE_* at build time, so the backend's URL
 # has to be known before this stage runs — the deploy pipeline passes it in
 # once the backend Cloud Run service exists (see .github/workflows/deploy.yml).
@@ -10,14 +15,11 @@ WORKDIR /app
 ARG VITE_API_URL=http://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
 
-COPY frontend/package.json ./package.json
 COPY frontend/tsconfig.json ./tsconfig.json
 COPY frontend/vite.config.ts ./vite.config.ts
 COPY frontend/eslint.config.js ./eslint.config.js
 COPY frontend/index.html ./index.html
 COPY frontend/src ./src
-
-RUN npm install
 RUN npm run build
 
 FROM nginx:1.27-alpine

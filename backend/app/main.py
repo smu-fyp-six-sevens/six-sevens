@@ -14,10 +14,11 @@ from .events import bus, registry, types
 from .events import push as event_push
 from .events.envelope import request_id
 from .fraud_detection.external_validation.registry_lookups import land_use
+from .fraud_detection.spelling import spelling_anomaly
 from .health import check_db_connection
 from .langgraph._anthropic import warm_up
 from .routers import audit as audit_router
-from .routers import cases, detection, documents, monitoring, notes, upload, ws
+from .routers import cases, detection, documents, finding_reviews, monitoring, notes, settings as settings_router, upload, ws
 from .workers import cases as case_worker
 from .workers import detection as detection_worker
 from .workers import documents as doc_worker
@@ -59,6 +60,7 @@ for _role, _handlers in _HANDLERS.items():
 async def lifespan(app: FastAPI):
     logger.info("Starting roles %s with %s events", sorted(ROLES), settings.EVENT_TRANSPORT)
     metrics.set_info(ROLES)
+    background_tasks: list[asyncio.Task[None]] = []
     if "api" in ROLES and not settings.AUTH_USERS:
         logger.warning("AUTH_USERS is not set, so nobody can log in. Set it in backend/.env")
     try:
@@ -81,6 +83,8 @@ async def lifespan(app: FastAPI):
             await asyncio.to_thread(land_use.log_startup_status)
         except Exception:
             logger.exception("Could not read the land-use index status — continuing anyway")
+        # Not awaited: startup doesn't wait for the spelling dictionary, a detection run just finds it ready.
+        background_tasks.append(asyncio.create_task(asyncio.to_thread(spelling_anomaly.warm_up)))
 
     if ROLES & _CALLS_CLAUDE:
         try:
@@ -156,6 +160,8 @@ if "api" in ROLES:
     app.include_router(detection.router, dependencies=_protected)
     app.include_router(detection.cases_router, dependencies=_protected)
     app.include_router(notes.router, dependencies=_protected)
+    app.include_router(finding_reviews.router, dependencies=_protected)
+    app.include_router(settings_router.router, dependencies=_protected)
     # The WebSocket can't carry an Authorization header, so it checks its own short-lived ticket (routers/ws.py).
     app.include_router(ws.router)
 

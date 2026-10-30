@@ -122,6 +122,24 @@ class AnalysisAudit(BaseModel):
 AnalysisStatus = Literal["running", "complete", "failed", "superseded"]
 
 
+class SummaryReason(BaseModel):
+    text: str
+    # The contributing finding (CaseRisk.contributing_findings) the reason rests on. A document's finding ids are
+    # numbered per document, so the document is part of what identifies it.
+    finding_id: str
+    document_id: str = ""
+
+
+class AnalysisSummary(BaseModel):
+    """The explanation an officer reads first (risk/summary.py): what the result comes down to, and why."""
+
+    headline: str
+    reasons: list[SummaryReason] = Field(default_factory=list)
+    would_help: str | None = None
+    # "model" when the model's reply passed every check, "fallback" when the deterministic summary replaced it.
+    source: Literal["model", "fallback"] = "model"
+
+
 class CaseAnalysis(BaseModel):
     run_id: str
     case_id: str
@@ -133,15 +151,38 @@ class CaseAnalysis(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     findings: list[CrossDocFinding] = Field(default_factory=list)
     outlook: RiskOutlook | None = None
+    # Runs from before structured_summary: their prose summary, which the card shows instead.
     summary: str | None = None
+    structured_summary: AnalysisSummary | None = None
     # The case's risk and evidence requests: produced only here, then read by the case views.
     risk: CaseRisk | None = None
     supporting_documents: list[SupportingDocumentRecommendation] = Field(default_factory=list)
     additional_documents: AdditionalDocuments | None = None
     # Comparisons that ran and found the documents agree, so an empty result is not read as "not checked".
     consistent_checks: list[str] = Field(default_factory=list)
+    # Detection checks (tool names) that examined the documents and raised nothing. Empty on older runs.
+    clean_checks: list[str] = Field(default_factory=list)
     audit: AnalysisAudit = Field(default_factory=AnalysisAudit)
     # Step-by-step log of the run, for debugging. Includes hypotheses that were tried and dropped.
     trace: list[dict[str, Any]] = Field(default_factory=list)
     # Computed on read: the case's documents changed since this run started.
+    stale: bool = False
+
+
+class CaseAnalysisRunItem(BaseModel):
+    """One run in a case's list of analyses (GET /cases/{id}/analysis/runs): enough to pick one to open."""
+
+    run_id: str
+    status: AnalysisStatus
+    started_at: datetime
+    finished_at: datetime | None = None
+    # The officer who asked for it (the case.analysis.requested event), when the audit trail has it.
+    started_by: str | None = None
+    risk_level: str | None = None
+    risk_score: int | None = None
+    # Against the next older run with a score; None for the oldest scored run or a run without a score.
+    score_change: int | None = None
+    # Cross-document findings, as the card and the audit trail count them.
+    finding_count: int = 0
+    # The case's documents changed since this run started.
     stale: bool = False

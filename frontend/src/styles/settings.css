@@ -1,0 +1,88 @@
+/* ================================
+   Settings (pages/SettingsPage.tsx)
+   ================================ */
+
+.settings-card {
+  padding: 16px 20px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+/* A name on the left, an on/off switch on the right. */
+.settings-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+}
+
+.settings-switch-name {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+/* The switch is drawn over a real checkbox, so it keeps the checkbox's keyboard and screen-reader behaviour. */
+.settings-switch-control {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.settings-switch-control input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.settings-switch-control input:disabled {
+  cursor: not-allowed;
+}
+
+.settings-switch-track {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--line);
+  transition: background 0.15s;
+}
+
+.settings-switch-track::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(18, 32, 61, 0.25);
+  content: '';
+  transition: transform 0.15s;
+}
+
+.settings-switch-control input:checked + .settings-switch-track {
+  background: var(--teal);
+}
+
+.settings-switch-control input:checked + .settings-switch-track::after {
+  transform: translateX(18px);
+}
+
+.settings-switch-control input:focus-visible + .settings-switch-track {
+  box-shadow: 0 0 0 3px var(--steel-a25);
+}
+
+.settings-switch-control input:disabled + .settings-switch-track {
+  opacity: 0.55;
+}
+
+.settings-error {
+  margin-top: 12px;
+}

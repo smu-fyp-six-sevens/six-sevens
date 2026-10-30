@@ -4,6 +4,7 @@ import KebabMenu from './KebabMenu';
 import { caseStatusTone } from '../utils/caseStatusTone';
 import { updateCase } from '../services/uploadService';
 import { MAX_COMPANY_NAME_LENGTH, validateCompanyName } from '../utils/caseValidation';
+import { ErrorMessage } from './ErrorMessage';
 
 interface CaseRowProps {
   caseRecord: CaseRecord;
@@ -102,11 +103,7 @@ export default function CaseRow({
             aria-invalid={saveError ? true : undefined}
             autoFocus
           />
-          {saveError && (
-            <span className="case-edit-error" role="alert">
-              {saveError}
-            </span>
-          )}
+          {saveError && <ErrorMessage inline message={saveError} />}
         </span>
 
         <span className="case-edit-actions add-field-form-actions">

@@ -69,9 +69,15 @@ class EvidenceRequests(BaseModel):
     requests: Annotated[list[EvidenceRequestItem], BeforeValidator(keep_valid(EvidenceRequestItem))] = []
 
 
+class SummaryReasonReply(BaseModel):
+    text: Text = ""
+    finding_id: Text = ""
+
+
 class SummaryReply(BaseModel):
-    summary: Text = ""
-    cites: TextList = []
+    headline: Text = ""
+    reasons: Annotated[list[SummaryReasonReply], BeforeValidator(keep_valid(SummaryReasonReply))] = []
+    would_help: Text = ""
 
 
 def _placeholder_summary(value: Any) -> str:

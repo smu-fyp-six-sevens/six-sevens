@@ -85,8 +85,8 @@ def _call(document: DocumentRecord, fields: list[ExtractedField], method: str, u
     repo = Repo(document)
     with (
         patch("app.routers._dependencies.document_repository", repo),
-        patch("app.routers.documents.document_repository", repo),
-        patch("app.routers.documents.extracted_fields_repository") as extracted,
+        patch("app.document_service.document_repository", repo),
+        patch("app.document_service.extracted_fields_repository") as extracted,
         patch("app.events.publish", new_callable=AsyncMock) as launch,
     ):
         extracted.get_extracted_fields.return_value = fields
@@ -122,7 +122,7 @@ def test_an_approved_document_can_no_longer_be_edited(method, path, body):
     response, _ = _call(document, fields, method, f"/documents/{document.id}{path}", body)
 
     assert response.status_code == 409
-    assert "locked" in response.json()["detail"]
+    assert "has been approved" in response.json()["detail"]
 
 
 @pytest.mark.sprint3
@@ -172,8 +172,8 @@ async def test_detection_starts_within_five_seconds_of_approval(monkeypatch):
 
     monkeypatch.setattr(bus, "_dispatch_in_process", dispatch)
     with (
-        patch("app.routers.documents.document_repository", repo),
-        patch("app.routers.documents.extracted_fields_repository") as extracted,
+        patch("app.document_service.document_repository", repo),
+        patch("app.document_service.extracted_fields_repository") as extracted,
         patch("app.workers.detection.run_detection", detection),
         patch("app.workers.detection.push_case_snapshot", AsyncMock()),
     ):
@@ -208,7 +208,7 @@ def test_a_rejected_document_can_no_longer_be_edited(method, path, body):
     response, _ = _call(document, fields, method, f"/documents/{document.id}{path}", body)
 
     assert response.status_code == 409
-    assert "locked" in response.json()["detail"]
+    assert "has been rejected" in response.json()["detail"]
 
 
 @pytest.mark.sprint3

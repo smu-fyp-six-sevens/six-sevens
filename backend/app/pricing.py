@@ -1,6 +1,8 @@
 """
-Claude list prices in USD per million tokens (anthropic.com/pricing), for the cost metrics and trace attributes.
-Matched by the longest model-name prefix; a model missing here costs 0 and is logged once.
+Claude list prices in USD per million tokens (platform.claude.com/docs/en/about-claude/pricing, read 2026-10-30), for
+the cost metrics and trace attributes. A call's cost is its exact token counts times these prices, so it matches the
+bill unless the organisation has a discount. Matched by the longest model-name prefix; a model missing here costs 0
+and is logged once.
 """
 
 from __future__ import annotations
@@ -14,13 +16,14 @@ logger = logging.getLogger(__name__)
 class Usage(NamedTuple):
     model: str
     uncached_input: int
-    output: int
+    output: int  # includes thinking tokens, which are billed as output
     cache_read: int
-    cache_write: int
+    cache_write: int  # 5-minute cache writes
+    cache_write_1h: int = 0
 
     @property
     def total_input(self) -> int:
-        return self.uncached_input + self.cache_read + self.cache_write
+        return self.uncached_input + self.cache_read + self.cache_write + self.cache_write_1h
 
 
 def usage(message: Any) -> Usage | None:
@@ -32,44 +35,57 @@ def usage(message: Any) -> Usage | None:
     model = response.get("model_name") or response.get("model") or "unknown"
     details = meta.get("input_token_details") or {}
     cache_read = details.get("cache_read", 0) or 0
-    # The API may report a write only under its per-lifetime keys, leaving the total at 0.
-    cache_write = max(
-        details.get("cache_creation", 0) or 0,
-        (details.get("ephemeral_5m_input_tokens", 0) or 0) + (details.get("ephemeral_1h_input_tokens", 0) or 0),
-    )
+    # The per-lifetime keys split the writes; without them, cache_creation is all 5-minute writes.
+    write_5m = details.get("ephemeral_5m_input_tokens", 0) or 0
+    write_1h = details.get("ephemeral_1h_input_tokens", 0) or 0
+    if not write_5m and not write_1h:
+        write_5m = details.get("cache_creation", 0) or 0
     # langchain-anthropic's input_tokens already includes cache reads and writes.
-    uncached = max(0, (meta.get("input_tokens", 0) or 0) - cache_read - cache_write)
-    return Usage(model, uncached, meta.get("output_tokens", 0) or 0, cache_read, cache_write)
+    uncached = max(0, (meta.get("input_tokens", 0) or 0) - cache_read - write_5m - write_1h)
+    return Usage(model, uncached, meta.get("output_tokens", 0) or 0, cache_read, write_5m, write_1h)
 
 
 class Price(NamedTuple):
     input: float
     output: float
     cache_read: float
-    cache_write: float  # 5-minute cache writes, the only kind this app makes
+    cache_write: float  # 5-minute cache writes
+    cache_write_1h: float
 
+
+# Haiku 5.5 charges more for a prompt over 100,000 tokens, counting every input token (cached ones included).
+_LONG_PROMPT_TOKENS = 100_000
 
 _PRICES: dict[str, Price] = {
-    "claude-opus-4-5": Price(5, 25, 0.50, 6.25),
-    "claude-opus-4-6": Price(5, 25, 0.50, 6.25),
-    "claude-opus-4": Price(15, 75, 1.50, 18.75),
-    "claude-sonnet-4": Price(3, 15, 0.30, 3.75),
-    "claude-sonnet-5": Price(3, 15, 0.30, 3.75),
-    "claude-haiku-4": Price(1, 5, 0.10, 1.25),
-    "claude-haiku-5": Price(1, 5, 0.10, 1.25),
-    "claude-3-5-haiku": Price(0.80, 4, 0.08, 1),
+    "claude-opus-5-5": Price(4, 20, 0.20, 5, 8),
+    "claude-opus-4-5": Price(5, 25, 0.50, 6.25, 10),
+    "claude-opus-4-6": Price(5, 25, 0.50, 6.25, 10),
+    "claude-opus-4": Price(15, 75, 1.50, 18.75, 30),
+    "claude-sonnet-5-5": Price(2, 10, 0.10, 2.50, 4),
+    "claude-sonnet-5": Price(2, 10, 0.20, 2.50, 4),
+    "claude-sonnet-4": Price(3, 15, 0.30, 3.75, 6),
+    "claude-haiku-5-5": Price(0.10, 0.50, 0.01, 0.125, 0.20),
+    "claude-haiku-4": Price(1, 5, 0.10, 1.25, 2),
+    "claude-3-5-haiku": Price(0.80, 4, 0.08, 1, 1.6),
+}
+_LONG_PROMPT_PRICES: dict[str, Price] = {
+    "claude-haiku-5-5": Price(0.50, 2.50, 0.05, 0.625, 1),
 }
 _unpriced: set[str] = set()
 
 
-def price_for(model: str) -> Price | None:
+def price_for(model: str, prompt_tokens: int = 0) -> Price | None:
+    """The price of a call to `model` whose prompt (every input token) is `prompt_tokens` long."""
     matches = [prefix for prefix in _PRICES if model.startswith(prefix)]
     if not matches:
         if model not in _unpriced:
             _unpriced.add(model)
             logger.warning("No price for model %r; its calls are counted at $0", model)
         return None
-    return _PRICES[max(matches, key=len)]
+    prefix = max(matches, key=len)
+    if prompt_tokens > _LONG_PROMPT_TOKENS and prefix in _LONG_PROMPT_PRICES:
+        return _LONG_PROMPT_PRICES[prefix]
+    return _PRICES[prefix]
 
 
 class Cost(NamedTuple):
@@ -77,12 +93,14 @@ class Cost(NamedTuple):
     saved_by_cache_usd: float  # what the cache reads would have cost as plain input, minus what they cost
 
 
-def cost(model: str, uncached_input: int, output: int, cache_read: int, cache_write: int) -> Cost:
-    price = price_for(model)
+def cost(
+    model: str, uncached_input: int, output: int, cache_read: int, cache_write: int, cache_write_1h: int = 0,
+) -> Cost:
+    price = price_for(model, uncached_input + cache_read + cache_write + cache_write_1h)
     if price is None:
         return Cost(0.0, 0.0)
     usd = (
-        uncached_input * price.input + output * price.output
-        + cache_read * price.cache_read + cache_write * price.cache_write
+        uncached_input * price.input + output * price.output + cache_read * price.cache_read
+        + cache_write * price.cache_write + cache_write_1h * price.cache_write_1h
     ) / 1_000_000
     return Cost(usd, cache_read * (price.input - price.cache_read) / 1_000_000)

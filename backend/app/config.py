@@ -53,6 +53,11 @@ class Settings:
     # any deployed environment; the "" default is only safe for local dev.
     AUTH_USERS: dict[str, str] = _users(_env("AUTH_USERS"))
     AUTH_SECRET_KEY: str = _env("AUTH_SECRET_KEY")
+    # The accounts that can change app-wide settings (routers/settings.py), comma-separated. Every other
+    # account is a loan officer. No role system beyond this list.
+    ADMIN_USERS: frozenset[str] = frozenset(
+        name.strip() for name in _env("ADMIN_USERS", "carol").split(",") if name.strip()
+    )
 
     # --- Services and events (CLOUD_ARCHITECTURE_PLAN.md) ---
     # Which roles this process runs; the default runs all of them, as uvicorn always has.
@@ -122,6 +127,8 @@ class Settings:
 
     # Threads for PDF/OCR/forensic work (cpu_pool.py). 1 = PyMuPDF only ever runs on one thread.
     CPU_WORKER_CONCURRENCY: int = int(os.environ.get("CPU_WORKER_CONCURRENCY", "1"))
+    # Processes for that work instead (each with its own PyMuPDF); 0 keeps the thread. Set on the deployed workers.
+    CPU_WORKER_PROCESSES: int = int(os.environ.get("CPU_WORKER_PROCESSES", "0"))
     # Detection runs (lead + 3 specialists each) allowed at once; the rest wait their turn.
     DETECTION_CONCURRENCY: int = int(os.environ.get("DETECTION_CONCURRENCY", "2"))
     # Most model calls one detection run may make (lead, specialists, reviews, binders). Past it the run
@@ -130,6 +137,9 @@ class Settings:
     # Most model calls one document's classify and extract run may make (agent turns, the two classifier
     # tools, a repair, extraction and its one retry, and one reclassification).
     DOCUMENT_MAX_MODEL_CALLS: int = int(os.environ.get("DOCUMENT_MAX_MODEL_CALLS", "24"))
+    # A document the content guard finds worded as an instruction to the AI fails at ingest, before classification
+    # or extraction (guardrails/content_guard.blocking_reason). "false" lets it through, flagged instead.
+    GUARD_BLOCK_INJECTION: bool = os.environ.get("GUARD_BLOCK_INJECTION", "true").lower() == "true"
     # Retries the Anthropic client makes by itself on a rate limit or 5xx; each one is billed again.
     LLM_MAX_RETRIES: int = int(os.environ.get("LLM_MAX_RETRIES", "1"))
     # One model request. Extraction can write 16k tokens, so this is generous.
@@ -166,8 +176,8 @@ class Settings:
     # Two-tier models: Sonnet for
     # classifier/vision/extraction/detection-lead, Haiku for
     # llm_classify/repair/specialists. Overridable per-tier.
-    LANGGRAPH_SONNET_MODEL: str = _env("LANGGRAPH_SONNET_MODEL", "claude-sonnet-4-6")
-    LANGGRAPH_HAIKU_MODEL: str = _env("LANGGRAPH_HAIKU_MODEL", "claude-haiku-4-5-20251001")
+    LANGGRAPH_SONNET_MODEL: str = _env("LANGGRAPH_SONNET_MODEL", "claude-sonnet-5-5")
+    LANGGRAPH_HAIKU_MODEL: str = _env("LANGGRAPH_HAIKU_MODEL", "claude-haiku-5-5")
     # Ceiling on the classify agent's tool-call loop and the full
     # record_escalation -> reclassify -> validate -> extract pass —
     # comfortably covers MAX_RECLASSIFICATION_ATTEMPTS with room to spare.

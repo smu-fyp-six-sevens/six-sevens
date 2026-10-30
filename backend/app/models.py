@@ -318,6 +318,8 @@ class ContributingFinding(BaseModel):
     document_type: str | None = None
     finding_id: str
     tool: str | None = None
+    # The tool's own check code where it reports one (e.g. "PAY.NET", "PAGE.NUMBERING").
+    check_code: str | None = None
     severity: str
     summary: str
     rationale: str
@@ -440,6 +442,18 @@ class AdditionalDocuments(BaseModel):
 CaseRecord.model_rebuild()  # now that AdditionalDocuments exists
 
 
+class WaitingDocument(BaseModel):
+    """
+    A document the case's risk score counts that isn't scanned yet, and what it is waiting for: still being
+    processed, an officer's approval, its detection scan, or a retry after it failed. A rerun before these are
+    done can't produce a score.
+    """
+
+    document_id: str
+    filename: str
+    reason: Literal["processing", "needs_approval", "scanning", "failed"]
+
+
 class CaseAnalysisOverview(BaseModel):
     """The latest per-case analysis in brief; the full result is GET /cases/{id}/analysis."""
 
@@ -449,6 +463,8 @@ class CaseAnalysisOverview(BaseModel):
     stale: bool = False
     finished_at: datetime | None = None
     finding_count: int = 0
+    # What a rerun would still wait on (empty: every document the score uses is scanned).
+    waiting_documents: list[WaitingDocument] = Field(default_factory=list)
 
 
 class CaseSummary(CaseRecord):
@@ -484,12 +500,54 @@ class CaseSummary(CaseRecord):
     analysis: CaseAnalysisOverview | None = None
 
 
+class CaseFlagCount(BaseModel):
+    """One detection check's flags in a case: how many, the worst severity, and the document types they're on."""
+
+    check: str
+    severity: str
+    count: int
+    document_types: list[str] = Field(default_factory=list)
+
+
 class CaseListItem(CaseRecord):
     """One row of the case queue: only what the list shows, so it needs no extracted fields."""
 
     documents_status: CaseDocumentsStatus
     # None when the documents' detection reports couldn't be loaded.
     risk: CaseRisk | None = None
+    # Automated processing time from the audit trail (audit.processing_ms_many); None until the case is analysed.
+    processing_ms: int | None = None
+    # Titles of the documents its latest analysis recommends requesting; None until the case is analysed.
+    recommended_documents: list[str] | None = None
+    # The types of the case's documents, each once.
+    document_types: list[str] = Field(default_factory=list)
+    # The case's flags (flags_repository), one entry per check, most flags first.
+    flags: list[CaseFlagCount] = Field(default_factory=list)
+    # The username of the officer who created the case (its case.created event); None when the trail has no record.
+    created_by: str | None = None
+
+
+class CaseListPage(BaseModel):
+    """One page of the case queue. `total` counts every case matching the search and status filter."""
+
+    items: list[CaseListItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class CaseCounts(BaseModel):
+    """What the queue's sidebar shows: every case, and how many are in each documents status."""
+
+    total: int
+    by_status: dict[str, int]
+
+
+class CaseSearchResult(BaseModel):
+    """Jump-to-case suggestions: the best matches (exact number first), and how many cases match in all."""
+
+    items: list[CaseRecord]
+    total: int
 
 
 # The same limit as the case forms in the frontend (utils/caseValidation.ts).
@@ -571,6 +629,140 @@ class UpdateNoteRequest(BaseModel):
     @classmethod
     def body_must_not_be_blank(cls, value: str) -> str:
         return _note_body(value)
+
+
+# --- Finding reviews: precision and recall per check (finding_reviews_repository, detection_metrics) ----------
+
+ReviewScope = Literal["document", "case"]
+ReviewVerdict = Literal["correct", "wrong"]
+MAX_REVIEW_NOTE_LENGTH = 1000
+
+
+class FindingReview(BaseModel):
+    """
+    An officer's verdict on one finding (kind "verdict": correct or wrong), or an issue the officer found that
+    no finding raised (kind "missed"). scope "document" is a finding on one document; "case" a cross-document
+    finding from the case analysis. check_name is the tool for a document finding, the category for a case one.
+    """
+
+    id: str
+    case_id: str
+    document_id: str | None = None
+    scope: ReviewScope
+    kind: Literal["verdict", "missed"]
+    finding_id: str | None = None
+    check_name: str
+    check_code: str | None = None
+    summary: str = ""
+    verdict: ReviewVerdict | None = None
+    note: str | None = None
+    reviewer: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class _ReviewTarget(BaseModel):
+    """Where a review sits: a document finding names its document; a case finding has none."""
+
+    scope: ReviewScope
+    document_id: UUID | None = None
+    check_name: str = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def document_matches_scope(self) -> "_ReviewTarget":
+        if (self.scope == "document") != (self.document_id is not None):
+            raise ValueError("A document review names its document; a case review doesn't")
+        return self
+
+
+class SetFindingVerdictRequest(_ReviewTarget):
+    """Marks one finding correct or wrong; verdict null clears the officer's mark."""
+
+    finding_id: str = Field(min_length=1, max_length=200)
+    check_code: str | None = Field(default=None, max_length=100)
+    # The finding's summary when it was reviewed, so a verdict is only shown against the same finding.
+    summary: str = Field(default="", max_length=4000)
+    verdict: ReviewVerdict | None = None
+
+
+class SetFindingVerdictsRequest(BaseModel):
+    """A whole group's review at once: every finding the officer looked at, each correct or wrong."""
+
+    verdicts: list[SetFindingVerdictRequest] = Field(min_length=1, max_length=200)
+
+
+class ReportMissedIssueRequest(_ReviewTarget):
+    """An issue the officer found that no finding raised, against the check that should have caught it."""
+
+    note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_LENGTH)
+
+    @field_validator("note")
+    @classmethod
+    def blank_note_is_none(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value is not None else None
+
+
+class UpdateMissedIssueRequest(BaseModel):
+    """Corrects a reported missed issue: the check it's filed against, and its note. Where it sits never changes."""
+
+    check_name: str = Field(min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_LENGTH)
+
+    @field_validator("note")
+    @classmethod
+    def blank_note_is_none(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value is not None else None
+
+
+class CheckMetrics(BaseModel):
+    """
+    One check's counts and rates. precision is correct / (correct + wrong): None when no finding of the check
+    was reviewed. recall is correct / (correct + missed): None when there is nothing it should have caught.
+    """
+
+    check_name: str
+    scope: ReviewScope
+    correct: int
+    wrong: int
+    missed: int
+    precision: float | None
+    recall: float | None
+    # Below target, or too few reviews for the rates to mean much.
+    flags: list[str] = []
+
+
+class MetricsSummary(BaseModel):
+    correct: int
+    wrong: int
+    missed: int
+    precision: float | None
+    recall: float | None
+    by_check: list[CheckMetrics]
+
+
+class CaseFindingReviews(BaseModel):
+    """Every review in a case, and the precision and recall they give: per document, across documents and for the case."""
+
+    reviews: list[FindingReview]
+    case: MetricsSummary
+    documents: dict[str, MetricsSummary]
+    cross_document: MetricsSummary
+    # The checks a missed issue can be reported against, per scope.
+    checks: dict[str, list[str]]
+    # A rate under its target is flagged, as on the dashboard.
+    target_precision: float
+    target_recall: float
+
+
+class DetectionMetrics(BaseModel):
+    """Precision and recall per check across every reviewed case."""
+
+    overall: MetricsSummary
+    cases_reviewed: int
+    documents_reviewed: int
+    target_precision: float
+    target_recall: float
+    min_reviews: int
 
 
 class DocumentRecord(BaseModel):
@@ -712,10 +904,12 @@ def counts_towards_checklist(document: DocumentRecord) -> bool:
     addresses (case_service.compute_requirement_coverage, mapper.py). Same
     bar as approval for the type: routing_status alone isn't enough, since
     an officer's "Save fields" flips it to ACCEPTED without confirming the
-    type. A rejected document never counts.
+    type. A rejected document never counts, nor does a failed one: an officer's type pick
+    is recorded before its extraction rerun, so a rerun that fails (or a document the
+    content guard stopped) would otherwise keep the checklist item ticked.
     """
     return (
         document.routing_status == RoutingStatus.ACCEPTED
-        and document.status != DocumentStatus.REJECTED
+        and document.status not in (DocumentStatus.REJECTED, DocumentStatus.FAILED)
         and is_classification_confirmed(document)
     )

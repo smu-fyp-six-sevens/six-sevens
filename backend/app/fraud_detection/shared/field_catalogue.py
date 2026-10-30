@@ -7,8 +7,9 @@ are never shown: labels and names come from the document, so they are data.
 
 from __future__ import annotations
 
-import json
 from typing import Any
+
+from .field_values import decode_field_value
 
 # document type -> array field -> "labels" (list each row) or "count" (default)
 ARRAY_DISPLAY: dict[str, dict[str, str]] = {
@@ -28,11 +29,7 @@ ARRAY_DISPLAY: dict[str, dict[str, str]] = {
 
 def array_rows(value: Any) -> list[dict] | None:
     """The rows of an array field, or None if it isn't one. Some stored values are JSON-encoded strings."""
-    if isinstance(value, str):
-        try:
-            value = json.loads(value)
-        except json.JSONDecodeError:
-            return None
+    value = decode_field_value(value)
     if not isinstance(value, list):
         return None
     return [row if isinstance(row, dict) else {"value": row} for row in value]

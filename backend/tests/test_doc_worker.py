@@ -159,5 +159,5 @@ async def test_an_officer_cancel_interrupts_the_run_here(published_events) -> No
         await doc_worker.on_cancelled(Event(type=types.DOCUMENT_CANCELLED, document_id="doc-1"))
         await asyncio.wait_for(run, timeout=2)
 
-    assert "doc-1" not in doc_worker._active
+    assert not doc_worker._runs.is_running("doc-1")
     assert published_events == []

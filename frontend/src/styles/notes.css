@@ -53,7 +53,7 @@
   padding: 6px 10px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #fff;
+  background: var(--white);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -88,13 +88,13 @@
   padding: 4px 6px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #fff;
+  background: var(--white);
   color: var(--ink);
   font: inherit;
   font-size: 12px;
 }
 
-.notes-card .analysis-error {
+.notes-card .card-error {
   margin: 0 16px 10px;
 }
 
@@ -116,7 +116,7 @@
   padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #fff;
+  background: var(--white);
 }
 
 .note-meta {

@@ -16,7 +16,6 @@ Documents at the root:
 - `HOW_IT_WORKS.md` the whole system end to end in plain language: pipeline, detection, flags, case analysis, live updates, configuration and cost logs.
 - `FRAUD_DETECTION_MAP.md` how the fraud checks and the detection agent are wired, plus known detection bugs.
 - `CROSS_DOCUMENT_AND_RISK_PLAN.md` design of the per-case analysis: deterministic checks, hypotheses, verification, risk outlook and guardrails.
-- `OUTPUT_VALIDATION.md` how model replies and tool results are validated, and what is bounded.
 - `REFACTORING_AUDIT.md` code smells and optimisations, with effort estimates.
 - `backend_tests.md` state of the test suites and what to add.
 - `PENDING_WORK.md` open product and platform work.
@@ -32,9 +31,19 @@ Documents at the root:
 Backend (from `backend/`):
 
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements-dev.lock
+pip install --no-deps -e .
 uvicorn app.main:app --reload
 ```
+
+**Dependencies:** `requirements.txt` holds the allowed ranges and is the file to edit. `requirements.lock` (the image) and `requirements-dev.lock` (CI and local, adding the dev tools) pin every version, so a build never picks up a release nobody tested. After changing `requirements.txt` or `pyproject.toml`'s dev list, or to take newer releases, regenerate both (from `backend/`, with `pip install uv`), then run the tests:
+
+```bash
+uv pip compile requirements.txt --universal --python-version 3.12 -o requirements.lock
+uv pip compile pyproject.toml --extra dev -c requirements.lock --universal --python-version 3.12 -o requirements-dev.lock
+```
+
+Add `--upgrade` to the first command to move every package to its newest allowed release, or `--upgrade-package <name>` for one.
 
 The database is Supabase, and its schema is changed directly there; the repo keeps no SQL migration files. The backend expects these to exist:
 
@@ -58,7 +67,7 @@ The API runs on `http://localhost:8000`. The interactive docs are at `/docs`.
 Frontend (from `frontend/`):
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -73,13 +82,15 @@ docker compose up --build                     # Pub/Sub emulator, Kong :8000, ap
 docker compose --profile frontend up --build  # also the nginx frontend on :5173 (otherwise use npm run dev)
 ```
 
-Settings come from `backend/.env`, as for uvicorn. The three workers share one container to save memory (about 3 GB in total). `CLOUD_ARCHITECTURE_PLAN.md` section 18 has the walkthrough, how to debug one role in the IDE, and the emulator's limits.
+Settings come from `backend/.env`, as for uvicorn. The three workers share one container to save memory (about 3 GB in total). `CLOUD_ARCHITECTURE_PLAN.md` section 12 has the walkthrough, how to debug the workers in the IDE, and the emulator's limits.
 
 The backend image has one target per role (`backend/Dockerfile`). The `detection-worker` and `all` targets download URA's land-use map and build the zoning index into the image (about a minute, needs internet, fails if it can't). To build without it, set `ALLOW_MISSING_LAND_USE=true` in the environment before `docker compose build`. Export `DATA_GOV_SG_API_KEY` first to pass it as a build secret.
 
 ## Deploying
 
-Cloud Run, from GitHub Actions ("Deploy to Cloud Run", manual). Terraform in `deploy/terraform` creates the services, Pub/Sub, secrets and identities once; its `README.md` has the one-time setup. `CLOUD_ARCHITECTURE_PLAN.md` describes the design.
+Cloud Run, from GitHub Actions: every push to `main` deploys once CI passes, and "Deploy to Cloud Run" can also be run by hand. Terraform in `deploy/terraform` creates the services, Pub/Sub, secrets and identities; its `README.md` has the one-time setup. `CLOUD_ARCHITECTURE_PLAN.md` describes the design.
+
+**Adding a service?** Follow [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md). Run Terraform first, then push.
 
 ## Tests
 
@@ -107,5 +118,11 @@ The Playwright suite runs against a mocked backend (`frontend/e2e/support/mockBa
 
 Defined in `.github/workflows/`:
 
-- `ci-cd.yml` runs on pushes to `main` and on pull requests. It runs ruff, pyright (a type error fails the build; `# type: ignore` and a weakened pyright config are rejected), the backend tests with coverage, then frontend lint, build and the Playwright suite. On a manual run it also publishes the backend and frontend images to GitHub Container Registry.
-- `deploy.yml` deploys both services to Cloud Run. It is manual only (`workflow_dispatch`), so pushes do not deploy. It needs the repository secrets `DATA_GOV_SG_API_KEY` and `URA_API_KEY`, alongside the Supabase, Anthropic and auth ones.
+- `ci-cd.yml` runs on pull requests and on pushes to `main` (not docs-only ones). Jobs:
+  - **backend:** ruff, pyright (a type error fails the build; `# type: ignore` and a weakened pyright config are rejected), `openapi.json` matching the models, the tests with coverage;
+  - **frontend:** lint, `api.gen.ts` matching `openapi.json`, type-check, build and the Playwright suite (in Microsoft's Playwright container);
+  - **security:** Checkov, plus Snyk or pip-audit and npm audit;
+  - **Terraform:** `fmt` and `validate`.
+
+  All four must pass. On a push to `main` it then calls `deploy.yml`.
+- `deploy.yml` builds one image per service, rolls them out to Cloud Run, checks the gateway, and rolls everything back if a check fails. It also runs by hand. It signs in through Workload Identity Federation (repository *variables* `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`); the only repository secrets are `DATA_GOV_SG_API_KEY` and `SNYK_TOKEN`. The services read their own keys from Secret Manager.

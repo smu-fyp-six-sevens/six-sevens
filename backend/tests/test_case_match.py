@@ -636,8 +636,8 @@ def test_case_match_endpoint_db_failure_returns_502() -> None:
 def test_document_case_match_endpoint_returns_that_documents_entry() -> None:
     # GET /documents/{id}/detection/case-match sits behind
     # Depends(get_document_or_404) (fetches via _dependencies.document_repository)
-    # and then delegates to case_service.get_case_match_for_document, which does
-    # its own separate document_repository/case_repository fetches.
+    # and hands that row to case_service.get_case_match_for_document, which reads
+    # only the case and its documents.
     stray = _doc("list_of_loans", {"uen": OTHER_UEN, "individual_name": "Tan Wei Ming"}, "stray")
     docs = [_incumbency(), *_corroborating(3), stray]
     with (
@@ -646,10 +646,10 @@ def test_document_case_match_endpoint_returns_that_documents_entry() -> None:
         patch("app.case_service.case_repository") as case_repo,
     ):
         dep_doc_repo.get_document.return_value = stray
-        doc_repo.get_document.return_value = stray
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
         response = client.get("/documents/stray/detection/case-match")
+        doc_repo.get_document.assert_not_called()
 
     assert response.status_code == 200
     body = response.json()
@@ -671,8 +671,8 @@ def test_document_case_match_endpoint_404_without_case() -> None:
 def test_get_case_match_for_document_none_when_document_has_no_case() -> None:
     orphan = _doc("nric", {"nric_number": "S1234567A"}, "orphan").model_copy(update={"case_id": None})
     with patch("app.case_service.document_repository") as doc_repo:
-        doc_repo.get_document.return_value = orphan
-        assert case_service.get_case_match_for_document("orphan") is None
+        assert case_service.get_case_match_for_document(orphan) is None
+        doc_repo.list_documents.assert_not_called()
 
 
 def test_get_case_match_for_document_none_when_its_case_is_missing() -> None:
@@ -681,9 +681,9 @@ def test_get_case_match_for_document_none_when_its_case_is_missing() -> None:
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.case_repository") as case_repo,
     ):
-        doc_repo.get_document.return_value = doc
+        doc_repo.list_documents.return_value = []
         case_repo.get_case.return_value = None
-        assert case_service.get_case_match_for_document("doc-1") is None
+        assert case_service.get_case_match_for_document(doc) is None
 
 
 def test_get_case_match_for_document_appends_document_missing_from_the_fetched_list() -> None:
@@ -697,10 +697,11 @@ def test_get_case_match_for_document_appends_document_missing_from_the_fetched_l
         # Deliberately excludes `stray` — its own fetch by document_id
         # succeeded, but this case's own document list doesn't have it yet
         # (e.g. a replication lag), the defensive case get_case_match_for_document
-        # guards against.
+        # guards against: it re-reads the document with its fields.
         doc_repo.list_documents.return_value = [_incumbency(), *_corroborating(3)]
 
-        result = case_service.get_case_match_for_document("stray")
+        result = case_service.get_case_match_for_document(stray.model_copy(update={"extracted_fields": None}))
+        doc_repo.get_document.assert_called_once_with("stray")
 
     assert result is not None
     assert result.document_id == "stray"
@@ -731,7 +732,7 @@ def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
         trace.get_detection_states.return_value = ({}, set())
-        analyses.get_latest_many.return_value = {}
+        analyses.get_latest_summary.return_value = None
         # Enrichment rewrites extracted_fields into {value, confidence}
         # wrappers — the case match must not see that shape.
         fields_repo.get_extracted_fields_for_documents.return_value = stored

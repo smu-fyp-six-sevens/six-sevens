@@ -20,6 +20,8 @@ DOCUMENT_DELETED = "document.deleted"
 
 DETECTION_RETRY_REQUESTED = "detection.retry_requested"
 DETECTION_CANCEL_REQUESTED = "detection.cancel_requested"
+# An officer re-ran one check on its own (routers/detection.py): audit only, nothing consumes it.
+DETECTION_CHECK_RUN = "detection.check_run"
 DOCUMENT_DETECTED = "document.detected"
 DETECTION_FAILED = "detection.failed"
 
@@ -34,6 +36,13 @@ AUTH_LOGIN = "auth.login"
 NOTE_ADDED = "note.added"
 NOTE_EDITED = "note.edited"
 NOTE_DELETED = "note.deleted"
+
+# An officer's review of detection findings (routers/finding_reviews.py): audit only, nothing consumes them.
+# One review.saved per document (or the cross-document group) whose verdicts were saved.
+FINDING_REVIEW_SAVED = "finding_review.saved"
+MISSED_ISSUE_REPORTED = "finding_review.missed_reported"
+MISSED_ISSUE_EDITED = "finding_review.missed_edited"
+FINDING_REVIEW_REMOVED = "finding_review.removed"
 
 # Stuck work (CLOUD_ARCHITECTURE_PLAN.md section 16). Cloud Scheduler publishes sweep.requested; the sweeper
 # publishes recovery.requested with detail.owner, delivered only to that worker; the owner reports the outcome.
