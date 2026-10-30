@@ -229,15 +229,6 @@
   font-weight: 700;
 }
 
-.pipeline-note {
-  margin-top: 28px;
-  padding-top: 4px;
-}
-
-.pipeline-note .section-label {
-  margin-top: 0;
-}
-
 .pipeline {
   display: flex;
   align-items: center;
@@ -245,40 +236,6 @@
   margin-top: 7px;
   overflow-x: auto;
   padding-bottom: 4px;
-}
-
-.pstage {
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 9.5px;
-  padding: 2.5px 7px;
-  border-radius: 10px;
-  background: var(--sand-92);
-  color: var(--slate-65a);
-  white-space: nowrap;
-}
-
-.pstage.done {
-  background: var(--teal-bg);
-  color: var(--teal);
-}
-
-.pstage.pending {
-  background: var(--sand-92);
-  color: var(--ink-soft);
-}
-
-.pconnector {
-  width: 8px;
-  height: 1px;
-  background: var(--line);
-  flex-shrink: 0;
-}
-
-.pipeline-note p {
-  margin: 10px 0 0;
-  font-size: 12px;
-  color: var(--ink-soft);
-  line-height: 1.6;
 }
 
 .shell--upload {
@@ -805,7 +762,6 @@
   color: var(--ink-soft);
 }
 
-
 .case-title-row {
   display: flex;
   align-items: center;
@@ -1079,129 +1035,6 @@
   }
 }
 
-.fulfils-row {
-  margin-top: 10px;
-}
-
-.fulfils-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.fulfils-tag {
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 11px;
-  padding: 3px 9px;
-  border-radius: 10px;
-  background: var(--teal-bg);
-  color: var(--teal);
-  white-space: nowrap;
-}
-
-.page-tabs {
-  display: flex;
-  gap: 6px;
-  margin-top: 12px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.page-tab {
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 11px;
-  padding: 5px 10px;
-  border-radius: 20px;
-  border: 1px solid var(--line);
-  background: var(--white);
-  color: var(--ink-soft);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.page-tab:hover {
-  border-color: var(--steel);
-  color: var(--ink);
-}
-
-.page-tab--active {
-  background: var(--steel);
-  border-color: var(--steel);
-  color: var(--white);
-}
-
-.extraction-text-panel {
-  margin: 8px 0 0;
-  padding: 12px 14px;
-  background: var(--white);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 420px;
-  overflow-y: auto;
-}
-
-.kv-grid {
-  margin-top: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--white);
-}
-
-.kv-row {
-  display: flex;
-  gap: 12px;
-  padding: 7px 12px;
-  font-size: 12px;
-  border-bottom: 1px solid var(--line);
-}
-
-.kv-row:last-child {
-  border-bottom: none;
-}
-
-.kv-key {
-  flex: 0 0 40%;
-  color: var(--ink-soft);
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  overflow-wrap: anywhere;
-}
-
-.kv-value {
-  flex: 1;
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-
-.kv-grid--editable .kv-row {
-  align-items: center;
-}
-
-.kv-input {
-  flex: 1;
-  min-width: 0;
-  font: inherit;
-  font-family: 'IBM Plex Mono', SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
-  color: var(--ink);
-  background: var(--white);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 4px 7px;
-}
-
-.kv-input:focus {
-  outline: none;
-  border-color: var(--steel);
-  box-shadow: 0 0 0 3px var(--steel-a15);
-}
-
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1234,10 +1067,6 @@
   /* The avatar stays as the menu's button; the officer name doesn't fit beside the brand. */
   .officer-name {
     display: none;
-  }
-
-  .go-btn {
-    min-height: 42px;
   }
 
   .file-row {

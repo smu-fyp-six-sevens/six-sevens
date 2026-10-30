@@ -15,7 +15,7 @@ from app.events import Event, types
 from app.main import app
 from app.fraud_detection.font_consistency import ExtractedField
 from app.models import DocumentRecord, DocumentStatus
-from app.routers.documents import _field_changes
+from app.document_service import field_changes as _field_changes
 from app.workers import cases as case_worker
 from app.workers import detection as detection_worker
 from app.workers import documents as doc_worker
@@ -192,8 +192,8 @@ def test_a_long_field_value_is_cut_in_the_trail() -> None:
 def test_saving_fields_records_the_officer_and_what_changed(published_events) -> None:
     with (
         patch("app.routers._dependencies.document_repository") as dep_repo,
-        patch("app.routers.documents.document_repository") as repo,
-        patch("app.routers.documents.extracted_fields_repository") as fields_repo,
+        patch("app.document_service.document_repository") as repo,
+        patch("app.document_service.extracted_fields_repository") as fields_repo,
     ):
         dep_repo.get_document.return_value = _document(DocumentStatus.ANALYZED)
         repo.update_extracted_fields.return_value = repo.get_document.return_value = _document(DocumentStatus.ANALYZED)
@@ -215,8 +215,8 @@ def test_adding_and_removing_a_field_record_its_value(published_events) -> None:
     field = ExtractedField(id="field-1", field_name="net_pay", field_type="number", field_value=5000, confidence=1.0)
     with (
         patch("app.routers._dependencies.document_repository") as dep_repo,
-        patch("app.routers.documents.document_repository") as repo,
-        patch("app.routers.documents.extracted_fields_repository") as fields_repo,
+        patch("app.document_service.document_repository") as repo,
+        patch("app.document_service.extracted_fields_repository") as fields_repo,
     ):
         dep_repo.get_document.return_value = _document(DocumentStatus.ANALYZED)
         repo.update_extracted_fields.return_value = repo.get_document.return_value = _document(DocumentStatus.ANALYZED)

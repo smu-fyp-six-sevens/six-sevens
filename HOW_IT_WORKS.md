@@ -246,7 +246,7 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 | Events and their transport | `events/` (`types.py`, `bus.py`, `push.py`, `registry.py`) |
 | Upload and the doc-worker | `routers/upload.py`, `workers/documents.py` |
 | Classify and extract | `langgraph/pipeline.py`, `graph.py`, `classify_graph.py`, `extract.py` |
-| Approve and detection | `routers/documents.py` (`approve_document`), `workers/detection.py`, `langgraph/detection/graph.py`, `specialists.py`, `tools.py` |
+| Approve and detection | `document_service.py` (`approve`), `workers/detection.py`, `langgraph/detection/graph.py`, `specialists.py`, `tools.py` |
 | The forensic checks | `fraud_detection/` |
 | Flags | `flags_repository.py` |
 | Case snapshot, checklist, case list | `case_service.py` |

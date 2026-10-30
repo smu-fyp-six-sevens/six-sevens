@@ -119,7 +119,7 @@ def test_a_deleted_document_is_removed_and_its_link_then_answers_not_found():
     document = _document(DocumentStatus.ANALYZED)
     with (
         patch("app.routers._dependencies.document_repository") as lookup,
-        patch("app.routers.documents.document_repository") as repo,
+        patch("app.document_service.document_repository") as repo,
     ):
         lookup.get_document.return_value = document
         deleted = client.delete("/documents/doc-1")
@@ -176,7 +176,7 @@ def test_deleting_the_document_that_fulfilled_a_requirement_reverts_the_checklis
 def test_a_document_still_being_processed_cannot_be_deleted(status):
     with (
         patch("app.routers._dependencies.document_repository") as lookup,
-        patch("app.routers.documents.document_repository") as repo,
+        patch("app.document_service.document_repository") as repo,
     ):
         lookup.get_document.return_value = _document(status)
         response = client.delete("/documents/doc-1")

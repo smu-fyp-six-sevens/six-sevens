@@ -54,8 +54,8 @@ def _real(filename_part: str) -> tuple[DocumentRecord, list[ExtractedField]]:
 def _approve(document: DocumentRecord, fields: list[ExtractedField]):
     with (
         patch("app.routers._dependencies.document_repository") as lookup,
-        patch("app.routers.documents.document_repository") as documents,
-        patch("app.routers.documents.extracted_fields_repository") as extracted,
+        patch("app.document_service.document_repository") as documents,
+        patch("app.document_service.extracted_fields_repository") as extracted,
     ):
         lookup.get_document.return_value = document
         documents.get_document.return_value = document

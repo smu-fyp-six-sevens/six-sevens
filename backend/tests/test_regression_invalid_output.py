@@ -146,7 +146,7 @@ async def test_the_other_documents_carry_on_and_the_failed_one_can_be_retried(ai
     # The failed document can be retried, and goes through the pipeline again.
     with (
         patch("app.routers._dependencies.document_repository", store),
-        patch("app.routers.documents.document_repository", store),
+        patch("app.document_service.document_repository", store),
     ):
         response = await asyncio.to_thread(client.post, f"/documents/{payslip}/retry")
     assert response.status_code == 200

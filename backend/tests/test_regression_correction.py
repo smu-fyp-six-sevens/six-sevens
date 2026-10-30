@@ -52,7 +52,7 @@ def test_a_below_threshold_document_cannot_be_approved_until_its_type_is_confirm
 
     with (
         patch("app.routers._dependencies.document_repository") as lookup,
-        patch("app.routers.documents.document_repository") as documents,
+        patch("app.document_service.document_repository") as documents,
         patch("app.events.publish", new_callable=AsyncMock) as launch,
     ):
         lookup.get_document.return_value = document
@@ -75,7 +75,7 @@ def _published(publish: AsyncMock) -> list[tuple[str, str | None]]:
 def _retry(document: DocumentRecord):
     with (
         patch("app.routers._dependencies.document_repository") as lookup,
-        patch("app.routers.documents.document_repository") as documents,
+        patch("app.document_service.document_repository") as documents,
         patch("app.events.publish", new_callable=AsyncMock) as queue,
     ):
         lookup.get_document.return_value = document
@@ -123,8 +123,8 @@ def test_a_processing_document_is_retryable_only_after_the_retry_threshold() -> 
 def _confirm_type(document: DocumentRecord, new_type: str):
     with (
         patch("app.routers._dependencies.document_repository") as lookup,
-        patch("app.routers.documents.document_repository") as documents,
-        patch("app.routers.documents.extracted_fields_repository") as fields,
+        patch("app.document_service.document_repository") as documents,
+        patch("app.document_service.extracted_fields_repository") as fields,
         patch("app.events.publish", new_callable=AsyncMock) as pipeline,
     ):
         lookup.get_document.return_value = document

@@ -43,12 +43,11 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 ### Backend
 
-1. **Business rules in the routers.** `routers/documents.py` (903 lines): `approve_document` (101 lines, longer now that it undoes an unpublished approval), `update_extracted_fields` (99) and `update_document_type`. Move them to a document service so the router only translates HTTP. M
-2. **Private helpers shared across packages.** `case_pipeline/*` (6 modules), `dates/date_anomalies.py`, `giro.py`, the `reference_checks` and two `registry_lookups` modules import `_as_number`, `_rows`, `_parse_field_date` (and `_money`, `_CURRENCY_WORDS`, `_fields_by_name`, …) from `fraud_detection/numerical_validation/common.py`. Those are a public field-value API in practice: make them public in `fraud_detection/shared/field_values.py`, as `decode_field_value` already is. Similarly, `field_checks/*` and `tool_timeout.py` import `_result` and `_with_ids` from `detection/tools.py`. M
-3. **`case_service.py` (516 lines) mixes jobs:** the documents-status rollup, pass-throughs (`get_case`, `create_case`, `update_case`), the snapshot builder, and `submission_finalized`. The required-documents rules are split across `models.py`, `case_service.py` and `mapper.py`. M
-4. **`submission_finalized` machinery.** A debounce with timer threads (`document_repository`), a flush before each request returns, and a per-process "last written" cache (`case_service._synced_finalized`), all for a flag nothing reads yet. Decide its shape when automatic case analysis is built: keep it stored, or compute it inside the gate and delete the machinery. Decision pending this sprint
-5. **`models.py` (665 lines)** mixes enums and business rules, API schemas, and risk models that have a twin in `case_pipeline/models.py`. M
-6. **Blocking calls in routers without the 502 wrapper.** A Supabase error at these becomes a bare 500 with no log line, instead of `to_thread_or_502` / `bad_gateway_on_error`'s logged 502: `cases.py` (the summary re-read in `update_case`); `documents.py` (the target-case read in move and bulk move, the `update_status` and re-read in `cancel_document`, the re-read after retry); `detection.py` (`langgraph_trace.load` in the check gate, the report and retry; `list_documents` in the company-name check; `langgraph_trace.resume`); `upload.py` (the case lookup in single and bulk upload). S
+1. **Private helpers shared across packages.** `case_pipeline/*` (6 modules), `dates/date_anomalies.py`, `giro.py`, the `reference_checks` and two `registry_lookups` modules import `_as_number`, `_rows`, `_parse_field_date` (and `_money`, `_CURRENCY_WORDS`, `_fields_by_name`, …) from `fraud_detection/numerical_validation/common.py`. Those are a public field-value API in practice: make them public in `fraud_detection/shared/field_values.py`, as `decode_field_value` already is. Similarly, `field_checks/*` and `tool_timeout.py` import `_result` and `_with_ids` from `detection/tools.py`. M
+2. **`case_service.py` (516 lines) mixes jobs:** the documents-status rollup, pass-throughs (`get_case`, `create_case`, `update_case`), the snapshot builder, and `submission_finalized`. The required-documents rules are split across `models.py`, `case_service.py` and `mapper.py`. M
+3. **`submission_finalized` machinery.** A debounce with timer threads (`document_repository`), a flush before each request returns, and a per-process "last written" cache (`case_service._synced_finalized`), all for a flag nothing reads yet. Decide its shape when automatic case analysis is built: keep it stored, or compute it inside the gate and delete the machinery. Decision pending this sprint
+4. **`models.py` (665 lines)** mixes enums and business rules, API schemas, and risk models that have a twin in `case_pipeline/models.py`. M
+5. **Blocking calls in routers without the 502 wrapper.** A Supabase error at these becomes a bare 500 with no log line, instead of `to_thread_or_502` / `bad_gateway_on_error`'s logged 502: `cases.py` (the summary re-read in `update_case`); `detection.py` (`langgraph_trace.load` in the check gate, the report and retry; `list_documents` in the company-name check; `langgraph_trace.resume`); `upload.py` (the case lookup in single and bulk upload). S
 
 ### Frontend (types)
 
@@ -56,14 +55,7 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 ### Deployment and repo
 
-1. **Nothing checks that the generated files match their generators.** Three sources write files:
-   - `deploy/grafana/build_dashboards.py` writes the dashboard JSON;
-   - `docs/architecture/build_diagrams.py` writes the draw.io file;
-   - the frontend API types come from `backend/scripts/export_openapi.py` (`frontend/openapi.json`) and `npm run gen:api` (`src/services/api.gen.ts`).
-
-   For the API types, `python scripts/export_openapi.py --check` and `npm run check:api` already exist; they just aren't in CI yet. A CI step that reruns all three and fails on a diff (as `subscriptions.json` has) would stop hand edits drifting from the source. S
-2. **The database schema isn't in the repo.** Everything else is code; the schema lives only in Supabase. Export it as versioned migrations (the first step of staging, `CLOUD_ARCHITECTURE_PLAN.md` section 9). M (reading the schema needs your go-ahead)
-3. **Keep each doc to one job:** the plan for cloud design and its to-do, HOW_IT_WORKS for behaviour, the Terraform README for operations, PENDING_WORK for open items, `CLAUDE.md` for orientation. Condensed on 2026-10-24; keep status out of the others. S, ongoing
+1. **The database schema isn't in the repo.** Everything else is code; the schema lives only in Supabase. Export it as versioned migrations (the first step of staging, `CLOUD_ARCHITECTURE_PLAN.md` section 9). M (reading the schema needs your go-ahead)
 
 ---
 
@@ -109,9 +101,7 @@ select conrelid::regclass as tbl, conname, confdeltype from pg_constraint where 
 ## Suggested order
 
 1. **The two SQL queries** (§4.1, 4.3): whether a case delete can be blocked, and whether the audit trail can be edited.
-2. **Quick win:** the 502 wrappers (backend 2.6), S.
-3. **The generator checks in CI** (repo 1), S.
-4. **Rules out of `routers/documents.py`** (backend 2.1), the biggest structural win left.
-5. **Public field-value helpers** (backend 2.2).
-6. **The one-off colours** (frontend 1.1), as you restyle each component.
-7. **Decide `submission_finalized`** (backend 2.4) as part of automatic case analysis.
+2. **Quick win:** the 502 wrappers (backend 2.5), S.
+3. **Public field-value helpers** (backend 2.1).
+4. **The one-off colours** (frontend 1.1), as you restyle each component.
+5. **Decide `submission_finalized`** (backend 2.3) as part of automatic case analysis.
