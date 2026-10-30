@@ -84,7 +84,6 @@ Also untested, lower weight: `CR.TENOR`, `FATCA.TIN_FORMAT`, `case_pipeline/risk
 | Compose files | `docker compose --profile observability --profile frontend config -q` |
 | Grafana dashboards | every PromQL query parses (`promtool` or a Prometheus container); provisioning loads (`/api/search` lists four dashboards) |
 | Images build | `docker build` per target (catches a broken Dockerfile before the deploy does) |
-| Generated API types | `python scripts/export_openapi.py --check` and `npm run check:api` exist but aren't in CI |
 
 ## 4. Playwright
 

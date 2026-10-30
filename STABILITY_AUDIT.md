@@ -20,9 +20,8 @@ A white-box read of `main` at `d6794e4`, looking for what is failing now, what w
 | 10 | Low | **The leak check keeps prompts of cancelled calls.** `on_llm_end` and `on_llm_error` never fire for a cancelled call, so its instruction text stays in the dict. It grows slowly with every cancel; the word matching also runs on the event loop | `guardrails/leak_check.py:79` | Cap the dict (drop entries older than the LLM timeout) |
 | 11 | Low | **Duplicated helpers that have drifted** (from separate branches): `formatDuration` ("2s" in the audit trail, "1.5s" in the stage timings), `compareFindings` (case overview vs risk card, different fallbacks), `displayableFieldEntries` (two signatures) | `AuditTrailCard.tsx`, `processingTimes.ts`, `CaseOverview.tsx`, `CaseRiskCard.tsx`, `fieldDisplay.ts`, `uploadHelpers.ts` | One copy each |
 | 12 | Low | **Colour tokens are eroding:** 86 hex literals outside the token files (`case-summary.css` 29, `document-details.css` 19, the rest under 10). Selectors defined in two stylesheets: `.section-label`, `.upload-btn`, `.skeleton-bar--pill`, `.pagination-gap`, so load order decides which wins | `frontend/src/styles/` | Move repeated colours to tokens; one home per selector |
-| 13 | Low | **`npm run check:api` fails on Windows checkouts.** `core.autocrlf=true` writes `api.gen.ts` with CRLF, and the check compares bytes. The content is identical, and CI on Linux passes | `.gitattributes` (none) | `frontend/src/services/api.gen.ts text eol=lf` and `frontend/openapi.json text eol=lf` |
-| 14 | Low | **A leftover `GET /message`** ("Hello from FastAPI") on every role | `main.py:208` | Delete |
-| 15 | Low | **The frontend's base images are old tags with known vulnerabilities** (the editor's image scan: `node:22-alpine` 9 high, `nginx:1.27-alpine` 16 critical and 61 high). The build stage doesn't ship; the nginx stage does | `frontend/Dockerfile` | Move to a current `nginx` alpine release (and `node`), pinned by version |
+| 13 | Low | **A leftover `GET /message`** ("Hello from FastAPI") on every role | `main.py:208` | Delete |
+| 14 | Low | **The frontend's base images are old tags with known vulnerabilities** (the editor's image scan: `node:22-alpine` 9 high, `nginx:1.27-alpine` 16 critical and 61 high). The build stage doesn't ship; the nginx stage does | `frontend/Dockerfile` | Move to a current `nginx` alpine release (and `node`), pinned by version |
 
 ## 2. The database (read 2026-10-30)
 
@@ -74,4 +73,4 @@ The biggest case (24 documents) is 40 KB of document rows, 88 to 124 KB of field
 2. **Idempotency:** findings 1, 2 and 3; small changes, each with a unit test that delivers the event twice.
 3. **The shared database:** D1 (talk to the branch owners), then the two clean-up queries (D2, D5).
 4. **Officer-facing:** findings 4, 5, 6 and 8.
-5. D3, D4 and finding 15 with the next deploy; the rest of the Low ones as time allows.
+5. D3, D4 and finding 14 with the next deploy; the rest of the Low ones as time allows.

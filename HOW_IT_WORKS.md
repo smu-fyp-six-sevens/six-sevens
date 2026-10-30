@@ -108,6 +108,26 @@ A case that was never analysed shows "Not scored yet". If documents change after
 - Total ≥ 8 → High, ≥ 3 → Medium, otherwise Low. **Critical** needs scoring high findings on 3 or more different documents.
 - The 0–100 number is anchored to the level, so a Critical case always outscores a High one.
 
+### Checking what the models return
+Every model reply and tool result is checked against an expected shape before anything uses it. A bad one is repaired, replaced by a safe default, or recorded as "could not assess": it never crashes a run, and a check that couldn't run never counts as clean.
+- **`app/llm_io.py`** reads replies: `message_text` (ignores thinking blocks), `parse_json_object` (tolerates fences and prose around the object), `forced_args` for tool calls, `was_cut_off` and `salvage_*` for replies cut off at the token limit, and `validate(Model, data)`, which never raises and returns `ok`, `degraded` (unusable fields dropped, defaults apply) or `failed` (the caller's fallback). Lenient on shape, strict on meaning: a test fails if a contract gains a numeric field, so coercion can't make up a number.
+- **`app/llm_contracts.py`** has one model per reply: `ClassifierReply`, `ExtractionReply`, `LeadPlan`, `LeadReview`, `SpecialistAssessment`, `EvidenceRequests`, `SummaryReply`. Hypotheses and verdicts are checked item by item, then in `verify.py`.
+- **Tool calls:** Haiku can be forced to call a tool (the evidence requests; each specialist's first turn). Sonnet 5.5 can't, so the cross-document planner and judge use `tool_choice: auto`, a `strict` tool, a prompt line naming it, and one retry if the reply didn't call it. The detection lead and extraction answer in JSON text.
+- **Refusals:** a `stop_reason` of `refusal` fails the step with its own reason (`ModelRefused`): the document fails with a plain message for the officer, and a specialist marks its findings unassessed.
+- **Detection tools** all return `ToolResult` (`unable_to_assess`, `nothing_to_check`, `findings`, …). A finding without a summary gets a placeholder rather than being dropped, so a flagged document can't read as clean. Stored reports carry a `schema_version` and are read through `read_report()`.
+
+| Reply | When it's unusable |
+|---|---|
+| Classifier agent | One cheap re-ask, then `unrecognised` and manual review; an unreadable `confidence` alone takes 0 |
+| LLM classifier, vision | Empty candidates; the rule classifier decides |
+| Extraction | Retried once with its own reply shown (not when cut off); then the document fails, retryable. A cut-off reply keeps its complete fields. Nothing is written without usable output, so a failed rerun doesn't wipe stored fields. Confidence is clamped to 0–1, anything else is unknown |
+| Lead plan / review | Default briefs / no summary and no second look |
+| Specialist | Findings stay unassessed, `uncertain=True` |
+| Hypotheses, verdicts, evidence requests | Empty list |
+| Summary | The deterministic summary |
+
+**Bounds:** a run may make at most `DOCUMENT_MAX_MODEL_CALLS` (24) or `DETECTION_MAX_MODEL_CALLS` (30) calls, and a case analysis 6 (`run_context.py`). Past the detection limit the verdict can't be clean. Every tool has a time limit (`TOOL_TIMEOUT_SECONDS` 60, `SLOW_TOOL_TIMEOUT_SECONDS` 120 for model and registry tools); a timeout is `unable_to_assess`. Transient API errors are retried by the client (`LLM_MAX_RETRIES`, 1). Every repaired reply is written to the trace (`run_audit`), with the raw reply capped at 4,000 characters.
+
 ---
 
 ## 4. How live updates work

@@ -16,7 +16,6 @@ Documents at the root:
 - `HOW_IT_WORKS.md` the whole system end to end in plain language: pipeline, detection, flags, case analysis, live updates, configuration and cost logs.
 - `FRAUD_DETECTION_MAP.md` how the fraud checks and the detection agent are wired, plus known detection bugs.
 - `CROSS_DOCUMENT_AND_RISK_PLAN.md` design of the per-case analysis: deterministic checks, hypotheses, verification, risk outlook and guardrails.
-- `OUTPUT_VALIDATION.md` how model replies and tool results are validated, and what is bounded.
 - `REFACTORING_AUDIT.md` code smells and optimisations, with effort estimates.
 - `backend_tests.md` state of the test suites and what to add.
 - `PENDING_WORK.md` open product and platform work.
@@ -120,8 +119,8 @@ The Playwright suite runs against a mocked backend (`frontend/e2e/support/mockBa
 Defined in `.github/workflows/`:
 
 - `ci-cd.yml` runs on pull requests and on pushes to `main` (not docs-only ones). Jobs:
-  - **backend:** ruff, pyright (a type error fails the build; `# type: ignore` and a weakened pyright config are rejected), the tests with coverage;
-  - **frontend:** lint, build and the Playwright suite (in Microsoft's Playwright container);
+  - **backend:** ruff, pyright (a type error fails the build; `# type: ignore` and a weakened pyright config are rejected), `openapi.json` matching the models, the tests with coverage;
+  - **frontend:** lint, `api.gen.ts` matching `openapi.json`, type-check, build and the Playwright suite (in Microsoft's Playwright container);
   - **security:** Checkov, plus Snyk or pip-audit and npm audit;
   - **Terraform:** `fmt` and `validate`.
 

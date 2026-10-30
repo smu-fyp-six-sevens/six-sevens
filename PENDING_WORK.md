@@ -1,6 +1,6 @@
 # Pending work
 
-Open product and platform work only: remove an item once it's done. Elsewhere: code smells and optimisations in `REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, case dashboard, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10. Updated 2026-10-26.
+Open product and platform work only: remove an item once it's done. Elsewhere: code smells and optimisations in `REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, case dashboard, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10; backwards-compatibility fallbacks in `REFACTORING_AUDIT.md` §5. Updated 2026-10-30.
 
 ## my notes
 
@@ -8,7 +8,7 @@ check if audit trail watches for cancel/retry etc.
 
 ## Product
 
-- **Automatic case analysis** (this sprint). The officer clicks it today. Not built: the gate on every document completion, supersede with a run-id fence, debounce and a re-run cap (`CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0). Decide `submission_finalized`'s shape here: keep it stored, or compute it inside the gate and delete the debounce machinery (`REFACTORING_AUDIT.md` backend 2.4).
+- **Automatic case analysis** (this sprint). The officer clicks it today. Not built: the gate on every document completion, supersede with a run-id fence, debounce and a re-run cap (`CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0). Decide `submission_finalized`'s shape here: keep it stored, or compute it inside the gate and delete the debounce machinery (`REFACTORING_AUDIT.md` backend 2.3).
 - **Case-level flags.** Cross-document and identity findings live only inside each run's JSON (`case_analysis_runs.result.findings`), so there's no row per finding, no status and no dismissal. A case-level flags table and module would give them that.
 - **Officer review of flags.** `flags` has `status`, `reviewed_by` and `reviewed_at`, but no endpoint or UI uses them. Needs an endpoint, a UI, and a decision on how a dismissal affects the score.
 - **Guard against repeated runs.** Each "Run again" spends about 12k tokens even when nothing changed; skipping a run whose fingerprint matches the last complete one would stop that, but changes what the button does.
@@ -33,17 +33,11 @@ check if audit trail watches for cancel/retry etc.
 - **Detection specialist prompts don't cache** (Haiku's minimum cacheable prefix is longer than their prompts). Accept it unless the cost logs show a large Haiku input bill.
 - **Postgres checkpointing** isn't built (`checkpointer=False`): a crashed run restarts from scratch, with no replay. Now only a debugging aid. If built: `langgraph-checkpoint-postgres` on the transaction pooler, its own schema, parent graph only, delete a document's thread when it finishes, no PII or text in state.
 - **LangGraph Store** (learning from officer corrections): last phase, not started.
+- **Model-output gaps:** nothing checks that an extracted value has its schema's type (text in a number field), and the binder and the classifier don't record a repaired reply in the trace (they don't pass `raw` to `validate`).
 
 ## Case analysis
 
 Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
-- **Earlier runs are stored but never shown.** Every run keeps its row in `case_analysis_runs` (result, trace, fingerprint, times) and its score in `risk_scores`, but `GET /cases/{id}/analysis` and the card read only the latest. Needs a list route (newest first: time, who started it, status, score and level, finding count, out of date or not), a "Previous runs" list on the Case Analysis card that opens an earlier result read-only, and the score change between runs. The audit trail already has who ran each one (`case.analysis.requested`).
-- **The case summary is long and hard to read** (sponsor feedback). `risk/summary.py` asks Haiku for 3 to 6 sentences of prose, and the card prints it as one paragraph that repeats the score, the findings and the evidence requests already shown around it. Make it structured:
-  - The model returns `headline` (one sentence, at most 20 words), `reasons` (2 to 4 short items, each citing one finding id) and `would_help` (at most one line). Code enforces the limits and falls back to the deterministic summary when they're broken, as it already does for a wrong citation; a reason without a citation fails the grounding check.
-  - The card shows the risk level as a coloured pill with the headline in bold, the reasons as a short list with a severity dot each, linked to their finding below, "Checked and fine" as small chips, and "Would help" as one line linking to the Additional Documents card.
-  - No score restated and no finding text pasted back in.
-  - Example: a High pill, "Two documents disagree on the company's address, and the payslip doesn't match the bank credits.", two linked reasons, chips "UEN ✓ · Names ✓ · Dates ✓", and "A recent utility bill would help."
-  - A prompt and model change, regenerated API types and one restyled card; detection and scoring are untouched. Old runs keep their prose `summary`, which the card shows as a fallback.
 - **Plan-then-judge has no follow-up round;** add one optional round if the evals show low recall.
 - **The run trace lists dropped hypotheses,** while the design says unproven ones are never shown. Decide before exposing it beyond developers.
 - **Guardrails still open:** a dismissal flow for cross-document findings, audit retention, the three sponsor questions in the plan.
@@ -56,7 +50,6 @@ Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 ## Performance
 
 Budgets are in `HOW_IT_WORKS.md` §8; query-level fixes are in `REFACTORING_AUDIT.md` §3.
-- `GET /cases/{id}/analysis` and `GET /documents/{id}/detection/case-match` read more than they need: fixes in `REFACTORING_AUDIT.md` §3 (1 and 2).
 - A burst of changes can chain snapshot builds, and the first requester waits for the follow-up.
 - **Opening a case still waits in sequence on a direct link or refresh:** the case lookup, then the WebSocket ticket, connection and first snapshot. (From the queue the case is handed over and the page code is prefetched.) Not done yet: fetching the first snapshot over a plain request alongside the socket, and putting the case's own details in the snapshot so a direct load needs one request.
 - **The queue's status filter, risk filter and risk sort read every matching case** (and `/cases/counts` reads every document's status) because status and risk are computed, not stored. Fine at today's volume; a stored rollup or index would be needed if the case count grows a lot.

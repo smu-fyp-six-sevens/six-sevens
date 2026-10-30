@@ -73,7 +73,7 @@ Runs per case, on an officer's request, once every approved document has been sc
 
 API: `POST /cases/{id}/analysis/run` (409 unless ready or already running), `GET /cases/{id}/analysis`. A case's snapshot carries the risk and additional documents of its latest complete run.
 
-Shared: `app/identifiers.py` is a leaf module (it imports neither `case_match` nor `cross_document`) with the key functions `alnum`, `id_key`, `uen_key`, `name_key`, `company_key`, the lenient name matchers and the person extraction (`Person`, `linked_people`). `llm_io.py` reads a model reply and `llm_contracts.py` checks it, for every model call (`OUTPUT_VALIDATION.md`).
+Shared: `app/identifiers.py` is a leaf module (it imports neither `case_match` nor `cross_document`) with the key functions `alnum`, `id_key`, `uen_key`, `name_key`, `company_key`, the lenient name matchers and the person extraction (`Person`, `linked_people`). `llm_io.py` reads a model reply and `llm_contracts.py` checks it, for every model call (HOW_IT_WORKS.md, "Checking what the models return").
 
 ## 2. Detection Agent: files
 
