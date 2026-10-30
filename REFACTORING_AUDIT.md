@@ -100,25 +100,11 @@ select conrelid::regclass as tbl, conname, confdeltype from pg_constraint where 
 
 ## 5. Backwards compatibility (technical debt)
 
-Features added after data already existed left code that tolerates the older rows: a field made optional, a fallback for a missing value, or a second way to show something. New rows always have the field, but the checks stay. Found 2026-10-30 by reading the code; nothing was counted against the database yet.
-
-**A. Removable once no old rows need them.** First count, read-only, how many rows still use each one; if none, delete the fallback and its tests. Where some remain: everything is synthetic, so deleting those old cases is cheaper than backfilling them (a write to the shared database, so ask its users first; re-running detection or analysis to upgrade them costs tokens).
-
-| # | Where | What it keeps working | Why it matters |
-|---|---|---|---|
-| A1 | `langgraph/detection/tools.py` `needs_locations`, `add_missing_locations` | Font, layout and spelling findings stored before they carried their place on the page: their checks are run again on the PDF to find it | Runs on **every read** of such a report (CPU and a file download). Numerical and date findings never store a place, so that part stays. Do first |
-| A2 | `case_pipeline/models.py` `summary`; `AnalysisSummaryBlock.tsx` | Runs from before the structured summary show their prose instead | Two rendering paths |
-| A3 | `AdditionalDocumentsCard.tsx` `legacyRecommendations`, `fromRecommendations`; `UploadPage` | Runs from before the unified additional-documents list are rebuilt from the old checklist recommendations | An extra prop through the page |
-| A4 | `services/uploadService/documentStatus.ts` (the `approved` branch) | Documents detected before the `detected` status existed: "approved" is guessed as scanning, skipped or failed | A guess that can show "Scanning…" on a finished document |
-| A5 | `services/uploadService/types.ts` `nothing_to_check?` | Detection reports from before the list existed | An optional type |
-| A6 | `utils/fileValidation.ts` `legacyDedupStoreKey` | Clears the old `uploaded-file-hashes:` localStorage key on every save | Harmless; delete any time, no data check needed |
-
-**B. Keep: they also cover more than old rows.**
-- `document_repository.get_guard_result` and `tools._guard_result` (the guard run again at detection), and the content-guard route's `checked=false`: ingest doesn't fail when saving `guard_result` fails, so a new document can lack it too.
-- `holder.py`, `models.is_personal_bank_statement`, `registry_lookups/addresses.py`: a statement without `entity_type` falls back to the names, which also covers an extraction that leaves it out.
-- `document_repository._attach_extracted_fields` ignores the retired `documents.extracted_fields` column. The code is right; drop the column with the schema migrations (repo 1).
-
-**C. History that can't be backfilled; accept it.** Cases or runs from before the audit trail recorded timings, creators or cost show no processing time (`audit.processing_ms_many`), no creator (`audit.created_by_many`), or leave the run out of the cost (`audit.case_cost`); older runs have an empty `clean_checks`. Each shows nothing rather than a wrong value.
+The database was wiped on 2026-10-31 and the fallbacks for older rows were removed. What remains tolerates a missing value for reasons that also apply to new rows, so it stays:
+- `document_repository.get_guard_result` and `tools._guard_result` (the guard run again at detection), and the content-guard route's `checked=false`: ingest doesn't fail when saving `guard_result` fails.
+- `holder.py`, `models.is_personal_bank_statement`, `registry_lookups/addresses.py`: a statement whose extraction leaves out `entity_type` falls back to the names.
+- `detection_report.read_report`: defaults for keys a report lacks (a run that stopped partway, or a later schema change).
+- `services/uploadService/documentStatus.ts`: `approved` is read as about to scan, skipped (no type) or failed, all live states.
 
 **Rule from here on:** a new stored field gets a default in the model that the old rows read correctly, and an entry here naming the fallback, so it can be removed once the old rows are gone.
 
@@ -128,7 +114,6 @@ Features added after data already existed left code that tolerates the older row
 
 1. **The two SQL queries** (§4.1, 4.3): whether a case delete can be blocked, and whether the audit trail can be edited.
 2. **Quick win:** the 502 wrappers (backend 2.5), S.
-3. **Backwards compatibility** (§5): the read-only counts, then A1, then the rest of A.
-4. **Public field-value helpers** (backend 2.1).
-5. **The one-off colours** (frontend 1.1), as you restyle each component.
-6. **Decide `submission_finalized`** (backend 2.3) as part of automatic case analysis.
+3. **Public field-value helpers** (backend 2.1).
+4. **The one-off colours** (frontend 1.1), as you restyle each component.
+5. **Decide `submission_finalized`** (backend 2.3) as part of automatic case analysis.

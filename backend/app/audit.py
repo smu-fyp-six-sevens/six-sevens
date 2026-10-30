@@ -149,8 +149,8 @@ class CaseCost(BaseModel):
 def case_cost(case_id: str) -> CaseCost:
     """
     A case's Claude spend from its audit trail: each costed run, a total per document, and the case total.
-    Runs from before the trail carried cost are absent. Also how long each finished run took (`timings`, whether
-    or not it was costed). Sync: run on a worker thread.
+    A run whose event carries no cost is absent. Also how long each finished run took (`timings`, whether or not
+    it was costed). Sync: run on a worker thread.
     """
     rows = (
         service_supabase_client().table(_TABLE).select("*").eq("case_id", case_id).in_("action", _COSTED)

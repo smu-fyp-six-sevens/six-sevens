@@ -14,7 +14,7 @@ import { loadFixture, readRegressionFixture } from '../support/fixtures';
  * What a case analysis leaves on a case, built by the real scoring and additional-documents code
  * (backend/tests/test_regression_case_views.py writes it), so these tests only show states the backend produces.
  */
-type CaseView = { risk: CaseRisk; additional_documents?: CaseRow['additional_documents']; supporting_document_recommendations?: unknown[] };
+type CaseView = { risk: CaseRisk; additional_documents?: CaseRow['additional_documents'] };
 const CASE_VIEWS = readRegressionFixture<Record<string, CaseView>>('case-views.json');
 const CASE_RISKS = readRegressionFixture<Record<string, { risk: CaseRisk }>>('case-risk-sprint4.json');
 

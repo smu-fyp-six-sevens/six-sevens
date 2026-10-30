@@ -186,7 +186,7 @@ export function CaseOverview({
                 <div><span>Case analysis</span><strong>{cost ? formatUsd(cost.case_analysis_usd) : '…'}</strong></div>
               </div>
               <p className="case-overview-metric-note">
-                {timingError ? "Couldn't load the cost." : "From each run's record in the audit trail; runs from before cost was recorded aren't included."}
+                {timingError ? "Couldn't load the cost." : "From each run's record in the audit trail."}
               </p>
             </article>
 

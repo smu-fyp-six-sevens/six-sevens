@@ -442,7 +442,7 @@ def update_guard_result(document_id: str, guard_result: dict) -> None:
 
 
 def get_guard_result(document_id: str) -> dict | None:
-    """The saved guard_result, or None: none saved yet (a document from before the guard), or no column."""
+    """The saved guard_result, or None: not ingested yet, or saving it at ingest failed (ingest doesn't fail for it)."""
     try:
         rows = supabase_client.table("documents").select("guard_result").eq("id", document_id).execute().data
     except Exception as exc:
@@ -518,10 +518,8 @@ def remove_documents(documents: list[DocumentRecord]) -> None:
 def _attach_extracted_fields(documents: list[DocumentRecord]) -> list[DocumentRecord]:
     """
     Populates extracted_fields from the extracted_fields table — the only
-    place field values are persisted (see update_extracted_fields). Always
-    overwrites, including with None when a document has no rows there, so a
-    document's extracted_fields never reflects stale/legacy data that may
-    still sit in the documents.extracted_fields column.
+    place field values are persisted (see update_extracted_fields). None when
+    a document has no rows there.
     """
     if not documents:
         return documents

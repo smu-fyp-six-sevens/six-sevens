@@ -73,7 +73,6 @@ export default function UploadPage({
     risk,
     analysisReady,
     analysisOverview,
-    supportingDocumentRecommendations,
     additionalDocuments,
     stage,
     setStage,
@@ -282,9 +281,7 @@ export default function UploadPage({
             analysisReady,
             analysisOverview,
             risk,
-            additionalDocumentCount: additionalDocuments
-              ? additionalDocuments.items.length
-              : supportingDocumentRecommendations.length,
+            additionalDocumentCount: additionalDocuments?.items.length ?? 0,
           })}
           onSelect={selectSection}
         />
@@ -501,7 +498,6 @@ export default function UploadPage({
           {activeSection === 'additional' && (
             <AdditionalDocumentsCard
               additionalDocuments={additionalDocuments}
-              legacyRecommendations={supportingDocumentRecommendations}
               analysed={risk !== null}
             />
           )}

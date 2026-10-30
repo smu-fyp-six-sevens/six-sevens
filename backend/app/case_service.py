@@ -248,7 +248,6 @@ def build_summary(
             covered=id_covered, total=id_total, missing_side=id_missing_side
         ),
         risk=completed.risk if completed else None,
-        supporting_document_recommendations=completed.supporting_documents if completed else [],
         additional_documents=case.additional_documents,
         # Every required document is mandatory: the analysis waits for a complete checklist as well as the scans.
         analysis_ready=is_ready_for_analysis(documents) and not missing,

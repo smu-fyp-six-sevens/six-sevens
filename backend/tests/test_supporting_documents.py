@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
-
 import pytest
 
-from app import case_service
-from app.models import CaseRecord, DocumentRecord, DocumentStatus, RoutingStatus
+from app.models import DocumentRecord, DocumentStatus, RoutingStatus
 from app.case_pipeline.risk.supporting_documents import _counterparty_from_description, recommend_supporting_documents
 
 COMPANY = "ANCHORPOINT INSURANCE BROKERS PTE LTD"
@@ -400,66 +397,6 @@ def test_every_document_in_the_case_is_read() -> None:
     ]
 
 
-def _case() -> CaseRecord:
-    return CaseRecord(
-        id="case-1", greenlink_case_id="GLDB-1",
-        created_at="2026-10-01T00:00:00Z", updated_at="2026-10-01T00:00:00Z",
-    )
-
-
-def _analysis_recommending(documents: list[DocumentRecord]):
-    """A completed analysis run holding what recommend_supporting_documents produced for the documents."""
-    from app.case_pipeline.models import CaseAnalysis
-
-    return CaseAnalysis(
-        run_id="run-1", case_id="case-1", status="complete", fingerprint="",
-        started_at="2026-10-01T00:00:00Z",
-        supporting_documents=recommend_supporting_documents(documents),
-    )
-
-
-def test_case_summary_carries_the_recommendations_its_analysis_produced() -> None:
-    statement = _statement([SUPPLIER_PAYMENT])
-    with (
-        patch("app.case_service.case_repository") as case_repo,
-        patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.langgraph_trace") as trace,
-        patch("app.case_service.analysis_repository") as analyses,
-    ):
-        case_repo.get_case.return_value = _case()
-        doc_repo.list_documents.return_value = [statement]
-        trace.get_detection_states.return_value = ({}, set())
-        analyses.get_latest_summary.return_value = _analysis_recommending([statement])
-
-        summary = case_service.get_case_summary("case-1")
-
-    assert summary is not None
-    assert [r.document_type for r in summary.supporting_document_recommendations] == ["purchase_order"]
-
-
-def test_case_without_an_analysis_recommends_nothing() -> None:
-    # Recommendations are produced only by an analysis run; the summary no longer recomputes them.
-    with (
-        patch("app.case_service.case_repository") as case_repo,
-        patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.langgraph_trace") as trace,
-        patch("app.case_service.analysis_repository") as analyses,
-    ):
-        case_repo.get_case.return_value = _case()
-        doc_repo.list_documents.return_value = [_statement([SUPPLIER_PAYMENT])]
-        trace.get_detection_states.return_value = ({}, set())
-        analyses.get_latest_summary.return_value = None
-
-        summary = case_service.get_case_summary("case-1")
-
-    assert summary is not None
-    assert summary.supporting_document_recommendations == []
-
-
-def test_case_summary_with_nothing_to_request_has_an_empty_list() -> None:
-    assert case_service.build_summary(_case(), []).supporting_document_recommendations == []
-
-
 def test_several_related_party_balances_are_listed_together() -> None:
     rows = [RELATED_CORPORATIONS, {**RELATED_CORPORATIONS, "label": "Amount due from holding company", "amount": 50_000}]
 
@@ -476,27 +413,3 @@ def test_related_party_balance_without_a_prior_year() -> None:
 
     assert recommendation.items[0].reason == "Amount due from related corporations: 352,920.00."
 
-
-def test_case_snapshot_pushed_to_the_page_carries_the_recommendations() -> None:
-    # The snapshot pushed over the websocket must carry the analysis's
-    # recommendations through serialisation, or the card would silently go empty.
-    statement = _statement([SUPPLIER_PAYMENT])
-    with (
-        patch("app.case_service.case_repository") as case_repo,
-        patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.langgraph_trace") as trace,
-        patch("app.case_service.extracted_fields_repository") as fields_repo,
-        patch("app.case_service.analysis_repository") as analyses,
-    ):
-        case_repo.get_case.return_value = _case()
-        doc_repo.list_documents.return_value = [statement]
-        trace.get_detection_states.return_value = ({}, set())
-        analyses.get_latest_summary.return_value = _analysis_recommending([statement])
-        fields_repo.get_extracted_fields_for_documents.return_value = {}
-
-        snapshot = case_service.build_case_snapshot("case-1")
-
-    assert snapshot is not None
-    [recommendation] = snapshot["case"]["supporting_document_recommendations"]
-    assert recommendation["document_type"] == "purchase_order"
-    assert recommendation["items"][0]["counterparty"] == "MERIDIAN LOGISTICS SERVICES"

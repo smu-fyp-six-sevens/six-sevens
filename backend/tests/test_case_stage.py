@@ -276,9 +276,9 @@ def test_a_finalised_case_is_not_moved_by_document_changes() -> None:
 # --- Officer changes ------------------------------------------------------------------------
 
 
-def test_a_case_still_owed_additional_documents_cannot_be_finalised() -> None:
+def test_a_case_still_missing_documents_cannot_be_finalised() -> None:
     with patch("app.case_stage.case_repository") as repo:
-        repo.get_case.return_value = _case("additional_documents_required")
+        repo.get_case.return_value = _case("documents_incomplete")
 
         with pytest.raises(case_stage.StageChangeNotAllowed):
             case_stage.finalise("case-1", "officer-a")

@@ -40,7 +40,6 @@ export type CaseRequirementCoverage = Pick<
   | 'missing_requirements'
   | 'proof_of_address_coverage'
   | 'id_document_coverage'
-  | 'supporting_document_recommendations'
   | 'additional_documents'
   | 'analysis_ready'
   | 'analysis'
@@ -124,9 +123,8 @@ export interface DetectionReport {
   document_type: string;
   verdict: 'flagged' | 'clean' | 'inconclusive';
   summary: string;
-  // Added with agent-decision confidence; absent on reports created before it was deployed.
-  confidence?: number;
-  agent_decisions?: {
+  confidence: number;
+  agent_decisions: {
     agent: string;
     decision_id: string;
     decision: string;
@@ -140,15 +138,13 @@ export interface DetectionReport {
     tools_called: string[];
     summary: string;
     uncertain: boolean;
-    // Absent on reports stored before dismissals existed.
-    dismissed?: { id: string; tool: string | null; summary: string; reason: string }[];
+    dismissed: { id: string; tool: string | null; summary: string; reason: string }[];
     second_look: boolean;
   }[];
   second_look: { from: string; to: string; question: string; reason: string } | null;
   unable_to_assess: { specialist: string; tool: string | null; reason: string | null }[];
-  // Checks the document had nothing for (no images, no metadata, no dates): a pass, shown for the
-  // record. Absent on reports stored before it existed.
-  nothing_to_check?: { specialist: string; tool: string | null; reason: string | null }[];
+  // Checks the document had nothing for (no images, no metadata, no dates): a pass, shown for the record.
+  nothing_to_check: { specialist: string; tool: string | null; reason: string | null }[];
   generated_at: string;
 }
 

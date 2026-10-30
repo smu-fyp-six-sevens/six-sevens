@@ -3,8 +3,8 @@ Who holds an account or is billed on a bank statement or utility bill: an indivi
 
 Extraction reads the holder as entity_name / entity_address / entity_type. What is stored keeps the field names
 the rest of the app already reads: company_name and company_address for a corporate, individual_name and
-individual_address for an individual, plus entity_type. Documents stored before entity_type existed are read
-from those older fields (see holder_kind).
+individual_address for an individual, plus entity_type. A document whose extraction left entity_type out is read
+from those fields (see holder_kind).
 """
 
 from __future__ import annotations

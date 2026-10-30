@@ -428,7 +428,6 @@ def test_case_never_analysed_has_no_risk() -> None:
 
     assert summary is not None
     assert summary.risk is None
-    assert summary.supporting_document_recommendations == []
 
 
 def test_case_summary_keeps_the_last_complete_risk_while_a_rerun_is_going() -> None:

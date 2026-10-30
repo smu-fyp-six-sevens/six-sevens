@@ -30,22 +30,6 @@ const CASE_STAGE_LABELS: Record<CaseStage, string> = {
   failed: 'Failed',
 };
 
-// Stages from before these ones, which a case can still hold until the backend brings it up to date.
-const LEGACY_STAGE_LABELS: Record<string, string> = {
-  documents_uploaded: 'Processing Documents',
-  documents_classified: 'Processing Documents',
-  documents_extracted: 'Pending Review',
-  manual_review: 'Pending Review',
-  documents_approved: 'Fraud Detection',
-  documents_rejected: 'Documents Incomplete',
-  detection_triggered: 'Fraud Detection',
-  documents_failed: 'Failed',
-  detection_failed: 'Failed',
-  analysing: 'Ready for Analysis',
-  completed: 'Case Analysed',
-  additional_documents_required: 'Pending Evaluation',
-};
-
 // One colour per group of stages, by who acts next, shared by the case queue's dots and filter and the case
 // page's Case Status badge: grey nothing yet, blue the system is working, amber the officer has something to do,
 // green analysed, slate closed, red something failed. Within a group the shade deepens as the case moves on.
@@ -84,12 +68,7 @@ export function caseStageTone(stage: string | null | undefined): StatusTone {
   return CASE_STAGE_TONES[stage as CaseStage] ?? 'grey';
 }
 
-// A value from before these stages reads as the stage it became; anything else as itself ("some_stage" -> "Some stage").
 export function caseStageLabel(stage: string | null | undefined): string {
   if (!stage) return 'Open';
-  return (
-    CASE_STAGE_LABELS[stage as CaseStage] ??
-    LEGACY_STAGE_LABELS[stage] ??
-    stage.charAt(0).toUpperCase() + stage.slice(1).replace(/_/g, ' ')
-  );
+  return CASE_STAGE_LABELS[stage as CaseStage] ?? stage;
 }

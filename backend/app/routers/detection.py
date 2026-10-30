@@ -339,9 +339,9 @@ _PLACED_REPORTS_KEPT = 64
 
 
 async def _with_finding_locations(document_id: str, report: dict) -> dict:
-    """The report with the findings it can't place itself (older font, spelling and layout findings;
-    numerical and date findings) placed on the page for the preview to highlight. Best effort: the
-    report is returned as stored if the file can't be read."""
+    """The report with the findings it can't place itself (numerical, date and registry findings) placed
+    on the page for the preview to highlight. Best effort: the report is returned as stored if the file
+    can't be read."""
     if not detection_tools.needs_locations(report):
         return report
     key = (document_id, str(report.get("generated_at")))
@@ -350,19 +350,8 @@ async def _with_finding_locations(document_id: str, report: dict) -> dict:
     try:
         document = await get_document_or_404(document_id)
         file_bytes = await _download_document_bytes(document)
-        fields = (
-            await asyncio.to_thread(extracted_fields_repository.get_extracted_fields_dict, document_id)
-            if detection_tools.needs_fields(report)
-            else {}
-        )
-        placed = await run_cpu(
-            detection_tools.add_missing_locations,
-            report,
-            file_bytes,
-            fields,
-            document.document_type,
-            document.classification_confidence,
-        )
+        fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields_dict, document_id)
+        placed = await run_cpu(detection_tools.add_missing_locations, report, file_bytes, fields)
     except Exception:
         logger.warning("Could not place the findings of document %s's report", document_id, exc_info=True)
         return report

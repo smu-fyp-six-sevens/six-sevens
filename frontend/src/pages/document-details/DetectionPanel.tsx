@@ -87,9 +87,9 @@ export function DetectionPanel({
               {detectionReport.consulted.map((c) => (
                 <li key={c.specialist}>
                   {c.title}{c.second_look ? ' (second look)' : ''} — {c.brief} [tools: {c.tools_called.join(', ') || 'none'}]
-                  {(c.dismissed ?? []).length > 0 && (
+                  {c.dismissed.length > 0 && (
                     <ul>
-                      {(c.dismissed ?? []).map((d) => (
+                      {c.dismissed.map((d) => (
                         <li key={`${d.tool}-${d.id}`}>dismissed: {d.summary} — {d.reason}</li>
                       ))}
                     </ul>
@@ -123,11 +123,11 @@ export function DetectionPanel({
                 </ul>
               </>
             )}
-            {(detectionReport.nothing_to_check?.length ?? 0) > 0 && (
+            {detectionReport.nothing_to_check.length > 0 && (
               <>
                 <div>Nothing to check (passed):</div>
                 <ul>
-                  {detectionReport.nothing_to_check?.map((u, i) => (
+                  {detectionReport.nothing_to_check.map((u, i) => (
                     <li key={i}>{u.specialist} / {u.tool ?? 'tool'} — {u.reason ?? ''}</li>
                   ))}
                 </ul>
@@ -142,7 +142,7 @@ export function DetectionPanel({
             <ul>
               {detectionReport.consulted.map((specialist) => {
                 const score = confidenceLabel(
-                  detectionReport.agent_decisions?.find((decision) => decision.agent === specialist.specialist)?.confidence,
+                  detectionReport.agent_decisions.find((decision) => decision.agent === specialist.specialist)?.confidence,
                 );
                 return (
                   <li key={specialist.specialist}>

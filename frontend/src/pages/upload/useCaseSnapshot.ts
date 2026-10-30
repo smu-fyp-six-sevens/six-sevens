@@ -16,7 +16,6 @@ import type {
   CaseRisk,
   DocumentCaseMatch,
   DocumentRecord,
-  SupportingDocumentRecommendation,
 } from '../../services/uploadService';
 import { acceptedIdentityNames } from './uploadHelpers';
 
@@ -37,9 +36,6 @@ export function useCaseSnapshot(caseId: string) {
   const [risk, setRisk] = useState<CaseRisk | null>(null);
   const [analysisReady, setAnalysisReady] = useState(false);
   const [analysisOverview, setAnalysisOverview] = useState<CaseAnalysisOverview | null>(null);
-  const [supportingDocumentRecommendations, setSupportingDocumentRecommendations] = useState<
-    SupportingDocumentRecommendation[]
-  >([]);
   const [additionalDocuments, setAdditionalDocuments] = useState<AdditionalDocuments | null>(null);
   // The case's stage, and which step failed while it is at Failed (see backend/app/case_stage.py).
   const [stage, setStage] = useState<string>('open');
@@ -116,7 +112,6 @@ export function useCaseSnapshot(caseId: string) {
         setRisk(caseSummary.risk ?? null);
         setAnalysisReady(caseSummary.analysis_ready ?? false);
         setAnalysisOverview(caseSummary.analysis ?? null);
-        setSupportingDocumentRecommendations(caseSummary.supporting_document_recommendations ?? []);
         setAdditionalDocuments(caseSummary.additional_documents ?? null);
         setStage(caseSummary.status ?? 'open');
         setStageFailure(caseSummary.failure ?? null);
@@ -187,7 +182,6 @@ export function useCaseSnapshot(caseId: string) {
     risk,
     analysisReady,
     analysisOverview,
-    supportingDocumentRecommendations,
     additionalDocuments,
     stage,
     setStage,

@@ -1371,17 +1371,6 @@
               }
             ]
           },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Summary"
-          },
           "supporting_documents": {
             "items": {
               "$ref": "#/components/schemas/SupportingDocumentRecommendation"
@@ -1409,7 +1398,6 @@
           "confidence",
           "findings",
           "outlook",
-          "summary",
           "structured_summary",
           "risk",
           "supporting_documents",
@@ -1981,9 +1969,8 @@
             ]
           },
           "status": {
-            "default": "open",
-            "title": "Status",
-            "type": "string"
+            "$ref": "#/components/schemas/CaseStage",
+            "default": "open"
           },
           "submission_finalized": {
             "default": false,
@@ -2205,9 +2192,8 @@
             "type": "string"
           },
           "status": {
-            "default": "open",
-            "title": "Status",
-            "type": "string"
+            "$ref": "#/components/schemas/CaseStage",
+            "default": "open"
           },
           "submission_finalized": {
             "default": false,
@@ -2536,9 +2522,8 @@
             ]
           },
           "status": {
-            "default": "open",
-            "title": "Status",
-            "type": "string"
+            "$ref": "#/components/schemas/CaseStage",
+            "default": "open"
           },
           "status_history": {
             "items": {
@@ -2551,13 +2536,6 @@
             "default": false,
             "title": "Submission Finalized",
             "type": "boolean"
-          },
-          "supporting_document_recommendations": {
-            "items": {
-              "$ref": "#/components/schemas/SupportingDocumentRecommendation"
-            },
-            "title": "Supporting Document Recommendations",
-            "type": "array"
           },
           "updated_at": {
             "format": "date-time",
@@ -2581,7 +2559,6 @@
           "proof_of_address_coverage",
           "id_document_coverage",
           "risk",
-          "supporting_document_recommendations",
           "analysis_ready",
           "analysis",
           "status_history",

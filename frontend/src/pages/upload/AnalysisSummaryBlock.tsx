@@ -24,14 +24,13 @@ function CheckedAndFine({ analysis }: { analysis: CaseAnalysis }) {
 }
 
 // The explanation an officer reads first: the level and a one-line headline, the findings it rests on (each linked
-// to where it is shown), what was checked and fine, and what would help. A run from before the structured summary
-// shows its prose instead. `linkToRiskTab` is off for an earlier run, whose document findings the tab no longer shows.
+// to where it is shown), what was checked and fine, and what would help. `linkToRiskTab` is off for an earlier run,
+// whose document findings the tab no longer shows.
 export function AnalysisSummaryBlock({ analysis, linkToRiskTab }: { analysis: CaseAnalysis; linkToRiskTab: boolean }) {
   const summary = analysis.structured_summary;
   if (!summary) {
     return (
       <div className="analysis-brief">
-        {analysis.summary && <p className="analysis-summary">{analysis.summary}</p>}
         <CheckedAndFine analysis={analysis} />
       </div>
     );

@@ -52,8 +52,7 @@
       "score": 50,
       "state": "scored",
       "unassessed_checks": []
-    },
-    "supporting_document_recommendations": []
+    }
   },
   "nothing needed": {
     "additional_documents": {
@@ -76,8 +75,7 @@
       "score": 0,
       "state": "scored",
       "unassessed_checks": []
-    },
-    "supporting_document_recommendations": []
+    }
   },
   "recommendations": {
     "additional_documents": {
@@ -176,66 +174,7 @@
       "score": 0,
       "state": "scored",
       "unassessed_checks": []
-    },
-    "supporting_document_recommendations": [
-      {
-        "document_type": "purchase_order",
-        "items": [
-          {
-            "amount": -22506.48,
-            "breakdown": [],
-            "counterparty": "UNITED PAPER SUPPLY PTE. LTD.",
-            "date": "11-Jun-26",
-            "description": "REMITTANCE TRANSFER OF FUNDS RTF UNITED PAPER SUPPLY PTE. LTD. SGD 22,506",
-            "prior_amount": null,
-            "reason": "Payment of 22,506.48 on 11-Jun-26 to UNITED PAPER SUPPLY PTE. LTD."
-          }
-        ],
-        "reason": "C001_BankStatement.pdf shows 1 large supplier payment (of at least 20,000.00).",
-        "request": "Request a purchase order for this transaction:",
-        "source_document_id": "0d44d44d-0000-0000-0000-000000000001",
-        "source_filename": "C001_BankStatement.pdf",
-        "title": "Purchase Order"
-      },
-      {
-        "document_type": "bank_loan_evidence",
-        "items": [
-          {
-            "amount": 1850790.0,
-            "breakdown": [
-              {
-                "amount": 516090.0,
-                "breakdown": [],
-                "counterparty": null,
-                "date": null,
-                "description": "Bank borrowings, current portion",
-                "prior_amount": 343330.0,
-                "reason": "Bank borrowings, current portion: 516,090.00 (prior year: 343,330.00)."
-              },
-              {
-                "amount": 1334700.0,
-                "breakdown": [],
-                "counterparty": null,
-                "date": null,
-                "description": "Bank borrowings, non-current portion",
-                "prior_amount": 948200.0,
-                "reason": "Bank borrowings, non-current portion: 1,334,700.00 (prior year: 948,200.00)."
-              }
-            ],
-            "counterparty": null,
-            "date": null,
-            "description": "Total bank borrowings",
-            "prior_amount": 1291530.0,
-            "reason": "Total bank borrowings: 1,850,790.00 (prior year: 1,291,530.00)."
-          }
-        ],
-        "reason": "C001_Financials.pdf shows a 43.3% increase in total bank borrowings compared with the prior year, exceeding the 40% threshold.",
-        "request": "Request bank loan statements or bank loan repayment schedules for this amount:",
-        "source_document_id": "0d44d44d-0000-0000-0000-000000000002",
-        "source_filename": "C001_Financials.pdf",
-        "title": "Bank Loan Statements or Bank Loan Repayment Schedules"
-      }
-    ]
+    }
   },
   "scored": {
     "risk": {

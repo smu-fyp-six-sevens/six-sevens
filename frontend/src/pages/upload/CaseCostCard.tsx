@@ -45,8 +45,7 @@ export function CaseCostCard({ caseId, documents }: { caseId: string; documents:
           </p>
           <p>
             <small>
-              At Anthropic list prices, from each run's record in the audit trail. Runs from before cost was
-              recorded aren't included.
+              At Anthropic list prices, from each run's record in the audit trail.
             </small>
           </p>
 

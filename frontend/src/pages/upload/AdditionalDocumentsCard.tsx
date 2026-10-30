@@ -1,9 +1,4 @@
-import type {
-  AdditionalDocument,
-  AdditionalDocuments,
-  RecommendationItem,
-  SupportingDocumentRecommendation,
-} from '../../services/uploadService';
+import type { AdditionalDocument, AdditionalDocuments, RecommendationItem } from '../../services/uploadService';
 
 const formatMoney = (value: number) =>
   value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -44,20 +39,6 @@ function BreakdownTable({ total }: { total: RecommendationItem }) {
   );
 }
 
-// The checklist-rule recommendations of a run from before the unified list existed.
-function fromRecommendations(recommendations: SupportingDocumentRecommendation[]): AdditionalDocument[] {
-  return recommendations.map((recommendation) => ({
-    title: recommendation.title,
-    why: recommendation.reason,
-    source: 'checklist',
-    addresses: [],
-    affects_score: false,
-    score_if_supports: null,
-    level_if_supports: null,
-    recommendation,
-  }));
-}
-
 function scoreEffect(item: AdditionalDocument): string {
   if (!item.affects_score) return 'No effect on score';
   const level = item.level_if_supports ? ` (${item.level_if_supports})` : '';
@@ -67,14 +48,12 @@ function scoreEffect(item: AdditionalDocument): string {
 // Produced by the case analysis run (backend risk/additional_documents.py): checklist rules and the agent's requests.
 export function AdditionalDocumentsCard({
   additionalDocuments,
-  legacyRecommendations,
   analysed,
 }: {
   additionalDocuments: AdditionalDocuments | null;
-  legacyRecommendations: SupportingDocumentRecommendation[];
   analysed: boolean;
 }) {
-  const items = additionalDocuments ? additionalDocuments.items : fromRecommendations(legacyRecommendations);
+  const items: AdditionalDocument[] = additionalDocuments?.items ?? [];
   const reason = additionalDocuments?.reason ?? null;
   const canMoveScore = items.some((item) => item.affects_score);
   const best = additionalDocuments;

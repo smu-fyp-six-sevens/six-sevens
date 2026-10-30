@@ -84,7 +84,6 @@ def _additional_documents_view(
     return {
         "risk": risk.model_dump(mode="json"),
         "additional_documents": additional.model_dump(mode="json"),
-        "supporting_document_recommendations": [s.model_dump(mode="json") for s in supporting],
     }
 
 
@@ -171,9 +170,11 @@ def test_a_registry_discrepancy_cannot_be_reduced_by_a_further_document():
 
 
 def test_a_large_payment_and_rising_borrowings_ask_for_a_purchase_order_and_loan_evidence():
-    recommendations = recommendations_view()["supporting_document_recommendations"]
+    items = recommendations_view()["additional_documents"]["items"]
 
-    assert [r["document_type"] for r in recommendations] == ["purchase_order", "bank_loan_evidence"]
+    assert [i["recommendation"]["document_type"] for i in items if i["recommendation"]] == [
+        "purchase_order", "bank_loan_evidence",
+    ]
 
 
 def test_the_playwright_suites_case_views_match_the_backend():

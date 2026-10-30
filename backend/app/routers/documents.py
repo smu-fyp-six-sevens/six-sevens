@@ -274,7 +274,7 @@ async def get_content_guard(
     result = await asyncio.to_thread(document_service.guard_result, document_id)
     blocked = document_service.is_guard_blocked(document)
     if result is None:
-        # From before the guard, not ingested yet, or no guard_result column.
+        # Not ingested yet, or saving the guard's result at ingest failed.
         return ContentGuardResponse(checked=False, risk=None, blocked=blocked)
     return ContentGuardResponse(
         checked=bool(result.get("checks_run")),

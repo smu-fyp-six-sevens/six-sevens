@@ -215,9 +215,8 @@ def finalise(case_id: str, changed_by: str) -> CaseStageChange | None:
 
 def sync_all_cases() -> int:
     """
-    Brings every case's stage up to date, e.g. at startup: a case whose
-    documents or analysis changed while no stage was being kept (or while the
-    backend was down), or one still at a stage from before these ones, would
+    Brings every case's stage up to date, e.g. at startup: a case whose stage
+    sync was lost (the process stopped before a debounced sync ran) would
     otherwise show a stale stage until its next change. Returns how many
     cases moved. Never raises.
     """

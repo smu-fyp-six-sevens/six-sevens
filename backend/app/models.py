@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .config import settings
 from .holder import holder_kind
@@ -106,7 +106,7 @@ ADDRESS_PROOF_DOCUMENT_TYPES: set[str] = {
 def is_personal_bank_statement(document_type: str | None, fields: dict | None) -> bool:
     """
     A bank_statement held by an individual rather than a company. The signal
-    is the stored entity_type, or for statements stored before it existed an
+    is the stored entity_type, or for a statement whose extraction left it out an
     individual_name with no company_name (see holder.holder_kind). Before extraction has run —
     no fields yet — it stays the corporate default, matching how a
     proof_of_address/source_of_wealth document is treated until its fields
@@ -271,11 +271,14 @@ class CaseStageChange(BaseModel):
 
 
 class CaseRecord(BaseModel):
+    # Stages are held as their plain values, so they compare, hash and go into queries as strings.
+    model_config = ConfigDict(use_enum_values=True)
+
     id: str
     greenlink_case_id: str
     company_name: str | None = None
-    # A CaseStage value; kept a plain string so a row written before the stages existed still loads.
-    status: str = CaseStage.OPEN.value
+    # Validated, so the default is stored as its value too.
+    status: CaseStage = Field(default=CaseStage.OPEN, validate_default=True)
     submission_finalized: bool = False
     finalized_at: datetime | None = None
     # The list of documents to request, read from the recommended_additional_documents column (see the validator); only the case summary returns it.
@@ -528,12 +531,6 @@ class CaseSummary(CaseRecord):
     )
     # None when the documents' detection reports couldn't be loaded.
     risk: CaseRisk | None = None
-    # Further evidence to request from the client; empty when nothing in the
-    # case needs any. Unlike missing_requirements (missing checklist items),
-    # these come from what the documents themselves show.
-    supporting_document_recommendations: list[SupportingDocumentRecommendation] = Field(
-        default_factory=list
-    )
     # The checklist requests merged with the agent's, in one list; None before the case is analysed.
     additional_documents: AdditionalDocuments | None = None
     # Every approved document has been scanned, so the case analysis can be run.

@@ -99,8 +99,6 @@ export interface CaseRow {
   id_document_coverage: { covered: number; total: number; missing_side: string | null };
   // Computed by backend/app/case_risk.py on every case read.
   risk: CaseRisk | null;
-  // Computed by backend/app/supporting_documents.py on every case read.
-  supporting_document_recommendations: unknown[];
   // Computed by backend/app/case_pipeline/risk/additional_documents.py when a case analysis runs.
   additional_documents?: unknown;
   // The latest case analysis run in brief (case_service.build_summary). analysis_ready isn't stored: like the
@@ -190,7 +188,6 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
     id_document_coverage: { covered: 0, total: 0, missing_side: null },
     // Only a completed case analysis sets a case's risk; until then the backend reads null.
     risk: null,
-    supporting_document_recommendations: [],
     ...overrides,
   };
 }
@@ -207,7 +204,6 @@ export function makeAnalysis(overrides: Partial<CaseAnalysis> & Pick<CaseAnalysi
     confidence: 0,
     findings: [],
     outlook: null,
-    summary: null,
     structured_summary: null,
     risk: null,
     supporting_documents: [],

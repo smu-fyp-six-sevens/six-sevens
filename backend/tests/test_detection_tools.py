@@ -109,68 +109,6 @@ async def test_spelling_tool_locates_the_word_on_the_page_for_the_preview() -> N
     assert first[1] < 100 < first[3] and second[1] < 140 < second[3]
 
 
-def test_an_older_reports_font_and_spelling_findings_are_placed_from_the_pdf() -> None:
-    import pymupdf
-
-    doc = pymupdf.open()
-    page = doc.new_page()
-    page.insert_text((72, 100), "Signed by Lakshmi d/o Rajendram")
-    page.insert_text((72, 140), "Any accidantal omission.")
-    pdf = doc.tobytes()
-    report = {"findings": [
-        {"tool": "font_consistency_tool", "locations": [{"page": 1, "text": "Lakshmi d/o Rajendram"}]},
-        {"tool": "spelling_tool", "word": "accidantal"},
-        {"tool": "metadata_tool", "summary": "Producer changed"},
-    ]}
-
-    assert tools.needs_locations(report)
-    placed = tools.add_missing_locations(report, pdf)
-
-    font, spelling, metadata = placed["findings"]
-    assert font["locations"][0]["bbox"][1] < 100 < font["locations"][0]["bbox"][3]
-    assert spelling["locations"][0]["bbox"][1] < 140 < spelling["locations"][0]["bbox"][3]
-    assert metadata == report["findings"][2]
-    assert not tools.needs_locations(placed)
-
-
-def test_an_older_reports_font_finding_on_repeated_text_is_not_guessed() -> None:
-    # Three copies of the figure and nothing to say which one the font check flagged: a box on the
-    # wrong copy would send the officer to the wrong place, so there is none.
-    import pymupdf
-
-    doc = pymupdf.open()
-    page = doc.new_page()
-    for y in (100, 140, 180):
-        page.insert_text((72, y), "81,872.00")
-    report = {"findings": [{"tool": "font_consistency_tool", "locations": [{"page": 1, "text": "81,872.00"}]}]}
-
-    [finding] = tools.add_missing_locations(report, doc.tobytes())["findings"]
-
-    assert "bbox" not in finding["locations"][0]
-
-
-def test_an_older_reports_text_overlay_is_placed_on_the_overlapping_copies() -> None:
-    import pymupdf
-
-    doc = pymupdf.open()
-    doc.new_page()
-    page = doc.new_page()
-    page.insert_text((72, 100), "04/05/2025")
-    # The overlay: a second date drawn over a copy further down.
-    page.insert_text((72, 300), "04/05/2026")
-    page.insert_text((72, 300), "04/05/2025")
-    pdf = doc.tobytes()
-    report = {"findings": [
-        {"tool": "layout_anomalies_tool", "page": 2, "type": "Text Overlay", "text": "04/05/2026 ↔ 04/05/2025"},
-    ]}
-
-    [finding] = tools.add_missing_locations(report, pdf)["findings"]
-
-    assert finding["bbox_units"] == "pt"
-    # Not the lone copy at y=100.
-    assert finding["bbox"][1] < 300 < finding["bbox"][3]
-
-
 @pytest.mark.asyncio
 async def test_spelling_tool_reports_a_repeated_word_as_one_finding_with_its_count() -> None:
     result = SpellingAnomalyResult(

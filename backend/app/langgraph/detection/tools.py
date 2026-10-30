@@ -412,156 +412,23 @@ def _word_locations(file_bytes: bytes, words: list[str]) -> dict[str, list[dict]
     return found
 
 
-def _missing_locations(finding: dict) -> bool:
-    if finding.get("tool") == "spelling_tool":
-        return "locations" not in finding and bool(finding.get("word"))
-    if finding.get("tool") == "font_consistency_tool":
-        return any("bbox" not in loc for loc in finding.get("locations") or [])
-    if finding.get("tool") == "layout_anomalies_tool":
-        return "bbox" not in finding and bool(finding.get("text"))
-    return value_locations.needs_locations(finding)
-
-
 def needs_locations(report: dict) -> bool:
-    """Whether a report has findings it can't place on the page by itself: font, spelling and layout
-    findings stored before they carried their places, and numerical and date findings, which never do."""
-    return any(_missing_locations(finding) for finding in report.get("findings", []))
-
-
-def needs_fields(report: dict) -> bool:
-    """Whether placing the report's findings needs the document's extracted fields."""
+    """Whether a report has findings it can't place on the page by itself: numerical, date and registry
+    findings, which never store a place."""
     return any(value_locations.needs_locations(finding) for finding in report.get("findings", []))
 
 
-def add_missing_locations(
-    report: dict,
-    file_bytes: bytes,
-    fields: dict | None = None,
-    document_type: str | None = None,
-    classification_confidence: float | None = None,
-) -> dict:
-    """The report with its findings placed on the page. A font or layout finding stored before it carried
-    its area gets the exact one by running its check again (both are deterministic) and matching the
-    finding by page and text; a misspelt word is placed by its whole-word matches, a numerical, date or
-    registry finding by its value (value_locations). Not saved; worked out again on each read."""
+def add_missing_locations(report: dict, file_bytes: bytes, fields: dict) -> dict:
+    """The report with its numerical, date and registry findings placed on the page by their value
+    (value_locations). Not saved; worked out again on each read."""
     if not file_bytes.startswith(b"%PDF"):
         return report
-    findings = report.get("findings", [])
-    missing = {f.get("tool") for f in findings if _missing_locations(f)}
-    words = [f["word"] for f in findings if f.get("tool") == "spelling_tool" and _missing_locations(f)]
-    word_locations = _word_locations(file_bytes, words) if words else {}
-    font_areas = _font_areas(file_bytes) if "font_consistency_tool" in missing else {}
-    layout_areas = (
-        _layout_areas(file_bytes, document_type, classification_confidence)
-        if "layout_anomalies_tool" in missing
-        else {}
-    )
-    located = []
     with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
-        for finding in findings:
-            if not _missing_locations(finding):
-                located.append(finding)
-            elif value_locations.needs_locations(finding):
-                located.append(value_locations.locate(doc, finding, fields or {}))
-            elif finding["tool"] == "spelling_tool":
-                located.append({**finding, "bbox_units": "pt", "locations": word_locations.get(finding["word"], [])})
-            elif finding["tool"] == "font_consistency_tool":
-                located.append({
-                    **finding,
-                    "bbox_units": "pt",
-                    "locations": [
-                        {**loc, "bbox": area} if (area := font_areas.get((loc.get("page"), loc.get("text"))))
-                        else _text_location(doc, loc)
-                        for loc in finding["locations"]
-                    ],
-                })
-            else:
-                area = layout_areas.get((finding.get("page"), finding["text"])) or _page_text_area(
-                    doc, finding.get("page"), finding["text"]
-                )
-                located.append({**finding, "bbox": area, "bbox_units": "pt"} if area else finding)
+        located = [
+            value_locations.locate(doc, finding, fields) if value_locations.needs_locations(finding) else finding
+            for finding in report.get("findings", [])
+        ]
     return {**report, "findings": located}
-
-
-def _font_areas(file_bytes: bytes) -> dict[tuple[int, str], list[float]]:
-    """Each place the font check flags, by (1-based page, text as the tool reports it)."""
-    try:
-        result = check_font_consistency("locations", file_bytes, [])
-    except Exception:
-        logger.warning("Font check failed while placing an older report's findings", exc_info=True)
-        return {}
-    return {
-        (loc.page + 1, _short(loc.text)): [round(v, 2) for v in loc.bbox]
-        for anomaly in result.anomalies
-        for loc in anomaly.locations
-    }
-
-
-def _layout_areas(
-    file_bytes: bytes, document_type: str | None, classification_confidence: float | None
-) -> dict[tuple[int, str], list[float]]:
-    """Each area the layout check flags, by (1-based page, text as the tool reports it)."""
-    try:
-        result = check_layout_anomalies("locations", file_bytes, document_type, classification_confidence)
-    except Exception:
-        logger.warning("Layout check failed while placing an older report's findings", exc_info=True)
-        return {}
-    return {(a.page, a.text): list(a.bbox) for a in result.anomalies}
-
-
-def _text_location(doc: pymupdf.Document, location: dict) -> dict:
-    area = _page_text_area(doc, location.get("page"), str(location.get("text") or ""))
-    return {**location, "bbox": area} if area else location
-
-
-def _page_text_area(doc: pymupdf.Document, page_number: Any, text: str) -> list[float] | None:
-    """Where text from a finding sits on its (1-based) page, when its check can't say: None unless it
-    is printed there once. Text overlay findings join the two overlapping texts with " ↔ ": the area
-    is the closest pair of their matches together."""
-    if not isinstance(page_number, int) or not 0 < page_number <= len(doc):
-        return None
-    page = doc[page_number - 1]
-    parts = [_text_matches(page, part) for part in text.split(" ↔ ")]
-    if not all(parts):
-        return None
-    if len(parts) == 1:
-        # Text printed more than once on the page (a figure repeated in a statement) could be any of
-        # them, so it isn't placed.
-        if len(parts[0]) > 1:
-            return None
-        area = parts[0][0]
-    else:
-        # Repeated text (a date, a name) matches in several places; the overlapping copies are the
-        # ones nearest each other.
-        area = min(
-            (a | b for a in parts[0] for b in parts[1]),
-            key=lambda rect: rect.width * rect.height,
-        )
-    return [round(v, 2) for v in (area.x0, area.y0, area.x1, area.y1)]
-
-
-def _text_matches(page: pymupdf.Page, text: str) -> list[pymupdf.Rect]:
-    """Each place the text appears on the page, a match wrapped over lines as one rect. Stored text is
-    cut short with an ellipsis and its line breaks become spaces, so if the whole of it isn't found,
-    its first few words are looked for instead."""
-    words = text.rstrip("…").split()
-    for count in (len(words), 6, 3):
-        needle = " ".join(words[:count])
-        if not needle:
-            return []
-        hits = page.search_for(needle)
-        if hits:
-            break
-    else:
-        return []
-    matches: list[pymupdf.Rect] = []
-    for rect in hits:
-        # The next line of the same match starts just below the last.
-        if matches and 0 <= rect.y0 - matches[-1].y1 <= 4 and count > 3:
-            matches[-1] |= rect
-        else:
-            matches.append(pymupdf.Rect(rect))
-    return matches
 
 
 @tool
@@ -712,8 +579,8 @@ def _injection_finding(span: dict) -> dict:
 
 
 async def _guard_result(document_id: str) -> dict | None:
-    """The guard_result saved at ingest; for a document without one (from before the guard, or not saved),
-    the guard run now on the stored file, so the check is never skipped."""
+    """The guard_result saved at ingest; for a document whose one wasn't saved, the guard run now on the
+    stored file, so the check is never skipped."""
     stored = await asyncio.to_thread(document_repository.get_guard_result, document_id)
     if stored and stored.get("checks_run"):
         return stored

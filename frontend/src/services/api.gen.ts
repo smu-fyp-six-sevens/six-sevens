@@ -2007,8 +2007,6 @@ export interface components {
              */
             status: "running" | "complete" | "failed" | "superseded";
             structured_summary: components["schemas"]["AnalysisSummary"] | null;
-            /** Summary */
-            summary: string | null;
             /** Supporting Documents */
             supporting_documents: components["schemas"]["SupportingDocumentRecommendation"][];
             /** Trace */
@@ -2232,11 +2230,8 @@ export interface components {
             /** Recommended Documents */
             recommended_documents: string[] | null;
             risk: components["schemas"]["CaseRisk"] | null;
-            /**
-             * Status
-             * @default open
-             */
-            status: string;
+            /** @default open */
+            status: components["schemas"]["CaseStage"];
             /**
              * Submission Finalized
              * @default false
@@ -2317,11 +2312,8 @@ export interface components {
             greenlink_case_id: string;
             /** Id */
             id: string;
-            /**
-             * Status
-             * @default open
-             */
-            status: string;
+            /** @default open */
+            status: components["schemas"]["CaseStage"];
             /**
              * Submission Finalized
              * @default false
@@ -2448,11 +2440,8 @@ export interface components {
             missing_requirements: string[];
             proof_of_address_coverage: components["schemas"]["ProofOfAddressCoverage"];
             risk: components["schemas"]["CaseRisk"] | null;
-            /**
-             * Status
-             * @default open
-             */
-            status: string;
+            /** @default open */
+            status: components["schemas"]["CaseStage"];
             /** Status History */
             status_history: components["schemas"]["CaseStageChange"][];
             /**
@@ -2460,8 +2449,6 @@ export interface components {
              * @default false
              */
             submission_finalized: boolean;
-            /** Supporting Document Recommendations */
-            supporting_document_recommendations: components["schemas"]["SupportingDocumentRecommendation"][];
             /**
              * Updated At
              * Format: date-time

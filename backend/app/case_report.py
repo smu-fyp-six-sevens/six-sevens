@@ -10,7 +10,6 @@ says why (not run yet, still running, or did not finish). Officer Notes appears 
 from __future__ import annotations
 
 import io
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -159,8 +158,7 @@ CASE_STAGE_COLOURS: dict[str, tuple[colors.Color, colors.Color]] = {
 
 
 def _stage_label(stage: str) -> str:
-    """A stage the page doesn't know (a row from before the stages) reads like its code: "some_stage" -> "Some stage"."""
-    return CASE_STAGE_LABELS.get(stage) or stage.replace("_", " ").capitalize() or "Open"
+    return CASE_STAGE_LABELS.get(stage, stage)
 # Same as the header (frontend lib/officers.ts); a username not listed is shown as it is.
 OFFICER_NAMES = {"greenlink-tester": "J. Tan", "demo": "K. Lim", "bob": "B. Smith", "carol": "C. Wong"}
 
@@ -833,7 +831,7 @@ def _summary_section(completed: CaseAnalysis) -> list[Flowable]:
     risk = completed.risk
     out: list[Flowable] = []
     if structured is None:
-        return _prose_summary(completed.summary) if completed.summary else [_notice("The analysis did not write a summary")]
+        return [_notice("The analysis did not write a summary")]
 
     level = risk.level if risk and risk.state == "scored" else None
     headline = Paragraph(_text(structured.headline), STYLES["headline"])
@@ -878,42 +876,6 @@ def _summary_section(completed: CaseAnalysis) -> list[Flowable]:
 
     if structured.would_help:
         out.append(_notice("What would help", structured.would_help, "info"))
-    return out
-
-
-# Where a sentence ends: after . ! or ? and before the capital that starts the next one.
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
-# The sentence of an older run's prose that says which evidence would change the result.
-_WOULD_HELP = re.compile(r"\b(would need|would help|to (meaningfully )?change this)\b", re.IGNORECASE)
-
-
-def _prose_summary(text: str) -> list[Flowable]:
-    """
-    An older run's one-paragraph summary, made easier to scan: its first sentence as the headline, the rest as
-    bullets, and what would change the result in its own box, as the structured summary lays them out.
-    """
-    sentences = [sentence.strip() for sentence in _SENTENCE_END.split(text.strip()) if sentence.strip()]
-    if not sentences:
-        return [_notice("The analysis did not write a summary")]
-    headline, rest = sentences[0], sentences[1:]
-    help_lines = [sentence for sentence in rest if _WOULD_HELP.search(sentence)]
-    points = [sentence for sentence in rest if sentence not in help_lines]
-
-    out: list[Flowable] = [Paragraph(_text(headline), STYLES["headline"]), Spacer(1, 8)]
-    if points:
-        out += [Paragraph("KEY POINTS", STYLES["kpi_label"]), Spacer(1, 4)]
-        rows = [[_Mark("dot", STEEL, size=6), Paragraph(_text(point), STYLES["body"])] for point in points]
-        table = Table(rows, colWidths=[6 * mm, CONTENT_WIDTH - 6 * mm])
-        table.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("TOPPADDING", (0, 0), (0, -1), 4),
-            ("TOPPADDING", (1, 0), (1, -1), 1),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ]))
-        out += [table, Spacer(1, 6)]
-    if help_lines:
-        out.append(_notice("What would help", " ".join(help_lines), "info"))
     return out
 
 

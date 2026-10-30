@@ -292,22 +292,6 @@ def test_long_file_names_wrap_at_underscores() -> None:
     assert case_report._wrap_filename("short.pdf", 40 * case_report.mm) == "short.pdf"
 
 
-def test_an_older_runs_prose_summary_is_split_into_headline_points_and_what_would_help() -> None:
-    analysis = _analysis()
-    analysis.structured_summary = None
-    analysis.summary = (
-        "This application presents critical fraud risk. The balance sheet doesn't add up. "
-        "The payslip's net pay exceeds gross pay. To meaningfully change this assessment, you would need "
-        "a corrected audited balance sheet."
-    )
-    text = _render(latest=analysis, completed=analysis).replace("\n", " ")
-
-    assert "KEY POINTS" in text
-    assert "What would help" in text
-    assert "you would need a corrected audited balance sheet" in text
-    assert "WHY THIS LEVEL" not in text
-
-
 def test_an_out_of_date_analysis_names_the_documents_changed_since() -> None:
     analysis = _analysis(stale=True)
     changed = [("BrightwaveAnalytics_Incorporation_Cert.pdf", "scanned", datetime(2026, 10, 27, 5, tzinfo=timezone.utc))]
