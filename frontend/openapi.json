@@ -8300,7 +8300,7 @@
     },
     "/cases/{case_id}/analysis/run": {
       "post": {
-        "description": "Starts the per-case analysis (cross-document findings, risk outlook and\nsummary) in the background. Only once every approved document has been\nscanned; poll GET .../analysis, or watch the case snapshot, for the result.",
+        "description": "Starts the per-case analysis (cross-document findings, risk outlook and\nsummary) in the background. Only once every required checklist document\nis on file and every approved document has been scanned; poll\nGET .../analysis, or watch the case snapshot, for the result.",
         "operationId": "run_case_analysis_cases__case_id__analysis_run_post",
         "parameters": [
           {

@@ -103,6 +103,9 @@ class Case:
         self.documents = documents
         self.reports = _clean_reports(documents)
         self.saved_risks: list[CaseRisk] = []
+        # The checklist items still missing. The C001 sample is only part of a case, so the tests about scanning and
+        # runs treat its checklist as complete; the mandatory-checklist test sets this.
+        self.missing_requirements: list[str] = []
 
     def list_documents(self, case_id=None, **kwargs):
         return [d for d in self.documents if d.case_id == case_id]
@@ -125,6 +128,9 @@ def case(monkeypatch) -> Case:
     fake = Case(c001_documents())
     monkeypatch.setattr("app.case_pipeline.service.document_repository.list_documents", fake.list_documents)
     monkeypatch.setattr("app.case_pipeline.service.langgraph_trace.get_detection_states", fake.get_detection_states)
+    monkeypatch.setattr(
+        "app.case_pipeline.service.compute_requirement_coverage", lambda documents: ([], fake.missing_requirements)
+    )
     monkeypatch.setattr("app.case_pipeline.service.push_case_snapshot", AsyncMock())
     monkeypatch.setattr("app.case_pipeline.service.risk_store.save", lambda case_id, risk: fake.saved_risks.append(risk))
     monkeypatch.setattr("app.case_pipeline.service.case_repository.set_recommended_additional_documents",
@@ -176,6 +182,21 @@ def test_the_analysis_cannot_run_while_a_document_is_still_being_scanned(
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Every approved document must finish scanning before the case can be analysed."
+    assert runs.rows == {}
+    assert published_events == []
+
+
+@pytest.mark.story("SCRUM-80")
+def test_the_analysis_cannot_run_while_a_required_document_is_missing(runs, case, existing_case, published_events):
+    case.missing_requirements = ["bank_statement", "id_document"]
+
+    response = run_analysis()
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Every required document must be on file before the case can be analysed. "
+        "Missing: Corporate Bank Statement, Identity Document (NRIC/Passport)."
+    )
     assert runs.rows == {}
     assert published_events == []
 

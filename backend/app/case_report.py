@@ -42,6 +42,7 @@ from .case_pipeline import repository as analysis_repository
 from .case_pipeline import service as analysis_service
 from .case_pipeline.models import CaseAnalysis
 from .config import settings
+from .labels import document_type_label, requirement_label
 from .events import types
 from .models import (
     ADDITIONAL_DOCUMENT_TYPES,
@@ -100,32 +101,6 @@ SEVERITY_COLOURS: dict[str, tuple[colors.Color, colors.Color]] = {
 }
 _SEVERITY_RANK = {"high": 3, "medium": 2, "low": 1}
 
-# How the UI names document types and checklist requirements (frontend services/uploadService/documentTypes.ts).
-DOCUMENT_TYPE_LABELS = {
-    "bank_statement": "Bank Statement",
-    "certificate_of_incorporation": "Certificate of Incorporation",
-    "payslip": "Payslip",
-    "passport": "Passport",
-    "nric": "NRIC",
-    "fatca_crs_declaration": "FATCA/CRS Declaration",
-    "certificate_of_incumbency": "Certificate of Incumbency",
-    "company_constitution": "Company Constitution",
-    "proof_of_address": "Proof of Address",
-    "source_of_wealth": "Source of Wealth",
-    "credit_report": "Credit Report",
-    "list_of_loans": "List of Loans",
-    "notice_of_assessment": "Notice of Assessment",
-    "unrecognised": "Unrecognised",
-}
-REQUIREMENT_LABELS = {
-    "id_document": "Identity Document (NRIC/Passport)",
-    "bank_statement": "Corporate Bank Statement",
-    "proof_of_address": "Personal Proof of Address",
-    "payslip": "Payslips",
-    "source_of_wealth": "Source of Corporate Wealth",
-    "company_proof_of_address": "Company Proof of Address",
-    "source_of_personal_wealth": "Source of Personal Wealth",
-}
 # The checklist in the sidebar's order (frontend REQUIRED_DOCUMENT_TYPES).
 REQUIREMENT_ORDER = [
     "id_document", "bank_statement", "proof_of_address", "fatca_crs_declaration", "certificate_of_incorporation",
@@ -208,6 +183,10 @@ STALE_EVENT_LABELS = {
 }
 
 
+# A document changed since the analysis: its name, the latest thing that happened to it, and when.
+ChangedDocument = tuple[str, str, datetime]
+
+
 @dataclass
 class ReportData:
     summary: CaseSummary
@@ -218,9 +197,9 @@ class ReportData:
     completed: CaseAnalysis | None
     # None when the notes couldn't be read: the section then says so rather than "no notes".
     notes: list[CaseNote] | None = field(default_factory=list)
-    # When the analysis is out of date: each document changed since it ran, with what happened to it, oldest first
+    # When the analysis is out of date: each document changed since it ran, with its latest change, oldest first
     # (from the audit trail). Empty when nothing is out of date or the trail couldn't be read.
-    changed_documents: list[tuple[str, list[str]]] = field(default_factory=list)
+    changed_documents: list[ChangedDocument] = field(default_factory=list)
     # document id -> its Routing Outcome, worked out in gather() from fields with their confidences and the case
     # match. A document missing here (a report built by hand, as in tests) is worked out from the record alone.
     routing: dict[str, str] = field(default_factory=dict)
@@ -270,24 +249,22 @@ def gather(case_id: str, generated_by: str | None = None) -> ReportData | None:
     )
 
 
-def _changed_since(case_id: str, analysis: CaseAnalysis, documents: list[DocumentRecord]) -> list[tuple[str, list[str]]]:
-    """The documents changed after the analysis started, each with what happened to it, from the audit trail."""
+def _changed_since(case_id: str, analysis: CaseAnalysis, documents: list[DocumentRecord]) -> list[ChangedDocument]:
+    """The documents changed after the analysis started, each with its latest change and when, from the audit trail."""
     try:
         events = audit.list_events(case_id=case_id, limit=500)
     except Exception:
         return []
     filenames = {d.id: d.filename for d in documents}
-    changes: dict[str, list[str]] = {}
-    # Newest first from the trail; walked oldest first so each document's actions read in order.
+    latest: dict[str, tuple[str, datetime]] = {}
+    # Newest first from the trail; walked oldest first so each document ends at its latest change.
     for event in reversed(events):
         label = STALE_EVENT_LABELS.get(event.type)
         if label is None or event.document_id is None or event.occurred_at < analysis.started_at:
             continue
         name = filenames.get(event.document_id) or str(event.detail.get("filename") or "A removed document")
-        actions = changes.setdefault(name, [])
-        if label not in actions:
-            actions.append(label)
-    return list(changes.items())
+        latest[name] = (label, event.occurred_at)
+    return sorted(((name, label, when) for name, (label, when) in latest.items()), key=lambda change: change[2])
 
 
 def _field_value(raw: object) -> object:
@@ -367,16 +344,6 @@ def _date(value: datetime | None) -> str:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(SGT).strftime("%d %b %Y")
-
-
-def _document_type(code: str | None) -> str:
-    if not code:
-        return "Not classified"
-    return DOCUMENT_TYPE_LABELS.get(code, code.replace("_", " ").capitalize())
-
-
-def _requirement(code: str) -> str:
-    return REQUIREMENT_LABELS.get(code) or DOCUMENT_TYPE_LABELS.get(code) or code.replace("_", " ").capitalize()
 
 
 def _check(tool: str | None) -> str:
@@ -760,6 +727,7 @@ def _stat_cards(data: ReportData) -> Table:
     """The four summary cards under the title: approved, manual review, risk score and findings."""
     completed = data.completed
     risk = completed.risk if completed else None
+    # Nothing to show or do yet (no score, no documents waiting): the card stays quiet.
     grey = colors.HexColor("#b9c2ce")
 
     total = len(data.documents)
@@ -774,7 +742,7 @@ def _stat_cards(data: ReportData) -> Table:
     cards = [
         ("DOCUMENTS APPROVED", str(approved), f"/ {total}", approved_note, TEAL if all_approved else STEEL),
         ("NEED MANUAL REVIEW", str(review), "",
-         "Waiting for an officer" if review else "Not required", AMBER if review else TEAL),
+         "Waiting for an officer" if review else "Not required", AMBER if review else grey),
     ]
     if risk and risk.state == "scored" and risk.level:
         cards.append(("RISK SCORE", str(risk.score) if risk.score is not None else "—", "/ 100",
@@ -819,23 +787,10 @@ def _analysis_status_banner(data: ReportData) -> Table:
     """One line on where the case analysis stands, under the tiles, so every reader knows what the report rests on."""
     latest, completed = data.latest, data.completed
     if latest is None:
-        next_step = (
-            "Every approved document is scanned, so the analysis is ready to run from the Case Analysis section."
-            if data.summary.analysis_ready
-            else "Approve the case's documents to trigger fraud detection, then run the case analysis."
-        )
-        return _notice(
-            "The case analysis has not been run yet",
-            f"The risk score, summary, findings and recommended additional documents appear once it has run. {next_step}",
-            "warning",
-        )
+        return _notice("No case analysis has been run yet.", tone="warning")
     state = analysis_state(latest)
     if state == "complete":
-        return _notice(
-            "Case analysis complete and up to date",
-            f"Finished {_when(latest.finished_at)}. The results below reflect the case's documents as they are now.",
-            "success",
-        )
+        return _notice(f"Case analysis complete and up to date as of {_when(latest.finished_at)}.", tone="success")
     previous = f" The results below come from the analysis finished {_when(completed.finished_at)}." if completed else ""
     if state == "running":
         return _notice(
@@ -857,7 +812,11 @@ def _analysis_status_banner(data: ReportData) -> Table:
     if not data.changed_documents:
         return _notice("Case analysis is out of date", f"{intro} Run it again to bring them up to date.", "warning")
     shown = data.changed_documents[:_CHANGES_SHOWN]
-    lines = "".join(f"<br/>•&nbsp; <b>{_text(name)}</b>: {', '.join(actions)}" for name, actions in shown)
+    lines = "".join(
+        # No-break spaces keep the date on one line.
+        f"<br/>•&nbsp; <b>{_text(name)}</b> - {label.capitalize()} as of {_date(when).replace(' ', '&nbsp;')}"
+        for name, label, when in shown
+    )
     more = len(data.changed_documents) - len(shown)
     if more:
         lines += f"<br/>•&nbsp; and {_plural(more, 'other document')}"
@@ -1017,7 +976,7 @@ def _risk_section(risk: CaseRisk | None) -> list[Flowable]:
             source = (
                 "Across documents"
                 if finding.source == "cross_document"
-                else f"{_text(finding.filename)}<br/><font color='{SOFT}'>{_document_type(finding.document_type)}</font>"
+                else f"{_text(finding.filename)}<br/><font color='{SOFT}'>{document_type_label(finding.document_type)}</font>"
             )
             check = _check(finding.category if finding.source == "cross_document" else finding.tool)
             detail = f"<b>{_text(finding.summary)}</b>"
@@ -1147,7 +1106,7 @@ def _checklist_section(data: ReportData) -> list[Flowable]:
             [
                 _check_mark(r in fulfilled),
                 Paragraph(
-                    _text(_requirement(r))
+                    _text(requirement_label(r))
                     + (f"<br/><font size='7.5' color='{SOFT}'>{_text(note_for(r))}</font>" if note_for(r) else ""),
                     STYLES["cell"] if r in fulfilled else ParagraphStyle("missing", parent=STYLES["cell"], textColor=RED),
                 ),
@@ -1182,7 +1141,7 @@ def _checklist_section(data: ReportData) -> list[Flowable]:
         out += [
             Spacer(1, 6),
             Paragraph(
-                "<b>Also on file:</b> " + ", ".join(_text(_requirement(r)) for r in extras),
+                "<b>Also on file:</b> " + ", ".join(_text(requirement_label(r)) for r in extras),
                 STYLES["small"],
             ),
         ]
@@ -1231,7 +1190,7 @@ def _documents_section(data: ReportData) -> list[Flowable]:
         colour = _hex(outcome_colour.get(outcome, INK_SOFT))
         rows.append([
             Paragraph(_wrap_filename(document.filename, file_width - 2 * gutter), STYLES["cell_bold"]),
-            Paragraph(_text(_document_type(document.document_type)), STYLES["cell"]),
+            Paragraph(_text(document_type_label(document.document_type)), STYLES["cell"]),
             _pill(STATUS_LABELS.get(status, status), fill, ink, width=18 * mm),
             Paragraph(f"<font color='{colour}'><b>{_text(outcome)}</b></font>", STYLES["cell"]),
             Paragraph(_date(document.uploaded_at), STYLES["cell_right"]),

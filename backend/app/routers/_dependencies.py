@@ -97,14 +97,6 @@ async def get_case_or_404(case_id: str) -> CaseRecord:
     return case
 
 
-FINALISED_DETAIL = case_service.FINALISED_DETAIL
-
-
-def raise_if_finalised(case: CaseRecord) -> None:
-    if case.status == CaseStage.FINALISED.value:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=FINALISED_DETAIL)
-
-
 async def ensure_case_editable(case_id: str | None) -> None:
     """A 409 when the case is finalised: it is view-only and accepts no changes."""
     if case_id is None:
@@ -115,13 +107,14 @@ async def ensure_case_editable(case_id: str | None) -> None:
         log=("Failed to fetch case %s", case_id),
     )
     if finalised:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=FINALISED_DETAIL)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=case_service.FINALISED_DETAIL)
 
 
 async def get_editable_case_or_404(case_id: str) -> CaseRecord:
     """get_case_or_404, for a handler that changes the case: refused once the case is finalised."""
     case = await get_case_or_404(case_id)
-    raise_if_finalised(case)
+    if case.status == CaseStage.FINALISED.value:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=case_service.FINALISED_DETAIL)
     return case
 
 

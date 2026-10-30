@@ -27,7 +27,8 @@ function seedCase(backend: MockBackend, overrides: Partial<CaseRow> = {}) {
 }
 
 const progressCard = (page: Page) => page.getByRole('region', { name: 'Case Status' });
-const stageBadge = (page: Page) => page.locator('.case-header .case-stage-badge');
+// The stage shown on the Case Status card (the case summary).
+const stageBadge = (page: Page) => progressCard(page).locator('.case-stage-badge');
 
 test.describe('Track case status @SCRUM-80', () => {
   test('AC1 the case queue shows each case at its stage @SCRUM-80', async ({ page, backend }) => {
@@ -140,6 +141,20 @@ test.describe('Track case status @SCRUM-80', () => {
     await expect(progressCard(page).locator('.case-status-step--done .case-status-step-label').last()).toHaveText('Pending Evaluation');
     await expect(progressCard(page).locator('[aria-current="step"]')).toHaveText('Case Analysed');
     await expect(progressCard(page).getByRole('button', { name: 'Finalise Case' })).toBeEnabled();
+  });
+
+  test('a case missing a required document is incomplete and names what is missing @SCRUM-80', async ({ page, backend }) => {
+    // No documents on file, so every required checklist item is missing.
+    seedCase(backend, { status: 'documents_incomplete' });
+    await page.goto('/cases/GLDB-1200');
+
+    await expect(stageBadge(page)).toHaveText('Documents Incomplete');
+    const next = progressCard(page).locator('.case-status-next');
+    await expect(next).toContainText('Every required document is mandatory: 11 out of 11 still missing.');
+
+    // The analysis waits for the same documents.
+    await page.goto('/cases/GLDB-1200?section=analysis');
+    await expect(page.locator('.summary-message')).toContainText('Every required document must be on file first: 11 out of 11 still missing.');
   });
 
   test('a failed case says which step failed @SCRUM-80', async ({ page, backend }) => {

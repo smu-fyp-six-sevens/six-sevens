@@ -17,11 +17,13 @@ from __future__ import annotations
 import logging
 import threading
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from . import case_repository, document_repository, finding_reviews_repository
 from .case_pipeline import repository as analysis_repository, state as analysis_state
 from .langgraph import trace as langgraph_trace
+from .mapper import compute_requirement_coverage
 from .models import (
     APPROVED_STATUSES,
     CaseFailure,
@@ -69,15 +71,20 @@ def _failed(failure: CaseFailure) -> StageResult:
 
 
 def document_stage(
-    documents: list[DocumentRecord], *, failed_detection_ids: frozenset[str] = frozenset()
+    documents: list[DocumentRecord],
+    *,
+    missing_requirements: Sequence[str],
+    failed_detection_ids: frozenset[str] = frozenset(),
 ) -> StageResult | None:
     """
     The stage the documents put the case at, most urgent first: any document
     still processing holds the whole case there, then a failure, then one
-    waiting for the officer, then one being scanned. failed_detection_ids:
-    approved documents whose last detection run crashed or was cancelled.
-    None once every approved document is scanned: the case analysis then
-    decides (see analysis_stage).
+    waiting for the officer, then a required document that is missing (every
+    REQUIRED_DOCUMENT_TYPES item is mandatory: missing_requirements, from
+    mapper.compute_requirement_coverage), then one being scanned.
+    failed_detection_ids: approved documents whose last detection run crashed
+    or was cancelled. None once every approved document is scanned and the
+    checklist is complete: the case analysis then decides (see analysis_stage).
     """
     active = [d for d in documents if d.status not in _SET_ASIDE]
     if not active:
@@ -91,9 +98,10 @@ def document_stage(
         return _failed(CaseFailure.FRAUD_DETECTION)
     if any(d.status == DocumentStatus.ANALYZED for d in active):
         return StageResult(CaseStage.PENDING_REVIEW)
-    # Every document is now approved (waiting for, in or past detection) or rejected.
+    # Every document is now approved (waiting for, in or past detection) or rejected. With none approved, or a
+    # required document missing, the case can't be analysed until the officer uploads more.
     approved = [d for d in active if d.status in APPROVED_STATUSES]
-    if not approved:
+    if not approved or missing_requirements:
         return StageResult(CaseStage.DOCUMENTS_INCOMPLETE)
     if any(d.status != DocumentStatus.DETECTED for d in approved):
         return StageResult(CaseStage.FRAUD_DETECTION)
@@ -135,7 +143,11 @@ def derive(case: CaseRecord) -> StageResult:
     documents = document_repository.list_documents(case_id=case.id)
     waiting = [d.id for d in documents if d.status == DocumentStatus.APPROVED]
     failed_detection_ids = frozenset(langgraph_trace.get_detection_states(waiting, slim=True)[1]) if waiting else frozenset()
-    return document_stage(documents, failed_detection_ids=failed_detection_ids) or analysis_stage(case, documents)
+    _, missing = compute_requirement_coverage(documents)
+    return (
+        document_stage(documents, missing_requirements=missing, failed_detection_ids=failed_detection_ids)
+        or analysis_stage(case, documents)
+    )
 
 
 def failure_of(documents: list[DocumentRecord], failed_detection_ids: set[str] | frozenset[str]) -> CaseFailure:

@@ -1,8 +1,9 @@
 """
-Cross-document identity matching for proof_of_address — a distinct concern
-from case_service.py's other job (documents_status rollup, submission_finalized
-sync): this is specifically about joining documents by extracted
-individual_name to figure out who still needs an address on file.
+The case's requirement checklist (compute_requirement_coverage) and the
+cross-document identity matching it rests on for proof_of_address and
+id_document: joining documents by extracted individual_name to figure out
+who still needs an address or an ID on file. Kept apart from case_service.py
+so the stages (case_stage.py) and the analysis can read the checklist too.
 """
 from __future__ import annotations
 
@@ -10,8 +11,12 @@ from typing import NamedTuple
 
 from .identifiers import id_key, name_key
 from .models import (
-    DocumentRecord,
+    ADDITIONAL_DOCUMENT_TYPES,
+    IDENTITY_DOCUMENT_REQUIREMENT,
     IDENTITY_DOCUMENT_TYPES,
+    REQUIRED_DOCUMENT_TYPES,
+    DocumentRecord,
+    DocumentType,
     counts_as_address_proof,
     counts_towards_checklist,
 )
@@ -260,3 +265,55 @@ def compute_id_document_missing_side(documents: list[DocumentRecord]) -> str | N
     if "back" in identity.sides:
         return "front"
     return None
+
+
+def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[str], list[str]]:
+    """
+    A requirement counts as fulfilled only by a document whose
+    classification was actually ACCEPTED — one sitting in manual review
+    hasn't been confirmed to be what it claims, so it shouldn't retire a
+    checklist item yet — and that a loan officer hasn't rejected (see
+    models.counts_towards_checklist). A single document can fulfil more than one
+    requirement (see DocumentRecord.fulfilled_requirements), so most
+    requirements are a union across all of a case's accepted documents, not
+    a 1:1 count — proof_of_address is the one exception, requiring coverage
+    per identity rather than just once anywhere in the case (see
+    compute_identity_proof_of_address_coverage).
+
+    Returns (fulfilled, missing) against the fixed REQUIRED_DOCUMENT_TYPES
+    checklist, both in checklist order.
+    """
+    fulfilled: set[str] = set()
+    for doc in documents:
+        if counts_towards_checklist(doc):
+            fulfilled.update(doc.fulfilled_requirements)
+
+    # Overrides whatever individual documents self-reported for this one
+    # requirement — see compute_identity_proof_of_address_coverage for why
+    # proof_of_address can't just be unioned like every other requirement.
+    proof_of_address = DocumentType.PROOF_OF_ADDRESS.value
+    if compute_identity_proof_of_address_coverage(documents):
+        fulfilled.add(proof_of_address)
+    else:
+        fulfilled.discard(proof_of_address)
+
+    # Same idea for id_document: it requires every identified individual's
+    # own ID to be complete (front+back, matched by nric_number — not just
+    # any front and any back existing somewhere in the case), mirroring
+    # proof_of_address's own per-identity requirement above. See
+    # compute_id_document_identity_coverage. id_document isn't a real
+    # DocumentType (passport/nric are the real classifiable types — see
+    # models.IDENTITY_DOCUMENT_TYPES), so it's not DocumentType.X.value
+    # like proof_of_address above, just the shared requirement string.
+    id_document = IDENTITY_DOCUMENT_REQUIREMENT
+    if compute_id_document_identity_coverage(documents):
+        fulfilled.add(id_document)
+    else:
+        fulfilled.discard(id_document)
+
+    # Additional items are reported as fulfilled (so the UI can tick them) but
+    # never as missing, so they can't block submission_finalized.
+    return (
+        [req for req in [*REQUIRED_DOCUMENT_TYPES, *ADDITIONAL_DOCUMENT_TYPES] if req in fulfilled],
+        [req for req in REQUIRED_DOCUMENT_TYPES if req not in fulfilled],
+    )

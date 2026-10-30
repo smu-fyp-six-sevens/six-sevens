@@ -3,7 +3,7 @@ import type { CaseFailure, CaseRequirementCoverage, CaseStage } from '../../serv
 import { finaliseCase } from '../../services/uploadService';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { caseFailureMessage, caseStageLabel, caseStageTone } from '../../utils/caseStages';
-import type { CaseSection } from './caseSections';
+import { missingRequirementsText, type CaseSection } from './caseSections';
 
 // The path every case follows. A stage off it (incomplete, failed) shows at the step it belongs to.
 const TRACK: CaseStage[] = [
@@ -35,7 +35,13 @@ interface NextStep {
 }
 
 // What the officer should know or do now, and where to go for it.
-function nextStep(stage: string, failure: CaseFailure | null, analysisRunning: boolean, findingsToReview: number | null): NextStep {
+function nextStep({ stage, failure, analysisRunning, findingsToReview, missingRequirements }: {
+  stage: string;
+  failure: CaseFailure | null;
+  analysisRunning: boolean;
+  findingsToReview: number | null;
+  missingRequirements: number;
+}): NextStep {
   switch (stage) {
     case 'open':
       return { text: 'Upload the case documents to get started.', link: { label: 'Upload documents', section: 'documents' } };
@@ -44,7 +50,13 @@ function nextStep(stage: string, failure: CaseFailure | null, analysisRunning: b
     case 'pending_review':
       return { text: 'Extracted documents are waiting for you to approve or reject them.', link: { label: 'Review documents', section: 'documents' } };
     case 'documents_incomplete':
-      return { text: 'Every document was rejected. Upload new documents to continue.', link: { label: 'Upload documents', section: 'documents' } };
+      return {
+        // Every required checklist document is mandatory; with none missing, every document was rejected.
+        text: missingRequirements
+          ? `Every required document is mandatory: ${missingRequirementsText(missingRequirements)}.`
+          : 'Every document was rejected. Upload new documents to continue.',
+        link: { label: 'Upload documents', section: 'documents' },
+      };
     case 'fraud_detection':
       return { text: 'Approved documents are being scanned for fraud.', link: { label: 'View approved documents', section: 'approved' } };
     case 'ready_for_analysis':
@@ -94,6 +106,7 @@ export function CaseStageCard({
   analysisRunning = false,
   caseLabel,
   findingsToReview = null,
+  missingRequirements = 0,
 }: {
   caseId: string;
   stage: string;
@@ -107,11 +120,13 @@ export function CaseStageCard({
   caseLabel?: string;
   // While the case is analysed: findings still without the officer's verdict. Finalising waits for 0.
   findingsToReview?: number | null;
+  // How many required checklist documents are not yet on file.
+  missingRequirements?: number;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingFinalise, setConfirmingFinalise] = useState(false);
-  const next = nextStep(stage, failure, analysisRunning, findingsToReview);
+  const next = nextStep({ stage, failure, analysisRunning, findingsToReview, missingRequirements });
   const position = trackPosition(stage, failure);
   const canFinalise = stage === 'case_analysed';
 

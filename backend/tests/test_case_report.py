@@ -123,9 +123,7 @@ def test_report_without_an_analysis_says_so_once_and_leaves_out_the_analysis_sec
     assert "GLDB-137" in text
     assert "Green Link Digital Bank" in text
     assert "OPEN" in text  # the case's stage
-    assert text.count("The case analysis has not been run yet") == 1
-    assert "recommended additional documents appear once it has run" in text.replace("\n", " ")
-    assert "trigger fraud detection" in text.replace("\n", " ")
+    assert text.count("No case analysis has been run yet.") == 1
     assert "Confidential · Generated 30 Oct 2026, 14:00 SGT by K. Lim" in text
     for section in ("Summary", "Risk Assessment", "Cross-Document Analysis", "Additional Documents to Request"):
         assert section not in text
@@ -136,18 +134,12 @@ def test_report_without_an_analysis_says_so_once_and_leaves_out_the_analysis_sec
     assert "Called the applicant <re> statement." in text
 
 
-def test_not_run_notice_says_when_the_analysis_is_ready_to_run() -> None:
-    text = _render(summary=_summary(analysis_ready=True))
-
-    assert "ready to run from the Case Analysis section" in text
-
-
 def test_complete_report_shows_the_analysis_results() -> None:
     analysis = _analysis()
     text = _render(latest=analysis, completed=analysis)
 
     assert "not been run" not in text
-    assert "Case analysis complete and up to date" in text
+    assert "Case analysis complete and up to date as of 30 Oct 2026, 14:00 SGT." in text
     assert "Risk Assessment" in text
     assert "High risk: the bank statement shows signs of editing" in text
     assert "Fonts change mid-page" in text
@@ -318,11 +310,11 @@ def test_an_older_runs_prose_summary_is_split_into_headline_points_and_what_woul
 
 def test_an_out_of_date_analysis_names_the_documents_changed_since() -> None:
     analysis = _analysis(stale=True)
-    changed = [("BrightwaveAnalytics_Incorporation_Cert.pdf", ["uploaded", "approved", "scanned"])]
-    text = _render(latest=analysis, completed=analysis, changed_documents=changed).replace("\n", " ")
+    changed = [("BrightwaveAnalytics_Incorporation_Cert.pdf", "scanned", datetime(2026, 10, 27, 5, tzinfo=timezone.utc))]
+    text = _render(latest=analysis, completed=analysis, changed_documents=changed).replace("\n", " ").replace("\xa0", " ")
 
     assert "Changed since then" in text
-    assert "BrightwaveAnalytics_Incorporation_Cert.pdf: uploaded, approved, scanned" in text
+    assert "BrightwaveAnalytics_Incorporation_Cert.pdf - Scanned as of 27 Oct 2026" in text
 
 
 def test_changed_since_reads_document_events_after_the_run_started() -> None:
@@ -339,9 +331,10 @@ def test_changed_since_reads_document_events_after_the_run_started() -> None:
     with patch.object(case_report.audit, "list_events", return_value=events):
         changed = case_report._changed_since("case-1", analysis, DOCUMENTS)
 
-    assert changed == [("uob_statement_aug.pdf", ["uploaded", "approved"])]
+    assert changed == [("uob_statement_aug.pdf", "approved", later)]
 
 
 def test_the_title_shows_the_cases_stage() -> None:
     assert "PENDING REVIEW" in _render(summary=_summary(status="pending_review"))
     assert "FINALISED" in _render(summary=_summary(status="finalised"))
+

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, st
 from .. import case_report, case_service, document_repository, events
 from ..auth import CurrentUser, current_actor
 from ..case_service import CaseRiskFilter, CaseSort
+from ..labels import requirement_label
 from ..case_stage import StageChangeNotAllowed
 from ..events import officer_event, types
 from ._dependencies import get_case_or_404, get_editable_case_or_404, to_thread_or_502
@@ -268,14 +269,21 @@ async def download_case_report(case_id: str) -> Response:
 async def run_case_analysis(case_id: str, case: CaseRecord = Depends(get_editable_case_or_404)) -> CaseAnalysis:
     """
     Starts the per-case analysis (cross-document findings, risk outlook and
-    summary) in the background. Only once every approved document has been
-    scanned; poll GET .../analysis, or watch the case snapshot, for the result.
+    summary) in the background. Only once every required checklist document
+    is on file and every approved document has been scanned; poll
+    GET .../analysis, or watch the case snapshot, for the result.
     """
     try:
         return await analysis_service.start_analysis(case_id)
     except analysis_service.AnalysisDisabled as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Case analysis is switched off."
+        ) from exc
+    except analysis_service.RequiredDocumentsMissing as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Every required document must be on file before the case can be analysed. Missing: "
+            + ", ".join(requirement_label(code) for code in exc.missing) + ".",
         ) from exc
     except analysis_service.AnalysisNotReady as exc:
         raise HTTPException(

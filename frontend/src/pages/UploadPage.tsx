@@ -34,15 +34,11 @@ import FinalisedBanner from '../components/FinalisedBanner';
 import DropZone from '../components/DropZone';
 import FileRow from '../components/FileRow';
 import KebabMenu from '../components/KebabMenu';
-import type {
-} from '../services/uploadService';
-import {
-} from '../utils/fileValidation';
 import {
   MAX_COMPANY_NAME_LENGTH,
 } from '../utils/caseValidation';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { caseStageLabel, caseStageTone } from '../utils/caseStages';
+import { REQUIRED_DOCUMENT_TYPES } from '../services/uploadService';
 
 
 const NAV_COLLAPSED_KEY = 'caseNav.collapsed';
@@ -122,6 +118,12 @@ export default function UploadPage({
   // Until the first snapshot arrives, the stage the queue row showed.
   const currentStage = snapshotLoaded ? stage : selectedCase.caseStatus;
   const isFinalised = currentStage === 'finalised';
+
+  // Every required checklist document is mandatory: the stage and the analysis wait for these.
+  const missingRequirements = useMemo(
+    () => REQUIRED_DOCUMENT_TYPES.filter((requirement) => !fulfilledRequirements.has(requirement.value)).length,
+    [fulfilledRequirements],
+  );
 
   const liveDocumentIds = useMemo(
     () => (snapshotLoaded ? new Set(documents.map((document) => document.id)) : null),
@@ -235,9 +237,6 @@ export default function UploadPage({
         ) : (
           <>
             <CaseTitle caseRecord={selectedCase} />
-            <span className={`case-stage-badge tone-${caseStageTone(currentStage)}`} aria-label={`Case status: ${caseStageLabel(currentStage)}`}>
-              {caseStageLabel(currentStage)}
-            </span>
             <span className="case-title-actions">
               <DownloadReportButton caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} onError={setReportError} />
               <KebabMenu
@@ -305,6 +304,7 @@ export default function UploadPage({
               analysisRunning={analysisOverview?.status === 'running'}
               caseLabel={selectedCase.caseNumber ?? undefined}
               findingsToReview={findingsToReview}
+              missingRequirements={missingRequirements}
             />
           )}
 
@@ -489,7 +489,12 @@ export default function UploadPage({
           {activeSection === 'risk' && <CaseRiskCard risk={risk} caseId={selectedCase.id} caseDocuments={documents} readOnly={isFinalised} />}
 
           {activeSection === 'analysis' && (
-            <CaseAnalysisCard caseId={selectedCase.id} analysisReady={analysisReady && !isFinalised} overview={analysisOverview} />
+            <CaseAnalysisCard
+              caseId={selectedCase.id}
+              analysisReady={analysisReady && !isFinalised}
+              overview={analysisOverview}
+              missingRequirements={missingRequirements}
+            />
           )}
 
           {/* Both come from the latest complete case analysis, so risk is set exactly when one exists. */}

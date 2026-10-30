@@ -76,7 +76,7 @@ def _analysis(status: str, fingerprint: str = "fp") -> CaseAnalysis:
 def test_the_document_furthest_behind_decides_the_cases_stage(statuses, expected) -> None:
     documents = [_document(status, f"doc-{i}") for i, status in enumerate(statuses)]
 
-    result = case_stage.document_stage(documents)
+    result = case_stage.document_stage(documents, missing_requirements=())
 
     assert (result.stage if result else None) == expected
 
@@ -85,26 +85,55 @@ def test_a_document_sent_to_manual_review_puts_the_case_in_pending_review() -> N
     sent_to_review = _document(DocumentStatus.ANALYZED, "doc-1")
     sent_to_review.routing_status = RoutingStatus.MANUAL_REVIEW
 
-    result = case_stage.document_stage([sent_to_review, _document(DocumentStatus.DETECTED, "doc-2")])
+    result = case_stage.document_stage([sent_to_review, _document(DocumentStatus.DETECTED, "doc-2")], missing_requirements=())
 
     assert result == case_stage.StageResult(CaseStage.PENDING_REVIEW)
 
 
 def test_a_failure_says_which_step_failed() -> None:
-    processing = case_stage.document_stage([_document(DocumentStatus.FAILED)])
+    processing = case_stage.document_stage([_document(DocumentStatus.FAILED)], missing_requirements=())
     documents = [_document(DocumentStatus.APPROVED, "doc-1"), _document(DocumentStatus.DETECTED, "doc-2")]
-    detection = case_stage.document_stage(documents, failed_detection_ids=frozenset({"doc-1"}))
+    detection = case_stage.document_stage(documents, failed_detection_ids=frozenset({"doc-1"}), missing_requirements=())
 
     assert processing == case_stage.StageResult(CaseStage.FAILED, CaseFailure.DOCUMENT_PROCESSING)
     assert detection == case_stage.StageResult(CaseStage.FAILED, CaseFailure.FRAUD_DETECTION)
     # Waiting for its turn, not failed: still being scanned.
-    assert case_stage.document_stage(documents) == case_stage.StageResult(CaseStage.FRAUD_DETECTION)
+    assert case_stage.document_stage(documents, missing_requirements=()) == case_stage.StageResult(CaseStage.FRAUD_DETECTION)
+
+
+@pytest.mark.parametrize("statuses", [
+    [DocumentStatus.DETECTED],  # everything on file is scanned
+    [DocumentStatus.APPROVED, DocumentStatus.DETECTING],  # still being scanned
+])
+def test_a_missing_required_document_makes_the_case_incomplete(statuses) -> None:
+    documents = [_document(status, f"doc-{i}") for i, status in enumerate(statuses)]
+
+    result = case_stage.document_stage(documents, missing_requirements=["bank_statement"])
+
+    assert result == case_stage.StageResult(CaseStage.DOCUMENTS_INCOMPLETE)
+
+
+def test_a_document_waiting_for_review_outranks_a_missing_required_document() -> None:
+    documents = [_document(DocumentStatus.ANALYZED, "doc-1"), _document(DocumentStatus.DETECTED, "doc-2")]
+
+    result = case_stage.document_stage(documents, missing_requirements=["bank_statement"])
+
+    assert result == case_stage.StageResult(CaseStage.PENDING_REVIEW)
+
+
+def test_derive_reads_the_missing_requirements_from_the_checklist() -> None:
+    with (
+        patch("app.case_stage.document_repository.list_documents",
+              return_value=[_document(DocumentStatus.DETECTED)]),
+        patch("app.case_stage.compute_requirement_coverage", return_value=(["payslip"], ["bank_statement"])),
+    ):
+        assert case_stage.derive(_case()) == case_stage.StageResult(CaseStage.DOCUMENTS_INCOMPLETE)
 
 
 def test_a_failure_outranks_a_document_waiting_for_review() -> None:
     documents = [_document(DocumentStatus.ANALYZED, "doc-1"), _document(DocumentStatus.FAILED, "doc-2")]
 
-    assert case_stage.document_stage(documents).stage == CaseStage.FAILED
+    assert case_stage.document_stage(documents, missing_requirements=()).stage == CaseStage.FAILED
 
 
 @pytest.mark.parametrize(

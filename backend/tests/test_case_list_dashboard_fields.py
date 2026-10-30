@@ -122,10 +122,14 @@ def test_the_accuracy_filters_pick_cases_by_creation_date_and_stage() -> None:
     def case(case_id: str, created: str, stage: str) -> CaseRecord:
         return CaseRecord(id=case_id, greenlink_case_id=case_id.upper(), status=stage, created_at=created, updated_at=created)
 
+    cases = [
+        case("new-ready", "2026-10-20T00:00:00Z", "case_analysed"), case("new-empty", "2026-10-21T00:00:00Z", "open"),
+        case("old-ready", "2026-09-01T00:00:00Z", "case_analysed"),
+    ]
     with patch("app.case_service.case_repository") as case_repo:
-        case_repo.list_matching_cases.return_value = [
-            case("new-ready", "2026-10-20T00:00:00Z", "case_analysed"), case("new-empty", "2026-10-21T00:00:00Z", "open"),
-            case("old-ready", "2026-09-01T00:00:00Z", "case_analysed"),
+        # The stage filter is the database's (cases.status IN ...).
+        case_repo.list_matching_cases.side_effect = lambda q, statuses=None: [
+            c for c in cases if statuses is None or c.status in statuses
         ]
 
         recent = case_service.case_ids_matching(date(2026, 10, 1), [])

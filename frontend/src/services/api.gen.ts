@@ -260,8 +260,9 @@ export interface paths {
         /**
          * Run Case Analysis
          * @description Starts the per-case analysis (cross-document findings, risk outlook and
-         *     summary) in the background. Only once every approved document has been
-         *     scanned; poll GET .../analysis, or watch the case snapshot, for the result.
+         *     summary) in the background. Only once every required checklist document
+         *     is on file and every approved document has been scanned; poll
+         *     GET .../analysis, or watch the case snapshot, for the result.
          */
         post: operations["run_case_analysis_cases__case_id__analysis_run_post"];
         delete?: never;

@@ -13,11 +13,12 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, cast
 
-from .. import audit, case_repository, document_repository, events, finding_reviews_repository, read_pool
+from .. import audit, case_repository, case_stage, document_repository, events, finding_reviews_repository, read_pool
 from ..config import settings
 from ..snapshots import push_case_snapshot
 from ..langgraph import trace as langgraph_trace
 from ..llm_io import ModelRefused
+from ..mapper import compute_requirement_coverage
 from ..models import DocumentRecord
 from ..run_context import end_run, start_run
 from . import repository, state
@@ -42,6 +43,14 @@ _MAX_MODEL_CALLS = 6
 
 class AnalysisDisabled(Exception):
     pass
+
+
+class RequiredDocumentsMissing(Exception):
+    """Every required checklist document is mandatory before a case can be analysed."""
+
+    def __init__(self, missing: list[str]):
+        super().__init__(", ".join(missing))
+        self.missing = missing
 
 
 class AnalysisNotReady(Exception):
@@ -77,6 +86,9 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
     if not settings.CASE_ANALYSIS_ENABLED:
         raise AnalysisDisabled()
     documents = await asyncio.to_thread(document_repository.list_documents, case_id=case_id)
+    _, missing = compute_requirement_coverage(documents)
+    if missing:
+        raise RequiredDocumentsMissing(missing)
     if not is_ready_for_analysis(documents):
         raise AnalysisNotReady()
     latest = await asyncio.to_thread(repository.latest_run_state, case_id)
@@ -200,8 +212,6 @@ async def _execute(
 
 async def sync_stage(case_id: str) -> None:
     """A run started or finished, which moves the case's stage. Never raises: the run itself is unaffected."""
-    from .. import case_stage
-
     try:
         await asyncio.to_thread(case_stage.sync_case_stage, case_id)
     except Exception:

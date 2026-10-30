@@ -25,16 +25,13 @@ from .langgraph import trace as langgraph_trace
 from .langgraph.extraction_prompts import EXTRACTION_SCHEMAS
 
 from .mapper import (
-    compute_id_document_identity_coverage,
     compute_id_document_identity_progress,
     compute_id_document_missing_side,
-    compute_identity_proof_of_address_coverage,
     compute_identity_proof_of_address_progress,
+    compute_requirement_coverage,
     compute_unmatched_proof_of_address_names,
 )
 from .models import (
-    ADDITIONAL_DOCUMENT_TYPES,
-    REQUIRED_DOCUMENT_TYPES,
     CaseAnalysisOverview,
     CaseCounts,
     CaseDocumentsStatus,
@@ -49,13 +46,10 @@ from .models import (
     CaseSummary,
     DocumentRecord,
     DocumentStatus,
-    DocumentType,
     FindingReview,
     IN_FLIGHT_STATUSES,
     IdDocumentCoverage,
-    IDENTITY_DOCUMENT_REQUIREMENT,
     ProofOfAddressCoverage,
-    counts_towards_checklist,
 )
 from .monitoring import is_stuck
 from .read_pool import submit as _submit
@@ -78,58 +72,6 @@ def compute_documents_status(documents: list[DocumentRecord]) -> CaseDocumentsSt
     if all(doc.status == DocumentStatus.ANALYZED for doc in documents):
         return CaseDocumentsStatus.ANALYZED
     return CaseDocumentsStatus.IN_PROGRESS
-
-
-def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[str], list[str]]:
-    """
-    A requirement counts as fulfilled only by a document whose
-    classification was actually ACCEPTED — one sitting in manual review
-    hasn't been confirmed to be what it claims, so it shouldn't retire a
-    checklist item yet — and that a loan officer hasn't rejected (see
-    models.counts_towards_checklist). A single document can fulfil more than one
-    requirement (see DocumentRecord.fulfilled_requirements), so most
-    requirements are a union across all of a case's accepted documents, not
-    a 1:1 count — proof_of_address is the one exception, requiring coverage
-    per identity rather than just once anywhere in the case (see
-    compute_identity_proof_of_address_coverage).
-
-    Returns (fulfilled, missing) against the fixed REQUIRED_DOCUMENT_TYPES
-    checklist, both in checklist order.
-    """
-    fulfilled: set[str] = set()
-    for doc in documents:
-        if counts_towards_checklist(doc):
-            fulfilled.update(doc.fulfilled_requirements)
-
-    # Overrides whatever individual documents self-reported for this one
-    # requirement — see compute_identity_proof_of_address_coverage for why
-    # proof_of_address can't just be unioned like every other requirement.
-    proof_of_address = DocumentType.PROOF_OF_ADDRESS.value
-    if compute_identity_proof_of_address_coverage(documents):
-        fulfilled.add(proof_of_address)
-    else:
-        fulfilled.discard(proof_of_address)
-
-    # Same idea for id_document: it requires every identified individual's
-    # own ID to be complete (front+back, matched by nric_number — not just
-    # any front and any back existing somewhere in the case), mirroring
-    # proof_of_address's own per-identity requirement above. See
-    # compute_id_document_identity_coverage. id_document isn't a real
-    # DocumentType (passport/nric are the real classifiable types — see
-    # models.IDENTITY_DOCUMENT_TYPES), so it's not DocumentType.X.value
-    # like proof_of_address above, just the shared requirement string.
-    id_document = IDENTITY_DOCUMENT_REQUIREMENT
-    if compute_id_document_identity_coverage(documents):
-        fulfilled.add(id_document)
-    else:
-        fulfilled.discard(id_document)
-
-    # Additional items are reported as fulfilled (so the UI can tick them) but
-    # never as missing, so they can't block submission_finalized.
-    return (
-        [req for req in [*REQUIRED_DOCUMENT_TYPES, *ADDITIONAL_DOCUMENT_TYPES] if req in fulfilled],
-        [req for req in REQUIRED_DOCUMENT_TYPES if req not in fulfilled],
-    )
 
 
 def get_case(case_id: str) -> CaseRecord | None:
@@ -308,7 +250,8 @@ def build_summary(
         risk=completed.risk if completed else None,
         supporting_document_recommendations=completed.supporting_documents if completed else [],
         additional_documents=case.additional_documents,
-        analysis_ready=is_ready_for_analysis(documents),
+        # Every required document is mandatory: the analysis waits for a complete checklist as well as the scans.
+        analysis_ready=is_ready_for_analysis(documents) and not missing,
         analysis=overview,
         status_history=status_history or [],
         failure=(
@@ -730,12 +673,9 @@ def list_cases_page(
 
 def case_ids_matching(since: date | None, stages: list[CaseStage]) -> set[str]:
     """The ids of cases created on or after `since` (UTC date) and at one of these stages (any when empty)."""
-    cases = case_repository.list_matching_cases(None)
+    cases = case_repository.list_matching_cases(None, statuses=[stage.value for stage in stages] or None)
     if since is not None:
         cases = [case for case in cases if case.created_at.date() >= since]
-    if stages:
-        wanted = {stage.value for stage in stages}
-        cases = [case for case in cases if case.status in wanted]
     return {case.id for case in cases}
 
 
