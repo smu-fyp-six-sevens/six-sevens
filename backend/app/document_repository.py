@@ -29,23 +29,50 @@ _LIST_COLUMNS = (
 
 def _sync_case(case_id: str | None) -> None:
     """Schedules the refresh below; a case with one already pending shares it, since it reads the latest state."""
+    _schedule(case_id, "case", _sync_case_now)
+
+
+def _sync_stage(case_id: str | None) -> None:
+    """
+    For a write that only changes a document's status: that can move the
+    case's stage (see case_stage.py) but not its checklist coverage.
+    """
+    _schedule(case_id, "stage", _sync_stage_now)
+
+
+def _schedule(case_id: str | None, kind: str, sync) -> None:
     if case_id is None:
         return
     if SYNC_DEBOUNCE_SECONDS <= 0:
-        _sync_case_now(case_id)
+        sync(case_id)
         return
+    key = f"{kind}:{case_id}"
     with _sync_lock:
-        if case_id in _sync_timers:
+        if key in _sync_timers:
             return
-        timer = _sync_timers[case_id] = threading.Timer(SYNC_DEBOUNCE_SECONDS, _run_scheduled_sync, args=(case_id,))
+        timer = _sync_timers[key] = threading.Timer(
+            SYNC_DEBOUNCE_SECONDS, _run_scheduled_sync, args=(key, sync, case_id)
+        )
         timer.daemon = True
     timer.start()
 
 
-def _run_scheduled_sync(case_id: str) -> None:
+def _run_scheduled_sync(key: str, sync, case_id: str) -> None:
     with _sync_lock:
-        _sync_timers.pop(case_id, None)  # a write from here on schedules the next run
-    _sync_case_now(case_id)
+        _sync_timers.pop(key, None)  # a write from here on schedules the next run
+    sync(case_id)
+
+
+def _sync_stage_now(case_id: str | None) -> None:
+    """Best-effort, like _sync_case_now: the document write already succeeded. Imported locally for the same reason."""
+    if case_id is None:
+        return
+    try:
+        from . import case_stage
+
+        case_stage.sync_case_stage(case_id)
+    except Exception:
+        logger.exception("Document write succeeded but failed to update the stage of case %s", case_id)
 
 
 def has_pending_syncs() -> bool:
@@ -60,9 +87,11 @@ def flush_pending_syncs() -> None:
     with _sync_lock:
         pending = list(_sync_timers.items())
         _sync_timers.clear()
-    for case_id, timer in pending:
+    for _key, timer in pending:
         timer.cancel()
-        _sync_case_now(case_id)
+        # The timer's own arguments: the refresh it was scheduled for and its case (the key is "kind:case_id").
+        _, sync, case_id = timer.args
+        sync(case_id)
 
 
 def _sync_case_now(case_id: str | None) -> None:
@@ -90,6 +119,7 @@ def _sync_case_now(case_id: str | None) -> None:
         case_service.sync_submission_finalized(case_id)
     except Exception:
         logger.exception("Document write succeeded but failed to resync case %s", case_id)
+    _sync_stage_now(case_id)
 
 
 def create_document(
@@ -106,6 +136,7 @@ def create_document(
         "uploaded_at": now.isoformat(),
     }
     result = supabase_client.table("documents").insert(row).execute()
+    _sync_stage(case_id)
     return DocumentRecord(**_row(result.data[0]))
 
 
@@ -157,18 +188,23 @@ def update_status(
     # fields (see models.counts_towards_checklist). record_classification /
     # update_extracted_fields resync when they write those; here only a move into or out of
     # FAILED can change it (out of it only by a compare-and-swap from FAILED, i.e. a retry).
-    if result.data and (
-        status == DocumentStatus.FAILED
-        or (expected_current_statuses is not None and DocumentStatus.FAILED in expected_current_statuses)
-    ):
-        _sync_case(_row(result.data[0]).get("case_id"))
+    # Any status change can move the case's stage; the case resync refreshes the stage too.
+    if result.data:
+        case_id = _row(result.data[0]).get("case_id")
+        if status == DocumentStatus.FAILED or (
+            expected_current_statuses is not None and DocumentStatus.FAILED in expected_current_statuses
+        ):
+            _sync_case(case_id)
+        else:
+            _sync_stage(case_id)
     return bool(result.data)
 
 def approve_document(document_id: str) -> DocumentRecord | None:
     """
     Approving resolves any manual review, so the document is ACCEPTED. Without it, a document routed to
     manual review that needed nothing saved (a content guard flag, say) stayed there after approval, never
-    counting towards the checklist (models.counts_towards_checklist). That can move coverage, so resync.
+    counting towards the checklist (models.counts_towards_checklist). That can move coverage and the stage,
+    so resync the case.
     """
     result = (
         supabase_client.table("documents")
@@ -198,25 +234,28 @@ def undo_approval(document_id: str, routing_status: RoutingStatus | None) -> Non
     if result.data:
         _sync_case(_row(result.data[0]).get("case_id"))
 
+
+def _set_detection_status(document_id: str, status: DocumentStatus) -> None:
+    result = supabase_client.table("documents").update(
+        {"status": status.value}
+    ).eq("id", document_id).execute()
+    if result.data:
+        _sync_stage(_row(result.data[0]).get("case_id"))
+
+
 def mark_detecting(document_id: str) -> None:
     """The Detection Agent has started — shown live as "Scanning" (see langgraph/detection/graph.py)."""
-    supabase_client.table("documents").update(
-        {"status": DocumentStatus.DETECTING.value}
-    ).eq("id", document_id).execute()
+    _set_detection_status(document_id, DocumentStatus.DETECTING)
 
 
 def mark_detected(document_id: str) -> None:
     """The Detection Agent finished and produced a report — terminal."""
-    supabase_client.table("documents").update(
-        {"status": DocumentStatus.DETECTED.value}
-    ).eq("id", document_id).execute()
+    _set_detection_status(document_id, DocumentStatus.DETECTED)
 
 
 def revert_to_approved(document_id: str) -> None:
     """A detection run crashed or was cancelled: back to APPROVED — still locked, eligible for Retry."""
-    supabase_client.table("documents").update(
-        {"status": DocumentStatus.APPROVED.value}
-    ).eq("id", document_id).execute()
+    _set_detection_status(document_id, DocumentStatus.APPROVED)
 
 
 def reject_document(document_id: str) -> DocumentRecord | None:

@@ -15,14 +15,23 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from .. import app_settings_repository, case_service, detection_metrics, document_repository, events, finding_reviews_repository
+from .. import (
+    app_settings_repository,
+    case_service,
+    case_stage,
+    detection_metrics,
+    document_repository,
+    events,
+    finding_reviews_repository,
+)
 from ..auth import CurrentUser
 from ..events import officer_event, types
 from ..models import (
-    CaseDocumentsStatus, CaseFindingReviews, CaseRecord, DetectionMetrics, ReportMissedIssueRequest,
+    CaseFindingReviews, CaseRecord, CaseStage, DetectionMetrics, ReportMissedIssueRequest,
     SetFindingVerdictRequest, SetFindingVerdictsRequest, UpdateMissedIssueRequest,
 )
-from ._dependencies import bad_gateway_on_error, get_case_or_404, to_thread_or_502
+from ._dependencies import bad_gateway_on_error, get_case_or_404, get_editable_case_or_404, to_thread_or_502
+from ..snapshots import push_case_snapshot
 
 
 
@@ -70,6 +79,12 @@ async def _record_saved(case_id: str, verdicts: list[tuple[str, str | None, str 
                 "cleared": marks.count(None),
             },
         ))
+    # A verdict can finish the evaluation (Pending Evaluation -> Case Analysed), or put it back; then show the page.
+    try:
+        await asyncio.to_thread(case_stage.sync_case_stage, case_id)
+    except Exception:
+        logger.exception("Failed to update the stage of case %s", case_id)
+    await push_case_snapshot(case_id)
 
 
 @router.get("/cases/{case_id}/finding-reviews", response_model=CaseFindingReviews)
@@ -83,7 +98,7 @@ async def get_case_finding_reviews(case_id: str, case: CaseRecord = Depends(get_
 
 @router.put("/cases/{case_id}/finding-reviews/verdict", response_model=CaseFindingReviews)
 async def set_finding_verdict(
-    case_id: str, request: SetFindingVerdictRequest, user: CurrentUser, case: CaseRecord = Depends(get_case_or_404),
+    case_id: str, request: SetFindingVerdictRequest, user: CurrentUser, case: CaseRecord = Depends(get_editable_case_or_404),
 ) -> CaseFindingReviews:
     """Marks one finding correct or wrong, signed by the officer; a null verdict clears the mark. Any officer
     can change a verdict; the latest one stands."""
@@ -105,7 +120,7 @@ async def set_finding_verdict(
 
 @router.put("/cases/{case_id}/finding-reviews/verdicts", response_model=CaseFindingReviews)
 async def set_finding_verdicts(
-    case_id: str, request: SetFindingVerdictsRequest, user: CurrentUser, case: CaseRecord = Depends(get_case_or_404),
+    case_id: str, request: SetFindingVerdictsRequest, user: CurrentUser, case: CaseRecord = Depends(get_editable_case_or_404),
 ) -> CaseFindingReviews:
     """Saves one group's review in one request: the officer ticked the findings that are real (correct) and left
     the rest (wrong). Every target is checked before anything is written, so a bad entry saves nothing."""
@@ -135,7 +150,7 @@ async def set_finding_verdicts(
     "/cases/{case_id}/finding-reviews/missed", response_model=CaseFindingReviews, status_code=status.HTTP_201_CREATED,
 )
 async def report_missed_issue(
-    case_id: str, request: ReportMissedIssueRequest, user: CurrentUser, case: CaseRecord = Depends(get_case_or_404),
+    case_id: str, request: ReportMissedIssueRequest, user: CurrentUser, case: CaseRecord = Depends(get_editable_case_or_404),
 ) -> CaseFindingReviews:
     """Records an issue no finding raised, against the check that should have caught it: a false negative."""
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to save a missed issue on case %s", case_id):
@@ -156,7 +171,7 @@ async def report_missed_issue(
 @router.patch("/cases/{case_id}/finding-reviews/{review_id}", response_model=CaseFindingReviews)
 async def update_missed_issue(
     case_id: str, review_id: UUID, request: UpdateMissedIssueRequest, user: CurrentUser,
-    case: CaseRecord = Depends(get_case_or_404),
+    case: CaseRecord = Depends(get_editable_case_or_404),
 ) -> CaseFindingReviews:
     """Corrects a reported missed issue (its check or note), e.g. one filed against the wrong check. A verdict
     on a finding is changed by reviewing the finding again, not here."""
@@ -184,7 +199,7 @@ async def update_missed_issue(
 
 @router.delete("/cases/{case_id}/finding-reviews/{review_id}", response_model=CaseFindingReviews)
 async def delete_finding_review(
-    case_id: str, review_id: UUID, case: CaseRecord = Depends(get_case_or_404),
+    case_id: str, review_id: UUID, case: CaseRecord = Depends(get_editable_case_or_404),
 ) -> CaseFindingReviews:
     """Removes a verdict or a missed issue (e.g. one reported by mistake)."""
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to delete review %s", review_id):
@@ -206,11 +221,11 @@ async def delete_finding_review(
 @router.get("/detection-metrics", response_model=DetectionMetrics)
 async def get_detection_metrics(
     since: date | None = None,
-    status_filter: list[CaseDocumentsStatus] = Query(default=[], alias="status"),
+    status_filter: list[CaseStage] = Query(default=[], alias="status"),
 ) -> DetectionMetrics:
     """
     Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only
-    cases created on or after `since` and in these documents statuses, as the dashboard's filters pick.
+    cases created on or after `since` and at these stages, as the dashboard's filters pick.
     """
     reviews = await to_thread_or_502(
         finding_reviews_repository.list_all,

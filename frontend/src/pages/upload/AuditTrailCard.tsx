@@ -21,6 +21,9 @@ const ACTION_LABELS: Record<string, string> = {
   'case.created': 'Created case',
   'case.renamed': 'Renamed case',
   'case.deleted': 'Deleted case',
+  'case.finalised': 'Finalised case',
+  // Before finalising became permanent, a finalised case could be reopened.
+  'case.reopened': 'Reopened case',
   'document.uploaded': 'Uploaded document',
   'document.analyzed': 'Classified and extracted document',
   'document.failed': 'Document processing failed',

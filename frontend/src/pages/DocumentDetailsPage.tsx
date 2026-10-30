@@ -29,6 +29,7 @@ import { DocumentSummaryCard } from './document-details/DocumentSummaryCard';
 import { ExtractedInformationCard } from './document-details/ExtractedInformationCard';
 import { ManualReviewCard } from './document-details/ManualReviewCard';
 import { NotesCard } from '../components/NotesCard';
+import FinalisedBanner from '../components/FinalisedBanner';
 import { useDetection } from './document-details/useDetection';
 import { useDocumentActions } from './document-details/useDocumentActions';
 import { useDocumentCaseMatch } from './document-details/useDocumentCaseMatch';
@@ -100,8 +101,10 @@ export default function DocumentDetailsPage({
   };
 
   const isApproved = hasBeenApproved(document?.status);
+  // A finalised case is view-only: nothing on its documents can change.
+  const caseFinalised = selectedCase.caseStatus === 'finalised';
   // Approve and Reject are both final: the document is locked against field edits and type corrections.
-  const isLocked = isApproved || document?.status === 'rejected';
+  const isLocked = isApproved || document?.status === 'rejected' || caseFinalised;
   // Fields still under the threshold haven't been reviewed: "Save fields" marks every reviewed field.
   const lowConfidenceFields = useMemo(
     () =>
@@ -386,13 +389,16 @@ export default function DocumentDetailsPage({
 
         {/* Notes: open on a locked document too, since a note never edits the document. */}
 
+        {caseFinalised && <FinalisedBanner />}
+
         <NotesCard
+          readOnly={caseFinalised}
           caseId={selectedCase.id}
           caseNumber={selectedCase.caseNumber}
           documents={[{ id: document.id, filename: document.filename }]}
           documentId={document.id}
           lockedNotice={
-            isLocked
+            isLocked && !caseFinalised
               ? `Document ${isApproved ? 'approved' : 'rejected'} and locked`
               : undefined
           }
@@ -413,7 +419,7 @@ export default function DocumentDetailsPage({
                   label: 'Full-screen preview',
                   onSelect: () => setIsPreviewOpen(true),
                 },
-                ...(!hasBeenApproved(document.status) && !isInFlight
+                ...(!hasBeenApproved(document.status) && !isInFlight && !caseFinalised
                   ? [
                       {
                         id: 'delete',
@@ -509,6 +515,7 @@ export default function DocumentDetailsPage({
             individualCheckError={individualCheckError}
             individualCheckResults={individualCheckResults}
             handleRunIndividualCheck={handleRunIndividualCheck}
+            readOnly={caseFinalised}
           />
         </Suspense>
 
@@ -519,7 +526,8 @@ export default function DocumentDetailsPage({
           )}
 
           {!hasBeenApproved(document.status) &&
-          document.status !== 'rejected' && (
+          document.status !== 'rejected' &&
+          !caseFinalised && (
             <div className="document-actions">
               {canCancelDocument(document.status) && (
                 <button

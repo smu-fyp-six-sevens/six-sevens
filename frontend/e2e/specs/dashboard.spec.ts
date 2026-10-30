@@ -56,11 +56,11 @@ test.describe('Dashboard', () => {
   });
 
   test('the status filter is the case queue\'s: several statuses at once, with their counts', async ({ page, backend }) => {
-    // Two cases with no documents yet, one with a failed document.
+    // Two open cases (no documents yet), one failed.
     backend.cases.push(
       makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd' }),
       makeCase({ id: 'case-b', greenlink_case_id: 'GLDB-7002', company_name: 'Bolt Logistics' }),
-      makeCase({ id: 'case-c', greenlink_case_id: 'GLDB-7003', company_name: 'Cedar Holdings' }),
+      makeCase({ id: 'case-c', greenlink_case_id: 'GLDB-7003', company_name: 'Cedar Holdings', status: 'failed' }),
     );
     backend.documents.push(makeDocument({ case_id: 'case-c', status: 'failed' }));
     await openCases(page);
@@ -68,13 +68,13 @@ test.describe('Dashboard', () => {
     await page.getByRole('button', { name: 'Filter by status' }).click();
     const list = page.getByRole('group', { name: 'status filter' });
     const count = (status: string) => list.locator('.header-filter-option', { hasText: status }).locator('.header-filter-count');
-    await expect(count('Documents pending')).toHaveText('2');
-    await expect(count('Documents failed')).toHaveText('1');
-    await list.getByLabel('Documents pending').uncheck();
+    await expect(count('Open')).toHaveText('2');
+    await expect(count('Failed')).toHaveText('1');
+    await list.getByLabel('Open').uncheck();
 
     await expect(page.getByText('Cedar Holdings')).toBeVisible();
     await expect(page.getByText('Acme Pte Ltd')).toHaveCount(0);
     await expect(page.getByText('Bolt Logistics')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Filter by status (4 selected)' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Filter by status (9 selected)' })).toBeVisible();
   });
 });

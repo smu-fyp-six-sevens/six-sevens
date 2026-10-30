@@ -153,22 +153,39 @@ STATUS_LABELS = {
     "failed": "Failed",
     "cancelled": "Cancelled",
 }
-# The case's status as the queue names it (frontend utils/caseStatus.ts).
-CASE_STATUS_LABELS = {
-    "in_progress": "In progress",
-    "analyzed": "Ready for review",
-    "failed": "Documents failed",
-    "stuck": "Processing stuck",
-    "no_documents": "Documents pending",
+# The case's stage as the case page's badge names it (frontend utils/caseStages.ts).
+CASE_STAGE_LABELS = {
+    "open": "Open",
+    "processing_documents": "Processing Documents",
+    "pending_review": "Pending Review",
+    "documents_incomplete": "Documents Incomplete",
+    "fraud_detection": "Fraud Detection",
+    "ready_for_analysis": "Ready for Analysis",
+    "pending_evaluation": "Pending Evaluation",
+    "case_analysed": "Case Analysed",
+    "finalised": "Finalised",
+    "failed": "Failed",
 }
-# The queue's colour for each status (frontend utils/caseStatusTone.ts, dashboard.css .case-status): (fill, ink).
-CASE_STATUS_COLOURS: dict[str, tuple[colors.Color, colors.Color]] = {
-    "analyzed": (TEAL_BG, TEAL),
-    "in_progress": (colors.HexColor("#e8f0fb"), BLUE),
-    "failed": (RED_BG, RED),
-    "stuck": (AMBER_BG, colors.HexColor("#8a5a06")),
-    "no_documents": (colors.HexColor("#e4ebf5"), INK_SOFT),
+# The badge's colour for each stage (caseStages.ts tones, case-stage.css --tone-tint and --tone-ink): (fill, ink).
+_TONES = {
+    "grey": ("#f2f4f7", "#4b5565"), "blue-1": ("#edf3fc", "#2f5fa8"), "blue-2": ("#e6edfc", "#1d3f9e"),
+    "amber-1": ("#fff8e8", "#8a5a00"), "amber-2": ("#fff3dd", "#8a5300"), "amber-3": ("#fdeedb", "#8f4a05"),
+    "amber-4": ("#f9e6d6", "#7a3a02"), "green": ("#e8f5ee", "#17603c"), "slate": ("#e8edf3", "#1e3a5f"),
+    "red": ("#fbeaea", "#962626"),
 }
+_STAGE_TONES = {
+    "open": "grey", "processing_documents": "blue-1", "fraud_detection": "blue-2", "pending_review": "amber-1",
+    "documents_incomplete": "amber-2", "ready_for_analysis": "amber-3", "pending_evaluation": "amber-4",
+    "case_analysed": "green", "finalised": "slate", "failed": "red",
+}
+CASE_STAGE_COLOURS: dict[str, tuple[colors.Color, colors.Color]] = {
+    stage: (colors.HexColor(_TONES[tone][0]), colors.HexColor(_TONES[tone][1])) for stage, tone in _STAGE_TONES.items()
+}
+
+
+def _stage_label(stage: str) -> str:
+    """A stage the page doesn't know (a row from before the stages) reads like its code: "some_stage" -> "Some stage"."""
+    return CASE_STAGE_LABELS.get(stage) or stage.replace("_", " ").capitalize() or "Open"
 # Same as the header (frontend lib/officers.ts); a username not listed is shown as it is.
 OFFICER_NAMES = {"greenlink-tester": "J. Tan", "demo": "K. Lim", "bob": "B. Smith", "carol": "C. Wong"}
 
@@ -626,11 +643,11 @@ class _Chip(Flowable):
 
 
 def _title_block(data: ReportData) -> list[Flowable]:
-    """A navy panel: the company, its case number and opening date, and its status in the queue's colour."""
+    """A navy panel: the company, its case number and opening date, and its stage in the case page's colour."""
     summary = data.summary
     company = summary.company_name or "Unnamed company"
-    status = summary.documents_status.value
-    status_fill, status_ink = CASE_STATUS_COLOURS.get(status, CASE_STATUS_COLOURS["no_documents"])
+    stage = summary.status
+    status_fill, status_ink = CASE_STAGE_COLOURS.get(stage, CASE_STAGE_COLOURS["open"])
 
     case_chip = _Chip(summary.greenlink_case_id, colors.HexColor("#2b3d61"), colors.white, size=8.5)
     meta = Table(
@@ -649,7 +666,7 @@ def _title_block(data: ReportData) -> list[Flowable]:
         Spacer(1, 8),
         meta,
     ]
-    status_chip = _Chip(CASE_STATUS_LABELS.get(status, status).upper(), status_fill, status_ink, size=7, dot=True)
+    status_chip = _Chip(_stage_label(stage).upper(), status_fill, status_ink, size=7, dot=True)
     right = Table([[status_chip]], colWidths=[status_chip.width], hAlign="RIGHT", style=TableStyle([
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -12,6 +12,7 @@ from app.models import (
     CaseListPage,
     CaseRecord,
     CaseSearchResult,
+    CaseStage,
     CaseSummary,
     DocumentStatus,
 )
@@ -51,7 +52,7 @@ def test_create_case() -> None:
 
     assert response.status_code == 201
     assert response.json()["id"] == "new-case"
-    mock_case_service.create_case.assert_called_once_with(None)
+    mock_case_service.create_case.assert_called_once_with(None, ANY)
 
 
 def test_create_case_endpoint_with_company_name() -> None:
@@ -62,7 +63,7 @@ def test_create_case_endpoint_with_company_name() -> None:
 
     assert response.status_code == 201
     assert response.json()["company_name"] == "Acme Pte Ltd"
-    mock_case_service.create_case.assert_called_once_with("Acme Pte Ltd")
+    mock_case_service.create_case.assert_called_once_with("Acme Pte Ltd", ANY)
 
 
 def test_get_case_not_found() -> None:
@@ -132,13 +133,13 @@ def test_list_cases_passes_the_page_sort_filter_and_search_through() -> None:
         mock_case_service.list_cases_page.return_value = CaseListPage(items=[], total=0, limit=10, offset=20)
 
         response = client.get(
-            "/cases?limit=10&offset=20&sort=risk&status=stuck&status=failed&risk=High&risk=unscored&q=acme"
+            "/cases?limit=10&offset=20&sort=risk&status=failed&status=pending_review&risk=High&risk=unscored&q=acme"
         )
 
     assert response.status_code == 200
     mock_case_service.list_cases_page.assert_called_once_with(
         limit=10, offset=20, sort="risk",
-        statuses=[CaseDocumentsStatus.STUCK, CaseDocumentsStatus.FAILED], risks=["High", "unscored"], q="acme",
+        statuses=[CaseStage.FAILED, CaseStage.PENDING_REVIEW], risks=["High", "unscored"], q="acme",
     )
 
 
@@ -159,7 +160,7 @@ def test_list_cases_rejects_a_page_outside_its_limits() -> None:
             client.get("/cases?limit=101"),
             client.get("/cases?offset=-1"),
             client.get("/cases?sort=cheapest"),
-            client.get("/cases?status=open"),
+            client.get("/cases?status=stuck"),
             client.get("/cases?q=" + "x" * 101),
         ]
 

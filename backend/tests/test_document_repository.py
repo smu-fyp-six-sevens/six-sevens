@@ -99,7 +99,7 @@ def test_a_burst_of_writes_to_one_case_schedules_a_single_resync() -> None:
         for _ in range(5):
             document_repository._sync_case("case-1")
         document_repository._sync_case("case-2")
-        assert [t.args for t in _FakeTimer.created] == [("case-1",), ("case-2",)]
+        assert [t.args[0] for t in _FakeTimer.created] == ["case:case-1", "case:case-2"]
         mock_case_service.assert_not_called()
 
         _FakeTimer.created[0].fire()

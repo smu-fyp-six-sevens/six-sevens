@@ -81,7 +81,13 @@ export interface CaseRow {
   id: string;
   greenlink_case_id: string;
   company_name: string | null;
+  // A CaseStage (backend/app/models.py): what the queue filters and counts on.
   status: string;
+  // Every stage change, oldest first, and what a failed case needs fixed (backend/app/case_stage.py).
+  status_history?: { id: string; case_id: string; from_status: string | null; to_status: string; changed_by: string; changed_at: string }[];
+  failure?: string | null;
+  // While analysed: findings without the officer's verdict; finalising waits for 0.
+  findings_to_review?: number | null;
   submission_finalized: boolean;
   finalized_at: string | null;
   missing_requirements: string[];
@@ -390,7 +396,7 @@ export class MockBackend {
     const riskValue = (c: CaseRow) => (rank(c) ? c.risk!.level! : 'unscored');
 
     let cases = this.newestFirst(this.matching(params.get('q')));
-    if (statuses.length) cases = cases.filter((c) => statuses.includes(this.documentsStatusOf(c)));
+    if (statuses.length) cases = cases.filter((c) => statuses.includes(c.status));
     if (risks.length) cases = cases.filter((c) => risks.includes(riskValue(c)));
     if (sort === 'oldest') cases.reverse();
     // Stable sorts: newest first among equals.
@@ -401,10 +407,7 @@ export class MockBackend {
 
   private caseCounts() {
     const by_status: Record<string, number> = {};
-    for (const c of this.cases) {
-      const status = this.documentsStatusOf(c);
-      by_status[status] = (by_status[status] ?? 0) + 1;
-    }
+    for (const c of this.cases) by_status[c.status] = (by_status[c.status] ?? 0) + 1;
     return { total: this.cases.length, by_status };
   }
 
@@ -663,6 +666,22 @@ export class MockBackend {
           .filter((e) => caseId === null || e.case_id === caseId)
           .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)),
       );
+    }
+    // The officer finalising a case (permanent): recorded in its stage history under the signed-in user.
+    const stageMatch = path.match(/^\/cases\/([^/]+)\/(finalise)$/);
+    if (stageMatch && method === 'POST') {
+      const found = this.cases.find((c) => c.id === stageMatch[1]);
+      if (!found) return json({ detail: 'Case not found' }, 404);
+      if (found.status !== 'case_analysed') {
+        return json({ detail: 'Only an analysed case, with its findings evaluated, can be finalised.' }, 409);
+      }
+      const from = found.status;
+      found.status = 'finalised';
+      found.status_history = [
+        ...(found.status_history ?? []),
+        { id: `change-${(found.status_history ?? []).length + 1}`, case_id: found.id, from_status: from, to_status: found.status, changed_by: 'officer-a', changed_at: new Date().toISOString() },
+      ];
+      return json(found);
     }
     const notesMatch = path.match(/^\/cases\/([^/]+)\/notes$/);
     if (notesMatch) {

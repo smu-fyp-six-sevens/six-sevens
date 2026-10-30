@@ -5,13 +5,14 @@ import type {
   CaseAnalysisRunItem,
   CaseCost,
   CaseCounts,
-  CaseDocumentsStatus,
   CaseListItem,
   CaseListPage,
   CaseOption,
+  CaseRequirementCoverage,
   CaseRiskFilter,
   CaseSearchResult,
   CaseSort,
+  CaseStage,
   UpdatedCase,
 } from './types';
 
@@ -54,7 +55,7 @@ export interface CasePageQuery {
   limit: number;
   offset: number;
   sort: CaseSort;
-  statuses: CaseDocumentsStatus[];
+  statuses: CaseStage[];
   risks: CaseRiskFilter[];
   q: string;
 }
@@ -160,4 +161,13 @@ export async function getCaseAnalysis(caseId: string): Promise<CaseAnalysis | nu
   await assertOk(response, 'Failed to fetch the case analysis');
 
   return (await response.json()) as CaseAnalysis;
+}
+
+// The officer acknowledges an analysed case's submission; recorded in its stage history under their username.
+export async function finaliseCase(caseId: string): Promise<CaseRequirementCoverage> {
+  const response = await authFetch(`/cases/${caseId}/finalise`, { method: 'POST' });
+
+  await assertOk(response, 'Failed to finalise the case');
+
+  return (await response.json()) as CaseRequirementCoverage;
 }

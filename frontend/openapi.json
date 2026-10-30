@@ -1731,6 +1731,16 @@
         "title": "CaseDocumentsStatus",
         "type": "string"
       },
+      "CaseFailure": {
+        "description": "What a FAILED case needs fixed: each has its own remedy for the officer.",
+        "enum": [
+          "document_processing",
+          "fraud_detection",
+          "case_analysis"
+        ],
+        "title": "CaseFailure",
+        "type": "string"
+      },
       "CaseFindingReviews": {
         "description": "Every review in a case, and the precision and recall they give: per document, across documents and for the case.",
         "properties": {
@@ -2292,6 +2302,70 @@
         "title": "CaseSearchResult",
         "type": "object"
       },
+      "CaseStage": {
+        "description": "Where a case stands, in the order a case normally moves through them\n(the loan officer's flowchart). Stored in cases.status. Every stage but\nFINALISED follows from the case's documents and its latest analysis (see\ncase_stage.derive); FINALISED is set by a loan officer once the case\nis analysed, and is permanent: the case is view-only. Each change is recorded in\ncase_status_history.",
+        "enum": [
+          "open",
+          "processing_documents",
+          "pending_review",
+          "documents_incomplete",
+          "fraud_detection",
+          "ready_for_analysis",
+          "pending_evaluation",
+          "case_analysed",
+          "finalised",
+          "failed"
+        ],
+        "title": "CaseStage",
+        "type": "string"
+      },
+      "CaseStageChange": {
+        "description": "One row of case_status_history: the stage a case moved to, when, and who moved it.",
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "changed_at": {
+            "format": "date-time",
+            "title": "Changed At",
+            "type": "string"
+          },
+          "changed_by": {
+            "title": "Changed By",
+            "type": "string"
+          },
+          "from_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Status"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "to_status": {
+            "title": "To Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "case_id",
+          "from_status",
+          "to_status",
+          "changed_by",
+          "changed_at"
+        ],
+        "title": "CaseStageChange",
+        "type": "object"
+      },
       "CaseSummary": {
         "description": "documents_status, fulfilled_requirements and missing_requirements are all\ncomputed live from the documents table on every read, never stored \u2014 see\ncase_service.py.",
         "properties": {
@@ -2339,6 +2413,16 @@
           "documents_status": {
             "$ref": "#/components/schemas/CaseDocumentsStatus"
           },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "finalized_at": {
             "anyOf": [
               {
@@ -2350,6 +2434,17 @@
               }
             ],
             "title": "Finalized At"
+          },
+          "findings_to_review": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Findings To Review"
           },
           "fulfilled_requirements": {
             "items": {
@@ -2394,6 +2489,13 @@
             "title": "Status",
             "type": "string"
           },
+          "status_history": {
+            "items": {
+              "$ref": "#/components/schemas/CaseStageChange"
+            },
+            "title": "Status History",
+            "type": "array"
+          },
           "submission_finalized": {
             "default": false,
             "title": "Submission Finalized",
@@ -2430,7 +2532,10 @@
           "risk",
           "supporting_document_recommendations",
           "analysis_ready",
-          "analysis"
+          "analysis",
+          "status_history",
+          "failure",
+          "findings_to_review"
         ],
         "title": "CaseSummary",
         "type": "object"
@@ -7580,7 +7685,7 @@
     },
     "/cases": {
       "get": {
-        "description": "One page of the case queue: newest or oldest first, or by risk either way; optionally only these documents\nstatuses, only these risk levels and only cases whose number or name contains q.",
+        "description": "One page of the case queue: newest or oldest first, or by risk either way; optionally only these stages,\nonly these risk levels and only cases whose number or name contains q.",
         "operationId": "list_cases_cases_get",
         "parameters": [
           {
@@ -7629,7 +7734,7 @@
             "schema": {
               "default": [],
               "items": {
-                "$ref": "#/components/schemas/CaseDocumentsStatus"
+                "$ref": "#/components/schemas/CaseStage"
               },
               "title": "Status",
               "type": "array"
@@ -8506,6 +8611,65 @@
         ]
       }
     },
+    "/cases/{case_id}/finalise": {
+      "post": {
+        "description": "The loan officer acknowledges an analysed case's submission. Recorded in its stage history under their\nusername. Permanent: the case is then view-only and takes no changes.",
+        "operationId": "finalise_case_cases__case_id__finalise_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Finalise Case",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
     "/cases/{case_id}/finding-reviews": {
       "get": {
         "description": "Every review in the case, with precision and recall per document, across documents and for the case.",
@@ -8981,7 +9145,7 @@
         ]
       },
       "post": {
-        "description": "Saves a note signed by the officer making the request. Allowed on any document, approved and\nrejected ones included: a note is stored on its own and never edits the document, so the\ndocument's lock is untouched. Any officer can reply to a note (parent_id).",
+        "description": "Saves a note signed by the officer making the request. Allowed on any document, approved and\nrejected ones included: a note is stored on its own and never edits the document, so the\ndocument's lock is untouched. Any officer can reply to a note (parent_id). A finalised case is\nview-only, notes included.",
         "operationId": "add_case_note_cases__case_id__notes_post",
         "parameters": [
           {
@@ -9244,7 +9408,7 @@
     },
     "/detection-metrics": {
       "get": {
-        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created on or after `since` and in these documents statuses, as the dashboard's filters pick.",
+        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created on or after `since` and at these stages, as the dashboard's filters pick.",
         "operationId": "get_detection_metrics_detection_metrics_get",
         "parameters": [
           {
@@ -9271,7 +9435,7 @@
             "schema": {
               "default": [],
               "items": {
-                "$ref": "#/components/schemas/CaseDocumentsStatus"
+                "$ref": "#/components/schemas/CaseStage"
               },
               "title": "Status",
               "type": "array"

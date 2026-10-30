@@ -27,6 +27,30 @@ def _sync_case_immediately(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture(autouse=True)
+def _skip_case_stage_sync(monkeypatch: pytest.MonkeyPatch):
+    """
+    Document writes and analysis runs move the case's stage, which reads the
+    case back from Supabase. Tests of those writes aren't about the stage, so
+    it is a no-op here; test_case_stage.py exercises the real one.
+    """
+    from app import case_stage
+
+    monkeypatch.setattr(case_stage, "sync_case_stage", lambda case_id: None)
+
+
+@pytest.fixture(autouse=True)
+def _cases_are_not_finalised(monkeypatch: pytest.MonkeyPatch):
+    """
+    Every route that changes a document or case first checks its case isn't
+    finalised, which reads the case. Tests of those routes aren't about that,
+    so every case reads as open; test_case_stage.py covers the refusal.
+    """
+    from app import case_service
+
+    monkeypatch.setattr(case_service, "is_case_finalised", lambda case_id: False)
+
+
+@pytest.fixture(autouse=True)
 def _bypass_auth():
     """
     Every route except /health and /auth/login requires require_auth (see

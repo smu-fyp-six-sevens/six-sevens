@@ -22,21 +22,40 @@ interface HeaderFilterProps {
 
 // A column header's filter: a button that opens a list of checkboxes, so several values can be picked at once.
 // Nothing selected means no filter, shown as every box ticked; unticking one then keeps all the others.
+// "Unselect all" clears the boxes so a few can be picked from scratch; until one is ticked nothing is filtered.
 export default function HeaderFilter({ name, title, options, selected, disabled = false, onChange }: HeaderFilterProps) {
   const listId = useId();
   const rootRef = useRef<HTMLSpanElement>(null);
   const [isOpen, setIsOpen] = useState(false);
+  // Every box shown unticked after "Unselect all", while there is still no filter.
+  const [cleared, setCleared] = useState(false);
   const everything = selected.size === 0;
 
   function toggle(value: string) {
-    const next = new Set(everything ? options.map((option) => option.value) : selected);
+    const next = new Set(cleared ? [] : everything ? options.map((option) => option.value) : selected);
 
     if (next.has(value)) next.delete(value);
     else next.add(value);
 
-    // Every box ticked again is the same as no filter.
+    // Every box ticked again is the same as no filter; so is none, which then shows unticked.
+    setCleared(next.size === 0);
     onChange(next.size === options.length ? new Set() : next);
   }
+
+  function selectAll() {
+    setCleared(false);
+    onChange(new Set());
+  }
+
+  function unselectAll() {
+    setCleared(true);
+    onChange(new Set());
+  }
+
+  // Reopening shows the filter as it is: with nothing picked, every box ticked.
+  useEffect(() => {
+    if (!isOpen) setCleared(false);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -83,7 +102,7 @@ export default function HeaderFilter({ name, title, options, selected, disabled 
             <label key={option.value} className="header-filter-option">
               <input
                 type="checkbox"
-                checked={everything || selected.has(option.value)}
+                checked={!cleared && (everything || selected.has(option.value))}
                 onChange={() => toggle(option.value)}
                 aria-label={option.text}
               />
@@ -92,8 +111,12 @@ export default function HeaderFilter({ name, title, options, selected, disabled 
             </label>
           ))}
 
-          {!everything && (
-            <button type="button" className="header-filter-clear" onClick={() => onChange(new Set())}>
+          {everything && !cleared ? (
+            <button type="button" className="header-filter-clear" onClick={unselectAll}>
+              Unselect all
+            </button>
+          ) : (
+            <button type="button" className="header-filter-clear" onClick={selectAll}>
               Select all
             </button>
           )}

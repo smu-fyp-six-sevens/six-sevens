@@ -16,7 +16,9 @@ from ..models import DocumentRecord, DocumentStatus, skips_detection
 from .. import case_service, document_repository, events, extracted_fields_repository, storage_service
 from ..events import Stopwatch, officer_event, types
 from ..cpu_pool import run_cpu
-from ._dependencies import get_document_or_404, get_document_with_metadata_or_404, to_thread_or_502
+from ._dependencies import (
+    get_document_or_404, get_document_with_metadata_or_404, get_editable_document_or_404, to_thread_or_502,
+)
 from ..case_match import DocumentCaseMatch
 from ..case_pipeline.cross_document.company_identity import (
     CompanyNameConsistencyResult,
@@ -391,7 +393,7 @@ async def get_document_detection_report(document_id: str) -> dict:
 
 @router.post("/{document_id}/detection/cancel")
 async def cancel_document_detection(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> dict:
     """
     Interrupts an in-flight detection run — the Detection panel's Cancel
@@ -414,7 +416,7 @@ async def cancel_document_detection(
 
 @router.post("/{document_id}/detection/retry")
 async def retry_document_detection(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> dict:
     """
     Re-launches detection after a previous attempt was cancelled or

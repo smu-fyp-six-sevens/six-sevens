@@ -27,13 +27,17 @@ import { getToken } from './lib/api';
 import type { CaseRiskLevel } from './services/uploadService';
 import { LoadErrorState } from './components/LoadErrorState';
 import { AppSettingsProvider } from './components/AppSettingsProvider';
+import type { StatusTone } from './utils/caseStages';
 
 export interface CaseRecord {
   id: string;
   caseNumber?: string | null;
   applicant: string;
+  // The stage's label and colour (see utils/caseStages.ts); caseStatus is the stage itself.
   status: string;
+  statusTone: StatusTone;
   caseStatus: string;
+  stuck?: boolean;
   created_at?: string | null;
   // Only set once the case has been scored (see backend/app/case_risk.py).
   riskLevel?: CaseRiskLevel | null;

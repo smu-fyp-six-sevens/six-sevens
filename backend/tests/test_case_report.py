@@ -122,7 +122,7 @@ def test_report_without_an_analysis_says_so_once_and_leaves_out_the_analysis_sec
     assert "Acme Holdings Pte Ltd" in text
     assert "GLDB-137" in text
     assert "Green Link Digital Bank" in text
-    assert "DOCUMENTS PENDING" in text
+    assert "OPEN" in text  # the case's stage
     assert text.count("The case analysis has not been run yet") == 1
     assert "recommended additional documents appear once it has run" in text.replace("\n", " ")
     assert "trigger fraud detection" in text.replace("\n", " ")
@@ -340,3 +340,8 @@ def test_changed_since_reads_document_events_after_the_run_started() -> None:
         changed = case_report._changed_since("case-1", analysis, DOCUMENTS)
 
     assert changed == [("uob_statement_aug.pdf", ["uploaded", "approved"])]
+
+
+def test_the_title_shows_the_cases_stage() -> None:
+    assert "PENDING REVIEW" in _render(summary=_summary(status="pending_review"))
+    assert "FINALISED" in _render(summary=_summary(status="finalised"))
