@@ -896,24 +896,6 @@
         "title": "AnomalyLocation",
         "type": "object"
       },
-      "AppSettings": {
-        "properties": {
-          "finding_reviews_enabled": {
-            "title": "Finding Reviews Enabled",
-            "type": "boolean"
-          },
-          "is_admin": {
-            "title": "Is Admin",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "finding_reviews_enabled",
-          "is_admin"
-        ],
-        "title": "AppSettings",
-        "type": "object"
-      },
       "BenfordAnalysis": {
         "properties": {
           "chi_square": {
@@ -1041,6 +1023,11 @@
               }
             ],
             "title": "Company Name"
+          },
+          "reviews_required": {
+            "default": true,
+            "title": "Reviews Required",
+            "type": "boolean"
           }
         },
         "title": "Body_create_case_cases_post",
@@ -1951,6 +1938,11 @@
             ],
             "title": "Recommended Documents"
           },
+          "reviews_required": {
+            "default": true,
+            "title": "Reviews Required",
+            "type": "boolean"
+          },
           "risk": {
             "anyOf": [
               {
@@ -1977,6 +1969,7 @@
           "company_name",
           "status",
           "checklist_enforced",
+          "reviews_required",
           "created_at",
           "updated_at",
           "documents_status",
@@ -2171,6 +2164,11 @@
             "title": "Id",
             "type": "string"
           },
+          "reviews_required": {
+            "default": true,
+            "title": "Reviews Required",
+            "type": "boolean"
+          },
           "status": {
             "$ref": "#/components/schemas/CaseStage",
             "default": "open"
@@ -2187,6 +2185,7 @@
           "company_name",
           "status",
           "checklist_enforced",
+          "reviews_required",
           "created_at",
           "updated_at"
         ],
@@ -2314,7 +2313,7 @@
         "type": "object"
       },
       "CaseStage": {
-        "description": "Where a case stands, in the order a case normally moves through them\n(the loan officer's flowchart). Stored in cases.status. Every stage but\nFINALISED follows from the case's documents and its latest analysis (see\ncase_stage.derive); FINALISED is set by a loan officer once the case\nis analysed, and is permanent: the case is view-only. Each change is recorded in\ncase_status_history.",
+        "description": "Where a case stands, in the order a case normally moves through them\n(the loan officer's flowchart). Stored in cases.status. Every stage but\nFINALISED follows from the case's documents and its latest analysis (see\ncase_stage.derive); FINALISED is set by a loan officer once the case\nis analysed, and is permanent: the case is view-only.",
         "enum": [
           "open",
           "processing_documents",
@@ -2329,53 +2328,6 @@
         ],
         "title": "CaseStage",
         "type": "string"
-      },
-      "CaseStageChange": {
-        "description": "One row of case_status_history: the stage a case moved to, when, and who moved it.",
-        "properties": {
-          "case_id": {
-            "title": "Case Id",
-            "type": "string"
-          },
-          "changed_at": {
-            "format": "date-time",
-            "title": "Changed At",
-            "type": "string"
-          },
-          "changed_by": {
-            "title": "Changed By",
-            "type": "string"
-          },
-          "from_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "From Status"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "to_status": {
-            "title": "To Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "case_id",
-          "from_status",
-          "to_status",
-          "changed_by",
-          "changed_at"
-        ],
-        "title": "CaseStageChange",
-        "type": "object"
       },
       "CaseSummary": {
         "description": "documents_status, fulfilled_requirements and missing_requirements are all\ncomputed live from the documents table on every read, never stored \u2014 see\ncase_service.py.",
@@ -2478,6 +2430,11 @@
           "proof_of_address_coverage": {
             "$ref": "#/components/schemas/ProofOfAddressCoverage"
           },
+          "reviews_required": {
+            "default": true,
+            "title": "Reviews Required",
+            "type": "boolean"
+          },
           "risk": {
             "anyOf": [
               {
@@ -2491,13 +2448,6 @@
           "status": {
             "$ref": "#/components/schemas/CaseStage",
             "default": "open"
-          },
-          "status_history": {
-            "items": {
-              "$ref": "#/components/schemas/CaseStageChange"
-            },
-            "title": "Status History",
-            "type": "array"
           },
           "unapproved_requirements": {
             "items": {
@@ -2518,6 +2468,7 @@
           "company_name",
           "status",
           "checklist_enforced",
+          "reviews_required",
           "additional_documents",
           "created_at",
           "updated_at",
@@ -2530,7 +2481,6 @@
           "risk",
           "analysis_ready",
           "analysis",
-          "status_history",
           "failure",
           "findings_to_review"
         ],
@@ -6633,19 +6583,6 @@
         "title": "RoutingStatus",
         "type": "string"
       },
-      "SetFindingReviewsRequest": {
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "title": "SetFindingReviewsRequest",
-        "type": "object"
-      },
       "SetFindingVerdictRequest": {
         "description": "Marks one finding correct or wrong; verdict null clears the officer's mark.",
         "properties": {
@@ -8554,7 +8491,7 @@
     },
     "/cases/{case_id}/finalise": {
       "post": {
-        "description": "The loan officer acknowledges an analysed case's submission. Recorded in its stage history under their\nusername. Permanent: the case is then view-only and takes no changes.",
+        "description": "The loan officer acknowledges an analysed case's submission. Recorded in the audit trail (case.finalised) under\ntheir username. Permanent: the case is then view-only and takes no changes, except notes and the report export.",
         "operationId": "finalise_case_cases__case_id__finalise_post",
         "parameters": [
           {
@@ -11769,115 +11706,6 @@
           }
         },
         "summary": "Message"
-      }
-    },
-    "/settings": {
-      "get": {
-        "operationId": "get_settings_settings_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AppSettings"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Settings",
-        "tags": [
-          "settings"
-        ]
-      }
-    },
-    "/settings/finding-reviews": {
-      "put": {
-        "description": "Turns finding reviews on or off for every officer. Admin only. Reviews already saved are kept either way.",
-        "operationId": "set_finding_reviews_settings_finding_reviews_put",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetFindingReviewsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AppSettings"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Set Finding Reviews",
-        "tags": [
-          "settings"
-        ]
       }
     },
     "/ws/tickets": {

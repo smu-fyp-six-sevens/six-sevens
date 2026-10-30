@@ -96,7 +96,7 @@ function trackPosition(stage: string, failure: CaseFailure | null): { index: num
   return { index: Math.max(TRACK.indexOf(stage as CaseStage), 0), kind: 'current' };
 }
 
-// Where the case stands, what to do next, and the officer's Finalise Case. Each change is recorded in case_status_history.
+// Where the case stands, what to do next, and the officer's Finalise Case.
 export function CaseStageCard({
   caseId,
   stage,

@@ -25,6 +25,8 @@ export function useCaseSnapshot(caseId: string) {
   const [fulfilledRequirements, setFulfilledRequirements] = useState<Set<string>>(new Set());
   // What the case analysis waits for: required items no approved document covers (empty unless the case enforces it).
   const [unapprovedRequirements, setUnapprovedRequirements] = useState<string[]>([]);
+  // Whether the case was created with finding reviews. Off until the snapshot says so, so no review control flashes up.
+  const [reviewsRequired, setReviewsRequired] = useState(false);
   const [proofOfAddressCoverage, setProofOfAddressCoverage] = useState<{
     covered: number;
     total: number;
@@ -110,6 +112,7 @@ export function useCaseSnapshot(caseId: string) {
         );
         setFulfilledRequirements(new Set(caseSummary.fulfilled_requirements));
         setUnapprovedRequirements(caseSummary.unapproved_requirements ?? []);
+        setReviewsRequired(caseSummary.reviews_required ?? false);
         setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
         setIdDocumentCoverage(caseSummary.id_document_coverage);
         setRisk(caseSummary.risk ?? null);
@@ -181,6 +184,7 @@ export function useCaseSnapshot(caseId: string) {
     setDocumentDetails,
     fulfilledRequirements,
     unapprovedRequirements,
+    reviewsRequired,
     proofOfAddressCoverage,
     idDocumentCoverage,
     risk,

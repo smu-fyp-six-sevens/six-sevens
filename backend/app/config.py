@@ -53,11 +53,6 @@ class Settings:
     # any deployed environment; the "" default is only safe for local dev.
     AUTH_USERS: dict[str, str] = _users(_env("AUTH_USERS"))
     AUTH_SECRET_KEY: str = _env("AUTH_SECRET_KEY")
-    # The accounts that can change app-wide settings (routers/settings.py), comma-separated. Every other
-    # account is a loan officer. No role system beyond this list.
-    ADMIN_USERS: frozenset[str] = frozenset(
-        name.strip() for name in _env("ADMIN_USERS", "carol").split(",") if name.strip()
-    )
 
     # --- Services and events (CLOUD_ARCHITECTURE_PLAN.md) ---
     # Which roles this process runs; the default runs all of them, as uvicorn always has.

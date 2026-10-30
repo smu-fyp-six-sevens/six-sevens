@@ -8,7 +8,6 @@ from collections import Counter, defaultdict
 from typing import Any, Literal
 
 from . import (
-    app_settings_repository,
     audit,
     case_repository,
     case_stage,
@@ -44,7 +43,6 @@ from .models import (
     CaseRisk,
     CaseSearchResult,
     CaseStage,
-    CaseStageChange,
     CaseSummary,
     DocumentRecord,
     DocumentStatus,
@@ -90,10 +88,10 @@ def is_case_finalised(case_id: str) -> bool:
     return case is not None and case.status == CaseStage.FINALISED.value
 
 
-def create_case(company_name: str | None = None, created_by: str = case_stage.SYSTEM) -> CaseRecord:
-    case = case_repository.create_case(company_name, checklist_enforced=settings.REQUIRE_COMPLETE_CHECKLIST)
-    case_stage.record_created(case, created_by)
-    return case
+def create_case(company_name: str | None = None, *, reviews_required: bool = True) -> CaseRecord:
+    return case_repository.create_case(
+        company_name, checklist_enforced=settings.REQUIRE_COMPLETE_CHECKLIST, reviews_required=reviews_required,
+    )
 
 
 def update_case(case_id: str, company_name: str) -> CaseRecord | None:
@@ -148,27 +146,18 @@ def _load_last_complete(case_id: str, analysis: CaseAnalysis | None) -> CaseAnal
 
 def _load_reviews(case: CaseRecord) -> list[FindingReview] | None:
     """
-    The officer's finding verdicts, only while the case is being evaluated; None when they can't be read, or when an
-    admin has turned finding reviews off (nothing is counted then: see case_stage.analysis_stage).
+    The officer's finding verdicts, only while the case is being evaluated; None when they can't be read, or when the
+    case doesn't take reviews (nothing is counted then: see case_stage.analysis_stage).
     """
+    if not case.reviews_required:
+        return None
     if case.status not in (CaseStage.CASE_ANALYSED.value, CaseStage.PENDING_EVALUATION.value):
         return []
     try:
-        if not app_settings_repository.get_finding_reviews_enabled():
-            return None
         return finding_reviews_repository.list_for_case(case.id)
     except Exception:
         logger.exception("Failed to load the finding reviews of case %s", case.id)
         return None
-
-
-def _load_status_history(case_id: str) -> list[CaseStageChange]:
-    """Empty when the history can't be read: the case still loads, with its current stage."""
-    try:
-        return case_repository.list_status_history(case_id)
-    except Exception:
-        logger.exception("Failed to load the stage history of case %s", case_id)
-        return []
 
 
 def _load_saved_risks(case_ids: list[str]) -> dict[str, CaseRisk]:
@@ -186,7 +175,6 @@ def build_summary(
     reports: dict[str, dict[str, Any]] | None = None,
     analysis: CaseAnalysis | None = None,
     completed: CaseAnalysis | None = None,
-    status_history: list[CaseStageChange] | None = None,
     failed_detection_ids: set[str] | None = None,
     reviews: list[FindingReview] | None = None,
 ) -> CaseSummary:
@@ -234,7 +222,6 @@ def build_summary(
         # A case that enforces the checklist also waits for every required document to be approved.
         analysis_ready=is_ready_for_analysis(documents) and not unapproved,
         analysis=overview,
-        status_history=status_history or [],
         failure=(
             case_stage.failure_of(documents, failed_detection_ids or set())
             if case.status == CaseStage.FAILED.value else None
@@ -444,7 +431,6 @@ def _build_case_snapshot(case_id: str) -> dict | None:
     # Full reports only matter for the staleness check of an existing analysis; otherwise "was it scanned" is enough.
     states_read = _submit(_load_detection_states, documents, slim=analysis is None)
     completed_read = _submit(_load_last_complete, case_id, analysis)
-    history_read = _submit(_load_status_history, case_id)
     reviews_read = _submit(_load_reviews, case)
     fields_by_document = fields_read.result()
     for document in documents:
@@ -453,7 +439,7 @@ def _build_case_snapshot(case_id: str) -> dict | None:
     detection_states = states_read.result()
     summary = build_summary(
         case, documents, detection_states[0] if detection_states is not None else None,
-        analysis, completed_read.result(), history_read.result(),
+        analysis, completed_read.result(),
         detection_states[1] if detection_states is not None else None, reviews_read.result(),
     )
     # Before enrichment: that rewrites extracted_fields in place into
@@ -487,7 +473,6 @@ def get_case_summary(case_id: str) -> CaseSummary | None:
     case_read = _submit(case_repository.get_case, case_id)
     documents_read = _submit(document_repository.list_documents, case_id=case_id)
     analysis_read = _submit(_load_analysis, case_id)
-    history_read = _submit(_load_status_history, case_id)
     case = case_read.result()
     if case is None:
         return None
@@ -498,7 +483,7 @@ def get_case_summary(case_id: str) -> CaseSummary | None:
     detection_states = states_read.result()
     return build_summary(
         case, documents, detection_states[0] if detection_states is not None else None, analysis, completed,
-        history_read.result(), detection_states[1] if detection_states is not None else None, reviews_read.result(),
+        detection_states[1] if detection_states is not None else None, reviews_read.result(),
     )
 
 
@@ -696,8 +681,8 @@ def get_case_item(number: str) -> CaseListItem | None:
     return _list_items([case])[0] if case is not None else None
 
 
-def finalise_case(case_id: str, changed_by: str) -> CaseSummary | None:
+def finalise_case(case_id: str) -> CaseSummary | None:
     """Raises case_stage.StageChangeNotAllowed when the case isn't analysed."""
-    case_stage.finalise(case_id, changed_by)
+    case_stage.finalise(case_id)
     return get_case_summary(case_id)
 

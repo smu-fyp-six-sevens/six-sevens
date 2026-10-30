@@ -10,7 +10,6 @@ import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews
 import DocumentReviewModal from './DocumentReviewModal';
 import type { ReviewLink } from './DocumentReviewModal';
 import { ErrorMessage } from '../../components/ErrorMessage';
-import { useFindingReviewsOn } from '../../lib/appSettings';
 
 // The group cross-document findings sit in: they belong to the case, not to one document.
 const CASE_GROUP_ID = '__case__';
@@ -227,12 +226,16 @@ export function CaseRiskCard({
   caseId,
   caseDocuments = [],
   readOnly = false,
+  reviewsRequired,
 }: {
   risk: CaseRisk | null;
   caseId: string;
   caseDocuments?: DocumentRecord[];
   // A finalised case: the officer's verdicts and missed issues show, but can't be changed.
   readOnly?: boolean;
+  // Whether the case was created with finding reviews: without them the findings are listed with no ticks, missed
+  // issues or metrics.
+  reviewsRequired: boolean;
 }) {
   const scored = risk?.state === 'scored' && risk.level ? risk : null;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -240,8 +243,7 @@ export function CaseRiskCard({
   const [reviewing, setReviewing] = useState<string | null>(null);
   // Ticks the officer changed but hasn't saved, by row key. A row without one shows its saved verdict.
   const [drafts, setDrafts] = useState<Record<string, boolean>>({});
-  // An admin can turn reviews off (Settings): then the findings are listed with no ticks, missed issues or metrics.
-  const reviewsOn = useFindingReviewsOn();
+  const reviewsOn = reviewsRequired;
   const reviews = useFindingReviews(caseId, scored !== null && reviewsOn);
   const allReviews = reviews.data?.reviews ?? [];
 

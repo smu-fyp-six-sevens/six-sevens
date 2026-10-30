@@ -15,12 +15,6 @@ function seedCase(backend: MockBackend, overrides: Partial<CaseRow> = {}) {
     company_name: 'Acme Trading Pte Ltd',
     status: 'case_analysed',
     findings_to_review: 0,
-    status_history: [
-      { id: 'change-1', case_id: 'case-acme', from_status: null, to_status: 'open', changed_by: 'officer-a', changed_at: '2026-10-01T01:00:00Z' },
-      { id: 'change-2', case_id: 'case-acme', from_status: 'open', to_status: 'processing_documents', changed_by: 'System', changed_at: '2026-10-01T02:00:00Z' },
-      { id: 'change-3', case_id: 'case-acme', from_status: 'ready_for_analysis', to_status: 'pending_evaluation', changed_by: 'System', changed_at: '2026-10-01T03:00:00Z' },
-      { id: 'change-4', case_id: 'case-acme', from_status: 'pending_evaluation', to_status: 'case_analysed', changed_by: 'System', changed_at: '2026-10-01T04:00:00Z' },
-    ],
     ...overrides,
   });
   backend.cases.push(found);

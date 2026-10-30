@@ -235,8 +235,7 @@ class CaseStage(str, Enum):
     (the loan officer's flowchart). Stored in cases.status. Every stage but
     FINALISED follows from the case's documents and its latest analysis (see
     case_stage.derive); FINALISED is set by a loan officer once the case
-    is analysed, and is permanent: the case is view-only. Each change is recorded in
-    case_status_history.
+    is analysed, and is permanent: the case is view-only.
     """
 
     OPEN = "open"                                  # created, no documents yet
@@ -259,17 +258,6 @@ class CaseFailure(str, Enum):
     CASE_ANALYSIS = "case_analysis"                # run the analysis again
 
 
-class CaseStageChange(BaseModel):
-    """One row of case_status_history: the stage a case moved to, when, and who moved it."""
-
-    id: str
-    case_id: str
-    from_status: str | None = None
-    to_status: str
-    changed_by: str
-    changed_at: datetime
-
-
 class CaseRecord(BaseModel):
     # Stages are held as their plain values, so they compare, hash and go into queries as strings.
     model_config = ConfigDict(use_enum_values=True)
@@ -282,6 +270,9 @@ class CaseRecord(BaseModel):
     # Whether every required checklist document must be approved before the case can be analysed. Set once, when the
     # case is created, from that environment's REQUIRE_COMPLETE_CHECKLIST, so every environment judges it the same way.
     checklist_enforced: bool = False
+    # Whether officers mark this case's findings correct or wrong (precision and recall), which finalising then waits
+    # for. Chosen by whoever creates the case, and fixed from then on.
+    reviews_required: bool = True
     # The list of documents to request, read from the recommended_additional_documents column (see the validator); only the case summary returns it.
     additional_documents: AdditionalDocuments | None = Field(default=None, exclude=True)
     created_at: datetime
@@ -541,8 +532,6 @@ class CaseSummary(CaseRecord):
     analysis_ready: bool = False
     # None when the case has never been analysed.
     analysis: CaseAnalysisOverview | None = None
-    # Every stage change, oldest first. Empty when the history couldn't be loaded.
-    status_history: list[CaseStageChange] = Field(default_factory=list)
     # Only while the case is FAILED: which step failed.
     failure: CaseFailure | None = None
     # Only while the case is analysed: how many of its findings still have no verdict (Pending Evaluation until 0).

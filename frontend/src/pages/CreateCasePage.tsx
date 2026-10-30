@@ -26,6 +26,8 @@ export default function CreateCasePage({
   onCreated,
 }: CreateCasePageProps) {
   const [companyName, setCompanyName] = useState('');
+  // Fixed once the case is created: whether its findings are reviewed (precision and recall) before finalising.
+  const [reviewsRequired, setReviewsRequired] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -51,6 +53,7 @@ export default function CreateCasePage({
         },
         body: JSON.stringify({
           company_name: trimmedName,
+          reviews_required: reviewsRequired,
         }),
       });
 
@@ -127,6 +130,28 @@ export default function CreateCasePage({
                   {companyName.length}/{MAX_COMPANY_NAME_LENGTH}
                 </span>
               </div>
+            </div>
+
+            <div className="form-field">
+              <label className="switch">
+                <span>
+                  <span className="switch-name">Review findings</span>
+                  <span className="switch-hint">
+                    Officers mark each finding correct or wrong (precision and recall) before the case can be
+                    finalised. This can't be changed after the case is created.
+                  </span>
+                </span>
+                <span className="switch-control">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={reviewsRequired}
+                    disabled={isSubmitting}
+                    onChange={(event) => setReviewsRequired(event.target.checked)}
+                  />
+                  <span className="switch-track" aria-hidden="true" />
+                </span>
+              </label>
             </div>
 
             {error && <ErrorMessage id="company-name-error" className="form-error" message={error} />}

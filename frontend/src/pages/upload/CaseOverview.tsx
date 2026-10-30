@@ -9,7 +9,6 @@ import type { CaseSection } from './caseSections';
 import { formatUsd, processingTimes } from './processingTimes';
 import { useCaseCost } from './useCaseCost';
 import { CaseOverviewSkeleton } from '../../components/Skeletons';
-import { useFindingReviewsOn } from '../../lib/appSettings';
 
 const SEVERITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2, info: 3 };
 const SHOWN_SEVERITIES = ['high', 'medium', 'low'] as const;
@@ -98,7 +97,9 @@ export function CaseOverview({
   snapshotLoaded,
   caseId,
   onSelectSection,
+  reviewsRequired,
 }: {
+  reviewsRequired: boolean;
   documents: DocumentRecord[];
   flaggedDocuments: DocumentRecord[];
   approvedDocuments: DocumentRecord[];
@@ -110,9 +111,9 @@ export function CaseOverview({
   onSelectSection: (section: CaseSection) => void;
 }) {
   const scored = risk?.state === 'scored' && risk.level;
-  // The officer's reviews of this case's findings (Risk Summary), as precision and recall. An admin can turn
-  // reviews off (Settings): then there is no Detection Accuracy panel and no Review Findings step.
-  const reviewsOn = useFindingReviewsOn();
+  // The officer's reviews of this case's findings (Risk Summary), as precision and recall. A case created without
+  // reviews has no Detection Accuracy panel and no Review Findings step.
+  const reviewsOn = reviewsRequired;
   const accuracy = useFindingReviews(caseId, reviewsOn).data;
   const reviewed = accuracy ? accuracy.case.correct + accuracy.case.wrong + accuracy.case.missed : 0;
   const checksByReviews = [...(accuracy?.case.by_check ?? [])]

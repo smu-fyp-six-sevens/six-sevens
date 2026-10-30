@@ -163,7 +163,7 @@ export async function getCaseAnalysis(caseId: string): Promise<CaseAnalysis | nu
   return (await response.json()) as CaseAnalysis;
 }
 
-// The officer acknowledges an analysed case's submission; recorded in its stage history under their username.
+// The officer acknowledges an analysed case's submission; recorded in the audit trail under their username.
 export async function finaliseCase(caseId: string): Promise<CaseRequirementCoverage> {
   const response = await authFetch(`/cases/${caseId}/finalise`, { method: 'POST' });
 

@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 
 from .. import case_report, case_service, document_repository, events
-from ..auth import CurrentUser, current_actor
+from ..auth import current_actor
 from ..case_service import CaseRiskFilter, CaseSort
 from ..labels import requirement_label
 from ..case_stage import StageChangeNotAllowed
@@ -35,17 +35,21 @@ logger = logging.getLogger(__name__)
 
 @router.post("", response_model=CaseRecord, status_code=status.HTTP_201_CREATED)
 async def create_case(
-    user: CurrentUser,
     company_name: str | None = Body(None, embed=True, max_length=MAX_COMPANY_NAME_LENGTH),
+    # Whether officers review this case's findings (precision and recall) before it can be finalised.
+    reviews_required: bool = Body(True, embed=True),
 ) -> CaseRecord:
     case = await to_thread_or_502(
-        case_service.create_case, company_name, user,
+        case_service.create_case, company_name, reviews_required=reviews_required,
         detail="Failed to create the case. Check Supabase table access.",
         log=("Failed to create case",),
     )
     await events.record(officer_event(
         types.CASE_CREATED, case_id=case.id,
-        detail={"company_name": company_name, "greenlink_case_id": case.greenlink_case_id},
+        detail={
+            "company_name": company_name, "greenlink_case_id": case.greenlink_case_id,
+            "reviews_required": reviews_required, "checklist_enforced": case.checklist_enforced,
+        },
     ))
     return case
 
@@ -139,9 +143,9 @@ async def update_case(
     return updated
 
 
-async def _change_stage(change, case_id: str, user: str, action: str) -> CaseSummary:
+async def _change_stage(change, case_id: str, action: str) -> CaseSummary:
     try:
-        updated = await asyncio.to_thread(change, case_id, user)
+        updated = await asyncio.to_thread(change, case_id)
     except StageChangeNotAllowed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except Exception as exc:
@@ -156,12 +160,12 @@ async def _change_stage(change, case_id: str, user: str, action: str) -> CaseSum
 
 
 @router.post("/{case_id}/finalise", response_model=CaseSummary)
-async def finalise_case(user: CurrentUser, case_id: str, case: CaseRecord = Depends(get_case_or_404)) -> CaseSummary:
+async def finalise_case(case_id: str, case: CaseRecord = Depends(get_case_or_404)) -> CaseSummary:
     """
-    The loan officer acknowledges an analysed case's submission. Recorded in its stage history under their
-    username. Permanent: the case is then view-only and takes no changes.
+    The loan officer acknowledges an analysed case's submission. Recorded in the audit trail (case.finalised) under
+    their username. Permanent: the case is then view-only and takes no changes, except notes and the report export.
     """
-    updated = await _change_stage(case_service.finalise_case, case_id, user, "finalise")
+    updated = await _change_stage(case_service.finalise_case, case_id, "finalise")
     await events.record(officer_event(types.CASE_FINALISED, case_id=case_id, detail={"from": case.status}))
     return updated
 

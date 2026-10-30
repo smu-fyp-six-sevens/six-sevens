@@ -68,6 +68,7 @@ export default function UploadPage({
     setDocumentDetails,
     fulfilledRequirements,
     unapprovedRequirements,
+    reviewsRequired,
     proofOfAddressCoverage,
     idDocumentCoverage,
     risk,
@@ -304,6 +305,7 @@ export default function UploadPage({
 
           {activeSection === 'summary' && (
             <CaseOverview
+              reviewsRequired={reviewsRequired}
               documents={documents}
               flaggedDocuments={flaggedDocuments}
               approvedDocuments={approvedDocuments}
@@ -480,7 +482,15 @@ export default function UploadPage({
             )
           )}
 
-          {activeSection === 'risk' && <CaseRiskCard risk={risk} caseId={selectedCase.id} caseDocuments={documents} readOnly={isFinalised} />}
+          {activeSection === 'risk' && (
+            <CaseRiskCard
+              risk={risk}
+              caseId={selectedCase.id}
+              caseDocuments={documents}
+              readOnly={isFinalised}
+              reviewsRequired={reviewsRequired}
+            />
+          )}
 
           {activeSection === 'analysis' && (
             <CaseAnalysisCard

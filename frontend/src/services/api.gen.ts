@@ -345,8 +345,8 @@ export interface paths {
         put?: never;
         /**
          * Finalise Case
-         * @description The loan officer acknowledges an analysed case's submission. Recorded in its stage history under their
-         *     username. Permanent: the case is then view-only and takes no changes.
+         * @description The loan officer acknowledges an analysed case's submission. Recorded in the audit trail (case.finalised) under
+         *     their username. Permanent: the case is then view-only and takes no changes, except notes and the report export.
          */
         post: operations["finalise_case_cases__case_id__finalise_post"];
         delete?: never;
@@ -1357,43 +1357,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Settings */
-        get: operations["get_settings_settings_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/settings/finding-reviews": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set Finding Reviews
-         * @description Turns finding reviews on or off for every officer. Admin only. Reviews already saved are kept either way.
-         */
-        put: operations["set_finding_reviews_settings_finding_reviews_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/ws/tickets": {
         parameters: {
             query?: never;
@@ -1846,13 +1809,6 @@ export interface components {
             /** Text */
             text: string;
         };
-        /** AppSettings */
-        AppSettings: {
-            /** Finding Reviews Enabled */
-            finding_reviews_enabled: boolean;
-            /** Is Admin */
-            is_admin: boolean;
-        };
         /** BenfordAnalysis */
         BenfordAnalysis: {
             /** Chi Square */
@@ -1887,6 +1843,11 @@ export interface components {
         Body_create_case_cases_post: {
             /** Company Name */
             company_name?: string | null;
+            /**
+             * Reviews Required
+             * @default true
+             */
+            reviews_required: boolean;
         };
         /** Body_upload_documents_batch_documents_upload_batch_post */
         Body_upload_documents_batch_documents_upload_batch_post: {
@@ -2213,6 +2174,11 @@ export interface components {
             processing_ms: number | null;
             /** Recommended Documents */
             recommended_documents: string[] | null;
+            /**
+             * Reviews Required
+             * @default true
+             */
+            reviews_required: boolean;
             risk: components["schemas"]["CaseRisk"] | null;
             /** @default open */
             status: components["schemas"]["CaseStage"];
@@ -2294,6 +2260,11 @@ export interface components {
             greenlink_case_id: string;
             /** Id */
             id: string;
+            /**
+             * Reviews Required
+             * @default true
+             */
+            reviews_required: boolean;
             /** @default open */
             status: components["schemas"]["CaseStage"];
             /**
@@ -2353,32 +2324,10 @@ export interface components {
          *     (the loan officer's flowchart). Stored in cases.status. Every stage but
          *     FINALISED follows from the case's documents and its latest analysis (see
          *     case_stage.derive); FINALISED is set by a loan officer once the case
-         *     is analysed, and is permanent: the case is view-only. Each change is recorded in
-         *     case_status_history.
+         *     is analysed, and is permanent: the case is view-only.
          * @enum {string}
          */
         CaseStage: "open" | "processing_documents" | "pending_review" | "documents_incomplete" | "fraud_detection" | "ready_for_analysis" | "pending_evaluation" | "case_analysed" | "finalised" | "failed";
-        /**
-         * CaseStageChange
-         * @description One row of case_status_history: the stage a case moved to, when, and who moved it.
-         */
-        CaseStageChange: {
-            /** Case Id */
-            case_id: string;
-            /**
-             * Changed At
-             * Format: date-time
-             */
-            changed_at: string;
-            /** Changed By */
-            changed_by: string;
-            /** From Status */
-            from_status: string | null;
-            /** Id */
-            id: string;
-            /** To Status */
-            to_status: string;
-        };
         /**
          * CaseSummary
          * @description documents_status, fulfilled_requirements and missing_requirements are all
@@ -2419,11 +2368,14 @@ export interface components {
             /** Missing Requirements */
             missing_requirements: string[];
             proof_of_address_coverage: components["schemas"]["ProofOfAddressCoverage"];
+            /**
+             * Reviews Required
+             * @default true
+             */
+            reviews_required: boolean;
             risk: components["schemas"]["CaseRisk"] | null;
             /** @default open */
             status: components["schemas"]["CaseStage"];
-            /** Status History */
-            status_history: components["schemas"]["CaseStageChange"][];
             /** Unapproved Requirements */
             unapproved_requirements: string[];
             /**
@@ -3899,11 +3851,6 @@ export interface components {
          * @enum {string}
          */
         RoutingStatus: "accepted" | "manual_review";
-        /** SetFindingReviewsRequest */
-        SetFindingReviewsRequest: {
-            /** Enabled */
-            enabled: boolean;
-        };
         /**
          * SetFindingVerdictRequest
          * @description Marks one finding correct or wrong; verdict null clears the officer's mark.
@@ -6668,72 +6615,6 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
-                };
-            };
-        };
-    };
-    get_settings_settings_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppSettings"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_finding_reviews_settings_finding_reviews_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetFindingReviewsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppSettings"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

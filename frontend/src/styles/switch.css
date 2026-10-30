@@ -1,16 +1,9 @@
 /* ================================
-   Settings (pages/SettingsPage.tsx)
+   On/off switch (e.g. the Create Case form's finding reviews)
    ================================ */
 
-.settings-card {
-  padding: 16px 20px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-}
-
-/* A name on the left, an on/off switch on the right. */
-.settings-switch {
+/* A name (and a hint under it) on the left, the switch on the right. */
+.switch {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -18,19 +11,27 @@
   cursor: pointer;
 }
 
-.settings-switch-name {
+.switch-name {
+  display: block;
   font-size: 14.5px;
   font-weight: 600;
 }
 
+.switch-hint {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
 /* The switch is drawn over a real checkbox, so it keeps the checkbox's keyboard and screen-reader behaviour. */
-.settings-switch-control {
+.switch-control {
   position: relative;
   display: inline-flex;
   flex-shrink: 0;
 }
 
-.settings-switch-control input {
+.switch-control input {
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -41,11 +42,11 @@
   cursor: pointer;
 }
 
-.settings-switch-control input:disabled {
+.switch-control input:disabled {
   cursor: not-allowed;
 }
 
-.settings-switch-track {
+.switch-track {
   position: relative;
   width: 40px;
   height: 22px;
@@ -54,7 +55,7 @@
   transition: background 0.15s;
 }
 
-.settings-switch-track::after {
+.switch-track::after {
   position: absolute;
   top: 3px;
   left: 3px;
@@ -67,22 +68,18 @@
   transition: transform 0.15s;
 }
 
-.settings-switch-control input:checked + .settings-switch-track {
+.switch-control input:checked + .switch-track {
   background: var(--teal);
 }
 
-.settings-switch-control input:checked + .settings-switch-track::after {
+.switch-control input:checked + .switch-track::after {
   transform: translateX(18px);
 }
 
-.settings-switch-control input:focus-visible + .settings-switch-track {
+.switch-control input:focus-visible + .switch-track {
   box-shadow: 0 0 0 3px var(--steel-a25);
 }
 
-.settings-switch-control input:disabled + .settings-switch-track {
+.switch-control input:disabled + .switch-track {
   opacity: 0.55;
-}
-
-.settings-error {
-  margin-top: 12px;
 }

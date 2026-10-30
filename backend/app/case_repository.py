@@ -5,12 +5,14 @@ from datetime import datetime, timezone
 
 from postgrest import CountMethod
 
-from .models import AdditionalDocuments, CaseRecord, CaseStageChange
+from .models import AdditionalDocuments, CaseRecord
 from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import fetch_all, row as _row
 
 
-def create_case(company_name: str | None = None, *, checklist_enforced: bool = False) -> CaseRecord:
+def create_case(
+    company_name: str | None = None, *, checklist_enforced: bool = False, reviews_required: bool = True,
+) -> CaseRecord:
     now = datetime.now(timezone.utc)
 
     # greenlink_case_id is intentionally omitted — it's assigned by a DB
@@ -21,6 +23,7 @@ def create_case(company_name: str | None = None, *, checklist_enforced: bool = F
         "company_name": company_name,
         "status": "open",
         "checklist_enforced": checklist_enforced,
+        "reviews_required": reviews_required,
         "recommended_additional_documents": [],
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
@@ -134,16 +137,16 @@ def update_case(case_id: str, company_name: str) -> CaseRecord | None:
 
 def delete_case(case_id: str) -> None:
     """
-    Removes the case's analysis runs, saved risk history, flags, notes, finding reviews and stage history, and then its row. Callers delete
-    its documents first. These are historical per-analysis rows, but a foreign key can prevent
-    deleting the case until they are removed.
+    Removes the case's analysis runs, saved risk history, flags, notes and finding reviews, and then its row. Callers
+    delete its documents first. These are historical per-analysis rows, but a foreign key can prevent deleting the case
+    until they are removed.
 
     Uses the service client so row-level security cannot turn this into a
     no-op that still looks successful. An empty result means the row is
     still there.
     """
     client = service_supabase_client()
-    for table in ("risk_scores", "case_analysis_runs", "flags", "case_notes", "finding_reviews", "case_status_history"):
+    for table in ("risk_scores", "case_analysis_runs", "flags", "case_notes", "finding_reviews"):
         client.table(table).delete().eq("case_id", case_id).execute()
     result = client.table("cases").delete().eq("id", case_id).execute()
     if not result.data:
@@ -170,28 +173,3 @@ def set_status(case_id: str, expected: str, status: str) -> bool:
         .execute()
     )
     return bool(result.data)
-
-
-def add_status_change(case_id: str, from_status: str | None, to_status: str, changed_by: str) -> CaseStageChange:
-    row = {
-        "id": str(uuid.uuid4()),
-        "case_id": case_id,
-        "from_status": from_status,
-        "to_status": to_status,
-        "changed_by": changed_by,
-        "changed_at": datetime.now(timezone.utc).isoformat(),
-    }
-    result = supabase_client.table("case_status_history").insert(row).execute()
-    return CaseStageChange(**_row(result.data[0]))
-
-
-def list_status_history(case_id: str) -> list[CaseStageChange]:
-    """Every stage change of the case, oldest first."""
-    result = (
-        supabase_client.table("case_status_history")
-        .select("*")
-        .eq("case_id", case_id)
-        .order("changed_at")
-        .execute()
-    )
-    return [CaseStageChange(**_row(row)) for row in result.data]

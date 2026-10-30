@@ -6,13 +6,16 @@ Open product and platform work only: remove an item once it's done. Elsewhere: c
 
 check if audit trail watches for cancel/retry etc.
 
+## Database
+
+- **Run part 2 of `backend/sql/0002_integration_branch.sql`** (the drops), unless already run. Keep prod unused until `integration` is deployed: `main`'s code still writes what it drops.
+
 ## Product
 
-- **Automatic case analysis** (this sprint). The officer clicks it today. Not built: the gate on every document completion, supersede with a run-id fence, debounce and a re-run cap (`CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0). Decide `submission_finalized`'s shape here: keep it stored, or compute it inside the gate and delete the debounce machinery (`REFACTORING_AUDIT.md` backend 2.3).
+- **Automatic case analysis** (this sprint). The officer clicks it today. Not built: the gate on every document completion, supersede with a run-id fence, debounce and a re-run cap (`CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0).
 - **Case-level flags.** Cross-document and identity findings live only inside each run's JSON (`case_analysis_runs.result.findings`), so there's no row per finding, no status and no dismissal. A case-level flags table and module would give them that.
 - **Officer review of flags.** `flags` has `status`, `reviewed_by` and `reviewed_at`, but no endpoint or UI uses them. Needs an endpoint, a UI, and a decision on how a dismissal affects the score.
 - **Guard against repeated runs.** Each "Run again" spends about 12k tokens even when nothing changed; skipping a run whose fingerprint matches the last complete one would stop that, but changes what the button does.
-- **Flags for older documents.** Documents detected before `flags` was wired have a report but no flag rows, and approved documents can't re-run detection.
 - **Agent-raised findings.** A specialist can only assess findings a tool returns; something it notices itself (a "modified copy" subject) appears in its summary but never scores. Needs a way to raise a finding that cites the field it read.
 
 ## Claude models

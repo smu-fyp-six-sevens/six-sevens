@@ -5,7 +5,6 @@ import AppHeader from '../components/AppHeader';
 import HeaderFilter, { type FilterOption } from '../components/HeaderFilter';
 import { RefreshButton } from '../components/RefreshButton';
 import { DashboardSkeleton } from '../components/Skeletons';
-import { useFindingReviewsOn } from '../lib/appSettings';
 import { InfoIcon, InfoLabel } from '../components/InfoTip';
 import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
 import { CASE_STAGES, caseStageLabel, caseStageTone } from '../utils/caseStages';
@@ -215,10 +214,7 @@ export default function DashboardPage({
   const [role, setRole] = useState<Role>('Analyst');
   // The tab lives in the URL, so a reload stays on it.
   const [searchParams, setSearchParams] = useSearchParams();
-  // The Accuracy tab and summary come from officers' finding reviews, which an admin can turn off (Settings).
-  const reviewsOn = useFindingReviewsOn();
-  const tabs = reviewsOn ? DASHBOARD_TABS : DASHBOARD_TABS.filter((item) => item !== 'Accuracy');
-  const tab = tabs.find((item) => item.toLowerCase() === searchParams.get('tab')) ?? 'Overview';
+  const tab = DASHBOARD_TABS.find((item) => item.toLowerCase() === searchParams.get('tab')) ?? 'Overview';
   const setTab = (next: DashboardTab) => setSearchParams((params) => {
     if (next === 'Overview') params.delete('tab');
     else params.set('tab', next.toLowerCase());
@@ -372,7 +368,7 @@ export default function DashboardPage({
           <div className="dashboard-content dashboard-sticky-content">
           <div className="dashboard-section-bar">
             <nav className="dashboard-tabs" aria-label="Dashboard sections">
-              {tabs.map((item) => {
+              {DASHBOARD_TABS.map((item) => {
                 // No count until the real cases arrive: before that the list is the sample cases.
                 const count = isLoading ? null : item === 'Cases' ? visibleCases.length : item === 'Flags' ? flagRows.length : null;
                 return (
@@ -429,7 +425,7 @@ export default function DashboardPage({
               <p className="snapshot-note"><InfoIcon /> Consider document findings, case status and review context alongside the risk score.</p>
             </article>
           </section>
-          {reviewsOn && <DetectionAccuracySummary filters={accuracyFilters} onViewAll={() => setTab('Accuracy')} />}
+          <DetectionAccuracySummary filters={accuracyFilters} onViewAll={() => setTab('Accuracy')} />
           <CaseTable cases={visibleCases.slice(0, 5)} heading="Recent cases" onOpenCase={openCase} showRiskAnalysis />
           </>}
 
@@ -449,7 +445,7 @@ export default function DashboardPage({
               <footer className="table-footer"><span>Showing <strong>{flagRows.length}</strong> flag categories</span></footer>
             </section>
           </>}
-          {tab === 'Accuracy' && reviewsOn && <DetectionAccuracyPanel filters={accuracyFilters} />}
+          {tab === 'Accuracy' && <DetectionAccuracyPanel filters={accuracyFilters} />}
           </>}
         </div>
       </main>

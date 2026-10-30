@@ -83,13 +83,14 @@ export interface CaseRow {
   company_name: string | null;
   // A CaseStage (backend/app/models.py): what the queue filters and counts on.
   status: string;
-  // Every stage change, oldest first, and what a failed case needs fixed (backend/app/case_stage.py).
-  status_history?: { id: string; case_id: string; from_status: string | null; to_status: string; changed_by: string; changed_at: string }[];
+  // What a failed case needs fixed (backend/app/case_stage.py).
   failure?: string | null;
   // While analysed: findings without the officer's verdict; finalising waits for 0.
   findings_to_review?: number | null;
   // Whether the case needs every required document approved before analysis (set when it is created).
   checklist_enforced: boolean;
+  // Whether officers review this case's findings before it can be finalised (chosen when it is created).
+  reviews_required: boolean;
   missing_requirements: string[];
   // What the analysis waits for: required items no approved document covers; empty unless checklist_enforced.
   unapproved_requirements: string[];
@@ -180,6 +181,7 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
     company_name: 'Harbor Light Shipping Pte Ltd',
     status: 'open',
     checklist_enforced: false,
+    reviews_required: true,
     missing_requirements: [],
     unapproved_requirements: [],
     created_at: ISO,
@@ -319,9 +321,6 @@ export class MockBackend {
   traces: Record<string, unknown> = {};
   /** What the content guard found at ingest, per document id (GET .../content-guard); none = checked, nothing found. */
   contentGuards: Record<string, unknown> = {};
-  /** App settings (GET /settings): whether officers review findings, and whether the signed-in officer is an admin. */
-  findingReviewsEnabled = true;
-  isAdmin = false;
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
   /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
@@ -559,12 +558,13 @@ export class MockBackend {
       return found ? json(this.listItem(found)) : json({ detail: 'Case not found' }, 404);
     }
     if (path === '/cases' && method === 'POST') {
-      const companyName = (body as { company_name?: string } | null)?.company_name ?? null;
+      const request = body as { company_name?: string; reviews_required?: boolean } | null;
       const next = this.cases.length + 1;
       const created = makeCase({
         id: `case-new-${next}`,
         greenlink_case_id: `GLDB-${9000 + next}`,
-        company_name: companyName,
+        company_name: request?.company_name ?? null,
+        reviews_required: request?.reviews_required ?? true,
       });
       this.cases.push(created);
       return json(created, 201);
@@ -573,18 +573,10 @@ export class MockBackend {
     if (costMatch && method === 'GET') {
       return json(this.caseCost(costMatch[1]));
     }
-    // Same rules as routers/settings.py: every officer reads the settings, only an admin changes them.
-    if (method === 'GET' && path === '/settings') {
-      return json({ finding_reviews_enabled: this.findingReviewsEnabled, is_admin: this.isAdmin });
-    }
-    if (method === 'PUT' && path === '/settings/finding-reviews') {
-      if (!this.isAdmin) return json({ detail: 'Only an admin can change this setting.' }, 403);
-      this.findingReviewsEnabled = (body as { enabled: boolean }).enabled;
-      return json({ finding_reviews_enabled: this.findingReviewsEnabled, is_admin: true });
-    }
-    // With reviews turned off, routers/finding_reviews.py refuses every review route.
-    if (!this.findingReviewsEnabled && (/^\/cases\/[^/]+\/finding-reviews/.test(path) || path === '/detection-metrics')) {
-      return json({ detail: 'Finding reviews are turned off by an admin.' }, 409);
+    // Like routers/finding_reviews.py: a case created without reviews refuses every review route.
+    const reviewedCase = path.match(/^\/cases\/([^/]+)\/finding-reviews/);
+    if (reviewedCase && this.cases.find((c) => c.id === reviewedCase[1])?.reviews_required === false) {
+      return json({ detail: 'This case was created without finding reviews.' }, 409);
     }
     // Officers' reviews of findings (precision/recall): none recorded, so every rate is "nothing to measure".
     if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {
@@ -666,7 +658,7 @@ export class MockBackend {
           .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)),
       );
     }
-    // The officer finalising a case (permanent): recorded in its stage history under the signed-in user.
+    // The officer finalising a case (permanent).
     const stageMatch = path.match(/^\/cases\/([^/]+)\/(finalise)$/);
     if (stageMatch && method === 'POST') {
       const found = this.cases.find((c) => c.id === stageMatch[1]);
@@ -674,12 +666,7 @@ export class MockBackend {
       if (found.status !== 'case_analysed') {
         return json({ detail: 'Only an analysed case, with its findings evaluated, can be finalised.' }, 409);
       }
-      const from = found.status;
       found.status = 'finalised';
-      found.status_history = [
-        ...(found.status_history ?? []),
-        { id: `change-${(found.status_history ?? []).length + 1}`, case_id: found.id, from_status: from, to_status: found.status, changed_by: 'officer-a', changed_at: new Date().toISOString() },
-      ];
       return json(found);
     }
     const notesMatch = path.match(/^\/cases\/([^/]+)\/notes$/);

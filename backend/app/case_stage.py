@@ -1,12 +1,11 @@
 """
-Tracks which stage each case is at (models.CaseStage) and records every
-change — the stage, when, and who — in case_status_history.
+Tracks which stage each case is at (models.CaseStage, stored in cases.status).
 
 Stages before FINALISED follow from the case itself, so the system moves the
-case through them (recorded as SYSTEM) whenever a document or the case
-analysis changes — see document_repository._sync_case and
-case_pipeline/service.py. A loan officer finalises an analysed case, recorded
-under their username; finalising is permanent and the case is then view-only.
+case through them whenever a document or the case analysis changes — see
+document_repository._sync_case and case_pipeline/service.py. A loan officer
+finalises an analysed case (the case.finalised audit event records who);
+finalising is permanent and the case is then view-only.
 
 A case holds many documents at different points, so its stage is the one of
 the document furthest behind, the most urgent first (see document_stage):
@@ -20,7 +19,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import app_settings_repository, case_repository, detection_results, document_repository, finding_reviews_repository
+from . import case_repository, detection_results, document_repository, finding_reviews_repository
 from .case_pipeline import repository as analysis_repository, state as analysis_state
 from .case_pipeline.readiness import unapproved_requirements
 from .models import (
@@ -28,7 +27,6 @@ from .models import (
     CaseFailure,
     CaseRecord,
     CaseStage,
-    CaseStageChange,
     ContributingFinding,
     DocumentRecord,
     DocumentStatus,
@@ -115,9 +113,9 @@ def analysis_stage(case: CaseRecord, documents: list[DocumentRecord]) -> StageRe
     shows (case_pipeline/state.py); otherwise the case is ready to be
     analysed again. A running analysis keeps the case at Ready for Analysis. A
     complete one is Pending Evaluation until the officer has marked every
-    finding correct or wrong (precision and recall), then Case Analysed. With
-    finding reviews turned off by an admin, nobody can mark findings, so a
-    complete analysis is Case Analysed straight away.
+    finding correct or wrong (precision and recall), then Case Analysed. A
+    case created without reviews (cases.reviews_required) is Case Analysed
+    straight away.
     """
     analysis = analysis_repository.get_latest_summary(case.id)
     if analysis is None:
@@ -136,7 +134,7 @@ def analysis_stage(case: CaseRecord, documents: list[DocumentRecord]) -> StageRe
     findings = analysis.risk.contributing_findings if analysis.risk else []
     if (
         findings
-        and app_settings_repository.get_finding_reviews_enabled()
+        and case.reviews_required
         and count_unreviewed(findings, finding_reviews_repository.list_for_case(case.id))
     ):
         return StageResult(CaseStage.PENDING_EVALUATION)
@@ -189,39 +187,29 @@ def count_unreviewed(findings: list[ContributingFinding], reviews: list[FindingR
     return sum(1 for f in findings if (f.finding_id, f.summary) not in reviewed)
 
 
-def _move(case: CaseRecord, to_stage: CaseStage, changed_by: str) -> CaseStageChange | None:
-    """Records the change unless the case is already there, or another process moved it first."""
+def _move(case: CaseRecord, to_stage: CaseStage) -> bool:
+    """Whether this call moved the case: not if it is already there, or another process moved it first."""
     if case.status == to_stage.value:
-        return None
-    if not case_repository.set_status(case.id, case.status, to_stage.value):
-        return None
-    return case_repository.add_status_change(case.id, case.status, to_stage.value, changed_by)
+        return False
+    return case_repository.set_status(case.id, case.status, to_stage.value)
 
 
-def record_created(case: CaseRecord, changed_by: str) -> None:
-    """The first history row: the case was opened. Never raises — the case itself already exists."""
-    try:
-        case_repository.add_status_change(case.id, None, case.status, changed_by)
-    except Exception:
-        logger.exception("Failed to record the opening stage of case %s", case.id)
-
-
-def sync_case_stage(case_id: str) -> CaseStageChange | None:
+def sync_case_stage(case_id: str) -> bool:
     """Moves the case to the stage its documents and analysis now put it at. A finalised case stays put."""
     with _case_locks[case_id]:
         case = case_repository.get_case(case_id)
         if case is None or case.status == CaseStage.FINALISED.value:
-            return None
-        return _move(case, derive(case).stage, SYSTEM)
+            return False
+        return _move(case, derive(case).stage)
 
 
-def finalise(case_id: str, changed_by: str) -> CaseStageChange | None:
+def finalise(case_id: str) -> bool:
     """An officer closes an analysed case. Brings the stage up to date first, so a pending sync can't block it."""
     with _case_locks[case_id]:
         sync_case_stage(case_id)
         case = case_repository.get_case(case_id)
         if case is None:
-            return None
+            return False
         if case.status == CaseStage.FINALISED.value:
             raise StageChangeNotAllowed("The case is already finalised.")
         if case.status == CaseStage.PENDING_EVALUATION.value:
@@ -230,7 +218,7 @@ def finalise(case_id: str, changed_by: str) -> CaseStageChange | None:
             )
         if case.status not in _FINALISABLE:
             raise StageChangeNotAllowed("Only an analysed case, with its findings evaluated, can be finalised.")
-        return _move(case, CaseStage.FINALISED, changed_by)
+        return _move(case, CaseStage.FINALISED)
 
 
 def sync_all_cases() -> int:
@@ -248,7 +236,7 @@ def sync_all_cases() -> int:
     moved = 0
     for case_id in case_ids:
         try:
-            if sync_case_stage(case_id) is not None:
+            if sync_case_stage(case_id):
                 moved += 1
         except Exception:
             logger.exception("Failed to bring the stage of case %s up to date", case_id)

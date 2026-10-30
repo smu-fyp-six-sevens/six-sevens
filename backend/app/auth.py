@@ -151,16 +151,6 @@ def require_auth(authorization: str | None = Header(default=None)) -> str:
 CurrentUser = Annotated[str, Depends(require_auth)]
 
 
-def is_admin(username: str) -> bool:
-    return username in settings.ADMIN_USERS
-
-
-def require_admin(user: CurrentUser) -> str:
-    """Rejects a signed-in officer who isn't an admin (settings.ADMIN_USERS); returns the admin's username."""
-    if not is_admin(user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only an admin can change this setting.")
-    return user
-
 # The signed-in officer for the current request, so events record who acted without every handler passing it.
 _actor: ContextVar[str | None] = ContextVar("actor", default=None)
 

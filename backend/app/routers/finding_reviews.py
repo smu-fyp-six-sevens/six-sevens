@@ -3,7 +3,8 @@ Loan officers' reviews of detection findings, and the precision and recall per c
 
 On the case page an officer marks each finding correct or wrong, per document and for the cross-document
 findings, and reports issues detection missed against the check that should have caught them. Every change
-returns the case's reviews and metrics afresh, so the page never computes them itself.
+returns the case's reviews and metrics afresh, so the page never computes them itself. Only a case created
+with reviews (cases.reviews_required) takes them.
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from .. import (
-    app_settings_repository,
     case_service,
     case_stage,
     detection_metrics,
@@ -34,15 +34,21 @@ from ._dependencies import bad_gateway_on_error, get_case_or_404, get_editable_c
 from ..snapshots import push_case_snapshot
 
 
-
-async def _require_reviews_on() -> None:
-    """Every route here, reads included: with finding reviews turned off (routers/settings.py), nobody marks
-    findings or sees the precision and recall they give."""
-    if not await asyncio.to_thread(app_settings_repository.get_finding_reviews_enabled):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Finding reviews are turned off by an admin.")
+def _taking_reviews(case: CaseRecord) -> CaseRecord:
+    if not case.reviews_required:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This case was created without finding reviews.")
+    return case
 
 
-router = APIRouter(tags=["finding-reviews"], dependencies=[Depends(_require_reviews_on)])
+async def _reviewed_case(case: CaseRecord = Depends(get_case_or_404)) -> CaseRecord:
+    return _taking_reviews(case)
+
+
+async def _editable_reviewed_case(case: CaseRecord = Depends(get_editable_case_or_404)) -> CaseRecord:
+    return _taking_reviews(case)
+
+
+router = APIRouter(tags=["finding-reviews"])
 logger = logging.getLogger(__name__)
 
 _SAVE_FAILED = "Failed to save the review. Check Supabase table access."
@@ -88,7 +94,7 @@ async def _record_saved(case_id: str, verdicts: list[tuple[str, str | None, str 
 
 
 @router.get("/cases/{case_id}/finding-reviews", response_model=CaseFindingReviews)
-async def get_case_finding_reviews(case_id: str, case: CaseRecord = Depends(get_case_or_404)) -> CaseFindingReviews:
+async def get_case_finding_reviews(case_id: str, case: CaseRecord = Depends(_reviewed_case)) -> CaseFindingReviews:
     """Every review in the case, with precision and recall per document, across documents and for the case."""
     with bad_gateway_on_error(
         "Failed to load the case's reviews. Check Supabase table access.", "Failed to list reviews for case %s", case_id
@@ -98,7 +104,7 @@ async def get_case_finding_reviews(case_id: str, case: CaseRecord = Depends(get_
 
 @router.put("/cases/{case_id}/finding-reviews/verdict", response_model=CaseFindingReviews)
 async def set_finding_verdict(
-    case_id: str, request: SetFindingVerdictRequest, user: CurrentUser, case: CaseRecord = Depends(get_editable_case_or_404),
+    case_id: str, request: SetFindingVerdictRequest, user: CurrentUser, case: CaseRecord = Depends(_editable_reviewed_case),
 ) -> CaseFindingReviews:
     """Marks one finding correct or wrong, signed by the officer; a null verdict clears the mark. Any officer
     can change a verdict; the latest one stands."""
@@ -120,7 +126,7 @@ async def set_finding_verdict(
 
 @router.put("/cases/{case_id}/finding-reviews/verdicts", response_model=CaseFindingReviews)
 async def set_finding_verdicts(
-    case_id: str, request: SetFindingVerdictsRequest, user: CurrentUser, case: CaseRecord = Depends(get_editable_case_or_404),
+    case_id: str, request: SetFindingVerdictsRequest, user: CurrentUser, case: CaseRecord = Depends(_editable_reviewed_case),
 ) -> CaseFindingReviews:
     """Saves one group's review in one request: the officer ticked the findings that are real (correct) and left
     the rest (wrong). Every target is checked before anything is written, so a bad entry saves nothing."""
@@ -150,7 +156,7 @@ async def set_finding_verdicts(
     "/cases/{case_id}/finding-reviews/missed", response_model=CaseFindingReviews, status_code=status.HTTP_201_CREATED,
 )
 async def report_missed_issue(
-    case_id: str, request: ReportMissedIssueRequest, user: CurrentUser, case: CaseRecord = Depends(get_editable_case_or_404),
+    case_id: str, request: ReportMissedIssueRequest, user: CurrentUser, case: CaseRecord = Depends(_editable_reviewed_case),
 ) -> CaseFindingReviews:
     """Records an issue no finding raised, against the check that should have caught it: a false negative."""
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to save a missed issue on case %s", case_id):
@@ -171,7 +177,7 @@ async def report_missed_issue(
 @router.patch("/cases/{case_id}/finding-reviews/{review_id}", response_model=CaseFindingReviews)
 async def update_missed_issue(
     case_id: str, review_id: UUID, request: UpdateMissedIssueRequest, user: CurrentUser,
-    case: CaseRecord = Depends(get_editable_case_or_404),
+    case: CaseRecord = Depends(_editable_reviewed_case),
 ) -> CaseFindingReviews:
     """Corrects a reported missed issue (its check or note), e.g. one filed against the wrong check. A verdict
     on a finding is changed by reviewing the finding again, not here."""
@@ -199,7 +205,7 @@ async def update_missed_issue(
 
 @router.delete("/cases/{case_id}/finding-reviews/{review_id}", response_model=CaseFindingReviews)
 async def delete_finding_review(
-    case_id: str, review_id: UUID, case: CaseRecord = Depends(get_editable_case_or_404),
+    case_id: str, review_id: UUID, case: CaseRecord = Depends(_editable_reviewed_case),
 ) -> CaseFindingReviews:
     """Removes a verdict or a missed issue (e.g. one reported by mistake)."""
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to delete review %s", review_id):
