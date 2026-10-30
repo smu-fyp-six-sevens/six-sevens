@@ -127,13 +127,17 @@ SPECIALISTS: dict[str, Specialist] = {
             "External validation (the document's facts against outside references): live ACRA company "
             "records (the UEN exists, name, status, incorporation date, registered address), OneMap and "
             "HDB addresses, and published tables such as CPF rates, the GST rate, IRAS tax rules, a "
-            "bank's published identifiers and the public holidays for GIRO dates. Each tool decides "
+            "bank's published identifiers and the public holidays for GIRO dates. Pages of a multi-page "
+            "document (page consistency): page numbers with gaps or repeats, a balance carried forward that the "
+            "next page doesn't bring forward, a page whose account number or holder differs, a page of another "
+            "size or a scan among digital pages, and duplicated pages. Each tool decides "
             "internally which of its checks apply to this document's type; you only supply the "
             "bindings, from the field list and the check menus."
         ),
         tools=(
             detection_tools.spelling_tool,
             detection_tools.date_consistency_tool,
+            detection_tools.page_consistency_tool,
             numerical_checks_tool,
             external_validation_tool,
         ),
@@ -270,6 +274,9 @@ def _make_agent_node(spec: Specialist):
         model = base.bind_tools(list(spec.tools))
         # First turn must call a tool: a specialist that answers without one has reviewed nothing.
         first_model = base.bind_tools(list(spec.tools), tool_choice="any")
+        # The same tools, none callable: a thinking block is only valid with the tools list it was made with, so
+        # the history can't be sent without them.
+        no_more_tools = base.bind_tools(list(spec.tools), tool_choice={"type": "none"})
 
         existing = state.get("messages") or []
         try:
@@ -284,9 +291,9 @@ def _make_agent_node(spec: Specialist):
             if existing:
                 tool_rounds = sum(1 for m in existing if isinstance(m, AIMessage) and m.tool_calls)
                 if tool_rounds >= _MAX_TOOL_ROUNDS:
-                    # Out of tool budget: one final turn with no tools, so the report still comes back.
+                    # Out of tool budget: one final turn that can't call a tool, so the report still comes back.
                     wrap_up = HumanMessage(content="Tool budget used up. Reply with the JSON report now, with no more tool calls.")
-                    response = await _invoke(lambda: base.ainvoke([*existing, wrap_up]))
+                    response = await _invoke(lambda: no_more_tools.ainvoke([*existing, wrap_up]))
                     telemetry.record_usage(span, response)
                     return {"messages": [wrap_up, response]}
                 # cache_control breakpoint is already in `existing`'s system

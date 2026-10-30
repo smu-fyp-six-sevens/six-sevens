@@ -16,6 +16,7 @@ TOOL_CATEGORIES: dict[str, FindingCategory] = {
     "ai_generation_tool": FindingCategory.TAMPERING_FORENSIC,
     "prompt_injection_tool": FindingCategory.TAMPERING_FORENSIC,
     "numerical_checks_tool": FindingCategory.TAMPERING_FORENSIC,
+    "page_consistency_tool": FindingCategory.TAMPERING_FORENSIC,
     "external_validation_tool": FindingCategory.REGISTRY_DISCREPANCY,
     "company_name_consistency_tool": FindingCategory.CROSS_DOCUMENT_VARIANCE,
     "address_consistency_tool": FindingCategory.CROSS_DOCUMENT_VARIANCE,

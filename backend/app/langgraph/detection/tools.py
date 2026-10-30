@@ -45,6 +45,7 @@ from ...fraud_detection.layout_anomalies import check_layout_anomalies
 from ...fraud_detection.layout_anomalies.extraction import _open_document as _open_layout_document
 from ...fraud_detection.shared.file_facts import describe_file
 from ...fraud_detection.shared.pdf_pages import pages as pdf_pages
+from ...fraud_detection.pages import check_page_consistency
 from ...fraud_detection.authenticity.metadata_analysis import (
     DESCRIPTIVE_METADATA_FIELDS,
     SUPPORTED_METADATA_FIELDS,
@@ -561,6 +562,44 @@ def _text_matches(page: pymupdf.Page, text: str) -> list[pymupdf.Rect]:
         else:
             matches.append(pymupdf.Rect(rect))
     return matches
+
+
+@tool
+async def page_consistency_tool(document_id: Annotated[str, InjectedState("document_id")]) -> dict:
+    """Checks that a multi-page document's pages belong together: the printed page numbers run without gaps or repeats, the balance carried forward from one page is the balance the next page brings forward, identifiers (account number, holder name, UEN) are the same on every page that prints them, no page is a different size or a scan among digital pages, and no page is a copy of another. Catches a page deleted, swapped in from another statement, or duplicated, even when every page looks genuine on its own. Single-page documents have nothing to check."""
+    document = await _document(document_id)
+    if document is None:
+        return _result("page_consistency_tool", [], unable="Document not found")
+
+    file_bytes = await _file_bytes(document_id)
+    if file_bytes is None:
+        return _result("page_consistency_tool", [], unable="Document file is not available in storage")
+
+    fields = await _extracted_fields(document_id)
+    result = await check_page_consistency(document_id, file_bytes, document.filename, fields)
+    if result.unable_to_assess:
+        return _result("page_consistency_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+
+    findings = [
+        {
+            "check_code": finding.check_code,
+            "check_codes": finding.check_codes,
+            "severity_hint": finding.severity,
+            "pages": finding.pages,
+            "stated": finding.stated,
+            "expected": finding.expected,
+            "summary": finding.summary,
+            # Other checks that saw the same page or boundary: one cause, one finding.
+            "evidence": finding.evidence,
+        }
+        for finding in result.findings
+    ]
+    output = _result("page_consistency_tool", _with_ids("page_consistency_tool", findings))
+    output.update(
+        pages_checked=result.pages_checked,
+        skipped=[{"check": s.check_code, "reason": s.reason} for s in result.skipped_checks],
+    )
+    return output
 
 
 @tool
