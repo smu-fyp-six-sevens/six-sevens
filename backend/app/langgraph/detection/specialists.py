@@ -274,6 +274,9 @@ def _make_agent_node(spec: Specialist):
         model = base.bind_tools(list(spec.tools))
         # First turn must call a tool: a specialist that answers without one has reviewed nothing.
         first_model = base.bind_tools(list(spec.tools), tool_choice="any")
+        # The same tools, none callable: a thinking block is only valid with the tools list it was made with, so
+        # the history can't be sent without them.
+        no_more_tools = base.bind_tools(list(spec.tools), tool_choice={"type": "none"})
 
         existing = state.get("messages") or []
         try:
@@ -288,9 +291,9 @@ def _make_agent_node(spec: Specialist):
             if existing:
                 tool_rounds = sum(1 for m in existing if isinstance(m, AIMessage) and m.tool_calls)
                 if tool_rounds >= _MAX_TOOL_ROUNDS:
-                    # Out of tool budget: one final turn with no tools, so the report still comes back.
+                    # Out of tool budget: one final turn that can't call a tool, so the report still comes back.
                     wrap_up = HumanMessage(content="Tool budget used up. Reply with the JSON report now, with no more tool calls.")
-                    response = await _invoke(lambda: base.ainvoke([*existing, wrap_up]))
+                    response = await _invoke(lambda: no_more_tools.ainvoke([*existing, wrap_up]))
                     telemetry.record_usage(span, response)
                     return {"messages": [wrap_up, response]}
                 # cache_control breakpoint is already in `existing`'s system
