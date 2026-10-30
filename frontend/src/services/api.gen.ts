@@ -510,6 +510,28 @@ export interface paths {
         patch: operations["edit_case_note_cases__case_id__notes__note_id__patch"];
         trace?: never;
     };
+    "/cases/{case_id}/report.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Case Report
+         * @description The case report as a PDF download: risk, the case analysis's summary and findings, the recommended additional
+         *     documents, the checklist, the documents and the notes. Before an analysis has finished, a banner says why and
+         *     the analysis sections are left out. Each download is recorded in the case's audit trail.
+         */
+        get: operations["download_case_report_cases__case_id__report_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/detection-metrics": {
         parameters: {
             query?: never;
@@ -5115,6 +5137,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseNote"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_case_report_cases__case_id__report_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The case report as a PDF. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
                 };
             };
             /** @description Validation Error */

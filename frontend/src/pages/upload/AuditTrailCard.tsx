@@ -40,6 +40,7 @@ const ACTION_LABELS: Record<string, string> = {
   'detection.failed': 'Fraud detection run',
   'case.analysis.requested': 'Requested case analysis',
   'case.analysis.completed': 'Case analysis run',
+  'case.report_exported': 'Downloaded case report',
   'note.added': 'Added note',
   'note.edited': 'Edited note',
   'note.deleted': 'Deleted note',

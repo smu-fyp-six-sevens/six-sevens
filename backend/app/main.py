@@ -144,6 +144,8 @@ if settings.CORS_IN_APP:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # So the frontend can read a download's filename (GET /cases/{id}/report.pdf).
+        expose_headers=["Content-Disposition"],
     )
 
 _protected = [Depends(auth.bind_actor)]

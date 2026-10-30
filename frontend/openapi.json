@@ -9057,6 +9057,61 @@
         ]
       }
     },
+    "/cases/{case_id}/report.pdf": {
+      "get": {
+        "description": "The case report as a PDF download: risk, the case analysis's summary and findings, the recommended additional\ndocuments, the checklist, the documents and the notes. Before an analysis has finished, a banner says why and\nthe analysis sections are left out. Each download is recorded in the case's audit trail.",
+        "operationId": "download_case_report_cases__case_id__report_pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {}
+            },
+            "description": "The case report as a PDF."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Case Report",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
     "/detection-metrics": {
       "get": {
         "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created on or after `since` and in these documents statuses, as the dashboard's filters pick.",

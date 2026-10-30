@@ -21,6 +21,22 @@ export async function deleteCase(caseId: string): Promise<void> {
   await assertOk(response, 'Failed to delete case');
 }
 
+// The case report PDF (GET /cases/{id}/report.pdf) and the filename the server gave it ("GLDB-148 Case Report.pdf").
+// The name is built from the case number too, for when a proxy doesn't expose Content-Disposition.
+export async function downloadCaseReport(
+  caseId: string,
+  caseNumber?: string | null,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await authFetch(`/cases/${caseId}/report.pdf`);
+
+  await assertOk(response, 'Failed to download the case report');
+
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const filename =
+    /filename="([^"]+)"/.exec(disposition)?.[1] ?? (caseNumber ? `${caseNumber} Case Report.pdf` : 'Case Report.pdf');
+  return { blob: await response.blob(), filename };
+}
+
 export async function updateCase(caseId: string, companyName: string): Promise<UpdatedCase> {
   const response = await authFetch(`/cases/${caseId}`, {
     method: 'PATCH',

@@ -20,6 +20,7 @@ import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
 import { CaseRiskCard } from './upload/CaseRiskCard';
 import { CaseOverview } from './upload/CaseOverview';
 import { CaseSectionNav } from './upload/CaseSectionNav';
+import { DownloadReportButton } from './upload/DownloadReportButton';
 import { caseSectionStatuses, isCaseSection, type CaseSection } from './upload/caseSections';
 import { FlaggedItemsCard } from './upload/FlaggedItemsCard';
 import { RejectedDocumentsCard } from './upload/RejectedDocumentsCard';
@@ -100,6 +101,7 @@ export default function UploadPage({
   };
 
   const [navCollapsed, setNavCollapsed] = useState(loadNavCollapsed);
+  const [reportError, setReportError] = useState<string | null>(null);
   useEffect(() => {
     try {
       localStorage.setItem(NAV_COLLAPSED_KEY, String(navCollapsed));
@@ -220,29 +222,33 @@ export default function UploadPage({
         ) : (
           <>
             <CaseTitle caseRecord={selectedCase} />
-            <KebabMenu
-              label={isDeletingCase ? 'Deleting case' : 'Case actions'}
-              disabled={isDeletingCase}
-              items={[
-                {
-                  id: 'edit',
-                  label: 'Edit case details',
-                  onSelect: () => setIsEditingCase(true),
-                },
-                {
-                  id: 'delete',
-                  label: isDeletingCase ? 'Deleting…' : 'Delete case',
-                  danger: true,
-                  disabled: isDeletingCase || caseHasInFlightDocument,
-                  onSelect: () => setCaseDeleteOpen(true),
-                },
-              ]}
-            />
+            <span className="case-title-actions">
+              <DownloadReportButton caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} onError={setReportError} />
+              <KebabMenu
+                label={isDeletingCase ? 'Deleting case' : 'Case actions'}
+                disabled={isDeletingCase}
+                items={[
+                  {
+                    id: 'edit',
+                    label: 'Edit case details',
+                    onSelect: () => setIsEditingCase(true),
+                  },
+                  {
+                    id: 'delete',
+                    label: isDeletingCase ? 'Deleting…' : 'Delete case',
+                    danger: true,
+                    disabled: isDeletingCase || caseHasInFlightDocument,
+                    onSelect: () => setCaseDeleteOpen(true),
+                  },
+                ]}
+              />
+            </span>
           </>
         )}
       </CaseHeader>
 
       {deleteError && <ErrorMessage className="toast-error" message={deleteError} />}
+      {reportError && <ErrorMessage className="toast-error" message={reportError} />}
 
       <div className={`case-layout${navCollapsed ? ' case-layout--collapsed' : ''}`}>
         <CaseSectionNav

@@ -403,6 +403,25 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
               ))}
             </ul>
           </div>
+        ) : activeList.length > 0 || riskList.length > 0 ? (
+          // A filter that matches nothing keeps the header, the only place on a wide screen to switch it off.
+          <div className="case-table">
+            <TableHead sort={sort} disabled={false} statusFilter={statusFilter} riskFilter={riskFilter} onSort={changeSort} />
+
+            <div className="case-table-empty">
+              <span>No cases match these filters.</span>
+              <button
+                type="button"
+                className="case-table-clear"
+                onClick={() => {
+                  changeStatuses(new Set());
+                  changeRisks(new Set());
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="no-results">
             {search

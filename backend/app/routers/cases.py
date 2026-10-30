@@ -4,9 +4,10 @@ import asyncio
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 
-from .. import case_service, document_repository, events
+from .. import case_report, case_service, document_repository, events
+from ..auth import current_actor
 from ..case_service import CaseRiskFilter, CaseSort
 from ..events import officer_event, types
 from ._dependencies import get_case_or_404, to_thread_or_502
@@ -189,6 +190,45 @@ async def get_case_match(case_id: str) -> CaseMatchResult:
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
     return result
+
+
+@router.get(
+    "/{case_id}/report.pdf",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}, "description": "The case report as a PDF."}},
+)
+async def download_case_report(case_id: str) -> Response:
+    """
+    The case report as a PDF download: risk, the case analysis's summary and findings, the recommended additional
+    documents, the checklist, the documents and the notes. Before an analysis has finished, a banner says why and
+    the analysis sections are left out. Each download is recorded in the case's audit trail.
+    """
+    actor = current_actor()
+    data = await to_thread_or_502(
+        case_report.gather, case_id, actor,
+        detail="Failed to fetch the case for its report. Check Supabase table access.",
+        log=("Failed to gather the report for case %s", case_id),
+    )
+    if data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    pdf = await to_thread_or_502(
+        case_report.render, data,
+        detail="Failed to build the case report.",
+        log=("Failed to render the report for case %s", case_id),
+    )
+    await events.record(officer_event(
+        types.CASE_REPORT_EXPORTED, case_id=case_id,
+        detail={
+            "analysis_run_id": data.completed.run_id if data.completed else None,
+            "analysis_state": case_report.analysis_state(data.latest),
+        },
+    ))
+    filename = case_report.filename_for(data.summary)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post(

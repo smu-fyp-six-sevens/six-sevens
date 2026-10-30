@@ -49,7 +49,7 @@ plugins:
       origins: [${CORS_ORIGINS}]
       methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
       headers: [Authorization, Content-Type, X-Request-ID]
-      exposed_headers: [X-Request-ID]
+      exposed_headers: [X-Request-ID, Content-Disposition]
       credentials: true
       max_age: 600
   - name: correlation-id
