@@ -44,6 +44,8 @@ from ..fraud_detection.dates.date_anomalies import (
     DateAnomalyResult,
     check_date_anomalies,
 )
+from ..fraud_detection.pages import check_page_consistency
+from ..fraud_detection.pages.models import PageConsistencyResult
 from ..fraud_detection.spelling.spelling_anomaly import SpellingAnomalyResult, check_spelling_anomalies
 from ..fraud_detection.external_validation.runner import ExternalValidationResult, run_external_validation
 
@@ -241,6 +243,14 @@ _CHECKS = [
         lambda d, f, x: check_spelling_anomalies(d.id, f, d.filename, x),
         "Misspellings in the document's text and extracted fields.",
         file=True, fields=True, step="check_spelling_anomaly", trace=_counted("anomalies"),
+    ),
+    _Check(
+        "page-consistency", PageConsistencyResult,
+        lambda d, f, x: check_page_consistency(d.id, f, d.filename, x),
+        "Whether a multi-page PDF's pages belong together: page numbering, balances carried between pages, "
+        "identifiers repeated on each page, a page of another size or a scan among digital pages, and duplicated "
+        "pages. Evidence about the same page or boundary is one finding; `check_codes` lists every check behind it.",
+        file=True, fields=True, step="check_page_consistency", trace=_counted("findings"),
     ),
     _Check(
         "numerical-validation", NumericalValidationResult, _numerical,

@@ -13,7 +13,7 @@ from app.case_pipeline.cross_document import agents
 from app.case_pipeline.cross_document.evidence import CaseContext
 from app.langgraph import _anthropic, pipeline
 from app.langgraph.detection import specialists
-from app.llm_io import ModelRefused, refusal_reason
+from app.llm_io import ModelRefused, refusal_reason, without_thinking
 
 _REFUSAL = {"stop_reason": "refusal", "stop_details": {"type": "refusal", "category": "cyber", "explanation": None}}
 
@@ -90,6 +90,58 @@ async def test_a_specialist_refusal_ends_its_review_with_the_reason_and_does_not
     report = specialists._collect_node({"specialist": "layout_rendering", "brief": "b", "messages": [reply]})["report"]
     assert report["uncertain"] is True
     assert report["uncertainty_reason"] == "Claude declined to process this content. Review the document manually."
+
+
+# --- thinking blocks are only valid with the tools list they were made with ---------------------------
+
+
+async def test_a_specialist_out_of_tool_budget_keeps_its_tools_but_cannot_call_them():
+    base = MagicMock()
+    bound = {}
+
+    def bind(tools, tool_choice=None):
+        model = MagicMock()
+        model.ainvoke = AsyncMock(return_value=AIMessage(content="{}"))
+        bound[str(tool_choice)] = (tools, model)
+        return model
+
+    base.bind_tools.side_effect = bind
+    spec = next(iter(specialists.SPECIALISTS.values()))
+    node = specialists._make_agent_node(spec)
+    rounds = [
+        AIMessage(content="", tool_calls=[{"name": "t", "args": {}, "id": str(n)}])
+        for n in range(specialists._MAX_TOOL_ROUNDS)
+    ]
+
+    with patch.object(_anthropic, "build_chat_anthropic", return_value=base):
+        result = await node({"document_id": "d", "messages": rounds})  # type: ignore[arg-type]
+
+    tools, model = bound["{'type': 'none'}"]
+    assert tools == list(spec.tools)
+    model.ainvoke.assert_awaited_once()
+    base.ainvoke.assert_not_called()
+    assert result["messages"][-1].content == "{}"
+
+
+def test_a_conversation_can_drop_its_thinking_and_keep_everything_else():
+    call = {"name": "vision_llm", "args": {}, "id": "1", "type": "tool_call"}
+    turn = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "", "signature": "abc"},
+            {"type": "redacted_thinking", "data": "xyz"},
+            {"type": "text", "text": "Looking."},
+            {"type": "tool_use", "name": "vision_llm", "input": {}, "id": "1"},
+        ],
+        tool_calls=[call],
+    )
+    question = HumanMessage(content="go")
+
+    kept_question, stripped = without_thinking([question, turn])
+
+    assert kept_question is question
+    assert [block["type"] for block in stripped.content] == ["text", "tool_use"]
+    assert stripped.tool_calls == turn.tool_calls
+    assert turn.content[0]["type"] == "thinking"  # the state's own message is left as it was
 
 
 # --- the cross-document agent asks for its tool ----------------------------------------------------

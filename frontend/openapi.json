@@ -3034,7 +3034,7 @@
         "type": "object"
       },
       "DateAnomalyResult": {
-        "description": "Response for GET /documents/{id}/detection/date-anomalies. Nothing is\npersisted \u2014 a pure read/compute, like the spelling/layout/numerical\nchecks.",
+        "description": "Response for GET /documents/{id}/detection/date-anomalies. A pure\ncompute: no findings are stored, only a step entry on the document's\ntrace (routers/detection.py).",
         "properties": {
           "dates_extracted": {
             "items": {
@@ -5792,7 +5792,7 @@
         "type": "object"
       },
       "NumericalValidationResult": {
-        "description": "Response for GET /documents/{id}/detection/numerical-validation.\nNothing is persisted \u2014 a pure read/compute, like the spelling and\nlayout checks.\n\nTwo independent Benford passes over transaction amounts (all amounts,\nand amounts with likely bank fees excluded) are named benford /\nbenford_excluding_fees; both are None when the document type has no\ntransaction list to run them on.",
+        "description": "Response for GET /documents/{id}/detection/numerical-validation. A pure\ncompute: no findings are stored, only a step entry on the document's\ntrace (routers/detection.py).\n\nTwo independent Benford passes over transaction amounts (all amounts,\nand amounts with likely bank fees excluded) are named benford /\nbenford_excluding_fees. Without a transaction list, benford says why it\ncouldn't run (unable_to_assess) and benford_excluding_fees is None.",
         "properties": {
           "benford": {
             "$ref": "#/components/schemas/BenfordAnalysis"
@@ -6001,6 +6001,136 @@
           "score_if_contradicts"
         ],
         "title": "OutlookRequest",
+        "type": "object"
+      },
+      "PageConsistencyResult": {
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/PageFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "pages_checked": {
+            "title": "Pages Checked",
+            "type": "integer"
+          },
+          "skipped_checks": {
+            "items": {
+              "$ref": "#/components/schemas/SkippedCheck"
+            },
+            "title": "Skipped Checks",
+            "type": "array"
+          },
+          "unable_to_assess": {
+            "title": "Unable To Assess",
+            "type": "boolean"
+          },
+          "unable_to_assess_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unable To Assess Reason"
+          }
+        },
+        "required": [
+          "document_id",
+          "pages_checked",
+          "findings",
+          "skipped_checks",
+          "unable_to_assess",
+          "unable_to_assess_reason"
+        ],
+        "title": "PageConsistencyResult",
+        "type": "object"
+      },
+      "PageFinding": {
+        "properties": {
+          "check_code": {
+            "title": "Check Code",
+            "type": "string"
+          },
+          "check_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Check Codes",
+            "type": "array"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "pages": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "severity": {
+            "enum": [
+              "impossible",
+              "inconsistent",
+              "implausible",
+              "signal"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "stated": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stated"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "check_code",
+          "check_codes",
+          "severity",
+          "pages",
+          "summary",
+          "stated",
+          "expected",
+          "evidence"
+        ],
+        "title": "PageFinding",
         "type": "object"
       },
       "PageMargins": {
@@ -10554,6 +10684,65 @@
           }
         },
         "summary": "Get Numerical Validation",
+        "tags": [
+          "detection"
+        ]
+      }
+    },
+    "/documents/{document_id}/detection/page-consistency": {
+      "get": {
+        "description": "Whether a multi-page PDF's pages belong together: page numbering, balances carried between pages, identifiers repeated on each page, a page of another size or a scan among digital pages, and duplicated pages. Evidence about the same page or boundary is one finding; `check_codes` lists every check behind it.",
+        "operationId": "get_page_consistency_documents__document_id__detection_page_consistency_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageConsistencyResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Page Consistency",
         "tags": [
           "detection"
         ]

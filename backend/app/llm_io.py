@@ -13,6 +13,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
+from langchain_core.messages import AIMessage
 from pydantic import BaseModel, BeforeValidator, ValidationError
 
 from .run_context import record_repair
@@ -35,6 +36,18 @@ def message_text(content: Any) -> str:
         block if isinstance(block, str) else block.get("text", "") if isinstance(block, dict) else ""
         for block in content
     )
+
+
+def without_thinking(messages: list) -> list:
+    """The conversation with the assistant turns' thinking blocks removed, for a call that changes the tools offered."""
+    return [
+        message.model_copy(update={"content": [
+            block for block in message.content
+            if not (isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))
+        ]})
+        if isinstance(message, AIMessage) and isinstance(message.content, list) else message
+        for message in messages
+    ]
 
 
 def parse_json_object(text: str) -> dict | None:

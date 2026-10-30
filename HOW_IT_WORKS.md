@@ -64,7 +64,7 @@ Approval publishes `document.approved`; the detection-worker runs it, **two runs
 | Specialist | Tools (plain code) | Looks for |
 |---|---|---|
 | **Layout & Rendering** | font consistency, layout anomalies, image manipulation, image tampering | odd fonts and sizes, misalignment, text over text, spliced or edited images |
-| **Content Validation** | spelling, date consistency, numerical checks, external validation | typos, impossible dates, sums and balances that don't add up, broken NRIC/UEN/MRZ checksums, a company missing from ACRA, a postal code missing from OneMap, a home address at an office or industrial unit, wrong CPF/GST rates |
+| **Content Validation** | spelling, date consistency, page consistency, numerical checks, external validation | typos, impossible dates, a page missing, swapped in or copied in a multi-page statement, sums and balances that don't add up, broken NRIC/UEN/MRZ checksums, a company missing from ACRA, a postal code missing from OneMap, a home address at an office or industrial unit, wrong CPF/GST rates |
 | **Digital Authenticity** | metadata, AI generation | editing software in the metadata, modified-after-created dates, AI-generated images |
 
    A tool returns *candidate* findings. The specialist gives each a severity or dismisses it as a false positive; it cannot invent findings or change a tool's facts.

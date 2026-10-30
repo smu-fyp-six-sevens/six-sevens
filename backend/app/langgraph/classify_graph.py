@@ -44,7 +44,7 @@ from .rule_classify import classify_by_rules
 from .state import DocumentGraphState
 from .vision_tool import vision_llm
 from ..config import settings
-from ..llm_io import message_text
+from ..llm_io import message_text, without_thinking
 from ..run_context import spend_model_call
 
 logger = logging.getLogger("classifier_pipeline.langgraph.classify")
@@ -115,7 +115,9 @@ async def agent_node(state: DocumentGraphState) -> dict:
             # whichever call first warmed the cache for this key.
             # ChatAnthropic always returns an AIMessage; ainvoke's declared
             # return type is the more general BaseMessage.
-            response = cast(AIMessage, await model.ainvoke(existing))
+            # The tools offered change between turns (_available_tools), and a thinking block is only valid with
+            # the tools list it was made with, so the earlier turns go without theirs.
+            response = cast(AIMessage, await model.ainvoke(without_thinking(existing)))
             telemetry.record_usage(span, response)
             span.set_attribute("tool_calls", [tc["name"] for tc in (response.tool_calls or [])])
             trace.record(

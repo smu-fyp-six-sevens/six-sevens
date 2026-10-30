@@ -52,6 +52,7 @@ GATED_CHECKS = [
     ("font-consistency", "check_font_consistency"),
     ("layout-anomalies", "check_layout_anomalies"),
     ("spelling-anomaly", "check_spelling_anomalies"),
+    ("page-consistency", "check_page_consistency"),
     ("metadata-anomaly", "check_metadata_anomalies"),
     ("numerical-validation", "bind_checks"),
     ("external-validation", "run_external_validation"),
@@ -63,7 +64,7 @@ GATED_CHECKS = [
 ]
 # The ones that read the stored file.
 DOWNLOADING = [pair for pair in GATED_CHECKS if pair[0] in {
-    "font-consistency", "layout-anomalies", "spelling-anomaly", "image-manipulation",
+    "font-consistency", "layout-anomalies", "spelling-anomaly", "page-consistency", "image-manipulation",
     "image-tampering", "image-integrity", "ai-generation",
 }]
 
