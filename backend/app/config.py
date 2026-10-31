@@ -53,11 +53,6 @@ class Settings:
     # any deployed environment; the "" default is only safe for local dev.
     AUTH_USERS: dict[str, str] = _users(_env("AUTH_USERS"))
     AUTH_SECRET_KEY: str = _env("AUTH_SECRET_KEY")
-    # The accounts that can change app-wide settings (routers/settings.py), comma-separated. Every other
-    # account is a loan officer. No role system beyond this list.
-    ADMIN_USERS: frozenset[str] = frozenset(
-        name.strip() for name in _env("ADMIN_USERS", "carol").split(",") if name.strip()
-    )
 
     # --- Services and events (CLOUD_ARCHITECTURE_PLAN.md) ---
     # Which roles this process runs; the default runs all of them, as uvicorn always has.
@@ -215,6 +210,9 @@ class Settings:
     # --- Per-case analysis (case_pipeline/) ---
     # Kill switch: off falls back to document-level detection and scoring only.
     CASE_ANALYSIS_ENABLED: bool = os.environ.get("CASE_ANALYSIS_ENABLED", "true").lower() == "true"
+    # Whether cases created here need every required checklist document approved before they can be analysed.
+    # Stored on each case when it's created (cases.checklist_enforced). On only in prod (Terraform).
+    REQUIRE_COMPLETE_CHECKLIST: bool = os.environ.get("REQUIRE_COMPLETE_CHECKLIST", "false").lower() == "true"
 
 
 settings = Settings()

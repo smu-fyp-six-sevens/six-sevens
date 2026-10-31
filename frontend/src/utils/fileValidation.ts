@@ -83,9 +83,6 @@ export async function hashFile(file: File): Promise<string> {
 // blocks a re-upload while its document is still in the case's live snapshot,
 // so deleting or moving the document out (from any browser) frees the file.
 const dedupStoreKey = (caseId: string) => `uploaded-documents:${caseId}`;
-// The old format kept bare hashes with no document, so a delete could never
-// release them. Dropped rather than migrated.
-const legacyDedupStoreKey = (caseId: string) => `uploaded-file-hashes:${caseId}`;
 
 // Per-browser only (localStorage) — can't detect the same file uploaded from
 // a different device/browser. A server-side content-hash check would be the
@@ -101,7 +98,6 @@ function getUploadedDocuments(caseId: string): Record<string, string> {
 
 function setUploadedDocuments(caseId: string, documents: Record<string, string>): void {
   try {
-    localStorage.removeItem(legacyDedupStoreKey(caseId));
     if (Object.keys(documents).length === 0) {
       localStorage.removeItem(dedupStoreKey(caseId));
     } else {

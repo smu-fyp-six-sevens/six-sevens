@@ -22,7 +22,7 @@ PAYSLIP = "Payslip net pay does not match the salary credits on the bank stateme
 
 def _finding(finding_id: str, text: str, *, category: str, filename: str, points: float = 12.0) -> ContributingFinding:
     return ContributingFinding(
-        document_id=f"doc-{finding_id}", filename=filename, finding_id=finding_id, severity="high",
+        document_id=f"doc-{finding_id}", filename=filename, finding_id=finding_id, fingerprint=finding_id, severity="high",
         summary=text, rationale="why", points=points, category=category,
     )
 

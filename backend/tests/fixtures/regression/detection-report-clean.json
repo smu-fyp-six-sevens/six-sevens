@@ -1,7 +1,46 @@
 {
+  "agent_decisions": [
+    {
+      "agent": "lead_planner",
+      "confidence": 0.0,
+      "decision": "assigned review briefs",
+      "decision_id": "specialist_briefs"
+    },
+    {
+      "agent": "lead_reviewer",
+      "confidence": 0.0,
+      "decision": "no second look requested",
+      "decision_id": "review_1"
+    },
+    {
+      "agent": "layout_rendering",
+      "confidence": 0.0,
+      "decision": "completed specialist assessment",
+      "decision_id": "specialist_review"
+    },
+    {
+      "agent": "content_validation",
+      "confidence": 0.0,
+      "decision": "completed specialist assessment",
+      "decision_id": "specialist_review"
+    },
+    {
+      "agent": "digital_authenticity",
+      "confidence": 0.0,
+      "decision": "completed specialist assessment",
+      "decision_id": "specialist_review"
+    }
+  ],
+  "confidence": 0.0,
   "consulted": [
     {
       "brief": "Brief for layout_rendering.",
+      "decision_confidences": [
+        {
+          "confidence": 0.0,
+          "second_look": false
+        }
+      ],
       "dismissed": [],
       "second_look": false,
       "specialist": "layout_rendering",
@@ -15,6 +54,12 @@
     },
     {
       "brief": "Brief for content_validation.",
+      "decision_confidences": [
+        {
+          "confidence": 0.0,
+          "second_look": false
+        }
+      ],
       "dismissed": [],
       "second_look": false,
       "specialist": "content_validation",
@@ -27,6 +72,12 @@
     },
     {
       "brief": "Brief for digital_authenticity.",
+      "decision_confidences": [
+        {
+          "confidence": 0.0,
+          "second_look": false
+        }
+      ],
       "dismissed": [],
       "second_look": false,
       "specialist": "digital_authenticity",
@@ -44,7 +95,7 @@
   "findings": [],
   "generated_at": "2026-10-14T00:00:00+00:00",
   "nothing_to_check": [],
-  "schema_version": 1,
+  "schema_version": 2,
   "second_look": null,
   "summary": "Nothing worth flagging was found.",
   "unable_to_assess": [],

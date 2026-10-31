@@ -13,7 +13,7 @@ from .models import AnalysisAudit, AnalysisSummary, CaseAnalysis, CrossDocFindin
 _TABLE = "case_analysis_runs"
 # What a snapshot or summary needs from a run: no trace, outlook or audit, which are large.
 _LIST_COLUMNS = (
-    "run_id, case_id, status, fingerprint, started_at, finished_at, error, findings:result->findings, "
+    "run_id, case_id, status, fingerprint, started_at, finished_at, error, confidence:result->confidence, findings:result->findings, "
     "risk:result->risk, supporting_documents:result->supporting_documents"
 )
 # A case's list of runs: when, how it ended, its score and how many findings, without the result itself.
@@ -26,7 +26,7 @@ _RUN_LIST_COLUMNS = (
 def _to_analysis(row: dict) -> CaseAnalysis:
     result: dict[str, Any] = row.get("result") or {}
     if "findings" in row:  # a list read selects only these keys out of result
-        result = {key: row.get(key) for key in ("findings", "risk", "supporting_documents")}
+        result = {key: row.get(key) for key in ("confidence", "findings", "risk", "supporting_documents")}
     return CaseAnalysis(
         run_id=row["run_id"],
         case_id=row["case_id"],
@@ -35,9 +35,9 @@ def _to_analysis(row: dict) -> CaseAnalysis:
         started_at=row["started_at"],
         finished_at=row.get("finished_at"),
         error=row.get("error"),
+        confidence=result.get("confidence", 0.0),
         findings=[CrossDocFinding(**f) for f in result.get("findings") or []],
         outlook=RiskOutlook(**result["outlook"]) if result.get("outlook") else None,
-        summary=result.get("summary"),
         structured_summary=AnalysisSummary(**result["structured_summary"]) if result.get("structured_summary") else None,
         risk=CaseRisk(**result["risk"]) if result.get("risk") else None,
         supporting_documents=[SupportingDocumentRecommendation(**s) for s in result.get("supporting_documents") or []],
@@ -112,8 +112,8 @@ def finish_run(analysis: CaseAnalysis) -> bool:
     superseded = current is not None and current != analysis.run_id
     result = {} if superseded else {
         "findings": [f.model_dump(mode="json") for f in analysis.findings],
+        "confidence": analysis.confidence,
         "outlook": analysis.outlook.model_dump(mode="json") if analysis.outlook else None,
-        "summary": analysis.summary,
         "structured_summary": analysis.structured_summary.model_dump(mode="json") if analysis.structured_summary else None,
         "risk": analysis.risk.model_dump(mode="json") if analysis.risk else None,
         "supporting_documents": [s.model_dump(mode="json") for s in analysis.supporting_documents],

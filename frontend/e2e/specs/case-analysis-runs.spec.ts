@@ -23,7 +23,7 @@ const EARLIER = 'run-1';
 function contributing(overrides: Partial<CaseRiskFinding> & Pick<CaseRiskFinding, 'document_id' | 'finding_id'>): CaseRiskFinding {
   return {
     filename: 'document.pdf', document_type: null, tool: null, check_code: null, severity: 'medium', summary: '',
-    rationale: '', points: 0, unreviewed: false, flag_id: null, category: null, source: 'document', repeat_of: null,
+    rationale: '', points: 0, unreviewed: false, fingerprint: `fp-${overrides.finding_id}`, category: null, source: 'document', repeat_of: null,
     also_on: 0, ...overrides,
   };
 }
@@ -38,7 +38,7 @@ const payslip = contributing({
 });
 const risk: CaseRisk = {
   state: 'scored', level: 'High', score: 48, points: 20, documents_scanned: 2, documents_total: 2,
-  contributing_findings: [crossDocument, payslip], unassessed_checks: [], reasons: [],
+  contributing_findings: [crossDocument, payslip], dismissed_findings: [], unassessed_checks: [], reasons: [],
 };
 
 function analysis(runId: string, overrides: Partial<CaseAnalysis> = {}): CaseAnalysis {
@@ -47,7 +47,8 @@ function analysis(runId: string, overrides: Partial<CaseAnalysis> = {}): CaseAna
     risk,
     findings: [{
       id: 'xdoc-1', hypothesis_id: 'h1', summary: ADDRESS, rationale: 'The two addresses differ.', severity: 'high',
-      category: 'cross_document_variance', citations: [], document_ids: ['doc-bizfile'], probe_summary: '', breach_flags: [],
+      category: 'cross_document_variance', citations: [], document_ids: ['doc-bizfile'], probe_summary: '', breach_flags: [], confidence: 0.8,
+      fingerprint: 'fp-xdoc-1',
     }],
     ...overrides,
   });
@@ -62,14 +63,14 @@ const SUMMARY: AnalysisSummary = {
   would_help: 'A recent utility bill would help.',
   source: 'model',
 };
-const EARLIER_SUMMARY = 'The case was rated High risk. An older summary in prose.';
+const EARLIER_SUMMARY: AnalysisSummary = { headline: 'The case was rated High risk.', reasons: [], would_help: null, source: 'model' };
 
 const latest = analysis(LATEST, {
   structured_summary: SUMMARY,
   consistent_checks: ['UEN is the same on 3 documents', 'The name is the same on C001_BizFile.pdf and C002_NRIC.pdf'],
   clean_checks: ['metadata_tool'],
 });
-const earlier = analysis(EARLIER, { started_at: '2026-10-26T02:00:00Z', summary: EARLIER_SUMMARY, stale: true });
+const earlier = analysis(EARLIER, { started_at: '2026-10-26T02:00:00Z', structured_summary: EARLIER_SUMMARY, stale: true });
 const runs: CaseAnalysisRunItem[] = [
   { run_id: LATEST, status: 'complete', started_at: '2026-10-27T02:00:00Z', finished_at: null, started_by: 'demo',
     risk_level: 'High', risk_score: 48, score_change: -24, finding_count: 1, stale: false },
@@ -147,8 +148,7 @@ test.describe('Case analysis summary and earlier runs', () => {
     await rows.nth(1).getByRole('button', { name: 'Open' }).click();
 
     await expect(page.getByText(/Earlier run from .*read-only\./)).toBeVisible();
-    // A run from before the structured summary shows its prose.
-    await expect(page.locator('.analysis-summary')).toHaveText(EARLIER_SUMMARY);
+    await expect(page.locator('.analysis-brief-headline strong')).toHaveText(EARLIER_SUMMARY.headline);
     await expect(rows.nth(1).locator('.analysis-run-viewing')).toHaveText('Showing');
 
     await page.getByRole('button', { name: 'Back to the latest' }).click();

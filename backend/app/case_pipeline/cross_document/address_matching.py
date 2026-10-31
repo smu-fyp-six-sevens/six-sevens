@@ -78,12 +78,26 @@ class AddressMismatch:
     reason: str
 
 
+# A floor and unit written out ("Floor 01, Unit 30", "Level 1 Unit 30", "Storey 01 #30") rather than as "#01-30".
+_FLOOR_UNIT_RE = re.compile(
+    r"\b(?:FLOOR|FLR|FL|LEVEL|LVL|STOREY|STOREYS)\s*(?:NO\.?\s*)?(\d+[A-Z]?)\s*[,;]?\s*(?:UNIT|#)\s*(?:NO\.?\s*)?(\w+)"
+)
+# "#01-30" and "Unit 01-30": floor, then unit.
+_UNIT_PAIR_RE = re.compile(r"(?:#|\bUNIT\s*(?:NO\.?\s*)?)\s*(\d+[A-Z]?)\s*[-–]\s*(\w+)")
+
+
 def normalize_address(value: object) -> str:
-    """Canonicalize punctuation, case, spacing, and common address abbreviations."""
+    """
+    Canonicalize punctuation, case, spacing, and common address abbreviations, so the same Singapore address in
+    different formats compares equal: "Block 50, Tuas Avenue 11, Floor 01, Unit 30, Singapore 639107" and
+    "50 TUAS AVENUE 11, #01-30, SINGAPORE 639107" both become "50 TUAS AVENUE 11 UNIT 1 30 639107".
+    """
     if not isinstance(value, str):
         return ""
     text = unicodedata.normalize("NFKD", value)
     text = "".join(char for char in text if not unicodedata.combining(char)).upper()
+    text = _FLOOR_UNIT_RE.sub(r" UNIT \1 \2 ", text)
+    text = _UNIT_PAIR_RE.sub(r" UNIT \1 \2 ", text)
     text = re.sub(r"#\s*", " UNIT ", text)
     text = re.sub(r"\bC['’]?WEALTH\b", "COMMONWEALTH", text)
     tokens: list[str] = re.findall(r"[A-Z0-9]+", text)
@@ -100,6 +114,9 @@ def normalize_address(value: object) -> str:
         # block; other uses of "block" (for example "Block A") are retained.
         if token == "BLOCK" and index + 1 < len(tokens) and tokens[index + 1].isdigit():
             continue
+        # "01" and "1" are the same floor or unit; a six-digit postal code keeps its leading zero.
+        if token.isdigit() and len(token) < 6:
+            token = str(int(token))
         normalized.append(token)
     return " ".join(normalized)
 

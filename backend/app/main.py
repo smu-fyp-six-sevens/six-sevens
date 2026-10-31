@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import audit, auth, document_repository, events, health, metrics, query_stats, realtime_listener, sweeper, telemetry
+from . import audit, auth, case_stage, document_repository, events, health, metrics, query_stats, realtime_listener, sweeper, telemetry
 from .config import settings
 from .events import bus, registry, types
 from .events import push as event_push
@@ -18,7 +18,7 @@ from .fraud_detection.spelling import spelling_anomaly
 from .health import check_db_connection
 from .langgraph._anthropic import warm_up
 from .routers import audit as audit_router
-from .routers import cases, detection, documents, finding_reviews, monitoring, notes, settings as settings_router, upload, ws
+from .routers import cases, detection, documents, finding_reviews, monitoring, notes, upload, ws
 from .workers import cases as case_worker
 from .workers import detection as detection_worker
 from .workers import documents as doc_worker
@@ -77,6 +77,8 @@ async def lifespan(app: FastAPI):
         except Exception:
             # Also non-fatal: the case status WebSocket then pushes nothing beyond the initial snapshot.
             logger.exception("Realtime listener failed to start — continuing anyway")
+        # In the background, so a long case list doesn't hold up startup.
+        background_tasks.append(asyncio.create_task(_bring_case_stages_up_to_date()))
 
     if "detection-worker" in ROLES:
         try:
@@ -104,6 +106,12 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(telemetry.shutdown)
 
 
+async def _bring_case_stages_up_to_date() -> None:
+    """Cases that changed while no stage was kept (or the backend was down) catch up once at startup."""
+    moved = await asyncio.to_thread(case_stage.sync_all_cases)
+    logger.info("Case stages brought up to date at startup (%d case(s) moved)", moved)
+
+
 app = FastAPI(title="fyp API", lifespan=lifespan)
 telemetry.setup(app)
 
@@ -114,12 +122,13 @@ async def count_queries(request: Request, call_next):
     request_id.set(request.headers.get("x-request-id"))
     started = time.perf_counter()
     status_code = 500
+    synced_cases = document_repository.track_request_syncs()
     try:
         with query_stats.scope(f"{request.method} {query_stats.label_path(request.url.path)}"):
             response = await call_next(request)
             # A push's work runs inside its request, so this also covers the workers.
-            if document_repository.has_pending_syncs():
-                await asyncio.to_thread(document_repository.flush_pending_syncs)
+            if synced_cases:
+                await asyncio.to_thread(document_repository.flush_syncs, synced_cases)
         status_code = response.status_code
         return response
     finally:
@@ -144,6 +153,8 @@ if settings.CORS_IN_APP:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # So the frontend can read a download's filename (GET /cases/{id}/report.pdf).
+        expose_headers=["Content-Disposition"],
     )
 
 _protected = [Depends(auth.bind_actor)]
@@ -158,10 +169,8 @@ if "api" in ROLES:
     app.include_router(documents.router, dependencies=_protected)
     app.include_router(monitoring.router, dependencies=_protected)
     app.include_router(detection.router, dependencies=_protected)
-    app.include_router(detection.cases_router, dependencies=_protected)
     app.include_router(notes.router, dependencies=_protected)
     app.include_router(finding_reviews.router, dependencies=_protected)
-    app.include_router(settings_router.router, dependencies=_protected)
     # The WebSocket can't carry an Authorization header, so it checks its own short-lived ticket (routers/ws.py).
     app.include_router(ws.router)
 

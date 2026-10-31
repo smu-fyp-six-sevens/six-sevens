@@ -30,6 +30,9 @@ export type CaseRisk = Omit<Schemas['CaseRisk'], 'contributing_findings'> & {
   contributing_findings: CaseRiskFinding[];
 };
 
+// A tool's finding a specialist dismissed as a false positive: never scored, listed for the officer's review.
+export type DismissedFinding = Schemas['DismissedFinding'];
+
 export type SupportingDocumentRecommendation = Schemas['SupportingDocumentRecommendation'];
 export type RecommendationItem = Schemas['RecommendationItem'];
 
@@ -38,13 +41,21 @@ export type CaseRequirementCoverage = Pick<
   Schemas['CaseSummary'],
   | 'fulfilled_requirements'
   | 'missing_requirements'
+  | 'unapproved_requirements'
+  | 'reviews_required'
   | 'proof_of_address_coverage'
   | 'id_document_coverage'
-  | 'supporting_document_recommendations'
   | 'additional_documents'
   | 'analysis_ready'
   | 'analysis'
+  | 'status'
+  | 'failure'
+  | 'findings_to_review'
 > & { risk: CaseRisk | null };
+
+// Where a case stands (see backend/app/case_stage.py), and what a failed case needs fixed.
+export type CaseStage = Schemas['CaseStage'];
+export type CaseFailure = Schemas['CaseFailure'];
 
 export type UpdatedCase = Pick<Schemas['CaseSummary'], 'id' | 'greenlink_case_id' | 'company_name'>;
 
@@ -94,6 +105,8 @@ export interface DetectionFinding {
   rationale: string;
   specialists: string[];
   via_second_look: boolean;
+  confidence?: number;
+  agent_confidences?: { specialist: string; confidence: number }[];
   // Where on the document it was found, for the checks that measure an area (image and layout checks).
   // `page` is 1-based (null for an image upload); `bbox` is [x0, y0, x1, y1] from the top-left, in
   // `bbox_units`, within a page of `page_size` when the check reports it.
@@ -113,6 +126,13 @@ export interface DetectionReport {
   document_type: string;
   verdict: 'flagged' | 'clean' | 'inconclusive';
   summary: string;
+  confidence: number;
+  agent_decisions: {
+    agent: string;
+    decision_id: string;
+    decision: string;
+    confidence: number;
+  }[];
   findings: DetectionFinding[];
   consulted: {
     specialist: string;
@@ -121,16 +141,16 @@ export interface DetectionReport {
     tools_called: string[];
     summary: string;
     uncertain: boolean;
-    // Absent on reports stored before dismissals existed.
-    dismissed?: { id: string; tool: string | null; summary: string; reason: string }[];
+    dismissed: { id: string; tool: string | null; summary: string; reason: string }[];
     second_look: boolean;
   }[];
   second_look: { from: string; to: string; question: string; reason: string } | null;
   unable_to_assess: { specialist: string; tool: string | null; reason: string | null }[];
-  // Checks the document had nothing for (no images, no metadata, no dates): a pass, shown for the
-  // record. Absent on reports stored before it existed.
-  nothing_to_check?: { specialist: string; tool: string | null; reason: string | null }[];
+  // Checks the document had nothing for (no images, no metadata, no dates): a pass, shown for the record.
+  nothing_to_check: { specialist: string; tool: string | null; reason: string | null }[];
   generated_at: string;
+  // Set when a later run crashed or was cancelled: this report, from the run before, still stands.
+  last_run_error?: string;
 }
 
 export type IndividualCheckId =
@@ -201,4 +221,3 @@ export type CaseFindingReviews = Omit<Schemas['CaseFindingReviews'], 'checks'> &
   checks: Record<ReviewScope, string[]>;
 };
 export type DetectionMetrics = Schemas['DetectionMetrics'];
-export type AppSettings = Schemas['AppSettings'];

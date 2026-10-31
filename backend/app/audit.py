@@ -111,11 +111,14 @@ def created_by_many(case_ids: list[str]) -> dict[str, str]:
     return {row["case_id"]: row["actor"] for row in rows if row.get("actor")}
 
 
-# End-of-run events that carry a run's Claude usage (detail.llm_cost_usd and the token counts).
+# End-of-run events that carry a run's Claude usage (detail.llm_cost_usd and the token counts): finished, failed,
+# cancelled or cut short alike.
 _COSTED = [
-    types.DOCUMENT_ANALYZED, types.DOCUMENT_FAILED, types.DOCUMENT_DETECTED, types.DETECTION_FAILED,
-    types.CASE_ANALYSIS_COMPLETED,
+    types.DOCUMENT_ANALYZED, types.DOCUMENT_FAILED, types.DOCUMENT_RUN_STOPPED, types.DOCUMENT_DETECTED,
+    types.DETECTION_FAILED, types.CASE_ANALYSIS_COMPLETED,
 ]
+# Events that name a document's file.
+_NAMED = [types.DOCUMENT_UPLOADED, types.DOCUMENT_DELETED]
 
 
 class CaseCostRun(BaseModel):
@@ -124,9 +127,19 @@ class CaseCostRun(BaseModel):
     type: str
     run: Literal["document", "extraction_rerun", "detection", "case_analysis"] | None = None
     document_id: str | None = None
+    outcome: Literal["success", "failed", "cancelled"] = "success"
+    # 1 for a document's (or the case's) first run of this kind, 2 for the next (a retry or rerun), and so on.
+    attempt: int = 1
     llm_cost_usd: float
     llm_calls: int | None = None
     llm_cache_read_tokens: int | None = None
+
+
+class CaseCostDocument(BaseModel):
+    """A document a costed run was on: its file name, whether it is still in the case, and whether it was deleted."""
+    filename: str | None = None
+    in_case: bool = True
+    deleted: bool = False
 
 
 class CaseCostTiming(BaseModel):
@@ -141,25 +154,45 @@ class CaseCost(BaseModel):
     case_id: str
     total_usd: float
     documents_usd: dict[str, float]
+    # Every document in documents_usd or runs, current or deleted.
+    documents: dict[str, CaseCostDocument] = {}
     case_analysis_usd: float
+    # What failed, cancelled and repeated runs cost: included in total_usd.
+    failed_or_cancelled_usd: float = 0.0
+    repeated_runs_usd: float = 0.0
     runs: list[CaseCostRun]
     timings: list[CaseCostTiming]
 
 
-def case_cost(case_id: str) -> CaseCost:
+def _events(build) -> list[Event]:
+    return [Event.from_audit_row(row) for row in fetch_all(build, "id")]
+
+
+def case_cost(case_id: str, document_ids: list[str]) -> CaseCost:
     """
-    A case's Claude spend from its audit trail: each costed run, a total per document, and the case total.
-    Runs from before the trail carried cost are absent. Also how long each finished run took (`timings`, whether
-    or not it was costed). Sync: run on a worker thread.
+    A case's Claude spend from its audit trail: each costed run (finished, failed, cancelled or cut short, retries
+    and reruns included), a total per document, and the case total. `document_ids` are the case's documents now: a
+    document moved in brings the runs it had before the move. Runs on documents since deleted stay, named from the
+    upload or delete event. A run whose event carries no cost is absent. Also how long each finished run took
+    (`timings`, whether or not it was costed). Sync: run on a worker thread.
     """
-    rows = (
-        service_supabase_client().table(_TABLE).select("*").eq("case_id", case_id).in_("action", _COSTED)
-        .order("occurred_at").limit(1000).execute().data or []
-    )
+    client = service_supabase_client()
+    by_id: dict[str, Event] = {
+        e.event_id: e for e in _events(lambda: client.table(_TABLE).select("*").eq("case_id", case_id).in_("action", _COSTED))
+    }
+    for start in range(0, len(document_ids), _CASE_CHUNK):
+        chunk = document_ids[start : start + _CASE_CHUNK]
+        for event in _events(
+            lambda chunk=chunk: client.table(_TABLE).select("*").in_("document_id", chunk).in_("action", _COSTED)
+        ):
+            by_id[event.event_id] = event
+    events_in_order = sorted(by_id.values(), key=lambda e: e.occurred_at)
+
     runs: list[CaseCostRun] = []
     timings: list[CaseCostTiming] = []
     per_document: dict[str, float] = {}
-    for event in (Event.from_audit_row(_row(row)) for row in rows):
+    attempts: dict[tuple[str | None, str | None], int] = {}
+    for event in events_in_order:
         if event.outcome == "success" and event.duration_ms is not None:
             timings.append(CaseCostTiming(
                 occurred_at=event.occurred_at, type=event.type, document_id=event.document_id,
@@ -168,17 +201,35 @@ def case_cost(case_id: str) -> CaseCost:
         cost = event.detail.get("llm_cost_usd")
         if cost is None:
             continue
+        kind = event.detail.get("run")
+        attempts[(event.document_id, kind)] = attempts.get((event.document_id, kind), 0) + 1
         runs.append(CaseCostRun(
-            occurred_at=event.occurred_at, type=event.type, run=event.detail.get("run"),
-            document_id=event.document_id, llm_cost_usd=float(cost), llm_calls=event.detail.get("llm_calls"),
-            llm_cache_read_tokens=event.detail.get("llm_cache_read_tokens"),
+            occurred_at=event.occurred_at, type=event.type, run=kind, document_id=event.document_id,
+            outcome=event.outcome, attempt=attempts[(event.document_id, kind)], llm_cost_usd=float(cost),
+            llm_calls=event.detail.get("llm_calls"), llm_cache_read_tokens=event.detail.get("llm_cache_read_tokens"),
         ))
         if event.document_id:
             per_document[event.document_id] = per_document.get(event.document_id, 0.0) + float(cost)
+
+    named = {r.document_id for r in runs if r.document_id}
+    current = set(document_ids)
+    documents = {document_id: CaseCostDocument(in_case=document_id in current) for document_id in named}
+    for start in range(0, len(named), _CASE_CHUNK):
+        chunk = sorted(named)[start : start + _CASE_CHUNK]
+        for event in _events(
+            lambda chunk=chunk: client.table(_TABLE).select("*").in_("document_id", chunk).in_("action", _NAMED)
+        ):
+            document = documents[str(event.document_id)]
+            document.filename = event.detail.get("filename") or document.filename
+            document.deleted = document.deleted or (event.type == types.DOCUMENT_DELETED and event.document_id not in current)
+
     return CaseCost(
         case_id=case_id, total_usd=round(sum(r.llm_cost_usd for r in runs), 6),
         documents_usd={doc: round(usd, 6) for doc, usd in per_document.items()},
+        documents=documents,
         case_analysis_usd=round(sum(r.llm_cost_usd for r in runs if r.run == "case_analysis"), 6),
+        failed_or_cancelled_usd=round(sum(r.llm_cost_usd for r in runs if r.outcome != "success"), 6),
+        repeated_runs_usd=round(sum(r.llm_cost_usd for r in runs if r.attempt > 1), 6),
         runs=runs, timings=timings,
     )
 

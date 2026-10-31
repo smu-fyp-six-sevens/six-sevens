@@ -9,21 +9,35 @@ TEST_USER = "test-user"  # who the bypassed login says is acting
 
 
 @pytest.fixture(autouse=True)
-def _reset_case_sync_memo():
-    """case_service remembers the last submission_finalized it wrote per case; tests reuse case ids."""
-    from app import case_service
-
-    case_service._synced_finalized.clear()
-    yield
-    case_service._synced_finalized.clear()
-
-
-@pytest.fixture(autouse=True)
 def _sync_case_immediately(monkeypatch: pytest.MonkeyPatch):
-    """document_repository batches the case flag refresh in production; tests expect it after each write."""
+    """document_repository batches the case stage refresh in production; tests expect it after each write."""
     from app import document_repository
 
     monkeypatch.setattr(document_repository, "SYNC_DEBOUNCE_SECONDS", 0)
+
+
+@pytest.fixture(autouse=True)
+def _skip_case_stage_sync(monkeypatch: pytest.MonkeyPatch):
+    """
+    Document writes and analysis runs move the case's stage, which reads the
+    case back from Supabase. Tests of those writes aren't about the stage, so
+    it is a no-op here; test_case_stage.py exercises the real one.
+    """
+    from app import case_stage
+
+    monkeypatch.setattr(case_stage, "sync_case_stage", lambda case_id: None)
+
+
+@pytest.fixture(autouse=True)
+def _cases_are_not_finalised(monkeypatch: pytest.MonkeyPatch):
+    """
+    Every route that changes a document or case first checks its case isn't
+    finalised, which reads the case. Tests of those routes aren't about that,
+    so every case reads as open; test_case_stage.py covers the refusal.
+    """
+    from app import case_service
+
+    monkeypatch.setattr(case_service, "is_case_finalised", lambda case_id: False)
 
 
 @pytest.fixture(autouse=True)

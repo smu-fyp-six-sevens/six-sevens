@@ -44,10 +44,9 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 ### Backend
 
 1. **Private helpers shared across packages.** `case_pipeline/*` (6 modules), `dates/date_anomalies.py`, `giro.py`, the `reference_checks` and two `registry_lookups` modules import `_as_number`, `_rows`, `_parse_field_date` (and `_money`, `_CURRENCY_WORDS`, `_fields_by_name`, …) from `fraud_detection/numerical_validation/common.py`. Those are a public field-value API in practice: make them public in `fraud_detection/shared/field_values.py`, as `decode_field_value` already is. Similarly, `field_checks/*` and `tool_timeout.py` import `_result` and `_with_ids` from `detection/tools.py`. M
-2. **`case_service.py` (516 lines) mixes jobs:** the documents-status rollup, pass-throughs (`get_case`, `create_case`, `update_case`), the snapshot builder, and `submission_finalized`. The required-documents rules are split across `models.py`, `case_service.py` and `mapper.py`. M
-3. **`submission_finalized` machinery.** A debounce with timer threads (`document_repository`), a flush before each request returns, and a per-process "last written" cache (`case_service._synced_finalized`), all for a flag nothing reads yet. Decide its shape when automatic case analysis is built: keep it stored, or compute it inside the gate and delete the machinery. Decision pending this sprint
-4. **`models.py` (665 lines)** mixes enums and business rules, API schemas, and risk models that have a twin in `case_pipeline/models.py`. M
-5. **Blocking calls in routers without the 502 wrapper.** A Supabase error at these becomes a bare 500 with no log line, instead of `to_thread_or_502` / `bad_gateway_on_error`'s logged 502: `cases.py` (the summary re-read in `update_case`); `detection.py` (`langgraph_trace.load` in the check gate, the report and retry; `list_documents` in the company-name check; `langgraph_trace.resume`); `upload.py` (the case lookup in single and bulk upload). S
+2. **`case_service.py` (516 lines) mixes jobs:** the documents-status rollup, pass-throughs (`get_case`, `create_case`, `update_case`), and the snapshot builder. The required-documents rules are split across `models.py`, `case_service.py` and `mapper.py`. M
+3. **`models.py` (665 lines)** mixes enums and business rules, API schemas, and risk models that have a twin in `case_pipeline/models.py`. M
+4. **Blocking calls in routers without the 502 wrapper.** A Supabase error at these becomes a bare 500 with no log line, instead of `to_thread_or_502` / `bad_gateway_on_error`'s logged 502: `cases.py` (the summary re-read in `update_case`); `detection.py` (`langgraph_trace.load` in the check gate, the report and retry; `list_documents` in the company-name check; `langgraph_trace.resume`); `upload.py` (the case lookup in single and bulk upload). S
 
 ### Frontend (types)
 
@@ -55,7 +54,7 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 ### Deployment and repo
 
-1. **The database schema isn't in the repo.** Everything else is code; the schema lives only in Supabase. Export it as versioned migrations (the first step of staging, `CLOUD_ARCHITECTURE_PLAN.md` section 9). M (reading the schema needs your go-ahead)
+1. **The schema is a hand-kept snapshot** (`backend/sql/schema.sql`), not versioned migrations. Staging (`CLOUD_ARCHITECTURE_PLAN.md` section 9) would want migrations it can replay. M
 
 ---
 
@@ -72,53 +71,35 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 ## 4. Deletes, the audit trail and the schema
 
-Checked 2026-10-27 by reading the code and PostgREST's table listing (no rows read). The listing doesn't show grants, RLS or foreign-key delete rules; the two queries below do (Supabase SQL editor).
+The delete rules are in `backend/sql/schema.sql` (every table keyed by a document or a case cascades from it). Grants and RLS aren't: the query below shows them (Supabase SQL editor).
 
 **What a delete removes:**
-- A document: `extracted_fields`, `flags`, `langgraph_trace`, its `case_notes` (replies carry the note's `document_id`), `finding_reviews`, the stored file (best effort), then the row (`document_repository._delete_document_children`).
-- A case: its documents as above, then `risk_scores`, `case_analysis_runs`, `flags`, `case_notes`, `finding_reviews`, then the row (`case_repository.delete_case`).
+- A document: by cascade, `extracted_fields`, `findings`, `langgraph_trace`, `detection_results` and its `case_notes`; the code removes its stored file (best effort) and the cross-document findings resting on it (`document_repository._delete_document_children`).
+- A case: its documents as above, then the row, which cascades to `risk_scores`, `case_analysis_runs`, `findings` and `case_notes` (`case_repository.delete_case`).
 - `audit_events` is never deleted: it has no foreign keys, so events outlive what they name. Intended.
 
 | # | Finding | Fix | Effort |
 |---|---|---|---|
-| 1 | **`case_status_history` blocks a case delete** if it has rows: it has a foreign key to `cases` and nothing clears it (no code on any branch uses the table; it belongs to other developers) | Check the delete rule; clear it in `delete_case`, or cascade | S |
 | 2 | **Delete audit events are fire-and-forget** (`events.record`): if publishing fails, the delete stands with no audit row. A case delete logs one `case.deleted` with a count, not a `document.deleted` per document | `publish` for deletes (fail the request), or accept; per-document events on case delete | S |
 | 3 | **`audit_events` can't be edited or removed only if grants say so.** `audit.py` says the service role has INSERT and SELECT only; Supabase's default gives `service_role` everything, so this holds only if someone revoked it by hand. The dashboard owner can always delete. No retention policy | Run the grants query; revoke UPDATE and DELETE if missing | S |
-| 4 | **Deletes aren't a transaction:** a failure partway leaves the rest (a retry finishes the job). A stored file that fails to delete is only logged, so it stays in storage | Accept; or a Postgres function per delete once the schema is in the repo | M, later |
+| 4 | **A delete's steps outside the database aren't in its transaction:** the cross-document findings citing a document go first, then the stored files, then the row (whose cascades are atomic). A failure partway leaves the row (a retry finishes the job); a stored file that fails to delete is only logged, so it stays in storage | Accept | - |
 
 ```sql
 select grantee, privilege_type from information_schema.role_table_grants where table_name = 'audit_events';
-select conrelid::regclass as tbl, conname, confdeltype from pg_constraint where contype = 'f';  -- c = cascade, a/r = blocks
 ```
 
-**Unused schema on `main`** (rows read on 2026-10-30; STABILITY_AUDIT §2 has the rest):
-- Not used at all: `case_status_history` (no code), `flags.reviewed_by` and `reviewed_at` (never set; `status` is only filtered on in the delete), `flags.related_document_ids` (null on every row).
-- Written by an unmerged branch, unknown to `main`: every `cases.status` value except `open` (STABILITY_AUDIT D1).
-- Written, never read: the whole `flags` table (risk and the UI read the detection report), `risk_scores.flag_ids` and `scored_at`, `extracted_fields.field_category` and `extracted_at`.
+**Unused schema** (read 2026-10-30):
+- Written, never read: `risk_scores.scored_at`, `extracted_fields.field_category` and `extracted_at`.
 
 ---
 
 ## 5. Backwards compatibility (technical debt)
 
-Features added after data already existed left code that tolerates the older rows: a field made optional, a fallback for a missing value, or a second way to show something. New rows always have the field, but the checks stay. Found 2026-10-30 by reading the code; nothing was counted against the database yet.
-
-**A. Removable once no old rows need them.** First count, read-only, how many rows still use each one; if none, delete the fallback and its tests. Where some remain: everything is synthetic, so deleting those old cases is cheaper than backfilling them (a write to the shared database, so ask its users first; re-running detection or analysis to upgrade them costs tokens).
-
-| # | Where | What it keeps working | Why it matters |
-|---|---|---|---|
-| A1 | `langgraph/detection/tools.py` `needs_locations`, `add_missing_locations` | Font, layout and spelling findings stored before they carried their place on the page: their checks are run again on the PDF to find it | Runs on **every read** of such a report (CPU and a file download). Numerical and date findings never store a place, so that part stays. Do first |
-| A2 | `case_pipeline/models.py` `summary`; `AnalysisSummaryBlock.tsx` | Runs from before the structured summary show their prose instead | Two rendering paths |
-| A3 | `AdditionalDocumentsCard.tsx` `legacyRecommendations`, `fromRecommendations`; `UploadPage` | Runs from before the unified additional-documents list are rebuilt from the old checklist recommendations | An extra prop through the page |
-| A4 | `services/uploadService/documentStatus.ts` (the `approved` branch) | Documents detected before the `detected` status existed: "approved" is guessed as scanning, skipped or failed | A guess that can show "Scanning…" on a finished document |
-| A5 | `services/uploadService/types.ts` `nothing_to_check?` | Detection reports from before the list existed | An optional type |
-| A6 | `utils/fileValidation.ts` `legacyDedupStoreKey` | Clears the old `uploaded-file-hashes:` localStorage key on every save | Harmless; delete any time, no data check needed |
-
-**B. Keep: they also cover more than old rows.**
-- `document_repository.get_guard_result` and `tools._guard_result` (the guard run again at detection), and the content-guard route's `checked=false`: ingest doesn't fail when saving `guard_result` fails, so a new document can lack it too.
-- `holder.py`, `models.is_personal_bank_statement`, `registry_lookups/addresses.py`: a statement without `entity_type` falls back to the names, which also covers an extraction that leaves it out.
-- `document_repository._attach_extracted_fields` ignores the retired `documents.extracted_fields` column. The code is right; drop the column with the schema migrations (repo 1).
-
-**C. History that can't be backfilled; accept it.** Cases or runs from before the audit trail recorded timings, creators or cost show no processing time (`audit.processing_ms_many`), no creator (`audit.created_by_many`), or leave the run out of the cost (`audit.case_cost`); older runs have an empty `clean_checks`. Each shows nothing rather than a wrong value.
+The database was wiped on 2026-10-31 and the fallbacks for older rows were removed. What remains tolerates a missing value for reasons that also apply to new rows, so it stays:
+- `document_repository.get_guard_result` and `tools._guard_result` (the guard run again at detection), and the content-guard route's `checked=false`: ingest doesn't fail when saving `guard_result` fails.
+- `holder.py`, `models.is_personal_bank_statement`, `registry_lookups/addresses.py`: a statement whose extraction leaves out `entity_type` falls back to the names.
+- `detection_report.read_report`: defaults for keys a report lacks (a run that stopped partway, or a later schema change).
+- `services/uploadService/documentStatus.ts`: `approved` is read as about to scan, skipped (no type) or failed, all live states.
 
 **Rule from here on:** a new stored field gets a default in the model that the old rows read correctly, and an entry here naming the fallback, so it can be removed once the old rows are gone.
 
@@ -127,8 +108,6 @@ Features added after data already existed left code that tolerates the older row
 ## Suggested order
 
 1. **The two SQL queries** (§4.1, 4.3): whether a case delete can be blocked, and whether the audit trail can be edited.
-2. **Quick win:** the 502 wrappers (backend 2.5), S.
-3. **Backwards compatibility** (§5): the read-only counts, then A1, then the rest of A.
-4. **Public field-value helpers** (backend 2.1).
-5. **The one-off colours** (frontend 1.1), as you restyle each component.
-6. **Decide `submission_finalized`** (backend 2.3) as part of automatic case analysis.
+2. **Quick win:** the 502 wrappers (backend 2.4), S.
+3. **Public field-value helpers** (backend 2.1).
+4. **The one-off colours** (frontend 1.1), as you restyle each component.

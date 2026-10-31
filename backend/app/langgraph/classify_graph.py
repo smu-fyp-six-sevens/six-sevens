@@ -1,24 +1,24 @@
 """
 Classify subgraph: rule_classify runs deterministically (the only
 deterministic step), then the agent takes over — it decides itself whether
-to call llm_classify_tool and/or vision_llm, but NOT in whatever order: the
-agent's first turn is only ever offered llm_classify_tool; vision_llm only
-becomes available starting from its second turn onward, and only until it's
-been called once. This is a code-enforced ordering (see _available_tools),
-not just a prompt suggestion — vision is by far the most expensive tool
+to call llm_classify_tool and/or vision_llm, but NOT in whatever order:
+llm_classify_tool only on the agent's first turn; vision_llm only from its
+second turn onward, and only until it has run once. Every turn offers both
+tools (a thinking block is only valid with the tools list it was made with),
+and the order is code-enforced in tools_node: a call out of order gets an
+error result instead of running. Vision is by far the most expensive tool
 (a full image, not just text), so it never gets to be the agent's first or
 only move. Within that ordering the agent still genuinely decides whether
 to call either tool at all, which is what keeps this agentic rather than a
 hardcoded pipeline with an LLM bolted on.
 
-    rule_classify -> agent (turn 1: llm_classify_tool only)
-                       -> [tools -> agent (turn 2+: vision_llm only)]* -> validate -> repair
+    rule_classify -> agent -> [tools -> agent]* -> validate -> repair
 
 Also holds the reclassify entry point: when Extraction escalates,
 graph.py routes back into this same agent/tools/validate/repair chain via
 prepare_reclassify_node, continuing the same conversation rather than
 re-running rule_classify. Since that conversation already has at least one
-prior agent turn, only vision_llm (if not already used) is offered there —
+prior agent turn, only vision_llm (if it hasn't run) can be used there —
 llm_classify_tool already had its one shot on the original pass.
 
 No checkpointer here (`compile(checkpointer=False)` in graph.py); only the
@@ -30,7 +30,8 @@ from __future__ import annotations
 import logging
 from typing import cast
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -44,7 +45,7 @@ from .rule_classify import classify_by_rules
 from .state import DocumentGraphState
 from .vision_tool import vision_llm
 from ..config import settings
-from ..llm_io import message_text, without_thinking
+from ..llm_io import message_text, thinking_summaries
 from ..run_context import spend_model_call
 
 logger = logging.getLogger("classifier_pipeline.langgraph.classify")
@@ -64,18 +65,62 @@ def _called_tool_names(messages: list) -> set[str]:
     return names
 
 
-def _available_tools(existing_messages: list) -> list:
+# A tool result that says the call was refused, not run (so it doesn't count as the tool's one use).
+_NOT_RUN = "Not run: "
+
+
+def _ran(name: str, messages: list) -> bool:
+    return any(
+        isinstance(m, ToolMessage) and m.name == name and not str(m.content).startswith(_NOT_RUN) for m in messages
+    )
+
+
+def _refusal(name: str, earlier: list) -> str | None:
     """
     Enforces the ordering described in this module's docstring: llm_classify_tool
     only on the agent's first turn, vision_llm only from the second turn
-    onward (and only until it's been called once) — never the reverse, and
-    never both offered in the same turn.
+    onward (and only until it has run once). `earlier` is the conversation
+    before the turn that made the call.
     """
-    if not existing_messages:
-        return [llm_classify_tool]
-    if "vision_llm" in _called_tool_names(existing_messages):
-        return []
-    return [vision_llm]
+    first_turn = not any(isinstance(m, AIMessage) for m in earlier)
+    if name == llm_classify_tool.name and not first_turn:
+        return "llm_classify_tool can only be called on your first turn."
+    if name == vision_llm.name:
+        if first_turn:
+            return "vision_llm can only be called from your second turn onward."
+        if _ran(vision_llm.name, earlier):
+            return "vision_llm has already been used once."
+    return None
+
+
+_tool_node = ToolNode(_TOOLS, messages_key="agent_messages", handle_tool_errors=True)
+
+
+async def tools_node(state: DocumentGraphState, config: RunnableConfig) -> dict:
+    """
+    Runs the agent's tool calls that fit the ordering; one that doesn't gets an error result instead. The order is
+    kept here rather than by changing the tools offered: a thinking block is only valid with the tools list it was
+    made with, so every turn offers the same two.
+    """
+    messages = state.get("agent_messages") or []
+    call_message = cast(AIMessage, messages[-1])
+    earlier = messages[:-1]
+    allowed, refused = [], []
+    for call in call_message.tool_calls:
+        reason = _refusal(call["name"], earlier)
+        if reason is None:
+            allowed.append(call)
+        else:
+            refused.append(ToolMessage(
+                content=f"{_NOT_RUN}{reason}", tool_call_id=call["id"], name=call["name"], status="error",
+            ))
+    results: list = []
+    if allowed:
+        ran = await _tool_node.ainvoke(
+            {**state, "agent_messages": [*earlier, call_message.model_copy(update={"tool_calls": allowed})]}, config,
+        )
+        results = list(ran["agent_messages"])
+    return {"agent_messages": [*results, *refused]}
 
 
 def rule_node(state: DocumentGraphState) -> dict:
@@ -98,15 +143,18 @@ async def agent_node(state: DocumentGraphState) -> dict:
 
     existing = state.get("agent_messages") or []
     spend_model_call("classify agent")
-    available_tools = _available_tools(existing)
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 2048, effort="low")
-    if available_tools:
-        model = model.bind_tools(available_tools)
+    # Every turn offers the same tools (tools_node keeps their order). Once vision has run there's nothing left to
+    # call, so the turn can't call one: tool_choice may change between turns without touching earlier thinking.
+    done = _ran(vision_llm.name, existing)
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 2048, effort="low").bind_tools(
+        _TOOLS, tool_choice={"type": "none"} if done else None,
+    )
+    offered = [] if done else [t.name for t in _TOOLS]
 
     with telemetry.get_tracer().start_as_current_span("classify.agent_call") as span:
         span.set_attribute("document_id", state["document_id"])
         span.set_attribute("turn", "continuation" if existing else "first")
-        span.set_attribute("offered_tools", [t.name for t in available_tools])
+        span.set_attribute("offered_tools", offered)
 
         if existing:
             # Tool-loop continuation: the system message (with its
@@ -115,15 +163,14 @@ async def agent_node(state: DocumentGraphState) -> dict:
             # whichever call first warmed the cache for this key.
             # ChatAnthropic always returns an AIMessage; ainvoke's declared
             # return type is the more general BaseMessage.
-            # The tools offered change between turns (_available_tools), and a thinking block is only valid with
-            # the tools list it was made with, so the earlier turns go without theirs.
-            response = cast(AIMessage, await model.ainvoke(without_thinking(existing)))
+            response = cast(AIMessage, await model.ainvoke(existing))
             telemetry.record_usage(span, response)
             span.set_attribute("tool_calls", [tc["name"] for tc in (response.tool_calls or [])])
             trace.record(
                 state["document_id"], "agent_call",
-                offered_tools=[t.name for t in available_tools],
+                offered_tools=offered,
                 tool_calls=[tc["name"] for tc in (response.tool_calls or [])],
+                thinking=thinking_summaries(response),
             )
             return {"agent_messages": [response]}
 
@@ -144,8 +191,9 @@ async def agent_node(state: DocumentGraphState) -> dict:
         span.set_attribute("tool_calls", [tc["name"] for tc in (response.tool_calls or [])])
         trace.record(
             state["document_id"], "agent_call",
-            offered_tools=[t.name for t in available_tools],
+            offered_tools=offered,
             tool_calls=[tc["name"] for tc in (response.tool_calls or [])],
+            thinking=thinking_summaries(response),
         )
         # agent_messages uses the add_messages reducer (see state.py), which
         # appends — only the messages new to this call are returned, not the
@@ -298,7 +346,7 @@ def build_classify_graph():
     graph = StateGraph(DocumentGraphState)
     graph.add_node("rule_classify", rule_node)
     graph.add_node("agent", agent_node)
-    graph.add_node("tools", ToolNode(_TOOLS, messages_key="agent_messages", handle_tool_errors=True))
+    graph.add_node("tools", tools_node)
     graph.add_node("validate", validate_node)
     graph.add_node("repair", repair_node)
 

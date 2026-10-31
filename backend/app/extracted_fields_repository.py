@@ -6,10 +6,11 @@ from datetime import datetime
 from typing import cast
 
 from .supabase_client import service_supabase_client, supabase_client
-from .supabase_rows import row as _row
+from .supabase_rows import fetch_all, row as _row
 from .fraud_detection.font_consistency import ExtractedField
 
 
+_DOCUMENT_CHUNK = 100  # keeps the in.(...) filter well under URL length limits
 _NUMBER_TEXT_RE = re.compile(r"^-?\(?\d[\d,]*(\.\d+)?\)?$")
 _DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d %b %Y", "%d %B %Y")
 
@@ -65,11 +66,13 @@ def replace_extracted_fields(
     from here) — so individual fields can be queried, joined, or reported
     on directly.
 
-    Replaces (delete-then-insert) rather than upserts: re-processing a
-    document (a reclassification escalation, or a loan officer's manual
-    correction — see routers/documents.py's PATCH endpoint) should leave
-    exactly the current field set, not accumulate stale rows from a
-    previous attempt under different field names.
+    Replaces the whole set rather than upserting: re-processing a document
+    (a reclassification escalation, or a loan officer's manual correction —
+    see routers/documents.py's PATCH endpoint) should leave exactly the
+    current field set, not accumulate stale rows from a previous attempt
+    under different field names. The delete and insert run in one
+    transaction (the replace_extracted_fields function), so a failure
+    leaves the old set in place.
 
     field_category records whether a field was one of the document type's
     required schema fields (see extraction_prompts.EXTRACTION_SCHEMAS) or
@@ -78,24 +81,20 @@ def replace_extracted_fields(
     default_confidence — the document-level confidence, or 1.0 for a
     human-reviewed manual save — for any field it didn't.
     """
-    supabase_client.table("extracted_fields").delete().eq("document_id", document_id).execute()
-
-    if not fields:
-        return
-
     field_confidences = field_confidences or {}
     rows = []
-    for name, value in fields.items():
+    for name, value in (fields or {}).items():
         per_field_confidence = field_confidences.get(name)
         rows.append({
-            "document_id": document_id,
             "field_name": name,
             "field_value": value,
             "confidence": per_field_confidence if per_field_confidence is not None else default_confidence,
             "field_category": "required" if name in required_field_names else "additional",
             "field_type": _infer_field_type(value),
         })
-    supabase_client.table("extracted_fields").insert(rows).execute()
+    service_supabase_client().rpc(
+        "replace_extracted_fields", {"p_document_id": document_id, "p_rows": rows},
+    ).execute()
 
 
 
@@ -123,19 +122,13 @@ def get_extracted_fields_for_documents(
     (routers/ws.py), which re-fetches every connected case on each poll
     tick and would otherwise issue one query per document per tick.
     """
-    if not document_ids:
-        return {}
-
-    result = (
-        supabase_client.table("extracted_fields")
-        .select("*")
-        .in_("document_id", document_ids)
-        .execute()
-    )
     by_document: dict[str, list[ExtractedField]] = defaultdict(list)
-    for raw_row in result.data:
-        row = _row(raw_row)
-        by_document[row["document_id"]].append(ExtractedField(**row))
+    # Paged: a case's statements alone can hold more rows than PostgREST returns in one response.
+    for start in range(0, len(document_ids), _DOCUMENT_CHUNK):
+        chunk = document_ids[start : start + _DOCUMENT_CHUNK]
+        rows = fetch_all(lambda chunk=chunk: supabase_client.table("extracted_fields").select("*").in_("document_id", chunk), "id")
+        for row in rows:
+            by_document[row["document_id"]].append(ExtractedField(**row))
     return by_document
 
 def get_extracted_fields_dict(document_id: str) -> dict:
@@ -180,22 +173,6 @@ def add_extracted_field(
         ),
         "field_type": _infer_field_type(field_value),
     })).execute()
-
-
-def delete_fields_for_document(document_id: str) -> None:
-    """Removes every extracted-field row for a document that is being deleted."""
-    service_supabase_client().table("extracted_fields").delete().eq(
-        "document_id", document_id
-    ).execute()
-
-
-def delete_fields_for_documents(document_ids: list[str]) -> None:
-    """Batch version of delete_fields_for_document — one round-trip for many documents."""
-    if not document_ids:
-        return
-    service_supabase_client().table("extracted_fields").delete().in_(
-        "document_id", document_ids
-    ).execute()
 
 
 def delete_extracted_field(

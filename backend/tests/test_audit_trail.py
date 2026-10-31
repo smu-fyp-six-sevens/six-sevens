@@ -273,12 +273,12 @@ def test_running_one_check_records_the_officer_check_and_findings(published_even
         patch("app.routers.detection.storage_service") as storage,
         patch("app.routers.detection.extracted_fields_repository") as fields_repo,
         patch("app.routers.detection.check_font_consistency", return_value=result),
-        patch("app.routers.detection.langgraph_trace") as trace,
+        patch("app.routers.detection.detection_results") as results,
     ):
         repo.get_document.return_value = _check_document()
         storage.download_file.return_value = b"%PDF-1.4"
         fields_repo.get_extracted_fields.return_value = []
-        trace.load.return_value = {"detection_report": {"verdict": "clean"}}
+        results.get.return_value = ({"verdict": "clean"}, None)
 
         assert client.get("/documents/doc-1/detection/font-consistency").status_code == 200
 
@@ -294,11 +294,11 @@ def test_a_check_that_fails_partway_is_recorded_as_failed(published_events) -> N
     with (
         patch("app.routers._dependencies.document_repository") as repo,
         patch("app.routers.detection.storage_service") as storage,
-        patch("app.routers.detection.langgraph_trace") as trace,
+        patch("app.routers.detection.detection_results") as results,
     ):
         repo.get_document.return_value = _check_document()
         storage.download_file.side_effect = RuntimeError("storage down")
-        trace.load.return_value = {"detection_report": {"verdict": "clean"}}
+        results.get.return_value = ({"verdict": "clean"}, None)
 
         assert client.get("/documents/doc-1/detection/layout-anomalies").status_code == 502
 
@@ -311,10 +311,10 @@ def test_a_check_that_fails_partway_is_recorded_as_failed(published_events) -> N
 def test_a_check_refused_before_it_runs_records_nothing(published_events) -> None:
     with (
         patch("app.routers._dependencies.document_repository") as repo,
-        patch("app.routers.detection.langgraph_trace") as trace,
+        patch("app.routers.detection.detection_results") as results,
     ):
         repo.get_document.return_value = _check_document()
-        trace.load.return_value = {}  # detection has not run yet
+        results.get.return_value = (None, None)  # detection has not run yet
 
         assert client.get("/documents/doc-1/detection/font-consistency").status_code == 409
 

@@ -47,7 +47,7 @@ import pytest
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from PIL import Image, ImageDraw
 
-from app import flags_repository
+from app import findings_repository
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.external_validation.sg_reference.holidays import BUNDLED_HOLIDAYS
 from app.langgraph import trace
@@ -168,6 +168,8 @@ class FakeStore:
         self.files: dict[str, bytes] = {}
         self.statuses: dict[str, list[str]] = {}
         self.guard_results: dict[str, dict] = {}
+        self.reports: dict[str, dict] = {}
+        self.errors: dict[str, str] = {}
 
     def add(self, filename: str, document_type: str, file: bytes, *, fields: dict | None = None,
             metadata: dict | None = None) -> str:
@@ -225,6 +227,23 @@ class FakeStore:
     def revert_to_approved(self, document_id):
         self._status(document_id, DocumentStatus.APPROVED)
 
+    def end_unfinished_detection(self, document_id, *, has_report):
+        if self.documents[document_id].status == DocumentStatus.DETECTING:
+            self._status(document_id, DocumentStatus.DETECTED if has_report else DocumentStatus.APPROVED)
+
+    # detection_results
+    def mark_started(self, document_id):
+        self.errors.pop(document_id, None)
+
+    def save_report(self, document_id, report):
+        self.reports[document_id] = report
+
+    def save_error(self, document_id, error):
+        self.errors[document_id] = error
+
+    def has_report(self, document_id):
+        return document_id in self.reports
+
     # extracted_fields_repository
     def get_extracted_fields(self, document_id):
         return self.fields.get(document_id, [])
@@ -250,6 +269,7 @@ def store(monkeypatch) -> FakeStore:
         monkeypatch.setattr(f"{module}.document_repository", fake)
         monkeypatch.setattr(f"{module}.extracted_fields_repository", fake)
     monkeypatch.setattr("app.langgraph.detection.tools.storage_service", fake)
+    monkeypatch.setattr("app.langgraph.detection.graph.detection_results", fake)
     # These fraud-tool regressions test each document in isolation. Identity
     # matching is covered separately by test_detection_case_match.py.
     monkeypatch.setattr(
@@ -270,7 +290,7 @@ def store(monkeypatch) -> FakeStore:
         "app.case_service.get_case_match_for_document",
         lambda document_id, **_kwargs: None,
     )
-    monkeypatch.setattr(flags_repository, "replace_for_document", lambda document_id, case_id, findings: len(findings))
+    monkeypatch.setattr(findings_repository, "sync_document", lambda document_id, case_id, report: 0)
     return fake
 
 
@@ -458,14 +478,12 @@ async def test_a_clean_image_is_not_flagged_for_tampering(ai, store):
 async def test_a_rerun_clears_the_error_an_earlier_attempt_left(ai, store):
     document_id = store.add("C020_NOA.pdf", "notice_of_assessment", id_card_pdf())
     ai.specialists[LAYOUT] = Specialist(tools=["image_tampering_tool"])
-    trace.record(document_id, "detection_error", error="Cancelled by loan officer")
+    store.errors[document_id] = "Cancelled by loan officer"
 
     await run_detection(document_id)
 
-    stored = trace.get(document_id)
-    assert stored is not None
-    assert stored["detection_error"] is None
-    assert stored["detection_report"]["verdict"]
+    assert document_id not in store.errors
+    assert store.reports[document_id]["verdict"]
 
 
 # --- SCRUM-63 Text overlay -----------------------------------------------------------
@@ -945,12 +963,7 @@ DETECTION_REPORT_FIXTURE = FIXTURES / "detection-report-c028.json"
 
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-119", "FD-015 – FD-020")
-async def test_the_playwright_suites_detection_report_matches_the_graph(ai, store, monkeypatch):
-    def sequential_flag_ids(findings):
-        for number, finding in enumerate((f for f in findings if flags_repository.is_flag(f)), start=1):
-            finding["flag_id"] = f"flag-{number}"
-
-    monkeypatch.setattr(flags_repository, "assign_flag_ids", sequential_flag_ids)
+async def test_the_playwright_suites_detection_report_matches_the_graph(ai, store):
     document_id = _credit_report_with_font_and_metadata_tampering(store)
     ai.briefs = {
         LAYOUT: "Credit report with printed figures: check fonts and layout.",

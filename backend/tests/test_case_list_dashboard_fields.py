@@ -7,7 +7,7 @@ from unittest.mock import patch
 from app import audit, case_service
 from app.events import types
 from app.models import (
-    AdditionalDocument, AdditionalDocuments, CaseDocumentsStatus, CaseRecord, DocumentRecord, DocumentStatus,
+    AdditionalDocument, AdditionalDocuments, CaseRecord, CaseStage, DocumentRecord, DocumentStatus,
 )
 
 
@@ -93,7 +93,7 @@ def test_the_case_list_carries_its_document_types_and_flags_grouped_by_check() -
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.risk_store") as store,
         patch("app.case_service.audit") as trail,
-        patch("app.case_service.flags_repository") as flags,
+        patch("app.case_service.findings_repository") as flags,
     ):
         case_repo.list_cases_page.return_value = ([case], 1)
         doc_repo.list_document_statuses.return_value = [
@@ -102,7 +102,7 @@ def test_the_case_list_carries_its_document_types_and_flags_grouped_by_check() -
         store.latest_many.return_value = {}
         trail.processing_ms_many.return_value = {}
         trail.created_by_many.return_value = {}
-        flags.list_for_cases.return_value = [
+        flags.list_flags_for_cases.return_value = [
             flag("doc-1", "spelling_tool", "low"),
             flag("doc-2", "numerical_checks_tool", "medium"), flag("doc-1", "numerical_checks_tool", "high"),
             flag("deleted-doc", "metadata_tool", "high"),  # its document is gone: not counted
@@ -118,24 +118,22 @@ def test_the_case_list_carries_its_document_types_and_flags_grouped_by_check() -
     ]
 
 
-def test_the_accuracy_filters_pick_cases_by_creation_date_and_documents_status() -> None:
-    def case(case_id: str, created: str) -> CaseRecord:
-        return CaseRecord(id=case_id, greenlink_case_id=case_id.upper(), created_at=created, updated_at=created)
+def test_the_accuracy_filters_pick_cases_by_creation_date_and_stage() -> None:
+    def case(case_id: str, created: str, stage: str) -> CaseRecord:
+        return CaseRecord(id=case_id, greenlink_case_id=case_id.upper(), status=stage, created_at=created, updated_at=created)
 
-    with (
-        patch("app.case_service.case_repository") as case_repo,
-        patch("app.case_service.document_repository") as doc_repo,
-    ):
-        case_repo.list_matching_cases.return_value = [
-            case("new-ready", "2026-10-20T00:00:00Z"), case("new-empty", "2026-10-21T00:00:00Z"),
-            case("old-ready", "2026-09-01T00:00:00Z"),
-        ]
-        doc_repo.list_document_statuses.return_value = [
-            DocumentRecord(id="d1", case_id="new-ready", filename="a.pdf", status=DocumentStatus.ANALYZED, uploaded_at="2026-10-20T00:00:00Z"),
+    cases = [
+        case("new-ready", "2026-10-20T00:00:00Z", "case_analysed"), case("new-empty", "2026-10-21T00:00:00Z", "open"),
+        case("old-ready", "2026-09-01T00:00:00Z", "case_analysed"),
+    ]
+    with patch("app.case_service.case_repository") as case_repo:
+        # The stage filter is the database's (cases.status IN ...).
+        case_repo.list_matching_cases.side_effect = lambda q, statuses=None: [
+            c for c in cases if statuses is None or c.status in statuses
         ]
 
         recent = case_service.case_ids_matching(date(2026, 10, 1), [])
-        recent_ready = case_service.case_ids_matching(date(2026, 10, 1), [CaseDocumentsStatus.ANALYZED])
+        recent_ready = case_service.case_ids_matching(date(2026, 10, 1), [CaseStage.CASE_ANALYSED])
 
     assert recent == {"new-ready", "new-empty"}
     assert recent_ready == {"new-ready"}

@@ -136,7 +136,7 @@ def _same_address(a: str, b: str) -> bool:
 def _addresses(fields: dict[str, Any], document_type: str | None) -> list[_Address]:
     """Every distinct Singapore address in the document, nested ones included, top-level fields first."""
     found: list[_Address] = []
-    # Statements stored before entity_type existed put a company's address under individual_address.
+    # A statement without entity_type can hold a company's address under individual_address.
     corporate_holder = holder_kind(document_type, fields) == "corporate"
     for value in text_values(fields):
         if not value.key.lower().endswith("address"):

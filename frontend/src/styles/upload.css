@@ -770,6 +770,13 @@
   min-width: 0;
 }
 
+.case-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .case-title-editing {
   flex: 1;
   min-width: 0;

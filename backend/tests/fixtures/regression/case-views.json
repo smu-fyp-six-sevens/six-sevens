@@ -31,7 +31,7 @@
           "document_type": "certificate_of_incorporation",
           "filename": "C058_CertIncorp.pdf",
           "finding_id": "0c33c33c:external_validation_tool-1",
-          "flag_id": null,
+          "fingerprint": "42b3f2edcd83ac9eef3820e6",
           "points": 8.0,
           "rationale": "A registered company is always on ACRA's register.",
           "repeat_of": null,
@@ -42,6 +42,7 @@
           "unreviewed": false
         }
       ],
+      "dismissed_findings": [],
       "documents_scanned": 1,
       "documents_total": 1,
       "level": "High",
@@ -52,8 +53,7 @@
       "score": 50,
       "state": "scored",
       "unassessed_checks": []
-    },
-    "supporting_document_recommendations": []
+    }
   },
   "nothing needed": {
     "additional_documents": {
@@ -66,6 +66,7 @@
     },
     "risk": {
       "contributing_findings": [],
+      "dismissed_findings": [],
       "documents_scanned": 1,
       "documents_total": 1,
       "level": "Low",
@@ -76,8 +77,7 @@
       "score": 0,
       "state": "scored",
       "unassessed_checks": []
-    },
-    "supporting_document_recommendations": []
+    }
   },
   "recommendations": {
     "additional_documents": {
@@ -166,6 +166,7 @@
     },
     "risk": {
       "contributing_findings": [],
+      "dismissed_findings": [],
       "documents_scanned": 2,
       "documents_total": 2,
       "level": "Low",
@@ -176,66 +177,7 @@
       "score": 0,
       "state": "scored",
       "unassessed_checks": []
-    },
-    "supporting_document_recommendations": [
-      {
-        "document_type": "purchase_order",
-        "items": [
-          {
-            "amount": -22506.48,
-            "breakdown": [],
-            "counterparty": "UNITED PAPER SUPPLY PTE. LTD.",
-            "date": "11-Jun-26",
-            "description": "REMITTANCE TRANSFER OF FUNDS RTF UNITED PAPER SUPPLY PTE. LTD. SGD 22,506",
-            "prior_amount": null,
-            "reason": "Payment of 22,506.48 on 11-Jun-26 to UNITED PAPER SUPPLY PTE. LTD."
-          }
-        ],
-        "reason": "C001_BankStatement.pdf shows 1 large supplier payment (of at least 20,000.00).",
-        "request": "Request a purchase order for this transaction:",
-        "source_document_id": "0d44d44d-0000-0000-0000-000000000001",
-        "source_filename": "C001_BankStatement.pdf",
-        "title": "Purchase Order"
-      },
-      {
-        "document_type": "bank_loan_evidence",
-        "items": [
-          {
-            "amount": 1850790.0,
-            "breakdown": [
-              {
-                "amount": 516090.0,
-                "breakdown": [],
-                "counterparty": null,
-                "date": null,
-                "description": "Bank borrowings, current portion",
-                "prior_amount": 343330.0,
-                "reason": "Bank borrowings, current portion: 516,090.00 (prior year: 343,330.00)."
-              },
-              {
-                "amount": 1334700.0,
-                "breakdown": [],
-                "counterparty": null,
-                "date": null,
-                "description": "Bank borrowings, non-current portion",
-                "prior_amount": 948200.0,
-                "reason": "Bank borrowings, non-current portion: 1,334,700.00 (prior year: 948,200.00)."
-              }
-            ],
-            "counterparty": null,
-            "date": null,
-            "description": "Total bank borrowings",
-            "prior_amount": 1291530.0,
-            "reason": "Total bank borrowings: 1,850,790.00 (prior year: 1,291,530.00)."
-          }
-        ],
-        "reason": "C001_Financials.pdf shows a 43.3% increase in total bank borrowings compared with the prior year, exceeding the 40% threshold.",
-        "request": "Request bank loan statements or bank loan repayment schedules for this amount:",
-        "source_document_id": "0d44d44d-0000-0000-0000-000000000002",
-        "source_filename": "C001_Financials.pdf",
-        "title": "Bank Loan Statements or Bank Loan Repayment Schedules"
-      }
-    ]
+    }
   },
   "scored": {
     "risk": {
@@ -248,7 +190,7 @@
           "document_type": "payslip",
           "filename": "C011_Payslip.pdf",
           "finding_id": "0a11a11a:font_consistency_tool-1",
-          "flag_id": null,
+          "fingerprint": "40573808e91049508096df80",
           "points": 8.0,
           "rationale": "Only the figure that matters differs.",
           "repeat_of": null,
@@ -266,7 +208,7 @@
           "document_type": "payslip",
           "filename": "C011_Payslip.pdf",
           "finding_id": "0a11a11a:layout_anomalies_tool-1",
-          "flag_id": null,
+          "fingerprint": "33cf3832ea01ca3fa52ad15f",
           "points": 3.0,
           "rationale": "Rows elsewhere on the payslip line up.",
           "repeat_of": null,
@@ -284,7 +226,7 @@
           "document_type": "payslip",
           "filename": "C011_Payslip.pdf",
           "finding_id": "0a11a11a:font_consistency_tool-2",
-          "flag_id": null,
+          "fingerprint": "a24a90f6936b6de196b64a3a",
           "points": 2.0,
           "rationale": "Employer CPF is in a different font from the rest of the payslip. The edit hides an underpayment.",
           "repeat_of": null,
@@ -302,7 +244,7 @@
           "document_type": "bank_statement",
           "filename": "C011_BankStatement.pdf",
           "finding_id": "0a11a11a:spelling_tool-1",
-          "flag_id": null,
+          "fingerprint": "34e3765ec2d1f416160a096c",
           "points": 1.0,
           "rationale": "A bank's own template is proofread.",
           "repeat_of": null,
@@ -320,7 +262,7 @@
           "document_type": "payslip",
           "filename": "C011_Payslip.pdf",
           "finding_id": "0a11a11a:layout_anomalies_tool-2",
-          "flag_id": null,
+          "fingerprint": "33cf3832ea01ca3fa52ad15f-2",
           "points": 0.75,
           "rationale": "Rows elsewhere on the payslip line up.",
           "repeat_of": null,
@@ -338,7 +280,7 @@
           "document_type": "payslip",
           "filename": "C011_Payslip.pdf",
           "finding_id": "0a11a11a:layout_anomalies_tool-3",
-          "flag_id": null,
+          "fingerprint": "33cf3832ea01ca3fa52ad15f-3",
           "points": 0.75,
           "rationale": "Rows elsewhere on the payslip line up.",
           "repeat_of": null,
@@ -349,6 +291,7 @@
           "unreviewed": false
         }
       ],
+      "dismissed_findings": [],
       "documents_scanned": 2,
       "documents_total": 2,
       "level": "High",

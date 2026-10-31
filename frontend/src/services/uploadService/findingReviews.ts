@@ -1,6 +1,6 @@
 import { assertOk } from './request';
 import { authFetch } from '../../lib/api';
-import type { CaseDocumentsStatus, CaseFindingReviews, DetectionMetrics, ReviewScope, ReviewVerdict } from './types';
+import type { CaseFindingReviews, CaseStage, DetectionMetrics, ReviewScope, ReviewVerdict } from './types';
 
 // Every review in the case, with precision and recall per document, across documents and for the case.
 export async function getCaseFindingReviews(caseId: string): Promise<CaseFindingReviews> {
@@ -11,50 +11,16 @@ export async function getCaseFindingReviews(caseId: string): Promise<CaseFinding
   return (await response.json()) as CaseFindingReviews;
 }
 
-// Marks one finding correct or wrong (signed by the logged-in officer); verdict null clears the mark.
-// Returns the case's reviews and metrics afresh.
-export async function setFindingVerdict(
-  caseId: string,
-  review: {
-    scope: ReviewScope;
-    documentId: string | null;
-    findingId: string;
-    checkName: string;
-    checkCode?: string | null;
-    summary: string;
-    verdict: ReviewVerdict | null;
-  },
-): Promise<CaseFindingReviews> {
-  const response = await authFetch(`/cases/${caseId}/finding-reviews/verdict`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      scope: review.scope,
-      document_id: review.documentId,
-      finding_id: review.findingId,
-      check_name: review.checkName,
-      check_code: review.checkCode ?? null,
-      summary: review.summary,
-      verdict: review.verdict,
-    }),
-  });
-
-  await assertOk(response, 'Failed to save the review');
-
-  return (await response.json()) as CaseFindingReviews;
-}
-
+// One finding, named by its fingerprint (and its document, for a document finding); verdict null clears the mark.
 export interface FindingVerdictInput {
   scope: ReviewScope;
   documentId: string | null;
-  findingId: string;
-  checkName: string;
-  checkCode?: string | null;
-  summary: string;
+  fingerprint: string;
   verdict: ReviewVerdict | null;
 }
 
-// One group's review in one request: the findings the officer ticked are correct, the rest wrong.
+// One group's review in one request, signed by the logged-in officer: the findings the officer ticked are
+// correct, the rest wrong. Returns the case's reviews and metrics afresh.
 export async function setFindingVerdicts(caseId: string, verdicts: FindingVerdictInput[]): Promise<CaseFindingReviews> {
   const response = await authFetch(`/cases/${caseId}/finding-reviews/verdicts`, {
     method: 'PUT',
@@ -63,10 +29,7 @@ export async function setFindingVerdicts(caseId: string, verdicts: FindingVerdic
       verdicts: verdicts.map((review) => ({
         scope: review.scope,
         document_id: review.documentId,
-        finding_id: review.findingId,
-        check_name: review.checkName,
-        check_code: review.checkCode ?? null,
-        summary: review.summary,
+        fingerprint: review.fingerprint,
         verdict: review.verdict,
       })),
     }),
@@ -126,7 +89,7 @@ export async function deleteFindingReview(caseId: string, reviewId: string): Pro
 // The dashboard's filters for the metrics: cases created on or after `since` (YYYY-MM-DD), in these statuses.
 export interface DetectionMetricsFilters {
   since?: string | null;
-  statuses?: CaseDocumentsStatus[];
+  statuses?: CaseStage[];
 }
 
 // Precision and recall per check across every reviewed case matching the filters (the dashboard).

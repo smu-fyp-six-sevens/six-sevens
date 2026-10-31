@@ -10,7 +10,7 @@ from app.models import CaseRisk, ContributingFinding, SupportingDocumentRecommen
 
 def _finding(finding_id: str, category: str, points: float = 8) -> ContributingFinding:
     return ContributingFinding(
-        document_id=finding_id.split(":")[0], filename="f.pdf", finding_id=finding_id, severity="high",
+        document_id=finding_id.split(":")[0], filename="f.pdf", finding_id=finding_id, fingerprint=finding_id, severity="high",
         summary="s", rationale="r", points=points, category=category,
     )
 

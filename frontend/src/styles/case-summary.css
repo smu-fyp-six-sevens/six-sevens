@@ -446,6 +446,20 @@
   color: var(--white);
 }
 
+/* A finding the specialists dismissed: never scored, so no severity colour. */
+.risk-severity--dismissed {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink-soft);
+}
+
+.risk-dismissed-heading {
+  margin: 14px 0 4px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .risk-finding-text {
   flex: 1;
   min-width: 0;

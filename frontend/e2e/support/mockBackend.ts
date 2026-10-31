@@ -81,10 +81,19 @@ export interface CaseRow {
   id: string;
   greenlink_case_id: string;
   company_name: string | null;
+  // A CaseStage (backend/app/models.py): what the queue filters and counts on.
   status: string;
-  submission_finalized: boolean;
-  finalized_at: string | null;
+  // What a failed case needs fixed (backend/app/case_stage.py).
+  failure?: string | null;
+  // While analysed: findings without the officer's verdict; finalising waits for 0.
+  findings_to_review?: number | null;
+  // Whether the case needs every required document approved before analysis (set when it is created).
+  checklist_enforced: boolean;
+  // Whether officers review this case's findings before it can be finalised (chosen when it is created).
+  reviews_required: boolean;
   missing_requirements: string[];
+  // What the analysis waits for: required items no approved document covers; empty unless checklist_enforced.
+  unapproved_requirements: string[];
   created_at: string;
   updated_at: string;
   dev: boolean;
@@ -93,8 +102,6 @@ export interface CaseRow {
   id_document_coverage: { covered: number; total: number; missing_side: string | null };
   // Computed by backend/app/case_risk.py on every case read.
   risk: CaseRisk | null;
-  // Computed by backend/app/supporting_documents.py on every case read.
-  supporting_document_recommendations: unknown[];
   // Computed by backend/app/case_pipeline/risk/additional_documents.py when a case analysis runs.
   additional_documents?: unknown;
   // The latest case analysis run in brief (case_service.build_summary). analysis_ready isn't stored: like the
@@ -173,9 +180,10 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
     greenlink_case_id: overrides.greenlink_case_id ?? `GLDB-${Math.floor(Math.random() * 9000) + 1000}`,
     company_name: 'Harbor Light Shipping Pte Ltd',
     status: 'open',
-    submission_finalized: false,
-    finalized_at: null,
+    checklist_enforced: false,
+    reviews_required: true,
     missing_requirements: [],
+    unapproved_requirements: [],
     created_at: ISO,
     updated_at: ISO,
     dev: true,
@@ -184,7 +192,6 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
     id_document_coverage: { covered: 0, total: 0, missing_side: null },
     // Only a completed case analysis sets a case's risk; until then the backend reads null.
     risk: null,
-    supporting_document_recommendations: [],
     ...overrides,
   };
 }
@@ -198,16 +205,16 @@ export function makeAnalysis(overrides: Partial<CaseAnalysis> & Pick<CaseAnalysi
     started_at: ISO,
     finished_at: ISO,
     error: null,
+    confidence: 0,
     findings: [],
     outlook: null,
-    summary: null,
     structured_summary: null,
     risk: null,
     supporting_documents: [],
     additional_documents: null,
     consistent_checks: [],
     clean_checks: [],
-    audit: { models: {}, prompt_version: '', hypotheses_tried: 0, findings_discarded: 0, tool_calls: [] },
+    audit: { models: {}, prompt_version: '', hypotheses_tried: 0, findings_discarded: 0, tool_calls: [], agent_decisions: [] },
     trace: [],
     stale: false,
     ...overrides,
@@ -314,9 +321,6 @@ export class MockBackend {
   traces: Record<string, unknown> = {};
   /** What the content guard found at ingest, per document id (GET .../content-guard); none = checked, nothing found. */
   contentGuards: Record<string, unknown> = {};
-  /** App settings (GET /settings): whether officers review findings, and whether the signed-in officer is an admin. */
-  findingReviewsEnabled = true;
-  isAdmin = false;
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
   /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
@@ -390,7 +394,7 @@ export class MockBackend {
     const riskValue = (c: CaseRow) => (rank(c) ? c.risk!.level! : 'unscored');
 
     let cases = this.newestFirst(this.matching(params.get('q')));
-    if (statuses.length) cases = cases.filter((c) => statuses.includes(this.documentsStatusOf(c)));
+    if (statuses.length) cases = cases.filter((c) => statuses.includes(c.status));
     if (risks.length) cases = cases.filter((c) => risks.includes(riskValue(c)));
     if (sort === 'oldest') cases.reverse();
     // Stable sorts: newest first among equals.
@@ -401,10 +405,7 @@ export class MockBackend {
 
   private caseCounts() {
     const by_status: Record<string, number> = {};
-    for (const c of this.cases) {
-      const status = this.documentsStatusOf(c);
-      by_status[status] = (by_status[status] ?? 0) + 1;
-    }
+    for (const c of this.cases) by_status[c.status] = (by_status[c.status] ?? 0) + 1;
     return { total: this.cases.length, by_status };
   }
 
@@ -557,12 +558,13 @@ export class MockBackend {
       return found ? json(this.listItem(found)) : json({ detail: 'Case not found' }, 404);
     }
     if (path === '/cases' && method === 'POST') {
-      const companyName = (body as { company_name?: string } | null)?.company_name ?? null;
+      const request = body as { company_name?: string; reviews_required?: boolean } | null;
       const next = this.cases.length + 1;
       const created = makeCase({
         id: `case-new-${next}`,
         greenlink_case_id: `GLDB-${9000 + next}`,
-        company_name: companyName,
+        company_name: request?.company_name ?? null,
+        reviews_required: request?.reviews_required ?? true,
       });
       this.cases.push(created);
       return json(created, 201);
@@ -571,18 +573,10 @@ export class MockBackend {
     if (costMatch && method === 'GET') {
       return json(this.caseCost(costMatch[1]));
     }
-    // Same rules as routers/settings.py: every officer reads the settings, only an admin changes them.
-    if (method === 'GET' && path === '/settings') {
-      return json({ finding_reviews_enabled: this.findingReviewsEnabled, is_admin: this.isAdmin });
-    }
-    if (method === 'PUT' && path === '/settings/finding-reviews') {
-      if (!this.isAdmin) return json({ detail: 'Only an admin can change this setting.' }, 403);
-      this.findingReviewsEnabled = (body as { enabled: boolean }).enabled;
-      return json({ finding_reviews_enabled: this.findingReviewsEnabled, is_admin: true });
-    }
-    // With reviews turned off, routers/finding_reviews.py refuses every review route.
-    if (!this.findingReviewsEnabled && (/^\/cases\/[^/]+\/finding-reviews/.test(path) || path === '/detection-metrics')) {
-      return json({ detail: 'Finding reviews are turned off by an admin.' }, 409);
+    // Like routers/finding_reviews.py: a case created without reviews refuses every review route.
+    const reviewedCase = path.match(/^\/cases\/([^/]+)\/finding-reviews/);
+    if (reviewedCase && this.cases.find((c) => c.id === reviewedCase[1])?.reviews_required === false) {
+      return json({ detail: 'This case was created without finding reviews.' }, 409);
     }
     // Officers' reviews of findings (precision/recall): none recorded, so every rate is "nothing to measure".
     if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {
@@ -663,6 +657,17 @@ export class MockBackend {
           .filter((e) => caseId === null || e.case_id === caseId)
           .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)),
       );
+    }
+    // The officer finalising a case (permanent).
+    const stageMatch = path.match(/^\/cases\/([^/]+)\/(finalise)$/);
+    if (stageMatch && method === 'POST') {
+      const found = this.cases.find((c) => c.id === stageMatch[1]);
+      if (!found) return json({ detail: 'Case not found' }, 404);
+      if (found.status !== 'case_analysed') {
+        return json({ detail: 'Only an analysed case, with its findings evaluated, can be finalised.' }, 409);
+      }
+      found.status = 'finalised';
+      return json(found);
     }
     const notesMatch = path.match(/^\/cases\/([^/]+)\/notes$/);
     if (notesMatch) {
@@ -888,31 +893,40 @@ export class MockBackend {
       // 404 until the document has one, which the page shows as "none yet".
       if (method === 'GET' && rest === '/detection/report') {
         const report = this.detectionReports[documentId];
-        if (report) return json(report);
         const error = this.detectionErrors[documentId];
+        // A rerun that didn't finish leaves the earlier report standing, with why beside it.
+        if (report) return json(error ? { ...report, last_run_error: error } : report);
         return error
           ? json({ detail: `Detection failed: ${error}. Run detection again.` }, 502)
           : json({ detail: 'No detection report for this document yet.' }, 404);
       }
-      // Like the worker: the run stops, leaves its error and the document returns to approved. The page only
-      // hears of it with the next snapshot, so a test pushes one.
+      // Like routers/detection.py cancel_document_detection and the worker. A run in flight stops and leaves its
+      // error; the document returns to detected when an earlier report still stands, else to approved. The page
+      // only hears of it with the next snapshot, so a test pushes one. A run still waiting for a worker (approved,
+      // nothing stored) is cancelled at once ("cancelled").
       if (method === 'POST' && rest === '/detection/cancel') {
-        if (document.status !== 'detecting') {
+        const queued =
+          document.status === 'approved' && !this.detectionReports[documentId] && !this.detectionErrors[documentId];
+        if (document.status !== 'detecting' && !queued) {
           return json({ detail: 'No detection run is currently in progress for this document.' }, 409);
         }
         this.detectionErrors[documentId] = 'Cancelled by loan officer';
-        document.status = 'approved';
+        document.status = this.detectionReports[documentId] ? 'detected' : 'approved';
         document.has_detection_error = true;
-        return json({ status: 'cancelling' });
+        return json({ status: queued ? 'cancelled' : 'cancelling' });
       }
-      // Same rules as routers/detection.py retry_document_detection: only after a cancelled or failed run that
-      // left no report, and never while one is running. The run then starts, as the detection-worker would.
+      // Same rules as routers/detection.py retry_document_detection: on an approved or detected document, after a
+      // cancelled or failed run or over a finished report, never while one runs or waits for a worker. The run
+      // then starts, as the detection-worker would.
       if (method === 'POST' && rest === '/detection/retry') {
         if (document.status === 'detecting') {
-          return json({ detail: 'Detection is already running for this document.' }, 409);
+          return json({ detail: 'Detection is already running for this document. Cancel it first.' }, 409);
         }
-        if (this.detectionReports[documentId] || !this.detectionErrors[documentId]) {
-          return json({ detail: 'Detection can only be retried after a cancelled or failed run.' }, 409);
+        if (document.status !== 'approved' && document.status !== 'detected') {
+          return json({ detail: 'Detection runs only on an approved document.' }, 409);
+        }
+        if (!this.detectionReports[documentId] && !this.detectionErrors[documentId]) {
+          return json({ detail: 'Detection is already queued for this document. Cancel it first.' }, 409);
         }
         delete this.detectionErrors[documentId];
         document.status = 'detecting';

@@ -70,7 +70,8 @@ export interface paths {
         };
         /**
          * Get Case Cost
-         * @description Claude spend for one case at list price: per run, per document and in total, from the audit trail.
+         * @description Claude spend for one case at list price: per run, per document and in total, from the audit trail. Every run
+         *     counts: failed, cancelled, retried and rerun ones, earlier case analyses, and runs on documents since deleted.
          */
         get: operations["get_case_cost_audit_cases__case_id__cost_get"];
         put?: never;
@@ -127,8 +128,8 @@ export interface paths {
         };
         /**
          * List Cases
-         * @description One page of the case queue: newest or oldest first, or by risk either way; optionally only these documents
-         *     statuses, only these risk levels and only cases whose number or name contains q.
+         * @description One page of the case queue: newest or oldest first, or by risk either way; optionally only these stages,
+         *     only these risk levels and only cases whose number or name contains q.
          */
         get: operations["list_cases_cases_get"];
         put?: never;
@@ -261,7 +262,9 @@ export interface paths {
          * Run Case Analysis
          * @description Starts the per-case analysis (cross-document findings, risk outlook and
          *     summary) in the background. Only once every approved document has been
-         *     scanned; poll GET .../analysis, or watch the case snapshot, for the result.
+         *     scanned and, for a case that enforces the checklist, every required
+         *     document has been approved; poll
+         *     GET .../analysis, or watch the case snapshot, for the result.
          */
         post: operations["run_case_analysis_cases__case_id__analysis_run_post"];
         delete?: never;
@@ -332,20 +335,21 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/cases/{case_id}/detection/reports": {
+    "/cases/{case_id}/finalise": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Case Detection Reports
-         * @description Every stored detection report for a case's documents, for one combined view.
-         */
-        get: operations["get_case_detection_reports_cases__case_id__detection_reports_get"];
+        get?: never;
         put?: never;
-        post?: never;
+        /**
+         * Finalise Case
+         * @description The loan officer acknowledges an analysed case's submission. Recorded in the audit trail (case.finalised) under
+         *     their username. Permanent: the case is then view-only and takes no changes, except notes and the report export.
+         */
+        post: operations["finalise_case_cases__case_id__finalise_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -392,27 +396,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/cases/{case_id}/finding-reviews/verdict": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set Finding Verdict
-         * @description Marks one finding correct or wrong, signed by the officer; a null verdict clears the mark. Any officer
-         *     can change a verdict; the latest one stands.
-         */
-        put: operations["set_finding_verdict_cases__case_id__finding_reviews_verdict_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/cases/{case_id}/finding-reviews/verdicts": {
         parameters: {
             query?: never;
@@ -424,7 +407,8 @@ export interface paths {
         /**
          * Set Finding Verdicts
          * @description Saves one group's review in one request: the officer ticked the findings that are real (correct) and left
-         *     the rest (wrong). Every target is checked before anything is written, so a bad entry saves nothing.
+         *     the rest (wrong); a null verdict clears the mark. Any officer can change a verdict; the latest one stands.
+         *     Every finding is looked up before anything is written, so a bad entry saves nothing.
          */
         put: operations["set_finding_verdicts_cases__case_id__finding_reviews_verdicts_put"];
         post?: never;
@@ -446,7 +430,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Finding Review
-         * @description Removes a verdict or a missed issue (e.g. one reported by mistake).
+         * @description Removes a missed issue (e.g. one reported by mistake), or clears a verdict; the finding itself stays.
          */
         delete: operations["delete_finding_review_cases__case_id__finding_reviews__review_id__delete"];
         options?: never;
@@ -476,7 +460,8 @@ export interface paths {
          * Add Case Note
          * @description Saves a note signed by the officer making the request. Allowed on any document, approved and
          *     rejected ones included: a note is stored on its own and never edits the document, so the
-         *     document's lock is untouched. Any officer can reply to a note (parent_id).
+         *     document's lock is untouched. Any officer can reply to a note (parent_id). A finalised case is
+         *     view-only, notes included.
          */
         post: operations["add_case_note_cases__case_id__notes_post"];
         delete?: never;
@@ -510,6 +495,28 @@ export interface paths {
         patch: operations["edit_case_note_cases__case_id__notes__note_id__patch"];
         trace?: never;
     };
+    "/cases/{case_id}/report.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Case Report
+         * @description The case report as a PDF download: risk, the case analysis's summary and findings, the recommended additional
+         *     documents, the checklist, the documents and the notes. Before an analysis has finished, a banner says why and
+         *     the analysis sections are left out. Each download is recorded in the case's audit trail.
+         */
+        get: operations["download_case_report_cases__case_id__report_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/detection-metrics": {
         parameters: {
             query?: never;
@@ -520,7 +527,7 @@ export interface paths {
         /**
          * Get Detection Metrics
          * @description Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only
-         *     cases created on or after `since` and in these documents statuses, as the dashboard's filters pick.
+         *     cases created on or after `since` and at these stages, as the dashboard's filters pick.
          */
         get: operations["get_detection_metrics_detection_metrics_get"];
         put?: never;
@@ -767,12 +774,11 @@ export interface paths {
         put?: never;
         /**
          * Cancel Document Detection
-         * @description Interrupts an in-flight detection run — the Detection panel's Cancel
-         *     action while a document reads "Scanning"/"Detecting". Only takes effect
-         *     at the graph's next await point (an Anthropic call already in flight
-         *     still completes) — see workers/detection.py. The cancellation is then
-         *     recorded the same way a crash is, so GET .../detection/report and
-         *     retry_document_detection below both already know how to handle it.
+         * @description Interrupts a detection run: one in flight ("Detecting"), or one still waiting for a worker slot (approved, with
+         *     no report and no error yet). An in-flight run stops at the graph's next await point (an Anthropic call already
+         *     in flight still completes) — see workers/detection.py — and records the cancellation the way a crash is
+         *     recorded. A waiting one is recorded as cancelled here, so it can be run again at once ("cancelled"); the
+         *     worker drops it when its turn comes.
          */
         post: operations["cancel_document_detection_documents__document_id__detection_cancel_post"];
         delete?: never;
@@ -1053,12 +1059,10 @@ export interface paths {
         put?: never;
         /**
          * Retry Document Detection
-         * @description Re-launches detection after a previous attempt was cancelled or
-         *     crashed. NOT a general "run detection" trigger — that only ever
-         *     happens automatically on approval (routers/documents.py's
-         *     approve_document) — so this is only allowed when the last attempt left
-         *     an error/cancellation behind and produced no report, and only when
-         *     nothing is already running for this document.
+         * @description Runs detection again on an approved document: after a cancelled or crashed run, or over a finished report
+         *     (a fresh run replaces the report and the document's findings, and the officer's verdicts on them, once it
+         *     completes; if it doesn't, the earlier report stands). Detection first runs by itself on approval. Refused
+         *     while a run is in flight or still waiting for a worker slot (cancel it first).
          */
         post: operations["retry_document_detection_documents__document_id__detection_retry_post"];
         delete?: never;
@@ -1324,43 +1328,6 @@ export interface paths {
         /** Message */
         get: operations["message_message_get"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Settings */
-        get: operations["get_settings_settings_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/settings/finding-reviews": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set Finding Reviews
-         * @description Turns finding reviews on or off for every officer. Admin only. Reviews already saved are kept either way.
-         */
-        put: operations["set_finding_reviews_settings_finding_reviews_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1741,10 +1708,29 @@ export interface components {
             reason: ("none_needed" | "no_reducible_findings" | "model_failed" | "budget") | null;
         };
         /**
+         * AgentDecision
+         * @description One model agent's decision and its bounded self-reported confidence.
+         */
+        AgentDecision: {
+            /**
+             * Agent
+             * @enum {string}
+             */
+            agent: "hypothesis_planner" | "hypothesis_judge";
+            /** Confidence */
+            confidence: number;
+            /** Decision */
+            decision: string;
+            /** Decision Id */
+            decision_id: string;
+        };
+        /**
          * AnalysisAudit
          * @description What produced a result, so a past run can be reconstructed.
          */
         AnalysisAudit: {
+            /** Agent Decisions */
+            agent_decisions: components["schemas"]["AgentDecision"][];
             /**
              * Findings Discarded
              * @default 0
@@ -1801,13 +1787,6 @@ export interface components {
             /** Text */
             text: string;
         };
-        /** AppSettings */
-        AppSettings: {
-            /** Finding Reviews Enabled */
-            finding_reviews_enabled: boolean;
-            /** Is Admin */
-            is_admin: boolean;
-        };
         /** BenfordAnalysis */
         BenfordAnalysis: {
             /** Chi Square */
@@ -1842,6 +1821,11 @@ export interface components {
         Body_create_case_cases_post: {
             /** Company Name */
             company_name?: string | null;
+            /**
+             * Reviews Required
+             * @default true
+             */
+            reviews_required: boolean;
         };
         /** Body_upload_documents_batch_documents_upload_batch_post */
         Body_upload_documents_batch_documents_upload_batch_post: {
@@ -1908,6 +1892,11 @@ export interface components {
             case_id: string;
             /** Clean Checks */
             clean_checks: string[];
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
             /** Consistent Checks */
             consistent_checks: string[];
             /** Error */
@@ -1938,8 +1927,6 @@ export interface components {
              */
             status: "running" | "complete" | "failed" | "superseded";
             structured_summary: components["schemas"]["AnalysisSummary"] | null;
-            /** Summary */
-            summary: string | null;
             /** Supporting Documents */
             supporting_documents: components["schemas"]["SupportingDocumentRecommendation"][];
             /** Trace */
@@ -2018,10 +2005,27 @@ export interface components {
             case_analysis_usd: number;
             /** Case Id */
             case_id: string;
+            /**
+             * Documents
+             * @default {}
+             */
+            documents: {
+                [key: string]: components["schemas"]["CaseCostDocument"];
+            };
             /** Documents Usd */
             documents_usd: {
                 [key: string]: number;
             };
+            /**
+             * Failed Or Cancelled Usd
+             * @default 0
+             */
+            failed_or_cancelled_usd: number;
+            /**
+             * Repeated Runs Usd
+             * @default 0
+             */
+            repeated_runs_usd: number;
             /** Runs */
             runs: components["schemas"]["CaseCostRun"][];
             /** Timings */
@@ -2030,10 +2034,33 @@ export interface components {
             total_usd: number;
         };
         /**
+         * CaseCostDocument
+         * @description A document a costed run was on: its file name, whether it is still in the case, and whether it was deleted.
+         */
+        CaseCostDocument: {
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /** Filename */
+            filename: string | null;
+            /**
+             * In Case
+             * @default true
+             */
+            in_case: boolean;
+        };
+        /**
          * CaseCostRun
          * @description One costed run, at list price.
          */
         CaseCostRun: {
+            /**
+             * Attempt
+             * @default 1
+             */
+            attempt: number;
             /** Document Id */
             document_id: string | null;
             /** Llm Cache Read Tokens */
@@ -2047,6 +2074,12 @@ export interface components {
              * Format: date-time
              */
             occurred_at: string;
+            /**
+             * Outcome
+             * @default success
+             * @enum {string}
+             */
+            outcome: "success" | "failed" | "cancelled";
             /** Run */
             run: ("document" | "extraction_rerun" | "detection" | "case_analysis") | null;
             /** Type */
@@ -2092,6 +2125,12 @@ export interface components {
          */
         CaseDocumentsStatus: "no_documents" | "stuck" | "failed" | "in_progress" | "analyzed";
         /**
+         * CaseFailure
+         * @description What a FAILED case needs fixed: each has its own remedy for the officer.
+         * @enum {string}
+         */
+        CaseFailure: "document_processing" | "fraud_detection" | "case_analysis";
+        /**
          * CaseFindingReviews
          * @description Every review in a case, and the precision and recall they give: per document, across documents and for the case.
          */
@@ -2132,6 +2171,11 @@ export interface components {
          * @description One row of the case queue: only what the list shows, so it needs no extracted fields.
          */
         CaseListItem: {
+            /**
+             * Checklist Enforced
+             * @default false
+             */
+            checklist_enforced: boolean;
             /** Company Name */
             company_name: string | null;
             /**
@@ -2144,8 +2188,6 @@ export interface components {
             /** Document Types */
             document_types: string[];
             documents_status: components["schemas"]["CaseDocumentsStatus"];
-            /** Finalized At */
-            finalized_at: string | null;
             /** Flags */
             flags: components["schemas"]["CaseFlagCount"][];
             /** Greenlink Case Id */
@@ -2156,17 +2198,14 @@ export interface components {
             processing_ms: number | null;
             /** Recommended Documents */
             recommended_documents: string[] | null;
+            /**
+             * Reviews Required
+             * @default true
+             */
+            reviews_required: boolean;
             risk: components["schemas"]["CaseRisk"] | null;
-            /**
-             * Status
-             * @default open
-             */
-            status: string;
-            /**
-             * Submission Finalized
-             * @default false
-             */
-            submission_finalized: boolean;
+            /** @default open */
+            status: components["schemas"]["CaseStage"];
             /**
              * Updated At
              * Format: date-time
@@ -2229,6 +2268,11 @@ export interface components {
         };
         /** CaseRecord */
         CaseRecord: {
+            /**
+             * Checklist Enforced
+             * @default false
+             */
+            checklist_enforced: boolean;
             /** Company Name */
             company_name: string | null;
             /**
@@ -2236,22 +2280,17 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /** Finalized At */
-            finalized_at: string | null;
             /** Greenlink Case Id */
             greenlink_case_id: string;
             /** Id */
             id: string;
             /**
-             * Status
-             * @default open
+             * Reviews Required
+             * @default true
              */
-            status: string;
-            /**
-             * Submission Finalized
-             * @default false
-             */
-            submission_finalized: boolean;
+            reviews_required: boolean;
+            /** @default open */
+            status: components["schemas"]["CaseStage"];
             /**
              * Updated At
              * Format: date-time
@@ -2267,6 +2306,8 @@ export interface components {
         CaseRisk: {
             /** Contributing Findings */
             contributing_findings: components["schemas"]["ContributingFinding"][];
+            /** Dismissed Findings */
+            dismissed_findings: components["schemas"]["DismissedFinding"][];
             /**
              * Documents Scanned
              * @default 0
@@ -2304,6 +2345,16 @@ export interface components {
             total: number;
         };
         /**
+         * CaseStage
+         * @description Where a case stands, in the order a case normally moves through them
+         *     (the loan officer's flowchart). Stored in cases.status. Every stage but
+         *     FINALISED follows from the case's documents and its latest analysis (see
+         *     case_stage.derive); FINALISED is set by a loan officer once the case
+         *     is analysed, and is permanent: the case is view-only.
+         * @enum {string}
+         */
+        CaseStage: "open" | "processing_documents" | "pending_review" | "documents_incomplete" | "fraud_detection" | "ready_for_analysis" | "pending_evaluation" | "case_analysed" | "finalised" | "failed";
+        /**
          * CaseSummary
          * @description documents_status, fulfilled_requirements and missing_requirements are all
          *     computed live from the documents table on every read, never stored — see
@@ -2317,6 +2368,11 @@ export interface components {
              * @default false
              */
             analysis_ready: boolean;
+            /**
+             * Checklist Enforced
+             * @default false
+             */
+            checklist_enforced: boolean;
             /** Company Name */
             company_name: string | null;
             /**
@@ -2325,8 +2381,9 @@ export interface components {
              */
             created_at: string;
             documents_status: components["schemas"]["CaseDocumentsStatus"];
-            /** Finalized At */
-            finalized_at: string | null;
+            failure: components["schemas"]["CaseFailure"] | null;
+            /** Findings To Review */
+            findings_to_review: number | null;
             /** Fulfilled Requirements */
             fulfilled_requirements: string[];
             /** Greenlink Case Id */
@@ -2337,19 +2394,16 @@ export interface components {
             /** Missing Requirements */
             missing_requirements: string[];
             proof_of_address_coverage: components["schemas"]["ProofOfAddressCoverage"];
+            /**
+             * Reviews Required
+             * @default true
+             */
+            reviews_required: boolean;
             risk: components["schemas"]["CaseRisk"] | null;
-            /**
-             * Status
-             * @default open
-             */
-            status: string;
-            /**
-             * Submission Finalized
-             * @default false
-             */
-            submission_finalized: boolean;
-            /** Supporting Document Recommendations */
-            supporting_document_recommendations: components["schemas"]["SupportingDocumentRecommendation"][];
+            /** @default open */
+            status: components["schemas"]["CaseStage"];
+            /** Unapproved Requirements */
+            unapproved_requirements: string[];
             /**
              * Updated At
              * Format: date-time
@@ -2501,8 +2555,8 @@ export interface components {
             filename: string;
             /** Finding Id */
             finding_id: string;
-            /** Flag Id */
-            flag_id: string | null;
+            /** Fingerprint */
+            fingerprint: string;
             /** Points */
             points: number;
             /** Rationale */
@@ -2546,8 +2600,18 @@ export interface components {
             category: components["schemas"]["FindingCategory"];
             /** Citations */
             citations: string[];
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
             /** Document Ids */
             document_ids: string[];
+            /**
+             * Fingerprint
+             * @default
+             */
+            fingerprint: string;
             /** Hypothesis Id */
             hypothesis_id: string;
             /** Id */
@@ -2650,6 +2714,33 @@ export interface components {
             target_precision: number;
             /** Target Recall */
             target_recall: number;
+        };
+        /**
+         * DismissedFinding
+         * @description A tool's finding a specialist dismissed as a false positive (case_risk). An officer marks it correct when it
+         *     is a real problem after all.
+         */
+        DismissedFinding: {
+            /** Category */
+            category: string | null;
+            /** Check Code */
+            check_code: string | null;
+            /** Document Id */
+            document_id: string;
+            /** Document Type */
+            document_type: string | null;
+            /** Filename */
+            filename: string;
+            /** Finding Id */
+            finding_id: string;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Reason */
+            reason: string;
+            /** Summary */
+            summary: string;
+            /** Tool */
+            tool: string | null;
         };
         /** DocumentCaseMatch */
         DocumentCaseMatch: {
@@ -2892,11 +2983,14 @@ export interface components {
         FindingCategory: "tampering_forensic" | "registry_discrepancy" | "identity_entity_conflict" | "cross_document_variance" | "behavioural_anomaly" | "unsupported_claim";
         /**
          * FindingReview
-         * @description An officer's verdict on one finding (kind "verdict": correct or wrong), or an issue the officer found that
-         *     no finding raised (kind "missed"). scope "document" is a finding on one document; "case" a cross-document
-         *     finding from the case analysis. check_name is the tool for a document finding, the category for a case one.
+         * @description An officer's verdict on one current finding (kind "verdict": correct or wrong, the finding's row in the
+         *     findings table), or an issue the officer found that no finding raised (kind "missed"). scope "document" is a
+         *     finding on one document; "case" a cross-document finding from the case analysis. check_name is the tool for
+         *     a document finding, the category for a case one.
          */
         FindingReview: {
+            /** Agent Decision */
+            agent_decision: ("accepted" | "not_assessed" | "overridden" | "dismissed") | null;
             /** Case Id */
             case_id: string;
             /** Check Code */
@@ -2910,8 +3004,8 @@ export interface components {
             created_at: string;
             /** Document Id */
             document_id: string | null;
-            /** Finding Id */
-            finding_id: string | null;
+            /** Fingerprint */
+            fingerprint: string | null;
             /** Id */
             id: string;
             /**
@@ -3818,34 +3912,20 @@ export interface components {
          * @enum {string}
          */
         RoutingStatus: "accepted" | "manual_review";
-        /** SetFindingReviewsRequest */
-        SetFindingReviewsRequest: {
-            /** Enabled */
-            enabled: boolean;
-        };
         /**
          * SetFindingVerdictRequest
          * @description Marks one finding correct or wrong; verdict null clears the officer's mark.
          */
         SetFindingVerdictRequest: {
-            /** Check Code */
-            check_code?: string | null;
-            /** Check Name */
-            check_name: string;
             /** Document Id */
             document_id?: string | null;
-            /** Finding Id */
-            finding_id: string;
+            /** Fingerprint */
+            fingerprint: string;
             /**
              * Scope
              * @enum {string}
              */
             scope: "document" | "case";
-            /**
-             * Summary
-             * @default
-             */
-            summary: string;
             /** Verdict */
             verdict?: ("correct" | "wrong") | null;
         };
@@ -4071,10 +4151,10 @@ export interface components {
         /**
          * UpdateCaseRequest
          * @description A loan officer updating the case's own identifying details. Only
-         *     company_name is officer-editable today — status, submission_finalized
-         *     and greenlink_case_id are system-managed (see case_service.py /
-         *     case_repository.set_submission_finalized) and deliberately excluded
-         *     here so they can't be overwritten through this endpoint.
+         *     company_name is officer-editable today — status, checklist_enforced
+         *     and greenlink_case_id are system-managed (see case_stage.py /
+         *     case_service.create_case) and deliberately excluded here so they
+         *     can't be overwritten through this endpoint.
          */
         UpdateCaseRequest: {
             /** Company Name */
@@ -4368,7 +4448,7 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 sort?: "newest" | "oldest" | "risk" | "lowest_risk";
-                status?: components["schemas"]["CaseDocumentsStatus"][];
+                status?: components["schemas"]["CaseStage"][];
                 risk?: ("Critical" | "High" | "Medium" | "Low" | "unscored")[];
                 q?: string | null;
             };
@@ -4800,7 +4880,7 @@ export interface operations {
             };
         };
     };
-    get_case_detection_reports_cases__case_id__detection_reports_get: {
+    finalise_case_cases__case_id__finalise_post: {
         parameters: {
             query?: never;
             header?: {
@@ -4819,9 +4899,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["CaseSummary"];
                 };
             };
             /** @description Validation Error */
@@ -4887,43 +4965,6 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseFindingReviews"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_finding_verdict_cases__case_id__finding_reviews_verdict_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                case_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetFindingVerdictRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5191,11 +5232,44 @@ export interface operations {
             };
         };
     };
+    download_case_report_cases__case_id__report_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The case report as a PDF. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_detection_metrics_detection_metrics_get: {
         parameters: {
             query?: {
                 since?: string | null;
-                status?: components["schemas"]["CaseDocumentsStatus"][];
+                status?: components["schemas"]["CaseStage"][];
             };
             header?: {
                 authorization?: string | null;
@@ -6556,72 +6630,6 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
-                };
-            };
-        };
-    };
-    get_settings_settings_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppSettings"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_finding_reviews_settings_finding_reviews_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetFindingReviewsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppSettings"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

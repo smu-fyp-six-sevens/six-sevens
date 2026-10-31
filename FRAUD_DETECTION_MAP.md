@@ -12,7 +12,7 @@ Detection runs in the background once a loan officer approves a document. Nothin
 4. **Merge.** Plain code combines the findings into one report with a verdict (`flagged`, `inconclusive`, `clean`), stored on the document's LangGraph trace (not the `documents` table, so the large trace loads only when needed).
 5. **Individual checks.** An officer can re-run one check from the panel, only after a full run has produced a report.
 
-**Flags.** After the report is saved, code writes each finding a specialist assessed and did not dismiss to the `flags` table (`app/flags_repository.py`), before the document becomes `detected`. A finding nobody assessed stays in the report (and counts towards case risk as "unreviewed") but is not a flag; case-level findings never are. Each flag's UUID is stamped on the finding as `flag_id`, so the report, the `flags` row and `risk_scores.flag_ids` agree. A retry replaces the document's open flags (the delete uses the service client; the backend role may only read and insert under RLS). A failed write is recorded on the trace as `flags_error` and does not fail the run.
+**Findings.** After the report is saved, code fingerprints every finding a tool returned (`app/finding_keys.py`) and writes them all, kept and dismissed, to the `findings` table (`app/findings_repository.py`, one transaction), replacing the previous run's findings and their verdicts, before the document becomes `detected`. A failed write is recorded on the trace as `findings_error` and does not fail the run. **Rerun and cancel:** an officer can cancel a run in flight or still waiting for a worker, and run detection again after a cancelled or failed run or over a finished report; a rerun that doesn't finish leaves the earlier report standing (the document returns to `detected`, and the report says the last run didn't finish).
 
 An approved "Other" (unrecognised) document is scanned like any other. Checks that need a type report "nothing to check", and layout runs in generic mode (no per-type reference). Comparing a document with the rest of its case is not done here; that is the per-case analysis (§1B).
 
@@ -46,6 +46,8 @@ The three `PAY.CPF_*` checks share one assessment (`reference_checks/cpf.py`), s
 | `REG.UNIT_MISSING` | home in flats or a condo with no unit number | signal |
 
 Zoning comes from a local index (`land_use.py`, about 12 MB) built from a 175 MB data.gov.sg file when the Docker image is built. Without it, zoning is skipped and the startup log says so.
+
+**Addresses** compare after `cross_document/address_matching.normalize_address`: "Block 50, Tuas Avenue 11, Floor 01, Unit 30, Singapore 639107", "50 TUAS AVENUE 11, #01-30, SINGAPORE 639107" and "Blk 50 … Unit 01-30 S639107" are one address (floor and unit forms, block, abbreviations, leading zeros); a different unit, floor, block or postal code still differs.
 
 **`case_match.py`** is the upload check, not a fraud signal: it verifies each case document's company and individuals against the certificate of incumbency (UEN, name and ID matching), so a document from another case is caught and sent to manual review. It is separate from the cross-document analysis; both build their comparable keys from `identifiers.py`. Reports stored before person comparison moved to the case analysis may still carry `case_identity_match` findings; they still display and score.
 
@@ -85,10 +87,10 @@ Shared: `app/identifiers.py` is a leaf module (it imports neither `case_match` n
   - Layout & Rendering: font consistency, layout anomalies, image manipulation, image tampering.
   - Content Validation: spelling, date consistency, page consistency, `numerical_checks_tool`, `external_validation_tool`; its prompt also lists the document's fields and the two check menus.
   - Digital Authenticity: metadata, AI generation.
-  A finding the LLM doesn't assess is kept at `medium` with `ai_accepted: false`; one it assessed and kept has `ai_accepted: true`. A tool with a severity floor (`_MIN_SEVERITY_BY_TOOL`) keeps that floor even when dismissed. Only `ai_accepted` per-document findings become flags.
+  A finding the LLM doesn't assess is kept at `medium` with `ai_accepted: false`; one it assessed and kept has `ai_accepted: true`. A tool with a severity floor (`_MIN_SEVERITY_BY_TOOL`) keeps that floor even when dismissed. Every finding is stored, kept and dismissed (`findings.agent_decision`); the case list counts the accepted ones.
 - **Per-run fetch cache (`tools.py`)**: the document row, its fields and its file are each fetched once per run. The cache holds the in-flight fetch, so parallel specialists share one; a failed fetch is dropped and retried. `load_context` primes it.
 - **`graph.py`**: the lead graph, the merge into a verdict, the lead's prompts, and `run_detection()`.
-- **`flags_repository.py`**: builds `flags` rows from a report and replaces a document's open flags.
+- **`findings_repository.py`**: builds `findings` rows from a report or a case analysis and syncs them; officers' verdicts and missed issues. **`finding_keys.py`**: the fingerprints.
 
 ## 2A. Wiring reference
 
@@ -97,8 +99,8 @@ Shared: `app/identifiers.py` is a leaf module (it imports neither `case_match` n
 1. `trace.resume`, record `detection_start`, mark the document `detecting`.
 2. Invoke the cached graph with `recursion_limit=40`.
 3. `finally`: drop the per-run fetch cache.
-4. On any exception: record `detection_error`, return the document to `approved`, re-raise. `CancelledError` is recorded by `_run_detection_task` instead.
-5. On success, in order: wait for the trace write holding the report (`trace.flush`), store the flags, mark `detected`. The report is saved before the status changes, so a snapshot never shows "detected" without a report.
+4. On any exception: save the error (`detection_results`), end the run (`end_unfinished_run`: back to `approved`, or to `detected` when an earlier report stands), re-raise. A cancel is recorded by the detection worker instead.
+5. On success, in order: save the report (`detection_results`), store the findings, mark `detected`. The report is saved before the status changes, so a snapshot never shows "detected" without a report.
 
 `_run_detection_task` holds a semaphore (`DETECTION_CONCURRENCY`, default 2), so a bulk approval queues the rest.
 
@@ -152,7 +154,7 @@ The specialist catalogue (names, titles, expertise, tools) is generated from `SP
 | `detection_second_look` | before a second look (from, to, question) |
 | `detection_done` | end of `synthesize` (verdict and the full `detection_report`) |
 | `detection_error` | any exception in `run_detection`, or cancel |
-| `flags_error` | storing flags failed (the run still completes) |
+| `findings_error` | storing the findings failed (the run still completes) |
 | `run_audit` | every repaired model reply and the call count |
 
 Trace writes are coalesced: at most one write per document is queued and it saves the latest state. Spans (OpenTelemetry): `detection.run`, `detection.lead_plan`, `detection.lead_review`, `detection.specialist.<name>`.
@@ -181,7 +183,7 @@ There is no `POST /detection/run`: the first run starts only on approval (`appro
 
 ## 4. Frontend
 
-- **`DetectionPanel.tsx`**: the verdict and summary, each specialist with its brief and tools, dismissed findings and why, the second look, findings, and anything that could not be assessed. Buttons: "Retry detection" after a failed run, "Cancel detection" while scanning; no "Run detection". "Run an individual check" buttons stay disabled until a report exists.
+- **`DetectionPanel.tsx`**: the verdict and summary, each specialist with its brief and tools, dismissed findings and why, the second look, findings, and anything that could not be assessed. Buttons: "Cancel detection" while scanning or waiting for a worker; "Run detection again" after a cancelled or failed run or over a finished report (confirmed first, since it replaces the findings and their verdicts). "Run an individual check" buttons stay disabled until a report exists.
 - **`CaseAnalysisCard.tsx`**: "Run case analysis" once `analysis_ready`, then the summary, findings (each difference its own row), "Checked and consistent", and the what-if list, with an "Out of date" notice when documents changed.
 
 ## 5. Tests
@@ -195,7 +197,7 @@ Found by reading the code (2026-10-05); re-checked 2026-10-24. None has been rep
 | # | Severity | Where | What happens |
 |---|---|---|---|
 | 1 | Low | `graph.py` `_normalise_plan` | If the lead's JSON can't be parsed, every specialist runs with the generic brief and nothing records the lead's failure |
-| 2 | Medium (local only) | `routers/detection.py` cancel/retry, `DetectionPanel.tsx` | If a run is lost before recording an error, cancel and retry both return 409. In the cloud the sweeper recovers a document `detecting` for over 15 minutes; locally (uvicorn, sweeper off) the panel shows "Scanning…" until `python -m app.sweeper --once --case <id>` is run |
+| 2 | Medium (local only) | `routers/detection.py` cancel/retry, `DetectionPanel.tsx` | If a run is lost mid-scan (`detecting`) before recording an error, cancel only asks a worker that no longer has it, and retry returns 409 (a run lost while still queued can be cancelled). In the cloud the sweeper recovers a document `detecting` for over 15 minutes; locally (uvicorn, sweeper off) the panel shows "Scanning…" until `python -m app.sweeper --once --case <id>` is run |
 | 3 | Medium–High | `specialists.py` `_collect_node`, merge | An unassessed finding becomes `medium` and can flag a document and count towards case risk ("unreviewed"); it is no longer stored as a flag |
 | 4 | Medium | `tools.py` `metadata_tool` | Calls the synchronous `check_metadata_anomalies` inside an `async` function, blocking the event loop while it runs (the other tools use `asyncio.to_thread`) |
 | 5 | Medium | `tools.py` `_with_ids`, `specialists.py` `_collect_node` | Finding ids are numbered per tool call; if a specialist calls the same tool twice, `_collect_node` keys by id and silently overwrites the first, and the second-look lookup assumes unique ids |

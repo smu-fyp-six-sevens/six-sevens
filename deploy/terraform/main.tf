@@ -20,6 +20,8 @@ locals {
     SUPABASE_STORAGE_BUCKET = var.supabase_storage_bucket
     # Traces to Cloud Trace, one service name each (K_SERVICE).
     OTEL_ENABLED = "true"
+    # Cases created here need every required document approved before analysis (cases.checklist_enforced).
+    REQUIRE_COMPLETE_CHECKLIST = "true"
   }
 
   # One entry per backend role (CLOUD_ARCHITECTURE_PLAN.md section 2).

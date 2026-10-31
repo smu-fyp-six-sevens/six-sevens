@@ -11,12 +11,14 @@ from pydantic import BaseModel
 
 from ..langgraph import trace as langgraph_trace
 from ..langgraph.detection import tools as detection_tools
-from ..langgraph.detection_report import read_report
 from ..models import DocumentRecord, DocumentStatus, skips_detection
-from .. import case_service, document_repository, events, extracted_fields_repository, storage_service
+from .. import case_service, detection_results, document_repository, events, extracted_fields_repository, storage_service
 from ..events import Stopwatch, officer_event, types
 from ..cpu_pool import run_cpu
-from ._dependencies import get_document_or_404, get_document_with_metadata_or_404, to_thread_or_502
+from ..snapshots import push_case_snapshot
+from ._dependencies import (
+    get_document_or_404, get_document_with_metadata_or_404, get_editable_document_or_404, to_thread_or_502,
+)
 from ..case_match import DocumentCaseMatch
 from ..case_pipeline.cross_document.company_identity import (
     CompanyNameConsistencyResult,
@@ -50,7 +52,6 @@ from ..fraud_detection.spelling.spelling_anomaly import SpellingAnomalyResult, c
 from ..fraud_detection.external_validation.runner import ExternalValidationResult, run_external_validation
 
 router = APIRouter(prefix="/documents", tags=["detection"])
-cases_router = APIRouter(prefix="/cases", tags=["detection"])
 logger = logging.getLogger(__name__)
 
 
@@ -84,6 +85,7 @@ async def _trace_check(document_id: str, step: str, **fields: object) -> None:
     table classify/extract/detection-run steps land on (see langgraph/trace.py)."""
     await asyncio.to_thread(langgraph_trace.resume, document_id)
     langgraph_trace.record(document_id, step, **fields)
+    await asyncio.to_thread(langgraph_trace.flush, document_id)
 
 
 async def _require_detection_has_run(
@@ -105,16 +107,15 @@ async def _check_detection_has_run(document_id: str, document: DocumentRecord) -
     pass (triggered automatically on approval — see
     workers/detection.py) has completed at least once
     for this document — never the other way round. Checked by looking for
-    a stored detection_report on the document's langgraph trace (same
-    signal GET .../detection/report uses).
+    a stored report (same signal GET .../detection/report uses).
     """
     if skips_detection(document):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Detection doesn't run on documents with no type.",
         )
-    trace_data = await asyncio.to_thread(langgraph_trace.load, document_id)
-    if not (trace_data or {}).get("detection_report"):
+    report, _ = await asyncio.to_thread(detection_results.get, document_id)
+    if not report:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Run full detection first before running an individual check.",
@@ -337,9 +338,9 @@ _PLACED_REPORTS_KEPT = 64
 
 
 async def _with_finding_locations(document_id: str, report: dict) -> dict:
-    """The report with the findings it can't place itself (older font, spelling and layout findings;
-    numerical and date findings) placed on the page for the preview to highlight. Best effort: the
-    report is returned as stored if the file can't be read."""
+    """The report with the findings it can't place itself (numerical, date and registry findings) placed
+    on the page for the preview to highlight. Best effort: the report is returned as stored if the file
+    can't be read."""
     if not detection_tools.needs_locations(report):
         return report
     key = (document_id, str(report.get("generated_at")))
@@ -348,19 +349,8 @@ async def _with_finding_locations(document_id: str, report: dict) -> dict:
     try:
         document = await get_document_or_404(document_id)
         file_bytes = await _download_document_bytes(document)
-        fields = (
-            await asyncio.to_thread(extracted_fields_repository.get_extracted_fields_dict, document_id)
-            if detection_tools.needs_fields(report)
-            else {}
-        )
-        placed = await run_cpu(
-            detection_tools.add_missing_locations,
-            report,
-            file_bytes,
-            fields,
-            document.document_type,
-            document.classification_confidence,
-        )
+        fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields_dict, document_id)
+        placed = await run_cpu(detection_tools.add_missing_locations, report, file_bytes, fields)
     except Exception:
         logger.warning("Could not place the findings of document %s's report", document_id, exc_info=True)
         return report
@@ -372,15 +362,18 @@ async def _with_finding_locations(document_id: str, report: dict) -> dict:
 
 @router.get("/{document_id}/detection/report")
 async def get_document_detection_report(document_id: str) -> dict:
-    trace = await asyncio.to_thread(langgraph_trace.load, document_id)
-    report = read_report((trace or {}).get("detection_report"))
+    report, error = await to_thread_or_502(
+        detection_results.get, document_id,
+        detail="Failed to load the detection report.", log=("Failed to load the detection report of %s", document_id),
+    )
     if report:
-        return await _with_finding_locations(document_id, report)
+        placed = await _with_finding_locations(document_id, report)
+        # A rerun that crashed or was cancelled leaves the earlier report standing; say so beside it.
+        return {**placed, "last_run_error": error} if error else placed
     # A report always wins over a stale error from an earlier failed attempt
     # (above) — only fall back to reporting the error when there's no report
     # at all, so the frontend can tell "crashed" apart from "never run yet"
     # instead of both looking like the same 404 forever.
-    error = (trace or {}).get("detection_error")
     if error:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -391,17 +384,20 @@ async def get_document_detection_report(document_id: str) -> dict:
 
 @router.post("/{document_id}/detection/cancel")
 async def cancel_document_detection(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> dict:
     """
-    Interrupts an in-flight detection run — the Detection panel's Cancel
-    action while a document reads "Scanning"/"Detecting". Only takes effect
-    at the graph's next await point (an Anthropic call already in flight
-    still completes) — see workers/detection.py. The cancellation is then
-    recorded the same way a crash is, so GET .../detection/report and
-    retry_document_detection below both already know how to handle it.
+    Interrupts a detection run: one in flight ("Detecting"), or one still waiting for a worker slot (approved, with
+    no report and no error yet). An in-flight run stops at the graph's next await point (an Anthropic call already
+    in flight still completes) — see workers/detection.py — and records the cancellation the way a crash is
+    recorded. A waiting one is recorded as cancelled here, so it can be run again at once ("cancelled"); the
+    worker drops it when its turn comes.
     """
-    if document.status != DocumentStatus.DETECTING:
+    queued = False
+    if document.status == DocumentStatus.APPROVED and not skips_detection(document):
+        report, error = await asyncio.to_thread(detection_results.get, document_id)
+        queued = report is None and error is None
+    if document.status != DocumentStatus.DETECTING and not queued:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No detection run is currently in progress for this document.",
@@ -409,20 +405,23 @@ async def cancel_document_detection(
     await events.publish(officer_event(
         types.DETECTION_CANCEL_REQUESTED, document_id=document_id, case_id=document.case_id,
     ))
+    if queued:
+        await asyncio.to_thread(detection_results.save_error, document_id, "Cancelled by loan officer")
+        if document.case_id:
+            await push_case_snapshot(document.case_id)
+        return {"status": "cancelled"}
     return {"status": "cancelling"}
 
 
 @router.post("/{document_id}/detection/retry")
 async def retry_document_detection(
-    document_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> dict:
     """
-    Re-launches detection after a previous attempt was cancelled or
-    crashed. NOT a general "run detection" trigger — that only ever
-    happens automatically on approval (routers/documents.py's
-    approve_document) — so this is only allowed when the last attempt left
-    an error/cancellation behind and produced no report, and only when
-    nothing is already running for this document.
+    Runs detection again on an approved document: after a cancelled or crashed run, or over a finished report
+    (a fresh run replaces the report and the document's findings, and the officer's verdicts on them, once it
+    completes; if it doesn't, the earlier report stands). Detection first runs by itself on approval. Refused
+    while a run is in flight or still waiting for a worker slot (cancel it first).
     """
     if skips_detection(document):
         raise HTTPException(
@@ -432,32 +431,24 @@ async def retry_document_detection(
     if document.status == DocumentStatus.DETECTING:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Detection is already running for this document.",
+            detail="Detection is already running for this document. Cancel it first.",
         )
-    trace_data = await asyncio.to_thread(langgraph_trace.load, document_id)
-    has_report = bool((trace_data or {}).get("detection_report"))
-    has_error = bool((trace_data or {}).get("detection_error"))
-    if has_report or not has_error:
+    if document.status not in (DocumentStatus.APPROVED, DocumentStatus.DETECTED):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Detection can only be retried after a cancelled or failed run.",
+            detail="Detection runs only on an approved document.",
+        )
+    report, error = await asyncio.to_thread(detection_results.get, document_id)
+    if report is None and error is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Detection is already queued for this document. Cancel it first.",
         )
     await events.publish(officer_event(
         types.DETECTION_RETRY_REQUESTED, document_id=document_id, case_id=document.case_id,
         detail={"document_type": document.document_type},
     ))
     return {"status": "retrying"}
-
-
-@cases_router.get("/{case_id}/detection/reports")
-async def get_case_detection_reports(case_id: str) -> list[dict]:
-    """Every stored detection report for a case's documents, for one combined view."""
-    return await to_thread_or_502(
-        langgraph_trace.get_case_detection_reports,
-        case_id,
-        detail="Failed to load detection reports.",
-        log=("Failed to load detection reports for case %s", case_id),
-    )
 
 
 @router.get("/{document_id}/detection/case-match", response_model=DocumentCaseMatch)

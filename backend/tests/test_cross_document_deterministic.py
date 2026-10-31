@@ -106,7 +106,7 @@ async def test_analysis_runs_the_code_checks_whatever_the_agent_proposes() -> No
         _doc("b", "bank_statement", {"company_name": "ACME PTE LTD", "uen": "202054321M"}),
     )
 
-    with patch.object(graph, "hypothesise", AsyncMock(return_value=[])):
+    with patch.object(graph, "hypothesise", AsyncMock(return_value=([], 0.0))):
         state = await graph.run_cross_document_analysis(context)
 
     assert [f.hypothesis_id for f in state["findings"]] == ["deterministic"]
@@ -318,7 +318,7 @@ async def test_a_company_name_mismatch_cannot_be_dropped_by_the_agent() -> None:
     # The code finding is added to the result whatever the agent proposes or concludes.
     context = _harbor_light_context()
 
-    with patch.object(graph, "hypothesise", AsyncMock(return_value=[])):
+    with patch.object(graph, "hypothesise", AsyncMock(return_value=([], 0.0))):
         state = await graph.run_cross_document_analysis(context)
 
     [mismatch] = [f for f in state["findings"] if "company name" in f.summary]

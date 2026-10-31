@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .config import settings
 from .holder import holder_kind
@@ -106,7 +106,7 @@ ADDRESS_PROOF_DOCUMENT_TYPES: set[str] = {
 def is_personal_bank_statement(document_type: str | None, fields: dict | None) -> bool:
     """
     A bank_statement held by an individual rather than a company. The signal
-    is the stored entity_type, or for statements stored before it existed an
+    is the stored entity_type, or for a statement whose extraction left it out an
     individual_name with no company_name (see holder.holder_kind). Before extraction has run —
     no fields yet — it stays the corporate default, matching how a
     proof_of_address/source_of_wealth document is treated until its fields
@@ -229,13 +229,50 @@ def compute_fulfilled_requirements(
     return fulfilled
 
 
+class CaseStage(str, Enum):
+    """
+    Where a case stands, in the order a case normally moves through them
+    (the loan officer's flowchart). Stored in cases.status. Every stage but
+    FINALISED follows from the case's documents and its latest analysis (see
+    case_stage.derive); FINALISED is set by a loan officer once the case
+    is analysed, and is permanent: the case is view-only.
+    """
+
+    OPEN = "open"                                  # created, no documents yet
+    PROCESSING_DOCUMENTS = "processing_documents"  # a document is uploaded, queued, classified or extracted
+    PENDING_REVIEW = "pending_review"              # a document waits for the officer to approve or reject it
+    DOCUMENTS_INCOMPLETE = "documents_incomplete"  # a required document is missing (or every one was rejected)
+    FRAUD_DETECTION = "fraud_detection"            # an approved document is being scanned for fraud
+    READY_FOR_ANALYSIS = "ready_for_analysis"      # every approved document is scanned; the analysis is not done (or is running)
+    PENDING_EVALUATION = "pending_evaluation"      # analysed; the officer still has findings to mark correct or wrong (precision and recall)
+    CASE_ANALYSED = "case_analysed"                # analysed, and every finding has the officer's verdict
+    FINALISED = "finalised"                        # an officer closed the case — permanent, view-only
+    FAILED = "failed"                              # document processing, fraud detection or the analysis failed (see CaseFailure)
+
+
+class CaseFailure(str, Enum):
+    """What a FAILED case needs fixed: each has its own remedy for the officer."""
+
+    DOCUMENT_PROCESSING = "document_processing"    # retry or remove the document
+    FRAUD_DETECTION = "fraud_detection"            # retry the detection
+    CASE_ANALYSIS = "case_analysis"                # run the analysis again
+
+
 class CaseRecord(BaseModel):
+    # Stages are held as their plain values, so they compare, hash and go into queries as strings.
+    model_config = ConfigDict(use_enum_values=True)
+
     id: str
     greenlink_case_id: str
     company_name: str | None = None
-    status: str = "open"
-    submission_finalized: bool = False
-    finalized_at: datetime | None = None
+    # Validated, so the default is stored as its value too.
+    status: CaseStage = Field(default=CaseStage.OPEN, validate_default=True)
+    # Whether every required checklist document must be approved before the case can be analysed. Set once, when the
+    # case is created, from that environment's REQUIRE_COMPLETE_CHECKLIST, so every environment judges it the same way.
+    checklist_enforced: bool = False
+    # Whether officers mark this case's findings correct or wrong (precision and recall), which finalising then waits
+    # for. Chosen by whoever creates the case, and fixed from then on.
+    reviews_required: bool = True
     # The list of documents to request, read from the recommended_additional_documents column (see the validator); only the case summary returns it.
     additional_documents: AdditionalDocuments | None = Field(default=None, exclude=True)
     created_at: datetime
@@ -327,8 +364,8 @@ class ContributingFinding(BaseModel):
     points: float
     # The specialist kept the tool's finding without ever assessing it.
     unreviewed: bool = False
-    # The finding's row in the flags table, set only when a specialist approved it as genuine.
-    flag_id: str | None = None
+    # Names the finding's row in the findings table, with the scope and document (finding_keys).
+    fingerprint: str
     # See case_pipeline.models.FindingCategory: decides whether more evidence can reduce it.
     category: str | None = None
     # "cross_document" for a finding from the case analysis rather than one document's scan.
@@ -337,6 +374,24 @@ class ContributingFinding(BaseModel):
     # carry it. On the copies that score 0: the finding_id of the one that scored.
     also_on: int = 0
     repeat_of: str | None = None
+
+
+class DismissedFinding(BaseModel):
+    """A tool's finding a specialist dismissed as a false positive (case_risk). An officer marks it correct when it
+    is a real problem after all."""
+
+    document_id: str
+    filename: str
+    document_type: str | None = None
+    # Unique per case, as ContributingFinding.finding_id.
+    finding_id: str
+    tool: str | None = None
+    check_code: str | None = None
+    summary: str
+    # The specialist's reason for dismissing it.
+    reason: str
+    category: str | None = None
+    fingerprint: str
 
 
 class UnassessedCheck(BaseModel):
@@ -360,6 +415,8 @@ class CaseRisk(BaseModel):
     # The raw points total the level is banded from.
     points: float | None = None
     contributing_findings: list[ContributingFinding] = Field(default_factory=list)
+    # What the specialists threw away as false positives: never scored, shown for officers to review.
+    dismissed_findings: list[DismissedFinding] = Field(default_factory=list)
     # Checks that couldn't run — listed, never scored: not being able to
     # check something isn't evidence of fraud.
     unassessed_checks: list[UnassessedCheck] = Field(default_factory=list)
@@ -478,6 +535,9 @@ class CaseSummary(CaseRecord):
     fulfilled_requirements: list[str] = Field(default_factory=list)
     # The checklist requirements no accepted document has fulfilled yet.
     missing_requirements: list[str] = Field(default_factory=list)
+    # What the case analysis waits for: required items no approved document covers. Always empty for a case that
+    # doesn't enforce the checklist (checklist_enforced).
+    unapproved_requirements: list[str] = Field(default_factory=list)
     proof_of_address_coverage: ProofOfAddressCoverage = Field(
         default_factory=lambda: ProofOfAddressCoverage(covered=0, total=0)
     )
@@ -486,18 +546,16 @@ class CaseSummary(CaseRecord):
     )
     # None when the documents' detection reports couldn't be loaded.
     risk: CaseRisk | None = None
-    # Further evidence to request from the client; empty when nothing in the
-    # case needs any. Unlike missing_requirements (missing checklist items),
-    # these come from what the documents themselves show.
-    supporting_document_recommendations: list[SupportingDocumentRecommendation] = Field(
-        default_factory=list
-    )
     # The checklist requests merged with the agent's, in one list; None before the case is analysed.
     additional_documents: AdditionalDocuments | None = None
     # Every approved document has been scanned, so the case analysis can be run.
     analysis_ready: bool = False
     # None when the case has never been analysed.
     analysis: CaseAnalysisOverview | None = None
+    # Only while the case is FAILED: which step failed.
+    failure: CaseFailure | None = None
+    # Only while the case is analysed: how many of its findings still have no verdict (Pending Evaluation until 0).
+    findings_to_review: int | None = None
 
 
 class CaseFlagCount(BaseModel):
@@ -521,7 +579,7 @@ class CaseListItem(CaseRecord):
     recommended_documents: list[str] | None = None
     # The types of the case's documents, each once.
     document_types: list[str] = Field(default_factory=list)
-    # The case's flags (flags_repository), one entry per check, most flags first.
+    # The findings specialists accepted (findings_repository.list_flags_for_cases), one entry per check, most first.
     flags: list[CaseFlagCount] = Field(default_factory=list)
     # The username of the officer who created the case (its case.created event); None when the trail has no record.
     created_by: str | None = None
@@ -557,10 +615,10 @@ MAX_COMPANY_NAME_LENGTH = 100
 class UpdateCaseRequest(BaseModel):
     """
     A loan officer updating the case's own identifying details. Only
-    company_name is officer-editable today — status, submission_finalized
-    and greenlink_case_id are system-managed (see case_service.py /
-    case_repository.set_submission_finalized) and deliberately excluded
-    here so they can't be overwritten through this endpoint.
+    company_name is officer-editable today — status, checklist_enforced
+    and greenlink_case_id are system-managed (see case_stage.py /
+    case_service.create_case) and deliberately excluded here so they
+    can't be overwritten through this endpoint.
     """
 
     company_name: str
@@ -631,7 +689,7 @@ class UpdateNoteRequest(BaseModel):
         return _note_body(value)
 
 
-# --- Finding reviews: precision and recall per check (finding_reviews_repository, detection_metrics) ----------
+# --- Finding reviews: precision and recall per check (findings_repository, detection_metrics) ------------------
 
 ReviewScope = Literal["document", "case"]
 ReviewVerdict = Literal["correct", "wrong"]
@@ -640,9 +698,10 @@ MAX_REVIEW_NOTE_LENGTH = 1000
 
 class FindingReview(BaseModel):
     """
-    An officer's verdict on one finding (kind "verdict": correct or wrong), or an issue the officer found that
-    no finding raised (kind "missed"). scope "document" is a finding on one document; "case" a cross-document
-    finding from the case analysis. check_name is the tool for a document finding, the category for a case one.
+    An officer's verdict on one current finding (kind "verdict": correct or wrong, the finding's row in the
+    findings table), or an issue the officer found that no finding raised (kind "missed"). scope "document" is a
+    finding on one document; "case" a cross-document finding from the case analysis. check_name is the tool for
+    a document finding, the category for a case one.
     """
 
     id: str
@@ -650,10 +709,14 @@ class FindingReview(BaseModel):
     document_id: str | None = None
     scope: ReviewScope
     kind: Literal["verdict", "missed"]
-    finding_id: str | None = None
+    # The reviewed finding's (ContributingFinding.fingerprint); None for a missed issue.
+    fingerprint: str | None = None
     check_name: str
     check_code: str | None = None
     summary: str = ""
+    # What the specialists decided on a document finding. A dismissed one marked correct is a real problem the
+    # agents threw away: a miss for recall (detection_metrics).
+    agent_decision: Literal["accepted", "not_assessed", "overridden", "dismissed"] | None = None
     verdict: ReviewVerdict | None = None
     note: str | None = None
     reviewer: str
@@ -661,27 +724,23 @@ class FindingReview(BaseModel):
     updated_at: datetime
 
 
-class _ReviewTarget(BaseModel):
+class _ReviewPlace(BaseModel):
     """Where a review sits: a document finding names its document; a case finding has none."""
 
     scope: ReviewScope
     document_id: UUID | None = None
-    check_name: str = Field(min_length=1, max_length=100)
 
     @model_validator(mode="after")
-    def document_matches_scope(self) -> "_ReviewTarget":
+    def document_matches_scope(self) -> "_ReviewPlace":
         if (self.scope == "document") != (self.document_id is not None):
             raise ValueError("A document review names its document; a case review doesn't")
         return self
 
 
-class SetFindingVerdictRequest(_ReviewTarget):
+class SetFindingVerdictRequest(_ReviewPlace):
     """Marks one finding correct or wrong; verdict null clears the officer's mark."""
 
-    finding_id: str = Field(min_length=1, max_length=200)
-    check_code: str | None = Field(default=None, max_length=100)
-    # The finding's summary when it was reviewed, so a verdict is only shown against the same finding.
-    summary: str = Field(default="", max_length=4000)
+    fingerprint: str = Field(min_length=1, max_length=100)
     verdict: ReviewVerdict | None = None
 
 
@@ -691,9 +750,10 @@ class SetFindingVerdictsRequest(BaseModel):
     verdicts: list[SetFindingVerdictRequest] = Field(min_length=1, max_length=200)
 
 
-class ReportMissedIssueRequest(_ReviewTarget):
+class ReportMissedIssueRequest(_ReviewPlace):
     """An issue the officer found that no finding raised, against the check that should have caught it."""
 
+    check_name: str = Field(min_length=1, max_length=100)
     note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_LENGTH)
 
     @field_validator("note")
@@ -904,12 +964,13 @@ def counts_towards_checklist(document: DocumentRecord) -> bool:
     addresses (case_service.compute_requirement_coverage, mapper.py). Same
     bar as approval for the type: routing_status alone isn't enough, since
     an officer's "Save fields" flips it to ACCEPTED without confirming the
-    type. A rejected document never counts, nor does a failed one: an officer's type pick
-    is recorded before its extraction rerun, so a rerun that fails (or a document the
-    content guard stopped) would otherwise keep the checklist item ticked.
+    type. A rejected or cancelled document never counts, nor does a failed one: an officer's
+    type pick is recorded before its extraction rerun, so a rerun that fails (or a document
+    the content guard stopped, or one cancelled midway) would otherwise keep the checklist
+    item ticked.
     """
     return (
         document.routing_status == RoutingStatus.ACCEPTED
-        and document.status not in (DocumentStatus.REJECTED, DocumentStatus.FAILED)
+        and document.status not in (DocumentStatus.REJECTED, DocumentStatus.FAILED, DocumentStatus.CANCELLED)
         and is_classification_confirmed(document)
     )

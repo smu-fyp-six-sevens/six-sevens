@@ -75,6 +75,8 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
 
   test('DI-032 / DI-034 missing optional documents leave every required document ticked and the case ready for review @DI-032 @DI-034', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
+    // The stage the backend gives a case whose documents wait for the officer (the capture predates stages).
+    fixture.case.status = 'pending_review';
     const removeDocuments = (...parts: string[]) => {
       backend.documents = backend.documents.filter((d) => !parts.some((part) => d.filename.includes(part)));
       backend.push(fixture.case.id);
@@ -97,7 +99,7 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
     }
     await expect(sidebar(page).locator('.section-label').first()).toContainText(`${REQUIRED.length} / ${REQUIRED.length}`);
     await page.goto('/cases');
-    await expect(page.locator('.case-row').filter({ hasText: 'Anchorpoint' })).toContainText('Ready for review');
+    await expect(page.locator('.case-row').filter({ hasText: 'Anchorpoint' })).toContainText('Pending Review');
   });
 });
 

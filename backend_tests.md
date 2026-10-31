@@ -13,7 +13,7 @@ This comes from reading the test files and measuring them with static scripts (t
 
 ## 1. How healthy is the suite?
 
-**Backend:** 1,783 test functions in 93 files (recounted 2026-10-28; `main` added `test_finding_reviews` and `test_value_locations`). 106 are parametrised; the Sprint 4 developer's full pytest run, before that merge, collected 2,325 cases: 2,323 pass, 2 skipped (AI-generation provenance, which needs `exiftool`; CI installs it). There are 3,639 plain `assert`s, 252 mock-call assertions and 802 `patch(...)` calls. 163 tests carry their own sprint marker (sprint 1: 10, 2: 41, 3: 60, 4: 52); `conftest.py` tags existing tests centrally on top (sprint 4 tagged: 381 cases; sprints 1–3: 931).
+**Backend:** 1,783 test functions in 93 files (recounted 2026-10-28; `main` added `test_finding_reviews` and `test_value_locations`). 106 are parametrised. The full pytest run on `integration` (2026-10-31) collected 2,659 cases: 2,657 pass, 2 skipped (AI-generation provenance, which needs `exiftool`; CI installs it). There are 3,639 plain `assert`s, 252 mock-call assertions and 802 `patch(...)` calls. 163 tests carry their own sprint marker (sprint 1: 10, 2: 41, 3: 60, 4: 52); `conftest.py` tags existing tests centrally on top (sprint 4 tagged: 381 cases; sprints 1–3: 931).
 
 | Group | Share | What to do |
 |---|---|---|
@@ -73,7 +73,7 @@ Also untested, lower weight: `CR.TENOR`, `FATCA.TIN_FORMAT`, `case_pipeline/risk
 | **Approve undoes an unpublished approval** | none | A test that makes `events.publish` fail on approve and asserts the document went back to analyzed |
 | **Trace propagation** (traceparent out on publish, continued on push; the agent label) | none (checked once by a scratch script) | Two small tests with OTel's in-memory exporter |
 | **`/metrics` and the LLM callback** (agent and model labels, cost, latency, work histograms) | none (checked once by a scratch script) | One test driving `query_stats.llm_callback` and reading the exposition |
-| `flush_pending_syncs` | none | One test: a scheduled refresh runs on flush, not later |
+| `document_repository.flush_syncs` | none | One test: a scheduled refresh runs on flush, not later |
 | `emulator_setup.py` | none | Fine: a local dev tool, exercised by the compose walkthrough |
 
 **Infrastructure in CI:** Terraform `fmt` and `validate` run in the `terraform` job, Checkov scans Terraform, Dockerfiles and workflows, and the deploy's gateway check is the post-deploy smoke test. These have no CI check, so a broken change can still merge:
@@ -117,7 +117,7 @@ In the suggested order: 1 and 2 cover the documents the sponsor weights highest;
 | 1 | **Income and bank statement rules** (section 2): the `PAY.NET` silent pass (fix and test), `PAY.DEDUCTIONS_SUM`, the two statistical statement rules, the clean and skip cases of `BS.TOTALS`, `BS.OVERDRAFT_LIMIT`, `BS.NARRATIVE_AMOUNT` | Highest-impact documents; one rule can pass without checking anything | S-M |
 | 2 | **Cross-document transaction tools** (section 2), on a `ToolKit` built from `build_context` as `test_company_identity` does | The payslip-to-bank-credit evidence has no test | M |
 | 3 | **More infrastructure checks in CI:** Kong config parse, compose config, dashboard PromQL and provisioning, image builds, the generated API type checks (the table in section 3) | Each has broken silently once and been caught by hand | S-M |
-| 4 | **Tests for the service-code gaps** in section 3: push token 401s, the approve rollback, trace propagation, the LLM callback and `/metrics`, `flush_pending_syncs`, the two `/audit` routes | The cloud behaviour is otherwise checked only by hand | M |
+| 4 | **Tests for the service-code gaps** in section 3: push token 401s, the approve rollback, trace propagation, the LLM callback and `/metrics`, `flush_syncs`, the two `/audit` routes | The cloud behaviour is otherwise checked only by hand | M |
 | 5 | **Repository tests on an in-memory fake Supabase client,** asserting stored state instead of mock call chains. Start with `test_document_repository` and `test_extracted_fields_repository` (most mock-only tests) | The biggest brittleness left | L |
 | 6 | **Finish Sprint 4** (section 1): fix REG-014 and test it; decide `MA-013` and `RS-001`; real check codes in the risk fixture; the shared harnesses in `tests/support/`; no private `_writer` | Closes the regression story's open items | S |
 | 7 | **`data-testid`s** on cards and rows the specs find by class | Restyling stops breaking tests | S-M |

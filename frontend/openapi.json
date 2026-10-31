@@ -726,9 +726,51 @@
         "title": "AdditionalDocuments",
         "type": "object"
       },
+      "AgentDecision": {
+        "description": "One model agent's decision and its bounded self-reported confidence.",
+        "properties": {
+          "agent": {
+            "enum": [
+              "hypothesis_planner",
+              "hypothesis_judge"
+            ],
+            "title": "Agent",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent",
+          "decision_id",
+          "decision",
+          "confidence"
+        ],
+        "title": "AgentDecision",
+        "type": "object"
+      },
       "AnalysisAudit": {
         "description": "What produced a result, so a past run can be reconstructed.",
         "properties": {
+          "agent_decisions": {
+            "items": {
+              "$ref": "#/components/schemas/AgentDecision"
+            },
+            "title": "Agent Decisions",
+            "type": "array"
+          },
           "findings_discarded": {
             "default": 0,
             "title": "Findings Discarded",
@@ -765,7 +807,8 @@
           "prompt_version",
           "hypotheses_tried",
           "findings_discarded",
-          "tool_calls"
+          "tool_calls",
+          "agent_decisions"
         ],
         "title": "AnalysisAudit",
         "type": "object"
@@ -851,24 +894,6 @@
           "text"
         ],
         "title": "AnomalyLocation",
-        "type": "object"
-      },
-      "AppSettings": {
-        "properties": {
-          "finding_reviews_enabled": {
-            "title": "Finding Reviews Enabled",
-            "type": "boolean"
-          },
-          "is_admin": {
-            "title": "Is Admin",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "finding_reviews_enabled",
-          "is_admin"
-        ],
-        "title": "AppSettings",
         "type": "object"
       },
       "BenfordAnalysis": {
@@ -998,6 +1023,11 @@
               }
             ],
             "title": "Company Name"
+          },
+          "reviews_required": {
+            "default": true,
+            "title": "Reviews Required",
+            "type": "boolean"
           }
         },
         "title": "Body_create_case_cases_post",
@@ -1226,6 +1256,13 @@
             "title": "Clean Checks",
             "type": "array"
           },
+          "confidence": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
           "consistent_checks": {
             "items": {
               "type": "string"
@@ -1321,17 +1358,6 @@
               }
             ]
           },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Summary"
-          },
           "supporting_documents": {
             "items": {
               "$ref": "#/components/schemas/SupportingDocumentRecommendation"
@@ -1356,9 +1382,9 @@
           "started_at",
           "finished_at",
           "error",
+          "confidence",
           "findings",
           "outlook",
-          "summary",
           "structured_summary",
           "risk",
           "supporting_documents",
@@ -1544,12 +1570,30 @@
             "title": "Case Id",
             "type": "string"
           },
+          "documents": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CaseCostDocument"
+            },
+            "default": {},
+            "title": "Documents",
+            "type": "object"
+          },
           "documents_usd": {
             "additionalProperties": {
               "type": "number"
             },
             "title": "Documents Usd",
             "type": "object"
+          },
+          "failed_or_cancelled_usd": {
+            "default": 0.0,
+            "title": "Failed Or Cancelled Usd",
+            "type": "number"
+          },
+          "repeated_runs_usd": {
+            "default": 0.0,
+            "title": "Repeated Runs Usd",
+            "type": "number"
           },
           "runs": {
             "items": {
@@ -1574,16 +1618,57 @@
           "case_id",
           "total_usd",
           "documents_usd",
+          "documents",
           "case_analysis_usd",
+          "failed_or_cancelled_usd",
+          "repeated_runs_usd",
           "runs",
           "timings"
         ],
         "title": "CaseCost",
         "type": "object"
       },
+      "CaseCostDocument": {
+        "description": "A document a costed run was on: its file name, whether it is still in the case, and whether it was deleted.",
+        "properties": {
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "in_case": {
+            "default": true,
+            "title": "In Case",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "filename",
+          "in_case",
+          "deleted"
+        ],
+        "title": "CaseCostDocument",
+        "type": "object"
+      },
       "CaseCostRun": {
         "description": "One costed run, at list price.",
         "properties": {
+          "attempt": {
+            "default": 1,
+            "title": "Attempt",
+            "type": "integer"
+          },
           "document_id": {
             "anyOf": [
               {
@@ -1626,6 +1711,16 @@
             "title": "Occurred At",
             "type": "string"
           },
+          "outcome": {
+            "default": "success",
+            "enum": [
+              "success",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
           "run": {
             "anyOf": [
               {
@@ -1653,6 +1748,8 @@
           "type",
           "run",
           "document_id",
+          "outcome",
+          "attempt",
           "llm_cost_usd",
           "llm_calls",
           "llm_cache_read_tokens"
@@ -1729,6 +1826,16 @@
           "analyzed"
         ],
         "title": "CaseDocumentsStatus",
+        "type": "string"
+      },
+      "CaseFailure": {
+        "description": "What a FAILED case needs fixed: each has its own remedy for the officer.",
+        "enum": [
+          "document_processing",
+          "fraud_detection",
+          "case_analysis"
+        ],
+        "title": "CaseFailure",
         "type": "string"
       },
       "CaseFindingReviews": {
@@ -1820,6 +1927,11 @@
       "CaseListItem": {
         "description": "One row of the case queue: only what the list shows, so it needs no extracted fields.",
         "properties": {
+          "checklist_enforced": {
+            "default": false,
+            "title": "Checklist Enforced",
+            "type": "boolean"
+          },
           "company_name": {
             "anyOf": [
               {
@@ -1856,18 +1968,6 @@
           },
           "documents_status": {
             "$ref": "#/components/schemas/CaseDocumentsStatus"
-          },
-          "finalized_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finalized At"
           },
           "flags": {
             "items": {
@@ -1909,6 +2009,11 @@
             ],
             "title": "Recommended Documents"
           },
+          "reviews_required": {
+            "default": true,
+            "title": "Reviews Required",
+            "type": "boolean"
+          },
           "risk": {
             "anyOf": [
               {
@@ -1920,14 +2025,8 @@
             ]
           },
           "status": {
-            "default": "open",
-            "title": "Status",
-            "type": "string"
-          },
-          "submission_finalized": {
-            "default": false,
-            "title": "Submission Finalized",
-            "type": "boolean"
+            "$ref": "#/components/schemas/CaseStage",
+            "default": "open"
           },
           "updated_at": {
             "format": "date-time",
@@ -1940,8 +2039,8 @@
           "greenlink_case_id",
           "company_name",
           "status",
-          "submission_finalized",
-          "finalized_at",
+          "checklist_enforced",
+          "reviews_required",
           "created_at",
           "updated_at",
           "documents_status",
@@ -2107,6 +2206,11 @@
       },
       "CaseRecord": {
         "properties": {
+          "checklist_enforced": {
+            "default": false,
+            "title": "Checklist Enforced",
+            "type": "boolean"
+          },
           "company_name": {
             "anyOf": [
               {
@@ -2123,18 +2227,6 @@
             "title": "Created At",
             "type": "string"
           },
-          "finalized_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finalized At"
-          },
           "greenlink_case_id": {
             "title": "Greenlink Case Id",
             "type": "string"
@@ -2143,15 +2235,14 @@
             "title": "Id",
             "type": "string"
           },
-          "status": {
-            "default": "open",
-            "title": "Status",
-            "type": "string"
-          },
-          "submission_finalized": {
-            "default": false,
-            "title": "Submission Finalized",
+          "reviews_required": {
+            "default": true,
+            "title": "Reviews Required",
             "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CaseStage",
+            "default": "open"
           },
           "updated_at": {
             "format": "date-time",
@@ -2164,8 +2255,8 @@
           "greenlink_case_id",
           "company_name",
           "status",
-          "submission_finalized",
-          "finalized_at",
+          "checklist_enforced",
+          "reviews_required",
           "created_at",
           "updated_at"
         ],
@@ -2180,6 +2271,13 @@
               "$ref": "#/components/schemas/ContributingFinding"
             },
             "title": "Contributing Findings",
+            "type": "array"
+          },
+          "dismissed_findings": {
+            "items": {
+              "$ref": "#/components/schemas/DismissedFinding"
+            },
+            "title": "Dismissed Findings",
             "type": "array"
           },
           "documents_scanned": {
@@ -2262,6 +2360,7 @@
           "score",
           "points",
           "contributing_findings",
+          "dismissed_findings",
           "unassessed_checks",
           "reasons",
           "documents_scanned",
@@ -2292,6 +2391,23 @@
         "title": "CaseSearchResult",
         "type": "object"
       },
+      "CaseStage": {
+        "description": "Where a case stands, in the order a case normally moves through them\n(the loan officer's flowchart). Stored in cases.status. Every stage but\nFINALISED follows from the case's documents and its latest analysis (see\ncase_stage.derive); FINALISED is set by a loan officer once the case\nis analysed, and is permanent: the case is view-only.",
+        "enum": [
+          "open",
+          "processing_documents",
+          "pending_review",
+          "documents_incomplete",
+          "fraud_detection",
+          "ready_for_analysis",
+          "pending_evaluation",
+          "case_analysed",
+          "finalised",
+          "failed"
+        ],
+        "title": "CaseStage",
+        "type": "string"
+      },
       "CaseSummary": {
         "description": "documents_status, fulfilled_requirements and missing_requirements are all\ncomputed live from the documents table on every read, never stored \u2014 see\ncase_service.py.",
         "properties": {
@@ -2320,6 +2436,11 @@
             "title": "Analysis Ready",
             "type": "boolean"
           },
+          "checklist_enforced": {
+            "default": false,
+            "title": "Checklist Enforced",
+            "type": "boolean"
+          },
           "company_name": {
             "anyOf": [
               {
@@ -2339,17 +2460,26 @@
           "documents_status": {
             "$ref": "#/components/schemas/CaseDocumentsStatus"
           },
-          "finalized_at": {
+          "failure": {
             "anyOf": [
               {
-                "format": "date-time",
-                "type": "string"
+                "$ref": "#/components/schemas/CaseFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findings_to_review": {
+            "anyOf": [
+              {
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Finalized At"
+            "title": "Findings To Review"
           },
           "fulfilled_requirements": {
             "items": {
@@ -2379,6 +2509,11 @@
           "proof_of_address_coverage": {
             "$ref": "#/components/schemas/ProofOfAddressCoverage"
           },
+          "reviews_required": {
+            "default": true,
+            "title": "Reviews Required",
+            "type": "boolean"
+          },
           "risk": {
             "anyOf": [
               {
@@ -2390,20 +2525,14 @@
             ]
           },
           "status": {
-            "default": "open",
-            "title": "Status",
-            "type": "string"
+            "$ref": "#/components/schemas/CaseStage",
+            "default": "open"
           },
-          "submission_finalized": {
-            "default": false,
-            "title": "Submission Finalized",
-            "type": "boolean"
-          },
-          "supporting_document_recommendations": {
+          "unapproved_requirements": {
             "items": {
-              "$ref": "#/components/schemas/SupportingDocumentRecommendation"
+              "type": "string"
             },
-            "title": "Supporting Document Recommendations",
+            "title": "Unapproved Requirements",
             "type": "array"
           },
           "updated_at": {
@@ -2417,20 +2546,22 @@
           "greenlink_case_id",
           "company_name",
           "status",
-          "submission_finalized",
-          "finalized_at",
+          "checklist_enforced",
+          "reviews_required",
           "additional_documents",
           "created_at",
           "updated_at",
           "documents_status",
           "fulfilled_requirements",
           "missing_requirements",
+          "unapproved_requirements",
           "proof_of_address_coverage",
           "id_document_coverage",
           "risk",
-          "supporting_document_recommendations",
           "analysis_ready",
-          "analysis"
+          "analysis",
+          "failure",
+          "findings_to_review"
         ],
         "title": "CaseSummary",
         "type": "object"
@@ -2838,16 +2969,9 @@
             "title": "Finding Id",
             "type": "string"
           },
-          "flag_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Flag Id"
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
           },
           "points": {
             "title": "Points",
@@ -2914,7 +3038,7 @@
           "rationale",
           "points",
           "unreviewed",
-          "flag_id",
+          "fingerprint",
           "category",
           "source",
           "also_on",
@@ -2980,12 +3104,24 @@
             "title": "Citations",
             "type": "array"
           },
+          "confidence": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
           "document_ids": {
             "items": {
               "type": "string"
             },
             "title": "Document Ids",
             "type": "array"
+          },
+          "fingerprint": {
+            "default": "",
+            "title": "Fingerprint",
+            "type": "string"
           },
           "hypothesis_id": {
             "title": "Hypothesis Id",
@@ -3025,10 +3161,12 @@
           "rationale",
           "severity",
           "category",
+          "confidence",
           "citations",
           "document_ids",
           "probe_summary",
-          "breach_flags"
+          "breach_flags",
+          "fingerprint"
         ],
         "title": "CrossDocFinding",
         "type": "object"
@@ -3272,6 +3410,93 @@
           "min_reviews"
         ],
         "title": "DetectionMetrics",
+        "type": "object"
+      },
+      "DismissedFinding": {
+        "description": "A tool's finding a specialist dismissed as a false positive (case_risk). An officer marks it correct when it\nis a real problem after all.",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "check_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Code"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Type"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "document_id",
+          "filename",
+          "document_type",
+          "finding_id",
+          "tool",
+          "check_code",
+          "summary",
+          "reason",
+          "category",
+          "fingerprint"
+        ],
+        "title": "DismissedFinding",
         "type": "object"
       },
       "DocumentCaseMatch": {
@@ -3982,8 +4207,25 @@
         "type": "string"
       },
       "FindingReview": {
-        "description": "An officer's verdict on one finding (kind \"verdict\": correct or wrong), or an issue the officer found that\nno finding raised (kind \"missed\"). scope \"document\" is a finding on one document; \"case\" a cross-document\nfinding from the case analysis. check_name is the tool for a document finding, the category for a case one.",
+        "description": "An officer's verdict on one current finding (kind \"verdict\": correct or wrong, the finding's row in the\nfindings table), or an issue the officer found that no finding raised (kind \"missed\"). scope \"document\" is a\nfinding on one document; \"case\" a cross-document finding from the case analysis. check_name is the tool for\na document finding, the category for a case one.",
         "properties": {
+          "agent_decision": {
+            "anyOf": [
+              {
+                "enum": [
+                  "accepted",
+                  "not_assessed",
+                  "overridden",
+                  "dismissed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Decision"
+          },
           "case_id": {
             "title": "Case Id",
             "type": "string"
@@ -4019,7 +4261,7 @@
             ],
             "title": "Document Id"
           },
-          "finding_id": {
+          "fingerprint": {
             "anyOf": [
               {
                 "type": "string"
@@ -4028,7 +4270,7 @@
                 "type": "null"
               }
             ],
-            "title": "Finding Id"
+            "title": "Fingerprint"
           },
           "id": {
             "title": "Id",
@@ -4097,10 +4339,11 @@
           "document_id",
           "scope",
           "kind",
-          "finding_id",
+          "fingerprint",
           "check_name",
           "check_code",
           "summary",
+          "agent_decision",
           "verdict",
           "note",
           "reviewer",
@@ -6523,40 +6766,9 @@
         "title": "RoutingStatus",
         "type": "string"
       },
-      "SetFindingReviewsRequest": {
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "title": "SetFindingReviewsRequest",
-        "type": "object"
-      },
       "SetFindingVerdictRequest": {
         "description": "Marks one finding correct or wrong; verdict null clears the officer's mark.",
         "properties": {
-          "check_code": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Check Code"
-          },
-          "check_name": {
-            "maxLength": 100,
-            "minLength": 1,
-            "title": "Check Name",
-            "type": "string"
-          },
           "document_id": {
             "anyOf": [
               {
@@ -6569,10 +6781,10 @@
             ],
             "title": "Document Id"
           },
-          "finding_id": {
-            "maxLength": 200,
+          "fingerprint": {
+            "maxLength": 100,
             "minLength": 1,
-            "title": "Finding Id",
+            "title": "Fingerprint",
             "type": "string"
           },
           "scope": {
@@ -6581,12 +6793,6 @@
               "case"
             ],
             "title": "Scope",
-            "type": "string"
-          },
-          "summary": {
-            "default": "",
-            "maxLength": 4000,
-            "title": "Summary",
             "type": "string"
           },
           "verdict": {
@@ -6607,8 +6813,7 @@
         },
         "required": [
           "scope",
-          "check_name",
-          "finding_id"
+          "fingerprint"
         ],
         "title": "SetFindingVerdictRequest",
         "type": "object"
@@ -7035,7 +7240,7 @@
         "type": "object"
       },
       "UpdateCaseRequest": {
-        "description": "A loan officer updating the case's own identifying details. Only\ncompany_name is officer-editable today \u2014 status, submission_finalized\nand greenlink_case_id are system-managed (see case_service.py /\ncase_repository.set_submission_finalized) and deliberately excluded\nhere so they can't be overwritten through this endpoint.",
+        "description": "A loan officer updating the case's own identifying details. Only\ncompany_name is officer-editable today \u2014 status, checklist_enforced\nand greenlink_case_id are system-managed (see case_stage.py /\ncase_service.create_case) and deliberately excluded here so they\ncan't be overwritten through this endpoint.",
         "properties": {
           "company_name": {
             "title": "Company Name",
@@ -7385,7 +7590,7 @@
     },
     "/audit/cases/{case_id}/cost": {
       "get": {
-        "description": "Claude spend for one case at list price: per run, per document and in total, from the audit trail.",
+        "description": "Claude spend for one case at list price: per run, per document and in total, from the audit trail. Every run\ncounts: failed, cancelled, retried and rerun ones, earlier case analyses, and runs on documents since deleted.",
         "operationId": "get_case_cost_audit_cases__case_id__cost_get",
         "parameters": [
           {
@@ -7580,7 +7785,7 @@
     },
     "/cases": {
       "get": {
-        "description": "One page of the case queue: newest or oldest first, or by risk either way; optionally only these documents\nstatuses, only these risk levels and only cases whose number or name contains q.",
+        "description": "One page of the case queue: newest or oldest first, or by risk either way; optionally only these stages,\nonly these risk levels and only cases whose number or name contains q.",
         "operationId": "list_cases_cases_get",
         "parameters": [
           {
@@ -7629,7 +7834,7 @@
             "schema": {
               "default": [],
               "items": {
-                "$ref": "#/components/schemas/CaseDocumentsStatus"
+                "$ref": "#/components/schemas/CaseStage"
               },
               "title": "Status",
               "type": "array"
@@ -8195,7 +8400,7 @@
     },
     "/cases/{case_id}/analysis/run": {
       "post": {
-        "description": "Starts the per-case analysis (cross-document findings, risk outlook and\nsummary) in the background. Only once every approved document has been\nscanned; poll GET .../analysis, or watch the case snapshot, for the result.",
+        "description": "Starts the per-case analysis (cross-document findings, risk outlook and\nsummary) in the background. Only once every approved document has been\nscanned and, for a case that enforces the checklist, every required\ndocument has been approved; poll\nGET .../analysis, or watch the case snapshot, for the result.",
         "operationId": "run_case_analysis_cases__case_id__analysis_run_post",
         "parameters": [
           {
@@ -8442,10 +8647,10 @@
         ]
       }
     },
-    "/cases/{case_id}/detection/reports": {
-      "get": {
-        "description": "Every stored detection report for a case's documents, for one combined view.",
-        "operationId": "get_case_detection_reports_cases__case_id__detection_reports_get",
+    "/cases/{case_id}/finalise": {
+      "post": {
+        "description": "The loan officer acknowledges an analysed case's submission. Recorded in the audit trail (case.finalised) under\ntheir username. Permanent: the case is then view-only and takes no changes, except notes and the report export.",
+        "operationId": "finalise_case_cases__case_id__finalise_post",
         "parameters": [
           {
             "in": "path",
@@ -8478,12 +8683,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  "title": "Response Get Case Detection Reports Cases  Case Id  Detection Reports Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/CaseSummary"
                 }
               }
             },
@@ -8500,9 +8700,9 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Get Case Detection Reports",
+        "summary": "Finalise Case",
         "tags": [
-          "detection"
+          "cases"
         ]
       }
     },
@@ -8634,78 +8834,9 @@
         ]
       }
     },
-    "/cases/{case_id}/finding-reviews/verdict": {
-      "put": {
-        "description": "Marks one finding correct or wrong, signed by the officer; a null verdict clears the mark. Any officer\ncan change a verdict; the latest one stands.",
-        "operationId": "set_finding_verdict_cases__case_id__finding_reviews_verdict_put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "case_id",
-            "required": true,
-            "schema": {
-              "title": "Case Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetFindingVerdictRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CaseFindingReviews"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Set Finding Verdict",
-        "tags": [
-          "finding-reviews"
-        ]
-      }
-    },
     "/cases/{case_id}/finding-reviews/verdicts": {
       "put": {
-        "description": "Saves one group's review in one request: the officer ticked the findings that are real (correct) and left\nthe rest (wrong). Every target is checked before anything is written, so a bad entry saves nothing.",
+        "description": "Saves one group's review in one request: the officer ticked the findings that are real (correct) and left\nthe rest (wrong); a null verdict clears the mark. Any officer can change a verdict; the latest one stands.\nEvery finding is looked up before anything is written, so a bad entry saves nothing.",
         "operationId": "set_finding_verdicts_cases__case_id__finding_reviews_verdicts_put",
         "parameters": [
           {
@@ -8774,7 +8905,7 @@
     },
     "/cases/{case_id}/finding-reviews/{review_id}": {
       "delete": {
-        "description": "Removes a verdict or a missed issue (e.g. one reported by mistake).",
+        "description": "Removes a missed issue (e.g. one reported by mistake), or clears a verdict; the finding itself stays.",
         "operationId": "delete_finding_review_cases__case_id__finding_reviews__review_id__delete",
         "parameters": [
           {
@@ -8981,7 +9112,7 @@
         ]
       },
       "post": {
-        "description": "Saves a note signed by the officer making the request. Allowed on any document, approved and\nrejected ones included: a note is stored on its own and never edits the document, so the\ndocument's lock is untouched. Any officer can reply to a note (parent_id).",
+        "description": "Saves a note signed by the officer making the request. Allowed on any document, approved and\nrejected ones included: a note is stored on its own and never edits the document, so the\ndocument's lock is untouched. Any officer can reply to a note (parent_id). A finalised case is\nview-only, notes included.",
         "operationId": "add_case_note_cases__case_id__notes_post",
         "parameters": [
           {
@@ -9187,9 +9318,64 @@
         ]
       }
     },
+    "/cases/{case_id}/report.pdf": {
+      "get": {
+        "description": "The case report as a PDF download: risk, the case analysis's summary and findings, the recommended additional\ndocuments, the checklist, the documents and the notes. Before an analysis has finished, a banner says why and\nthe analysis sections are left out. Each download is recorded in the case's audit trail.",
+        "operationId": "download_case_report_cases__case_id__report_pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {}
+            },
+            "description": "The case report as a PDF."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Case Report",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
     "/detection-metrics": {
       "get": {
-        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created on or after `since` and in these documents statuses, as the dashboard's filters pick.",
+        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created on or after `since` and at these stages, as the dashboard's filters pick.",
         "operationId": "get_detection_metrics_detection_metrics_get",
         "parameters": [
           {
@@ -9216,7 +9402,7 @@
             "schema": {
               "default": [],
               "items": {
-                "$ref": "#/components/schemas/CaseDocumentsStatus"
+                "$ref": "#/components/schemas/CaseStage"
               },
               "title": "Status",
               "type": "array"
@@ -9981,7 +10167,7 @@
     },
     "/documents/{document_id}/detection/cancel": {
       "post": {
-        "description": "Interrupts an in-flight detection run \u2014 the Detection panel's Cancel\naction while a document reads \"Scanning\"/\"Detecting\". Only takes effect\nat the graph's next await point (an Anthropic call already in flight\nstill completes) \u2014 see workers/detection.py. The cancellation is then\nrecorded the same way a crash is, so GET .../detection/report and\nretry_document_detection below both already know how to handle it.",
+        "description": "Interrupts a detection run: one in flight (\"Detecting\"), or one still waiting for a worker slot (approved, with\nno report and no error yet). An in-flight run stops at the graph's next await point (an Anthropic call already\nin flight still completes) \u2014 see workers/detection.py \u2014 and records the cancellation the way a crash is\nrecorded. A waiting one is recorded as cancelled here, so it can be run again at once (\"cancelled\"); the\nworker drops it when its turn comes.",
         "operationId": "cancel_document_detection_documents__document_id__detection_cancel_post",
         "parameters": [
           {
@@ -10810,7 +10996,7 @@
     },
     "/documents/{document_id}/detection/retry": {
       "post": {
-        "description": "Re-launches detection after a previous attempt was cancelled or\ncrashed. NOT a general \"run detection\" trigger \u2014 that only ever\nhappens automatically on approval (routers/documents.py's\napprove_document) \u2014 so this is only allowed when the last attempt left\nan error/cancellation behind and produced no report, and only when\nnothing is already running for this document.",
+        "description": "Runs detection again on an approved document: after a cancelled or crashed run, or over a finished report\n(a fresh run replaces the report and the document's findings, and the officer's verdicts on them, once it\ncompletes; if it doesn't, the earlier report stands). Detection first runs by itself on approval. Refused\nwhile a run is in flight or still waiting for a worker slot (cancel it first).",
         "operationId": "retry_document_detection_documents__document_id__detection_retry_post",
         "parameters": [
           {
@@ -11609,115 +11795,6 @@
           }
         },
         "summary": "Message"
-      }
-    },
-    "/settings": {
-      "get": {
-        "operationId": "get_settings_settings_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AppSettings"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Settings",
-        "tags": [
-          "settings"
-        ]
-      }
-    },
-    "/settings/finding-reviews": {
-      "put": {
-        "description": "Turns finding reviews on or off for every officer. Admin only. Reviews already saved are kept either way.",
-        "operationId": "set_finding_reviews_settings_finding_reviews_put",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetFindingReviewsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AppSettings"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Set Finding Reviews",
-        "tags": [
-          "settings"
-        ]
       }
     },
     "/ws/tickets": {

@@ -16,16 +16,6 @@
   line-height: 1.6;
 }
 
-.analysis-summary {
-  margin: 0 20px 16px;
-  padding: 12px 14px;
-  border-left: 3px solid var(--steel);
-  border-radius: 0 8px 8px 0;
-  background: var(--slate-97);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
 .analysis-heading {
   margin: 8px 20px 6px;
   padding-top: 14px;
@@ -108,10 +98,6 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--slate-97);
-}
-
-.analysis-brief .analysis-summary {
-  margin: 0;
 }
 
 .analysis-brief-headline {

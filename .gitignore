@@ -31,6 +31,8 @@ frontend/playwright-report/
 frontend/test-results/
 # Playwright run from another folder
 **/test-results/
+# Playwright MCP page snapshots
+.playwright-mcp/
 
 .ruff_cache/
 

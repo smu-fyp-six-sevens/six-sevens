@@ -34,7 +34,8 @@ from ...guardrails.envelope import fence
 from ...llm_contracts import SpecialistAssessment, ToolResult
 from ... import run_context
 from ...run_context import RunBudgetExceeded, spend_model_call
-from ...llm_io import ModelRefused, message_text, parse_json_object, salvage_list, validate
+from ...llm_io import ModelRefused, message_text, parse_json_object, salvage_list, thinking_summaries, validate
+from .. import trace
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.specialists")
 
@@ -182,8 +183,9 @@ Severity scale: high = strong sign of tampering; medium = suspicious, needs a hu
 Dismiss = the finding is a false positive for this document. Dismissed findings are removed from the report the lead sees, so give a short rationale for each one.
 
 When finished, reply with ONLY this JSON (no prose):
-{{"summary": "<2-3 sentences>", "assessments": [{{"finding_id": "<id from a tool result>", "dismiss": false, "severity": "info|low|medium|high|null", "rationale": "<why>"}}], "uncertain": false, "uncertainty_reason": null}}
+{{"summary": "<2-3 sentences>", "confidence": <number from 0 to 1 for your overall assessment>, "assessments": [{{"finding_id": "<id from a tool result>", "dismiss": false, "severity": "info|low|medium|high|null", "rationale": "<why>", "confidence": <number from 0 to 1 for this assessment>}}], "uncertain": false, "uncertainty_reason": null}}
 Set "dismiss" to true and "severity" to null for a dismissed finding.
+Give a confidence score for every assessment, including dismissed findings. Use 0 when you cannot assess confidence; never omit a score.
 Set "uncertain" to true when a finding is ambiguous, or a second opinion from a different specialist would help, and say why in "uncertainty_reason"."""
 
 _SPECIALIST_DYNAMIC_PROMPT = """Today's date: {today}
@@ -264,6 +266,11 @@ async def _invoke(call) -> AIMessage:
         return AIMessage(content="", response_metadata={"refusal": str(exc)})
 
 
+def _note_thinking(document_id: str, specialist: str, response: AIMessage) -> None:
+    if thinking := thinking_summaries(response):
+        trace.record(document_id, "specialist_thinking", specialist=specialist, thinking=thinking)
+
+
 def _make_agent_node(spec: Specialist):
     async def agent_node(state: SpecialistState) -> dict:
         from .._anthropic import build_chat_anthropic
@@ -295,12 +302,14 @@ def _make_agent_node(spec: Specialist):
                     wrap_up = HumanMessage(content="Tool budget used up. Reply with the JSON report now, with no more tool calls.")
                     response = await _invoke(lambda: no_more_tools.ainvoke([*existing, wrap_up]))
                     telemetry.record_usage(span, response)
+                    _note_thinking(state["document_id"], spec.name, response)
                     return {"messages": [wrap_up, response]}
                 # cache_control breakpoint is already in `existing`'s system
                 # message — this call naturally lands after whichever call
                 # first warmed the cache for this specialist.
                 response = await _invoke(lambda: model.ainvoke(existing))
                 telemetry.record_usage(span, response)
+                _note_thinking(state["document_id"], spec.name, response)
                 return {"messages": [response]}
 
             static_text = _SPECIALIST_STATIC_PROMPT.format(title=spec.title, expertise=spec.expertise)
@@ -335,6 +344,7 @@ def _make_agent_node(spec: Specialist):
                 lambda: cache_gate.run(f"detection_specialist:{spec.name}", lambda: first_model.ainvoke(seed))
             )
             telemetry.record_usage(span, response)
+            _note_thinking(state["document_id"], spec.name, response)
             return {"messages": [*seed, response]}
 
     return agent_node
@@ -449,11 +459,12 @@ def _collect_node(state: SpecialistState) -> dict:
         floor = _severity_floor(finding)
         hard = _is_hard_breach(finding)
         if assessed is not None and assessed.dismiss and floor is None and not hard:
+            # The whole finding, so the findings table keeps what the tool returned.
             dismissed.append({
+                **finding,
                 "id": finding_id,
-                "tool": finding.get("tool"),
-                "summary": finding["summary"],
                 "reason": assessed.rationale or "Dismissed as a false positive.",
+                "confidence": assessed.confidence,
             })
             continue
         rated = assessed.severity.lower() if assessed is not None else ""
@@ -472,6 +483,7 @@ def _collect_node(state: SpecialistState) -> dict:
             "severity": severity,
             "rationale": rationale,
             "ai_accepted": ai_accepted,
+            "confidence": assessed.confidence if assessed is not None else 0.0,
         })
 
     parsed_ok = assessment_status == "ok"
@@ -480,6 +492,7 @@ def _collect_node(state: SpecialistState) -> dict:
     refusal = final.response_metadata.get("refusal") if isinstance(final, AIMessage) else None
     report = {
         "specialist": state["specialist"],
+        "confidence": assessment.confidence,
         "brief": state.get("brief"),
         "tools_called": tools_called,
         "tool_calls": tool_calls,

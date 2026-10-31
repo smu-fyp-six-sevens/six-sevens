@@ -7,26 +7,31 @@ from datetime import date
 from collections import Counter, defaultdict
 from typing import Any, Literal
 
-from . import audit, case_repository, document_repository, extracted_fields_repository, flags_repository
+from . import (
+    audit,
+    case_repository,
+    case_stage,
+    detection_results,
+    document_repository,
+    extracted_fields_repository,
+    findings_repository,
+)
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
 from .case_pipeline import repository as analysis_repository, state as analysis_state
 from .case_pipeline.models import CaseAnalysis
-from .case_pipeline.readiness import is_ready_for_analysis
+from .case_pipeline.readiness import is_ready_for_analysis, unapproved_requirements
 from .case_pipeline.risk import store as risk_store
-from .langgraph import trace as langgraph_trace
+from .config import settings
 from .langgraph.extraction_prompts import EXTRACTION_SCHEMAS
 
 from .mapper import (
-    compute_id_document_identity_coverage,
     compute_id_document_identity_progress,
     compute_id_document_missing_side,
-    compute_identity_proof_of_address_coverage,
     compute_identity_proof_of_address_progress,
+    compute_requirement_coverage,
     compute_unmatched_proof_of_address_names,
 )
 from .models import (
-    ADDITIONAL_DOCUMENT_TYPES,
-    REQUIRED_DOCUMENT_TYPES,
     CaseAnalysisOverview,
     CaseCounts,
     CaseDocumentsStatus,
@@ -36,15 +41,14 @@ from .models import (
     CaseRecord,
     CaseRisk,
     CaseSearchResult,
+    CaseStage,
     CaseSummary,
     DocumentRecord,
     DocumentStatus,
-    DocumentType,
+    FindingReview,
     IN_FLIGHT_STATUSES,
     IdDocumentCoverage,
-    IDENTITY_DOCUMENT_REQUIREMENT,
     ProofOfAddressCoverage,
-    counts_towards_checklist,
 )
 from .monitoring import is_stuck
 from .read_pool import submit as _submit
@@ -69,64 +73,24 @@ def compute_documents_status(documents: list[DocumentRecord]) -> CaseDocumentsSt
     return CaseDocumentsStatus.IN_PROGRESS
 
 
-def compute_requirement_coverage(documents: list[DocumentRecord]) -> tuple[list[str], list[str]]:
-    """
-    A requirement counts as fulfilled only by a document whose
-    classification was actually ACCEPTED — one sitting in manual review
-    hasn't been confirmed to be what it claims, so it shouldn't retire a
-    checklist item yet — and that a loan officer hasn't rejected (see
-    models.counts_towards_checklist). A single document can fulfil more than one
-    requirement (see DocumentRecord.fulfilled_requirements), so most
-    requirements are a union across all of a case's accepted documents, not
-    a 1:1 count — proof_of_address is the one exception, requiring coverage
-    per identity rather than just once anywhere in the case (see
-    compute_identity_proof_of_address_coverage).
-
-    Returns (fulfilled, missing) against the fixed REQUIRED_DOCUMENT_TYPES
-    checklist, both in checklist order.
-    """
-    fulfilled: set[str] = set()
-    for doc in documents:
-        if counts_towards_checklist(doc):
-            fulfilled.update(doc.fulfilled_requirements)
-
-    # Overrides whatever individual documents self-reported for this one
-    # requirement — see compute_identity_proof_of_address_coverage for why
-    # proof_of_address can't just be unioned like every other requirement.
-    proof_of_address = DocumentType.PROOF_OF_ADDRESS.value
-    if compute_identity_proof_of_address_coverage(documents):
-        fulfilled.add(proof_of_address)
-    else:
-        fulfilled.discard(proof_of_address)
-
-    # Same idea for id_document: it requires every identified individual's
-    # own ID to be complete (front+back, matched by nric_number — not just
-    # any front and any back existing somewhere in the case), mirroring
-    # proof_of_address's own per-identity requirement above. See
-    # compute_id_document_identity_coverage. id_document isn't a real
-    # DocumentType (passport/nric are the real classifiable types — see
-    # models.IDENTITY_DOCUMENT_TYPES), so it's not DocumentType.X.value
-    # like proof_of_address above, just the shared requirement string.
-    id_document = IDENTITY_DOCUMENT_REQUIREMENT
-    if compute_id_document_identity_coverage(documents):
-        fulfilled.add(id_document)
-    else:
-        fulfilled.discard(id_document)
-
-    # Additional items are reported as fulfilled (so the UI can tick them) but
-    # never as missing, so they can't block submission_finalized.
-    return (
-        [req for req in [*REQUIRED_DOCUMENT_TYPES, *ADDITIONAL_DOCUMENT_TYPES] if req in fulfilled],
-        [req for req in REQUIRED_DOCUMENT_TYPES if req not in fulfilled],
-    )
-
-
 def get_case(case_id: str) -> CaseRecord | None:
     return case_repository.get_case(case_id)
 
 
-def create_case(company_name: str | None = None) -> CaseRecord:
-    return case_repository.create_case(company_name)
+# The refusal for any change to a finalised case: shared by routers/_dependencies.py and document_service.py.
+FINALISED_DETAIL = "This case is finalised and view-only, so it can't be changed."
+
+
+def is_case_finalised(case_id: str) -> bool:
+    """A finalised case is view-only and accepts no changes (see routers/_dependencies.py)."""
+    case = case_repository.get_case(case_id)
+    return case is not None and case.status == CaseStage.FINALISED.value
+
+
+def create_case(company_name: str | None = None, *, reviews_required: bool = True) -> CaseRecord:
+    return case_repository.create_case(
+        company_name, checklist_enforced=settings.REQUIRE_COMPLETE_CHECKLIST, reviews_required=reviews_required,
+    )
 
 
 def update_case(case_id: str, company_name: str) -> CaseRecord | None:
@@ -136,51 +100,23 @@ def update_case(case_id: str, company_name: str) -> CaseRecord | None:
 def delete_case(case_id: str) -> None:
     """
     Removes a case and every document that belongs to it. Documents go
-    first (via document_repository.remove_documents, which batch-clears
-    their extracted-field rows and stored files) so nothing is left orphaned
-    if the case delete were to run first and fail partway through.
+    first (document_repository.remove_documents), so their stored files are
+    removed; the database cascades the rest.
     """
     documents = document_repository.list_documents(case_id=case_id, include_fields=False)
     document_repository.remove_documents(documents)
     case_repository.delete_case(case_id)
-    _synced_finalized.pop(case_id, None)
-
-
-# The value last written per case by this process, so an unchanged flag costs no write (and no
-# Realtime event, and doesn't restamp finalized_at). Only ever a shortcut: a miss just writes.
-_synced_finalized: dict[str, bool] = {}
-
-
-def sync_submission_finalized(case_id: str) -> None:
-    """
-    Persists whether this case's requirement checklist is currently fully
-    satisfied. Called right after every classification result is recorded
-    (a document's first classification, or a /retry reclassification —
-    either can change coverage), rather than only computing this at read
-    time like documents_status. Reversible by design: recomputes from
-    scratch every call, so if coverage has dropped back below 100% since
-    it was last synced (e.g. a retry reclassifies a document away from a
-    requirement nothing else covers), this correctly flips back to
-    False/None rather than leaving a stale True in place.
-    """
-    documents = document_repository.list_documents(case_id=case_id)
-    _, missing = compute_requirement_coverage(documents)
-    finalized = not missing
-    if _synced_finalized.get(case_id) == finalized:
-        return
-    case_repository.set_submission_finalized(case_id, finalized=finalized)
-    _synced_finalized[case_id] = finalized
 
 
 # (reports by document_id, ids whose last detection run failed) — see
-# langgraph_trace.get_detection_states.
+# detection_results.get_states.
 DetectionStates = tuple[dict[str, dict[str, Any]], set[str]]
 
 
 def _load_detection_states(documents: list[DocumentRecord], *, slim: bool = False) -> DetectionStates | None:
     """None when the trace table can't be read — the case still loads, without detection states."""
     try:
-        return langgraph_trace.get_detection_states([document.id for document in documents], slim=slim)
+        return detection_results.get_states([document.id for document in documents], slim=slim)
     except Exception:
         logger.exception("Failed to load detection reports for %d document(s)", len(documents))
         return None
@@ -206,6 +142,22 @@ def _load_last_complete(case_id: str, analysis: CaseAnalysis | None) -> CaseAnal
         return None
 
 
+def _load_reviews(case: CaseRecord) -> list[FindingReview] | None:
+    """
+    The officer's finding verdicts, only while the case is being evaluated; None when they can't be read, or when the
+    case doesn't take reviews (nothing is counted then: see case_stage.analysis_stage).
+    """
+    if not case.reviews_required:
+        return None
+    if case.status not in (CaseStage.CASE_ANALYSED.value, CaseStage.PENDING_EVALUATION.value):
+        return []
+    try:
+        return findings_repository.list_reviews_for_case(case.id)
+    except Exception:
+        logger.exception("Failed to load the finding reviews of case %s", case.id)
+        return None
+
+
 def _load_saved_risks(case_ids: list[str]) -> dict[str, CaseRisk]:
     """Empty when the saved scores can't be read: the list then shows those cases unscored."""
     try:
@@ -221,6 +173,8 @@ def build_summary(
     reports: dict[str, dict[str, Any]] | None = None,
     analysis: CaseAnalysis | None = None,
     completed: CaseAnalysis | None = None,
+    failed_detection_ids: set[str] | None = None,
+    reviews: list[FindingReview] | None = None,
 ) -> CaseSummary:
     """
     The case's checklist and document rollup, computed from its documents,
@@ -230,6 +184,7 @@ def build_summary(
     needed to tell whether the latest analysis is stale.
     """
     fulfilled, missing = compute_requirement_coverage(documents)
+    unapproved = unapproved_requirements(case, documents)
     covered, total = compute_identity_proof_of_address_progress(documents)
     unmatched_names = compute_unmatched_proof_of_address_names(documents)
     id_covered, id_total = compute_id_document_identity_progress(documents)
@@ -253,6 +208,7 @@ def build_summary(
         documents_status=compute_documents_status(documents),
         fulfilled_requirements=fulfilled,
         missing_requirements=missing,
+        unapproved_requirements=unapproved,
         proof_of_address_coverage=ProofOfAddressCoverage(
             covered=covered, total=total, unmatched_names=unmatched_names
         ),
@@ -260,10 +216,19 @@ def build_summary(
             covered=id_covered, total=id_total, missing_side=id_missing_side
         ),
         risk=completed.risk if completed else None,
-        supporting_document_recommendations=completed.supporting_documents if completed else [],
         additional_documents=case.additional_documents,
-        analysis_ready=is_ready_for_analysis(documents),
+        # A case that enforces the checklist also waits for every required document to be approved.
+        analysis_ready=is_ready_for_analysis(documents) and not unapproved,
         analysis=overview,
+        failure=(
+            case_stage.failure_of(documents, failed_detection_ids or set())
+            if case.status == CaseStage.FAILED.value else None
+        ),
+        findings_to_review=(
+            case_stage.count_unreviewed(completed.risk if completed else None, reviews)
+            if reviews is not None and case.status in (CaseStage.CASE_ANALYSED.value, CaseStage.PENDING_EVALUATION.value)
+            else None
+        ),
     )
 
 
@@ -464,6 +429,7 @@ def _build_case_snapshot(case_id: str) -> dict | None:
     # Full reports only matter for the staleness check of an existing analysis; otherwise "was it scanned" is enough.
     states_read = _submit(_load_detection_states, documents, slim=analysis is None)
     completed_read = _submit(_load_last_complete, case_id, analysis)
+    reviews_read = _submit(_load_reviews, case)
     fields_by_document = fields_read.result()
     for document in documents:
         fields = fields_by_document.get(document.id)
@@ -472,6 +438,7 @@ def _build_case_snapshot(case_id: str) -> dict | None:
     summary = build_summary(
         case, documents, detection_states[0] if detection_states is not None else None,
         analysis, completed_read.result(),
+        detection_states[1] if detection_states is not None else None, reviews_read.result(),
     )
     # Before enrichment: that rewrites extracted_fields in place into
     # {"value", "confidence"} wrappers, while case_match (and mapper.py, via
@@ -509,10 +476,12 @@ def get_case_summary(case_id: str) -> CaseSummary | None:
         return None
     documents, analysis = documents_read.result(), analysis_read.result()
     states_read = _submit(_load_detection_states, documents, slim=analysis is None)
+    reviews_read = _submit(_load_reviews, case)
     completed = _load_last_complete(case_id, analysis)
     detection_states = states_read.result()
     return build_summary(
         case, documents, detection_states[0] if detection_states is not None else None, analysis, completed,
+        detection_states[1] if detection_states is not None else None, reviews_read.result(),
     )
 
 
@@ -548,7 +517,7 @@ def _load_flag_counts(documents_by_case: dict[str, list[DocumentRecord]]) -> dic
     flags can't be read: the list then shows no flags.
     """
     try:
-        rows = flags_repository.list_for_cases(list(documents_by_case))
+        rows = findings_repository.list_flags_for_cases(list(documents_by_case))
     except Exception:
         logger.exception("Failed to load flags for %d case(s)", len(documents_by_case))
         return {}
@@ -631,26 +600,26 @@ def _risk_filter_value(risk: CaseRisk | None) -> str:
 
 
 def list_cases_page(
-    *, limit: int, offset: int, sort: CaseSort, statuses: list[CaseDocumentsStatus], q: str | None,
+    *, limit: int, offset: int, sort: CaseSort, statuses: list[CaseStage], q: str | None,
     risks: list[CaseRiskFilter] | None = None,
 ) -> CaseListPage:
     """
-    One page of the case queue. Sorting by date and searching happen in the database, so only the page's own
-    documents and scores are read. A status or risk filter and the risk order come from other tables (and
-    "stuck" from the clock), which the database can't sort or filter on: those read every matching case first,
+    One page of the case queue. Sorting by date, searching and the stage filter (cases.status) happen in the
+    database, so only the page's own documents and scores are read. A risk filter and the risk order come
+    from another table, which the database can't sort or filter on: those read every matching case first,
     then slice.
     """
     q = (q or "").strip() or None
+    stages = [stage.value for stage in statuses]
     by_risk = sort in ("risk", "lowest_risk")
-    if not by_risk and not statuses and not risks:
-        cases, total = case_repository.list_cases_page(q, newest=sort == "newest", limit=limit, offset=offset)
+    if not by_risk and not risks:
+        cases, total = case_repository.list_cases_page(
+            q, newest=sort == "newest", limit=limit, offset=offset, statuses=stages,
+        )
         return CaseListPage(items=_list_items(cases), total=total, limit=limit, offset=offset)
 
-    cases = case_repository.list_matching_cases(q)  # newest first
+    cases = case_repository.list_matching_cases(q, statuses=stages)  # newest first
     documents_by_case = _group_by_case(document_repository.list_document_statuses([case.id for case in cases]))
-    if statuses:
-        wanted = set(statuses)
-        cases = [case for case in cases if compute_documents_status(documents_by_case.get(case.id, [])) in wanted]
     saved: dict[str, CaseRisk] | None = None
     if by_risk or risks:
         saved = _load_saved_risks([case.id for case in cases])
@@ -666,24 +635,18 @@ def list_cases_page(
     return CaseListPage(items=_list_items(page, documents_by_case, saved), total=len(cases), limit=limit, offset=offset)
 
 
-def case_ids_matching(since: date | None, statuses: list[CaseDocumentsStatus]) -> set[str]:
-    """The ids of cases created on or after `since` (UTC date) and in one of these documents statuses (any when empty)."""
-    cases = case_repository.list_matching_cases(None)
+def case_ids_matching(since: date | None, stages: list[CaseStage]) -> set[str]:
+    """The ids of cases created on or after `since` (UTC date) and at one of these stages (any when empty)."""
+    cases = case_repository.list_matching_cases(None, statuses=[stage.value for stage in stages] or None)
     if since is not None:
         cases = [case for case in cases if case.created_at.date() >= since]
-    if statuses:
-        documents_by_case = _group_by_case(document_repository.list_document_statuses([case.id for case in cases]))
-        wanted = set(statuses)
-        cases = [case for case in cases if compute_documents_status(documents_by_case.get(case.id, [])) in wanted]
     return {case.id for case in cases}
 
 
 def case_counts() -> CaseCounts:
-    """Every case, and how many are in each documents status (the queue's sidebar)."""
-    case_ids = case_repository.list_case_ids()
-    documents_by_case = _group_by_case(document_repository.list_all_document_statuses())
-    counts = Counter(compute_documents_status(documents_by_case.get(case_id, [])).value for case_id in case_ids)
-    return CaseCounts(total=len(case_ids), by_status=dict(counts))
+    """Every case, and how many are at each stage (the queue's sidebar)."""
+    stages = case_repository.list_case_statuses()
+    return CaseCounts(total=len(stages), by_status=dict(Counter(stages)))
 
 
 def _match_rank(case: CaseRecord, needle: str) -> int:
@@ -714,3 +677,10 @@ def get_case_item(number: str) -> CaseListItem | None:
     """One queue row, by the number officers see in the URL (GLDB-137)."""
     case = case_repository.get_case_by_number(number)
     return _list_items([case])[0] if case is not None else None
+
+
+def finalise_case(case_id: str) -> CaseSummary | None:
+    """Raises case_stage.StageChangeNotAllowed when the case isn't analysed."""
+    case_stage.finalise(case_id)
+    return get_case_summary(case_id)
+

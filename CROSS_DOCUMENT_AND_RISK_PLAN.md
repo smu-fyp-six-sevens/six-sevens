@@ -82,7 +82,7 @@ The agent proposes a theory and the tools fetch the facts; the model never calcu
 
 ### Storage
 
-Results persist with their input fingerprint: only conclusive findings (plus the code-made ones and the "checked and consistent" lines), with the run's risk, outlook, summary and merged additional documents. A completed run writes one `risk_scores` row whose `flag_ids` are the UUIDs of the per-document `flags` behind the score.
+Results persist with their input fingerprint: only conclusive findings (plus the code-made ones and the "checked and consistent" lines), with the run's risk, outlook, summary and merged additional documents. A completed run writes one `risk_scores` row, and, when it is the case's newest, its findings to the `findings` table (linked to the case only).
 
 ## Part 2: Risk scoring and outlook
 

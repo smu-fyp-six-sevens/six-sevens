@@ -196,8 +196,7 @@ export function documentDetectionStage(
   if (status === 'detected' || hasDetectionReport) {
     return 'detected';
   }
-  // status === 'approved': either about to start, or resting after a failed/cancelled run — fall
-  // back to the old inference (still needed for documents detected before this status existed).
+  // status === 'approved': about to start, skipped (no type), or resting after a failed or cancelled run.
   if (skipsDetection(documentType)) {
     return 'skipped';
   }

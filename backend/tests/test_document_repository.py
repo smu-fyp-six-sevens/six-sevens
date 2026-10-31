@@ -66,7 +66,7 @@ def test_update_status_sends_only_the_status_and_a_cleared_reason_when_no_option
 
 
 def test_sync_case_is_a_noop_for_a_caseless_document() -> None:
-    with patch("app.case_service.sync_submission_finalized") as mock_case_service:
+    with patch("app.case_stage.sync_case_stage") as mock_case_service:
         document_repository._sync_case(None)
 
     mock_case_service.assert_not_called()
@@ -94,12 +94,12 @@ def test_a_burst_of_writes_to_one_case_schedules_a_single_resync() -> None:
     with (
         patch.object(document_repository, "SYNC_DEBOUNCE_SECONDS", 1.5),
         patch("app.document_repository.threading.Timer", _FakeTimer),
-        patch("app.case_service.sync_submission_finalized") as mock_case_service,
+        patch("app.case_stage.sync_case_stage") as mock_case_service,
     ):
         for _ in range(5):
             document_repository._sync_case("case-1")
         document_repository._sync_case("case-2")
-        assert [t.args for t in _FakeTimer.created] == [("case-1",), ("case-2",)]
+        assert [t.args[0] for t in _FakeTimer.created] == ["case-1", "case-2"]
         mock_case_service.assert_not_called()
 
         _FakeTimer.created[0].fire()
@@ -111,12 +111,10 @@ def test_a_burst_of_writes_to_one_case_schedules_a_single_resync() -> None:
     document_repository._sync_timers.clear()
 
 
-def test_update_status_does_not_resync_the_case_even_for_analyzed() -> None:
-    # Coverage depends on routing, the confirmed type, rejection and the fields; a status
-    # change alone can't move it, and the writes that can already resync.
+def test_update_status_resyncs_the_case_since_the_stage_follows_document_statuses() -> None:
     with (
         patch("app.document_repository.supabase_client") as mock_client,
-        patch("app.case_service.sync_submission_finalized") as mock_case_service,
+        patch("app.case_stage.sync_case_stage") as mock_case_service,
     ):
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
             _execute_result([_row(status="analyzed")])
@@ -124,7 +122,7 @@ def test_update_status_does_not_resync_the_case_even_for_analyzed() -> None:
 
         assert document_repository.update_status("doc-1", DocumentStatus.ANALYZED) is True
 
-    mock_case_service.assert_not_called()
+    mock_case_service.assert_called_once_with("case-1")
 
 
 def test_update_status_includes_every_optional_field_when_given() -> None:
@@ -175,7 +173,7 @@ def test_approve_document_accepts_it_and_resyncs_the_case() -> None:
     # Approving resolves manual review (a content guard flag, say), which can tick a checklist item.
     with (
         patch("app.document_repository.supabase_client") as mock_client,
-        patch("app.case_service.sync_submission_finalized") as mock_case_service,
+        patch("app.case_stage.sync_case_stage") as mock_case_service,
     ):
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
             _execute_result([_row(status="approved", routing_status="accepted")])
@@ -192,7 +190,7 @@ def test_approve_document_accepts_it_and_resyncs_the_case() -> None:
 def test_undo_approval_restores_the_status_and_routing_only_while_still_approved() -> None:
     with (
         patch("app.document_repository.supabase_client") as mock_client,
-        patch("app.case_service.sync_submission_finalized") as mock_case_service,
+        patch("app.case_stage.sync_case_stage") as mock_case_service,
     ):
         update = mock_client.table.return_value.update
         update.return_value.eq.return_value.eq.return_value.execute.return_value = _execute_result([_row()])
@@ -208,7 +206,7 @@ def test_undo_approval_restores_the_status_and_routing_only_while_still_approved
 def test_approve_document_returns_none_when_nothing_was_updated() -> None:
     with (
         patch("app.document_repository.supabase_client") as mock_client,
-        patch("app.case_service.sync_submission_finalized") as mock_case_service,
+        patch("app.case_stage.sync_case_stage") as mock_case_service,
     ):
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
             _execute_result([])
@@ -224,7 +222,7 @@ def test_reject_document_updates_status_resyncs_the_case_and_returns_the_row() -
     # change that does resync.
     with (
         patch("app.document_repository.supabase_client") as mock_client,
-        patch("app.case_service.sync_submission_finalized") as mock_case_service,
+        patch("app.case_stage.sync_case_stage") as mock_case_service,
     ):
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
             _execute_result([_row(status="rejected")])
@@ -323,7 +321,7 @@ def test_list_documents_with_no_filters_does_not_call_eq() -> None:
 def test_update_extracted_fields_sends_extraction_confidence_only() -> None:
     with (
         patch("app.document_repository.supabase_client") as mock_client,
-        patch("app.case_service.sync_submission_finalized"),
+        patch("app.case_stage.sync_case_stage"),
     ):
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
             _execute_result([_row()])
@@ -342,7 +340,7 @@ def test_update_extracted_fields_sends_extraction_confidence_only() -> None:
 def test_update_extracted_fields_includes_fulfilled_requirements_when_given() -> None:
     with (
         patch("app.document_repository.supabase_client") as mock_client,
-        patch("app.case_service.sync_submission_finalized"),
+        patch("app.case_stage.sync_case_stage"),
     ):
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
             _execute_result([_row()])
@@ -451,11 +449,11 @@ def _document(**overrides) -> DocumentRecord:
     return DocumentRecord(**values)
 
 
-def test_remove_document_deletes_fields_storage_and_row() -> None:
+def test_remove_document_deletes_the_file_and_the_row_which_cascades() -> None:
     document = _document()
 
     with (
-        patch("app.document_repository.extracted_fields_repository") as mock_fields,
+        patch("app.document_repository.findings_repository") as mock_findings,
         patch("app.document_repository.storage_service") as mock_storage,
         patch("app.document_repository.service_supabase_client") as mock_service,
     ):
@@ -465,18 +463,17 @@ def test_remove_document_deletes_fields_storage_and_row() -> None:
         )
         document_repository.remove_document(document)
 
-    mock_fields.delete_fields_for_documents.assert_called_once_with(["doc-1"])
+    # The cross-document findings resting on it go; every row keyed by it cascades from the documents delete.
+    mock_findings.delete_case_findings_citing.assert_called_once_with(["doc-1"])
     mock_storage.delete_file.assert_called_once_with("case-1/doc-1_statement.pdf")
-    # What hangs off the document goes first, then the document itself.
-    assert [c.args for c in mock_client.table.call_args_list] == [("flags",), ("langgraph_trace",), ("case_notes",), ("finding_reviews",), ("documents",)]
-    mock_client.table.return_value.delete.return_value.in_.assert_any_call("document_id", ["doc-1"])
+    assert [c.args for c in mock_client.table.call_args_list] == [("documents",)]
     mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "doc-1")
     mock_client.table.return_value.delete.return_value.eq.return_value.execute.assert_called_once()
 
 
 def test_remove_document_skips_storage_when_the_file_was_never_stored() -> None:
     with (
-        patch("app.document_repository.extracted_fields_repository"),
+        patch("app.document_repository.findings_repository"),
         patch("app.document_repository.storage_service") as mock_storage,
         patch("app.document_repository.service_supabase_client") as mock_service,
     ):
@@ -490,7 +487,7 @@ def test_remove_document_skips_storage_when_the_file_was_never_stored() -> None:
 
 def test_remove_document_still_deletes_the_row_when_storage_delete_fails() -> None:
     with (
-        patch("app.document_repository.extracted_fields_repository"),
+        patch("app.document_repository.findings_repository"),
         patch("app.document_repository.storage_service") as mock_storage,
         patch("app.document_repository.service_supabase_client") as mock_service,
     ):
@@ -507,7 +504,7 @@ def test_remove_document_still_deletes_the_row_when_storage_delete_fails() -> No
 
 def test_remove_document_raises_when_the_row_was_not_actually_deleted() -> None:
     with (
-        patch("app.document_repository.extracted_fields_repository"),
+        patch("app.document_repository.findings_repository"),
         patch("app.document_repository.storage_service"),
         patch("app.document_repository.service_supabase_client") as mock_service,
     ):
@@ -521,41 +518,38 @@ def test_remove_document_raises_when_the_row_was_not_actually_deleted() -> None:
 
 def test_remove_documents_is_a_noop_for_an_empty_list() -> None:
     with (
-        patch("app.document_repository.extracted_fields_repository") as mock_fields,
+        patch("app.document_repository.findings_repository") as mock_findings,
         patch("app.document_repository.storage_service") as mock_storage,
         patch("app.document_repository.service_supabase_client") as mock_service,
     ):
         document_repository.remove_documents([])
 
-    mock_fields.delete_fields_for_documents.assert_not_called()
+    mock_findings.delete_case_findings_citing.assert_not_called()
     mock_storage.delete_files.assert_not_called()
     mock_service.assert_not_called()
 
 
-def test_remove_documents_batches_fields_storage_and_row_deletes() -> None:
+def test_remove_documents_batches_the_file_and_row_deletes() -> None:
     documents = [
         _document(id="doc-1"),
         _document(id="doc-2", storage_path="case-1/doc-2_statement.pdf"),
     ]
 
     with (
-        patch("app.document_repository.extracted_fields_repository") as mock_fields,
+        patch("app.document_repository.findings_repository") as mock_findings,
         patch("app.document_repository.storage_service") as mock_storage,
         patch("app.document_repository.service_supabase_client") as mock_service,
-        patch("app.case_service.sync_submission_finalized") as mock_case_service,
+        patch("app.case_stage.sync_case_stage") as mock_case_service,
     ):
         document_repository.remove_documents(documents)
 
-    mock_fields.delete_fields_for_documents.assert_called_once_with(["doc-1", "doc-2"])
+    mock_findings.delete_case_findings_citing.assert_called_once_with(["doc-1", "doc-2"])
     mock_storage.delete_files.assert_called_once_with(
         ["case-1/doc-1_statement.pdf", "case-1/doc-2_statement.pdf"]
     )
     mock_client = mock_service.return_value
-    assert [c.args for c in mock_client.table.call_args_list] == [("flags",), ("langgraph_trace",), ("case_notes",), ("finding_reviews",), ("documents",)]
-    assert [c.args for c in mock_client.table.return_value.delete.return_value.in_.call_args_list] == [
-        ("document_id", ["doc-1", "doc-2"]), ("document_id", ["doc-1", "doc-2"]), ("document_id", ["doc-1", "doc-2"]),
-        ("document_id", ["doc-1", "doc-2"]), ("id", ["doc-1", "doc-2"]),
-    ]
+    assert [c.args for c in mock_client.table.call_args_list] == [("documents",)]
+    mock_client.table.return_value.delete.return_value.in_.assert_called_once_with("id", ["doc-1", "doc-2"])
     # Batch removal skips the per-document case resync (see remove_documents'
     # docstring) — callers doing this in bulk delete the case right after.
     mock_case_service.assert_not_called()
@@ -565,7 +559,7 @@ def test_remove_documents_skips_storage_call_when_no_document_has_a_storage_path
     documents = [_document(id="doc-1", storage_path=None)]
 
     with (
-        patch("app.document_repository.extracted_fields_repository"),
+        patch("app.document_repository.findings_repository"),
         patch("app.document_repository.storage_service") as mock_storage,
         patch("app.document_repository.service_supabase_client"),
     ):
@@ -578,7 +572,7 @@ def test_remove_documents_swallows_a_storage_batch_delete_failure() -> None:
     documents = [_document(id="doc-1")]
 
     with (
-        patch("app.document_repository.extracted_fields_repository"),
+        patch("app.document_repository.findings_repository"),
         patch("app.document_repository.storage_service") as mock_storage,
         patch("app.document_repository.service_supabase_client") as mock_service,
     ):
@@ -589,11 +583,11 @@ def test_remove_documents_swallows_a_storage_batch_delete_failure() -> None:
     mock_service.return_value.table.return_value.delete.return_value.in_.assert_called_with("id", ["doc-1"])
 
 
-def test_moved_document_takes_its_notes_and_reviews_to_the_new_case() -> None:
+def test_moved_document_takes_its_notes_and_findings_to_the_new_case() -> None:
     with (
         patch("app.document_repository.supabase_client") as mock_client,
         patch("app.document_repository.notes_repository") as mock_notes,
-        patch("app.document_repository.finding_reviews_repository") as mock_reviews,
+        patch("app.document_repository.findings_repository") as mock_findings,
         patch("app.document_repository._sync_case"),
     ):
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
@@ -605,7 +599,7 @@ def test_moved_document_takes_its_notes_and_reviews_to_the_new_case() -> None:
     assert mock_notes.move_with_documents.call_args_list == [
         call(["doc-1"], "case-2"), call(["doc-2", "doc-3"], "case-2"),
     ]
-    assert mock_reviews.move_with_documents.call_args_list == mock_notes.move_with_documents.call_args_list
+    assert mock_findings.move_with_documents.call_args_list == mock_notes.move_with_documents.call_args_list
 
 
 def test_document_statuses_are_read_for_100_cases_at_a_time() -> None:

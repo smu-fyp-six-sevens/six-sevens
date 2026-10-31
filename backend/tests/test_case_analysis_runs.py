@@ -12,7 +12,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.case_pipeline import service
-from app.case_pipeline.models import CaseAnalysis
+from app.case_pipeline.models import AnalysisSummary, CaseAnalysis
 from app.main import app
 from app.models import CaseRecord
 
@@ -34,7 +34,7 @@ def _list(rows: list[dict], *, requested: list[SimpleNamespace] | None = None, a
     with (
         patch.object(service.repository, "list_runs", return_value=rows),
         patch.object(service.document_repository, "list_documents", return_value=[]),
-        patch.object(service.langgraph_trace, "get_detection_states", return_value=({}, set())),
+        patch.object(service.detection_results, "get_states", return_value=({}, set())),
         patch.object(service.state, "compute_fingerprint", return_value="now"),
         patch.object(service.audit, "list_events", side_effect=RuntimeError("down") if audit_error else None,
                      return_value=requested or []),
@@ -101,7 +101,7 @@ def test_the_list_route_returns_the_runs() -> None:
 
 def test_an_earlier_run_opens_whole() -> None:
     analysis = CaseAnalysis(run_id=RUN_1, case_id="case-1", status="complete", fingerprint="old", started_at=NOW,
-                            summary="An older prose summary.")
+                            structured_summary=AnalysisSummary(headline="An earlier headline."))
     with (
         patch("app.routers._dependencies.case_service") as cases,
         patch.object(service, "get_run", return_value=analysis) as get_run,
@@ -110,7 +110,7 @@ def test_an_earlier_run_opens_whole() -> None:
         response = client.get(f"/cases/case-1/analysis/runs/{RUN_1}")
 
     assert response.status_code == 200
-    assert response.json()["summary"] == "An older prose summary."
+    assert response.json()["structured_summary"]["headline"] == "An earlier headline."
     get_run.assert_called_once_with("case-1", RUN_1)
 
 

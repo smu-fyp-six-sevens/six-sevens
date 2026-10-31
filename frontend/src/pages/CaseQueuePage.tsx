@@ -8,10 +8,9 @@ import HeaderFilter from '../components/HeaderFilter';
 import type { FilterOption } from '../components/HeaderFilter';
 import Pagination from '../components/Pagination';
 import { deleteCase } from '../services/uploadService';
-import type { CaseDocumentsStatus, CaseRiskFilter, CaseSort } from '../services/uploadService';
+import type { CaseRiskFilter, CaseSort, CaseStage } from '../services/uploadService';
 import type { CaseRecord } from '../App';
-import { caseStatusTone } from '../utils/caseStatusTone';
-import { STATUS_ORDER, statusLabel, statusValue } from '../utils/caseStatus';
+import { CASE_STAGES, caseStageLabel, caseStageTone, isCaseStage } from '../utils/caseStages';
 import { caseNumberLabel } from '../utils/caseSearch';
 import { useCaseQueue } from './useCaseQueue';
 import { ErrorMessage } from '../components/ErrorMessage';
@@ -46,7 +45,7 @@ const RISK_OPTIONS: { value: CaseRiskFilter; label: string }[] = [
 ];
 
 interface QueuePrefs {
-  statuses: CaseDocumentsStatus[];
+  statuses: CaseStage[];
   risks: CaseRiskFilter[];
   sort: CaseSort;
 }
@@ -112,11 +111,9 @@ function TableHead({ sort, disabled, statusFilter, riskFilter, onSort }: {
   );
 }
 
-// A saved status is the backend's value; older saves hold the label ("In progress") the queue used to store.
-function savedStatus(item: unknown): CaseDocumentsStatus | undefined {
-  if (typeof item !== 'string') return undefined;
-
-  return STATUS_ORDER.find((value) => value === item) ?? statusValue(item);
+// A saved status is a stage; older saves hold a documents status or label the queue no longer filters on.
+function savedStatus(item: unknown): CaseStage | undefined {
+  return typeof item === 'string' && isCaseStage(item) ? item : undefined;
 }
 
 // Per-browser (localStorage), not per-account — enough to stop having to
@@ -142,7 +139,7 @@ function loadPrefs(): QueuePrefs {
 
     return {
       statuses: Array.isArray(parsed.statuses)
-        ? parsed.statuses.map(savedStatus).filter((status): status is CaseDocumentsStatus => status !== undefined)
+        ? parsed.statuses.map(savedStatus).filter((status): status is CaseStage => status !== undefined)
         : [],
       risks: Array.isArray(parsed.risks)
         ? parsed.risks.map(savedRisk).filter((risk): risk is CaseRiskFilter => risk !== undefined)
@@ -172,7 +169,7 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
   const [caseToDelete, setCaseToDelete] = useState<CaseRecord | null>(null);
   // Read localStorage once, on the first render; the settings start from it.
   const [initialPrefs] = useState(loadPrefs);
-  const [savedStatuses, setSavedStatuses] = useState<Set<CaseDocumentsStatus>>(() => new Set(initialPrefs.statuses));
+  const [savedStatuses, setSavedStatuses] = useState<Set<CaseStage>>(() => new Set(initialPrefs.statuses));
   const [risks, setRisks] = useState<Set<CaseRiskFilter>>(() => new Set(initialPrefs.risks));
   const [sort, setSort] = useState<CaseSort>(initialPrefs.sort);
 
@@ -181,19 +178,19 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
   }, [savedStatuses, risks, sort]);
 
   // The sidebar lists the statuses cases are in, so it learns them from the server's counts.
-  const [counts, setCounts] = useState<Map<CaseDocumentsStatus, number> | null>(null);
+  const [counts, setCounts] = useState<Map<CaseStage, number> | null>(null);
 
   // A saved status no case has right now has no chip to switch it off, so it must not filter anything: only
   // statuses that currently exist count as active. Until the counts arrive, the saved ones are used as they are.
   const statusOptions = useMemo(
-    () => (counts ? STATUS_ORDER.filter((status) => (counts.get(status) ?? 0) > 0) : []),
+    () => (counts ? CASE_STAGES.filter((status) => (counts.get(status) ?? 0) > 0) : []),
     [counts],
   );
   const activeStatuses = useMemo(
     () => new Set(counts ? statusOptions.filter((status) => savedStatuses.has(status)) : savedStatuses),
     [counts, statusOptions, savedStatuses],
   );
-  const activeList = useMemo(() => STATUS_ORDER.filter((status) => activeStatuses.has(status)), [activeStatuses]);
+  const activeList = useMemo(() => CASE_STAGES.filter((status) => activeStatuses.has(status)), [activeStatuses]);
   const riskList = useMemo(() => RISK_OPTIONS.map((option) => option.value).filter((risk) => risks.has(risk)), [risks]);
 
   const queue = useCaseQueue({
@@ -203,7 +200,7 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
 
   useEffect(() => {
     if (queue.counts) {
-      setCounts(new Map(Object.entries(queue.counts.by_status) as [CaseDocumentsStatus, number][]));
+      setCounts(new Map(Object.entries(queue.counts.by_status) as [CaseStage, number][]));
     }
   }, [queue.counts]);
 
@@ -228,7 +225,7 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
   }, [hasLoaded, isFetching, items.length, total, requestedPage, pageCount]);
 
   // Changing a filter or the sort starts again from the first page.
-  function changeStatuses(next: Set<CaseDocumentsStatus>) {
+  function changeStatuses(next: Set<CaseStage>) {
     setSavedStatuses(next);
     goToPage(1);
   }
@@ -245,12 +242,12 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
 
   const statusFilterOptions: FilterOption[] = statusOptions.map((status) => ({
     value: status,
-    text: statusLabel(status),
+    text: caseStageLabel(status),
     count: counts?.get(status) ?? 0,
     label: (
       <>
-        <span className={`case-status-dot case-status-dot--${caseStatusTone(statusLabel(status))}`} aria-hidden="true" />
-        {statusLabel(status)}
+        <span className={`case-status-dot tone-${caseStageTone(status)}`} aria-hidden="true" />
+        {caseStageLabel(status)}
       </>
     ),
   }));
@@ -271,7 +268,7 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
       options={statusFilterOptions}
       selected={activeStatuses}
       disabled={!counts}
-      onChange={(next) => changeStatuses(next as Set<CaseDocumentsStatus>)}
+      onChange={(next) => changeStatuses(next as Set<CaseStage>)}
     />
   );
   // The header's own risk filter is just a funnel next to the sort arrows; the small-screen row has no header, so it is titled.
@@ -402,6 +399,25 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
                 />
               ))}
             </ul>
+          </div>
+        ) : activeList.length > 0 || riskList.length > 0 ? (
+          // A filter that matches nothing keeps the header, the only place on a wide screen to switch it off.
+          <div className="case-table">
+            <TableHead sort={sort} disabled={false} statusFilter={statusFilter} riskFilter={riskFilter} onSort={changeSort} />
+
+            <div className="case-table-empty">
+              <span>No cases match these filters.</span>
+              <button
+                type="button"
+                className="case-table-clear"
+                onClick={() => {
+                  changeStatuses(new Set());
+                  changeRisks(new Set());
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
           </div>
         ) : (
           <div className="no-results">

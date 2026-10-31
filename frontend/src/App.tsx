@@ -11,7 +11,6 @@ import {
 import { CasePageSkeleton, DocumentPageSkeleton, PageSkeleton } from './components/Skeletons';
 import CaseQueuePage from './pages/CaseQueuePage';
 import CreateCasePage from './pages/CreateCasePage';
-import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundState from './components/NotFoundState';
 import { useCaseByNumber, type CaseHandover } from './pages/useCaseByNumber';
@@ -26,14 +25,17 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 import { getToken } from './lib/api';
 import type { CaseRiskLevel } from './services/uploadService';
 import { LoadErrorState } from './components/LoadErrorState';
-import { AppSettingsProvider } from './components/AppSettingsProvider';
+import type { StatusTone } from './utils/caseStages';
 
 export interface CaseRecord {
   id: string;
   caseNumber?: string | null;
   applicant: string;
+  // The stage's label and colour (see utils/caseStages.ts); caseStatus is the stage itself.
   status: string;
+  statusTone: StatusTone;
   caseStatus: string;
+  stuck?: boolean;
   created_at?: string | null;
   // Only set once the case has been scored (see backend/app/case_risk.py).
   riskLevel?: CaseRiskLevel | null;
@@ -232,7 +234,6 @@ export default function App() {
   const [isAuthed, setIsAuthed] = useState(() => getToken() !== null);
 
   return (
-    <AppSettingsProvider isAuthed={isAuthed}>
     <BrowserRouter>
       <Suspense fallback={<PageSkeleton />}>
       <Routes>
@@ -287,14 +288,6 @@ export default function App() {
           }
         />
 
-        <Route
-          path="/settings"
-          element={
-            <RequireAuth isAuthed={isAuthed}>
-              <SettingsPage />
-            </RequireAuth>
-          }
-        />
 
         <Route
           path="/create-case"
@@ -312,6 +305,5 @@ export default function App() {
       </Routes>
       </Suspense>
     </BrowserRouter>
-    </AppSettingsProvider>
   );
 }

@@ -13,10 +13,12 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, cast
 
-from .. import audit, case_repository, document_repository, events, finding_reviews_repository, read_pool
+from .. import (
+    audit, case_repository, case_stage, detection_results, document_repository, events, finding_keys,
+    findings_repository, read_pool,
+)
 from ..config import settings
 from ..snapshots import push_case_snapshot
-from ..langgraph import trace as langgraph_trace
 from ..llm_io import ModelRefused
 from ..models import DocumentRecord
 from ..run_context import end_run, start_run
@@ -24,10 +26,10 @@ from . import repository, state
 from .cross_document.evidence import build_context
 from .cross_document.agents import PROMPT_VERSION
 from .cross_document.graph import run_cross_document_analysis
-from .models import AnalysisAudit, AnalysisStatus, CaseAnalysis, CaseAnalysisRunItem
+from .models import AgentDecision, AnalysisAudit, AnalysisStatus, CaseAnalysis, CaseAnalysisRunItem
 from .risk import store as risk_store
 from .trace import RunTrace
-from .readiness import is_ready_for_analysis
+from .readiness import is_ready_for_analysis, unapproved_requirements
 from .risk.case_risk import compute_case_risk, scoring_breakdown
 from .risk.additional_documents import build_additional_documents
 from .risk.outlook import build_outlook, outlook_trace, propose_requests_with_status
@@ -42,6 +44,14 @@ _MAX_MODEL_CALLS = 6
 
 class AnalysisDisabled(Exception):
     pass
+
+
+class RequiredDocumentsMissing(Exception):
+    """A case that enforces the checklist needs every required document approved before it can be analysed."""
+
+    def __init__(self, missing: list[str]):
+        super().__init__(", ".join(missing))
+        self.missing = missing
 
 
 class AnalysisNotReady(Exception):
@@ -76,7 +86,11 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
     """The api side: checks, records a running run, and asks the case-worker to run it."""
     if not settings.CASE_ANALYSIS_ENABLED:
         raise AnalysisDisabled()
+    case = await asyncio.to_thread(case_repository.get_case, case_id)
     documents = await asyncio.to_thread(document_repository.list_documents, case_id=case_id)
+    missing = unapproved_requirements(case, documents) if case else []
+    if missing:
+        raise RequiredDocumentsMissing(missing)
     if not is_ready_for_analysis(documents):
         raise AnalysisNotReady()
     latest = await asyncio.to_thread(repository.latest_run_state, case_id)
@@ -84,7 +98,7 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
         raise AnalysisAlreadyRunning()
 
     reports, _ = await asyncio.to_thread(
-        langgraph_trace.get_detection_states, [d.id for d in documents]
+        detection_results.get_states, [d.id for d in documents]
     )
     run_id = str(uuid.uuid4())
     fingerprint = state.compute_fingerprint(documents, reports)
@@ -102,7 +116,9 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
         # Nothing will run it, so it must not block the next attempt for the whole time limit.
         analysis.status, analysis.error = "failed", "The analysis could not be started. Run it again."
         await asyncio.to_thread(repository.finish_run, analysis)
+        await sync_stage(case_id)
         raise
+    await sync_stage(case_id)
     return analysis
 
 
@@ -110,7 +126,7 @@ async def run_requested(case_id: str, run_id: str, fingerprint: str, started_at:
     """The case-worker side: runs a requested analysis over the documents as they are now."""
     documents = await asyncio.to_thread(document_repository.list_documents, case_id=case_id)
     reports, failed_ids = await asyncio.to_thread(
-        langgraph_trace.get_detection_states, [d.id for d in documents]
+        detection_results.get_states, [d.id for d in documents]
     )
     analysis = CaseAnalysis(
         run_id=run_id, case_id=case_id, status="running", fingerprint=fingerprint, started_at=started_at,
@@ -138,6 +154,7 @@ async def _execute(
                                           for k, v in context.docs.items()})
         result = await run_cross_document_analysis(context)
         findings = result.get("findings") or []
+        finding_keys.assign_case_fingerprints(findings)
         trace.save()
 
         risk = compute_case_risk(documents, reports, failed_ids, findings)
@@ -169,6 +186,14 @@ async def _execute(
         analysis.supporting_documents = supporting_documents
         analysis.additional_documents = additional
         analysis.consistent_checks = result.get("consistent_checks") or []
+        agent_decisions = [
+            AgentDecision.model_validate(decision)
+            for decision in result.get("agent_decisions") or []
+        ]
+        analysis.confidence = min(
+            (decision.confidence for decision in agent_decisions),
+            default=0.0,
+        )
         analysis.clean_checks = clean_checks
         analysis.audit = AnalysisAudit(
             models={"analysis": settings.LANGGRAPH_SONNET_MODEL},
@@ -176,6 +201,7 @@ async def _execute(
             hypotheses_tried=len(result.get("hypotheses") or []),
             findings_discarded=len(result.get("discarded") or []),
             tool_calls=result.get("tool_calls") or [],
+            agent_decisions=agent_decisions,
         )
         analysis.status = "complete"
         trace.record("done", status="complete", findings=len(findings))
@@ -192,18 +218,27 @@ async def _execute(
             await _store_result(analysis)
         except Exception:
             logger.exception("Failed to store the case analysis result for case %s", case_id)
+        await sync_stage(case_id)
         await push_case_snapshot(case_id)
+
+
+async def sync_stage(case_id: str) -> None:
+    """A run started or finished, which moves the case's stage. Never raises: the run itself is unaffected."""
+    try:
+        await asyncio.to_thread(case_stage.sync_case_stage, case_id)
+    except Exception:
+        logger.exception("Failed to update the stage of case %s", case_id)
 
 
 async def _store_result(analysis: CaseAnalysis) -> None:
     """Saves a finished run; only the case's newest complete run also updates the case's score and requested documents."""
     published = await asyncio.to_thread(repository.finish_run, analysis)
     if published and analysis.status == "complete":
-        # Officers' reviews of cross-document findings named the previous run's findings, which this one replaces.
+        # The run (case_analysis_runs) is the source of truth, so a failure here is logged, not raised.
         try:
-            await asyncio.to_thread(finding_reviews_repository.clear_case_scope, analysis.case_id)
+            await asyncio.to_thread(findings_repository.sync_case, analysis.case_id, analysis.findings)
         except Exception:
-            logger.exception("Failed to clear the previous analysis's finding reviews for case %s", analysis.case_id)
+            logger.exception("Failed to store the case analysis findings of case %s", analysis.case_id)
         # The case list reads the score from here rather than opening every run.
         await asyncio.to_thread(risk_store.save, analysis.case_id, analysis.risk)
         await asyncio.to_thread(
@@ -213,7 +248,7 @@ async def _store_result(analysis: CaseAnalysis) -> None:
 
 def _documents_and_reports(case_id: str) -> tuple[list[DocumentRecord], dict[str, dict[str, Any]]]:
     documents = document_repository.list_documents(case_id=case_id)
-    reports, _ = langgraph_trace.get_detection_states([d.id for d in documents])
+    reports, _ = detection_results.get_states([d.id for d in documents])
     return documents, reports
 
 
@@ -254,7 +289,7 @@ def list_runs(case_id: str) -> list[CaseAnalysisRunItem]:
     if not rows:
         return []
     documents = document_repository.list_documents(case_id=case_id)
-    reports, _ = langgraph_trace.get_detection_states([d.id for d in documents])
+    reports, _ = detection_results.get_states([d.id for d in documents])
     current = state.compute_fingerprint(documents, reports)
     starters = _starters(case_id)
 

@@ -25,6 +25,7 @@ from app.case_pipeline.risk.case_risk import compute_case_risk
 from app.case_pipeline.risk.outlook import build_outlook
 from app.case_pipeline.risk.supporting_documents import recommend_supporting_documents
 from app.models import DocumentRecord, DocumentStatus, RoutingStatus
+from app.finding_keys import assign_document_fingerprints
 
 CASE_VIEWS_FIXTURE = Path(__file__).parent / "fixtures" / "regression" / "case-views.json"
 _UPLOADED = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -44,8 +45,11 @@ def _finding(number: int, tool: str, severity: str, summary: str, rationale: str
 
 
 def _report(*findings: dict, unable: tuple[dict, ...] = ()) -> dict:
-    return {"verdict": "flagged" if findings else "clean", "findings": list(findings),
-            "unable_to_assess": list(unable), "consulted": []}
+    # Fingerprinted as the detection graph does when a run finishes.
+    report = {"verdict": "flagged" if findings else "clean", "findings": list(findings),
+              "unable_to_assess": list(unable), "consulted": []}
+    assign_document_fingerprints(report)
+    return report
 
 
 def scored_case_view() -> dict:
@@ -84,7 +88,6 @@ def _additional_documents_view(
     return {
         "risk": risk.model_dump(mode="json"),
         "additional_documents": additional.model_dump(mode="json"),
-        "supporting_document_recommendations": [s.model_dump(mode="json") for s in supporting],
     }
 
 
@@ -171,9 +174,11 @@ def test_a_registry_discrepancy_cannot_be_reduced_by_a_further_document():
 
 
 def test_a_large_payment_and_rising_borrowings_ask_for_a_purchase_order_and_loan_evidence():
-    recommendations = recommendations_view()["supporting_document_recommendations"]
+    items = recommendations_view()["additional_documents"]["items"]
 
-    assert [r["document_type"] for r in recommendations] == ["purchase_order", "bank_loan_evidence"]
+    assert [i["recommendation"]["document_type"] for i in items if i["recommendation"]] == [
+        "purchase_order", "bank_loan_evidence",
+    ]
 
 
 def test_the_playwright_suites_case_views_match_the_backend():

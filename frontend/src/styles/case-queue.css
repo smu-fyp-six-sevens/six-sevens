@@ -8,7 +8,6 @@
   border-radius: 8px;
   padding: 12px 14px;
 }
-
 .search-box .search-icon {
   width: 16px;
   height: 16px;
@@ -244,20 +243,18 @@
   background: var(--slate-65);
 }
 
-.case-status-dot--green {
-  background: var(--green-30);
+.case-status-dot[class*='tone-'] {
+  background: var(--tone);
 }
 
-.case-status-dot--blue {
-  background: var(--blue-43);
-}
-
-.case-status-dot--red {
-  background: var(--red-45a);
-}
-
-.case-status-dot--amber {
-  background: #b26a00;
+.case-row-stuck {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--amber-bg);
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .queue-search-chip {
@@ -367,12 +364,39 @@
 
 /* Columns shared by the header and every row. The header's right padding leaves room for each row's ⋮ menu. */
 .case-table {
-  --case-cols: 120px minmax(0, 2.4fr) 180px 112px 120px;
+  --case-cols: 120px minmax(0, 2.4fr) 250px 112px 120px;
 
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: visible;
+}
+
+.case-table-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 16px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.case-table-clear {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.case-table-clear:hover,
+.case-table-clear:focus-visible {
+  border-color: var(--steel);
+  color: var(--steel-dark);
 }
 
 .case-table-head,
@@ -891,4 +915,3 @@
     border-radius: 10px 10px 0 0;
   }
 }
-

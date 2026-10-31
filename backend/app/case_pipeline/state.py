@@ -18,8 +18,8 @@ from .risk.case_risk import counts_towards_risk
 
 
 def compute_fingerprint(documents: list[DocumentRecord], reports: dict[str, dict[str, Any]]) -> str:
-    """A hash of everything an analysis reads: the approved documents, their fields and their findings, and the
-    documents its risk score still waits on."""
+    """A hash of everything an analysis reads: the approved documents, their fields and their findings. Approving,
+    rejecting, moving or deleting a document, or a rerun of its detection, changes it."""
     parts: list[Any] = []
     for document in sorted((d for d in documents if d.status in APPROVED_STATUSES), key=lambda d: d.id):
         report = reports.get(document.id) or {}
@@ -28,16 +28,6 @@ def compute_fingerprint(documents: list[DocumentRecord], reports: dict[str, dict
             document.id, document.status.value, document.document_type,
             json.dumps(document.extracted_fields or {}, sort_keys=True, default=str), findings,
         ])
-    # Documents the risk score counts that no officer has approved yet (e.g. a bank statement that failed
-    # processing): the score waits on them ("5/6 scanned"), so retrying, rejecting or deleting one has to make
-    # the analysis out of date too. Added only when there are any, so other cases' fingerprints don't change.
-    waiting = sorted(
-        [d.id, d.status.value, d.document_type]
-        for d in documents
-        if d.status not in APPROVED_STATUSES and counts_towards_risk(d, reports, set())
-    )
-    if waiting:
-        parts.append(["awaiting", waiting])
     return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 
 

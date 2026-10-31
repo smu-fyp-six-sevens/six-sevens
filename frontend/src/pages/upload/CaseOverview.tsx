@@ -4,13 +4,11 @@ import { Rate } from '../../components/Rate';
 import { RATE_MEANING, belowTargetNote, formatCheck } from '../../utils/checkLabels';
 import { InfoLabel } from '../../components/InfoTip';
 import { isEligibleForApproval } from './uploadHelpers';
-import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
+import { findingScope, useFindingReviews } from './useFindingReviews';
 import type { CaseSection } from './caseSections';
-import { outOfDateMessage } from './caseSections';
 import { formatUsd, processingTimes } from './processingTimes';
 import { useCaseCost } from './useCaseCost';
 import { CaseOverviewSkeleton } from '../../components/Skeletons';
-import { useFindingReviewsOn } from '../../lib/appSettings';
 
 const SEVERITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2, info: 3 };
 const SHOWN_SEVERITIES = ['high', 'medium', 'low'] as const;
@@ -95,27 +93,27 @@ export function CaseOverview({
   approvedDocuments,
   caseMatches,
   risk,
-  analysisReady,
   analysisOverview,
   snapshotLoaded,
   caseId,
   onSelectSection,
+  reviewsRequired,
 }: {
+  reviewsRequired: boolean;
   documents: DocumentRecord[];
   flaggedDocuments: DocumentRecord[];
   approvedDocuments: DocumentRecord[];
   caseMatches: Map<string, DocumentCaseMatch>;
   risk: CaseRisk | null;
-  analysisReady: boolean;
   analysisOverview: CaseAnalysisOverview | null;
   snapshotLoaded: boolean;
   caseId: string;
   onSelectSection: (section: CaseSection) => void;
 }) {
   const scored = risk?.state === 'scored' && risk.level;
-  // The officer's reviews of this case's findings (Risk Summary), as precision and recall. An admin can turn
-  // reviews off (Settings): then there is no Detection Accuracy panel and no Review Findings step.
-  const reviewsOn = useFindingReviewsOn();
+  // The officer's reviews of this case's findings (Risk Summary), as precision and recall. A case created without
+  // reviews has no Detection Accuracy panel and no Review Findings step.
+  const reviewsOn = reviewsRequired;
   const accuracy = useFindingReviews(caseId, reviewsOn).data;
   const reviewed = accuracy ? accuracy.case.correct + accuracy.case.wrong + accuracy.case.missed : 0;
   const checksByReviews = [...(accuracy?.case.by_check ?? [])]
@@ -127,73 +125,8 @@ export function CaseOverview({
   const documentsWithFindings = documentsByWorstFinding(risk?.contributing_findings ?? []);
   const worstDocuments = documentsWithFindings.slice(0, FLAGGED_DOCUMENTS_SHOWN);
   const recentDocuments = [...documents].reverse().slice(0, 5);
-  const detectedCount = documents.filter((document) => document.status === 'detected').length;
-  const analysisPhase = !analysisOverview
-    ? analysisReady
-      ? { label: 'Ready to run', tone: 'action' }
-      : { label: 'Waiting for document checks', tone: 'idle' }
-    : analysisOverview.status === 'running'
-      ? { label: 'Analysis running', tone: 'progress' }
-      : analysisOverview.status === 'failed'
-        ? { label: 'Analysis failed', tone: 'error' }
-        : analysisOverview.stale || analysisOverview.status === 'superseded'
-? { label: `Out of date · ${outOfDateMessage(analysisOverview).short.toLowerCase()}`, tone: 'action' }
-          : { label: `${analysisOverview.finding_count} cross-document ${analysisOverview.finding_count === 1 ? 'finding' : 'findings'} · up to date`, tone: 'done' };
-  const progressStages = [
-    { label: 'Documents Uploaded', detail: `${documents.length} ${documents.length === 1 ? 'document' : 'documents'}`, tone: documents.length ? 'done' : 'idle' },
-    {
-      label: 'Officer Approval',
-      detail: awaitingApprovalCount
-        ? `${awaitingApprovalCount} eligible to approve`
-        : reviewCount
-          ? `${reviewCount} ${reviewCount === 1 ? 'needs' : 'need'} review first`
-          : `${approvedDocuments.length} of ${documents.length} approved`,
-      tone: awaitingApprovalCount || reviewCount ? 'action' : documents.length > 0 && approvedDocuments.length === documents.length ? 'done' : 'idle',
-    },
-    { label: 'Fraud Detection', detail: `${detectedCount} of ${documents.length} complete`, tone: documents.length === 0 ? 'idle' : detectedCount === documents.length ? 'done' : 'action' },
-  ];
-  // The analysis runs over the documents detected so far, so it can be up to date (or ready to rerun) while others
-  // still wait for approval or detection. It only asks for action or completes the step once every document is through.
-  progressStages.push(
-    (analysisPhase.tone === 'done' || analysisPhase.tone === 'action') && !progressStages.every((stage) => stage.tone === 'done')
-      ? {
-          label: 'Case Analysis',
-          detail: analysisOverview ? `Covers ${detectedCount} of ${documents.length} documents` : 'After every document is checked',
-          tone: 'idle',
-        }
-      : { label: 'Case Analysis', detail: analysisPhase.label, tone: analysisPhase.tone },
-  );
-  // A document's findings count as reviewed once each has a saved verdict (the Risk Summary's Save review).
-  const reviewedDocumentCount = accuracy
-    ? documentsWithFindings.filter((group) => group.findings.every((finding) => verdictFor(accuracy.reviews, finding))).length
-    : 0;
-  const findingsReviewed = risk?.state === 'scored' && reviewedDocumentCount === documentsWithFindings.length;
-  // The findings are the latest case analysis's, so they're only final once it is up to date: an out-of-date run
-  // (a document added since) may find more, and reviewing what it has isn't the end of the review.
-  // Every step before it has to be done too, so a case's findings are reviewed together once every document is through.
-  const analysisUpToDate = progressStages.every((stage) => stage.tone === 'done');
+  // The accuracy is from the latest analysis's findings; an out-of-date run (a document added since) may change them.
   const analysisStale = Boolean(analysisOverview && (analysisOverview.stale || analysisOverview.status === 'superseded'));
-  if (!reviewsOn) {
-    progressStages.push(
-      analysisUpToDate && risk?.state === 'scored'
-        ? { label: 'Finalise Case', detail: 'Ready to finalise', tone: 'action' }
-        : { label: 'Finalise Case', detail: 'After the case analysis', tone: 'idle' },
-    );
-  } else progressStages.push(
-    !analysisUpToDate || risk?.state !== 'scored'
-      ? { label: 'Review Findings', detail: analysisStale ? 'Waiting for the analysis rerun' : analysisPhase.tone === 'done' ? 'After every document is checked' : 'After the case analysis', tone: 'idle' }
-      : documentsWithFindings.length === 0
-        ? { label: 'Review Findings', detail: 'No findings to review', tone: 'done' }
-        : {
-            label: 'Review Findings',
-            detail: `${reviewedDocumentCount} of ${documentsWithFindings.length} ${documentsWithFindings.length === 1 ? 'document' : 'documents'} reviewed`,
-            tone: findingsReviewed ? 'done' : 'action',
-          },
-    // There is no finalise action yet, so this step is as far as a case gets: ready once everything before it is done.
-    progressStages.every((stage) => stage.tone === 'done') && findingsReviewed
-      ? { label: 'Finalise Case', detail: 'Ready to finalise', tone: 'action' }
-      : { label: 'Finalise Case', detail: 'After all findings are reviewed', tone: 'idle' },
-  );
   const { cost, error: timingError, loading: timingLoading } = useCaseCost(caseId);
   const timings = processingTimes(cost?.timings);
   return (
@@ -202,22 +135,6 @@ export function CaseOverview({
         <CaseOverviewSkeleton />
       ) : (
         <>
-          <section className="case-overview-progress" aria-label="Case progress">
-            {/* A step's line in from the left fills once the step before it is done. */}
-            <ol className="case-overview-stepper">
-              {progressStages.map((stage, index) => (
-                <li
-                  className={`case-overview-step case-overview-step--${stage.tone}${index > 0 && progressStages[index - 1].tone === 'done' ? ' case-overview-step--reached' : ''}`}
-                  key={stage.label}
-                >
-                  <span className="case-overview-step-marker" aria-hidden="true">{stage.tone === 'done' ? '✓' : <span />}</span>
-                  <strong>{stage.label}</strong>
-                  <span className="case-overview-step-detail">{stage.detail}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-
           <section className="case-overview-topline" aria-label="Case risk and document counts">
             <article className={`case-overview-risk case-overview-risk--${riskTone(risk?.level)}`}>
               <div className="case-overview-risk-copy">
@@ -270,7 +187,7 @@ export function CaseOverview({
                 <div><span>Case analysis</span><strong>{cost ? formatUsd(cost.case_analysis_usd) : '…'}</strong></div>
               </div>
               <p className="case-overview-metric-note">
-                {timingError ? "Couldn't load the cost." : "From each run's record in the audit trail; runs from before cost was recorded aren't included."}
+                {timingError ? "Couldn't load the cost." : "From each run's record in the audit trail."}
               </p>
             </article>
 

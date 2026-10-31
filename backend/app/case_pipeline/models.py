@@ -46,6 +46,7 @@ class PlannedCheck(BaseModel):
 class Hypothesis(BaseModel):
     id: str
     claim: str
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     # Document keys (e.g. "bank_statement_1") the claim rests on.
     documents: list[str] = Field(default_factory=list)
     proof: str = ""
@@ -62,12 +63,15 @@ class CrossDocFinding(BaseModel):
     rationale: str
     severity: Severity
     category: FindingCategory
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     citations: list[str] = Field(default_factory=list)
     document_ids: list[str] = Field(default_factory=list)
     # What the refutation probe returned, in the investigator's words.
     probe_summary: str = ""
     # Set by code when a tool result carried a hard breach.
     breach_flags: list[str] = Field(default_factory=list)
+    # Set by finding_keys once the run's findings are final; names its row in the findings table.
+    fingerprint: str = ""
 
 
 class EvidenceRequest(BaseModel):
@@ -96,6 +100,15 @@ class RiskOutlook(BaseModel):
     unreducible_finding_ids: list[str] = Field(default_factory=list)
 
 
+class AgentDecision(BaseModel):
+    """One model agent's decision and its bounded self-reported confidence."""
+
+    agent: Literal["hypothesis_planner", "hypothesis_judge"]
+    decision_id: str
+    decision: str
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
 class AnalysisAudit(BaseModel):
     """What produced a result, so a past run can be reconstructed."""
 
@@ -104,6 +117,8 @@ class AnalysisAudit(BaseModel):
     hypotheses_tried: int = 0
     findings_discarded: int = 0
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    # Preserve planner and judge confidence with each decision, including discarded hypotheses.
+    agent_decisions: list[AgentDecision] = Field(default_factory=list)
 
 
 AnalysisStatus = Literal["running", "complete", "failed", "superseded"]
@@ -135,10 +150,9 @@ class CaseAnalysis(BaseModel):
     started_at: datetime
     finished_at: datetime | None = None
     error: str | None = None
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     findings: list[CrossDocFinding] = Field(default_factory=list)
     outlook: RiskOutlook | None = None
-    # Runs from before structured_summary: their prose summary, which the card shows instead.
-    summary: str | None = None
     structured_summary: AnalysisSummary | None = None
     # The case's risk and evidence requests: produced only here, then read by the case views.
     risk: CaseRisk | None = None
@@ -146,7 +160,7 @@ class CaseAnalysis(BaseModel):
     additional_documents: AdditionalDocuments | None = None
     # Comparisons that ran and found the documents agree, so an empty result is not read as "not checked".
     consistent_checks: list[str] = Field(default_factory=list)
-    # Detection checks (tool names) that examined the documents and raised nothing. Empty on older runs.
+    # Detection checks (tool names) that examined the documents and raised nothing.
     clean_checks: list[str] = Field(default_factory=list)
     audit: AnalysisAudit = Field(default_factory=AnalysisAudit)
     # Step-by-step log of the run, for debugging. Includes hypotheses that were tried and dropped.

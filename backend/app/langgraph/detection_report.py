@@ -1,14 +1,13 @@
 """
-Reading a stored detection report. Reports are JSON saved by whichever version of the code ran the
-detection, so a reader gets every key it indexes, with a safe default when an older report lacks it.
-Nothing is migrated in the database.
+Reading a stored detection report. Reports are JSON in detection_results, so a reader gets every key it
+indexes, with a safe default when a report lacks one (a run that stopped partway, or a later schema change).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SEVERITIES = ("info", "low", "medium", "high")
 _VERDICTS = ("clean", "flagged", "inconclusive")

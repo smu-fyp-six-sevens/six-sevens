@@ -12,10 +12,10 @@ import {
 import type {
   AdditionalDocuments,
   CaseAnalysisOverview,
+  CaseFailure,
   CaseRisk,
   DocumentCaseMatch,
   DocumentRecord,
-  SupportingDocumentRecommendation,
 } from '../../services/uploadService';
 import { acceptedIdentityNames } from './uploadHelpers';
 
@@ -23,6 +23,10 @@ import { acceptedIdentityNames } from './uploadHelpers';
 export function useCaseSnapshot(caseId: string) {
   const [documentDetails, setDocumentDetails] = useState<Map<string, DocumentRecord>>(new Map());
   const [fulfilledRequirements, setFulfilledRequirements] = useState<Set<string>>(new Set());
+  // What the case analysis waits for: required items no approved document covers (empty unless the case enforces it).
+  const [unapprovedRequirements, setUnapprovedRequirements] = useState<string[]>([]);
+  // Whether the case was created with finding reviews. Off until the snapshot says so, so no review control flashes up.
+  const [reviewsRequired, setReviewsRequired] = useState(false);
   const [proofOfAddressCoverage, setProofOfAddressCoverage] = useState<{
     covered: number;
     total: number;
@@ -36,10 +40,12 @@ export function useCaseSnapshot(caseId: string) {
   const [risk, setRisk] = useState<CaseRisk | null>(null);
   const [analysisReady, setAnalysisReady] = useState(false);
   const [analysisOverview, setAnalysisOverview] = useState<CaseAnalysisOverview | null>(null);
-  const [supportingDocumentRecommendations, setSupportingDocumentRecommendations] = useState<
-    SupportingDocumentRecommendation[]
-  >([]);
   const [additionalDocuments, setAdditionalDocuments] = useState<AdditionalDocuments | null>(null);
+  // The case's stage, and which step failed while it is at Failed (see backend/app/case_stage.py).
+  const [stage, setStage] = useState<string>('open');
+  const [stageFailure, setStageFailure] = useState<CaseFailure | null>(null);
+  // Findings still without the officer's verdict, while the case is analysed.
+  const [findingsToReview, setFindingsToReview] = useState<number | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   // Whether documentDetails holds this case's documents yet, not the empty start or the previous case's.
   const [snapshotLoaded, setSnapshotLoaded] = useState(false);
@@ -105,13 +111,17 @@ export function useCaseSnapshot(caseId: string) {
           new Map((caseMatch?.documents ?? []).map((match) => [match.document_id, match])),
         );
         setFulfilledRequirements(new Set(caseSummary.fulfilled_requirements));
+        setUnapprovedRequirements(caseSummary.unapproved_requirements ?? []);
+        setReviewsRequired(caseSummary.reviews_required ?? false);
         setProofOfAddressCoverage(caseSummary.proof_of_address_coverage);
         setIdDocumentCoverage(caseSummary.id_document_coverage);
         setRisk(caseSummary.risk ?? null);
         setAnalysisReady(caseSummary.analysis_ready ?? false);
         setAnalysisOverview(caseSummary.analysis ?? null);
-        setSupportingDocumentRecommendations(caseSummary.supporting_document_recommendations ?? []);
         setAdditionalDocuments(caseSummary.additional_documents ?? null);
+        setStage(caseSummary.status ?? 'open');
+        setStageFailure(caseSummary.failure ?? null);
+        setFindingsToReview(caseSummary.findings_to_review ?? null);
       },
       (connected) => {
         if (isMountedRef.current) setWsConnected(connected);
@@ -173,13 +183,20 @@ export function useCaseSnapshot(caseId: string) {
     documentDetails,
     setDocumentDetails,
     fulfilledRequirements,
+    unapprovedRequirements,
+    reviewsRequired,
     proofOfAddressCoverage,
     idDocumentCoverage,
     risk,
     analysisReady,
     analysisOverview,
-    supportingDocumentRecommendations,
     additionalDocuments,
+    stage,
+    setStage,
+    stageFailure,
+    setStageFailure,
+    findingsToReview,
+    setFindingsToReview,
     wsConnected,
     snapshotLoaded,
     caseMatches,

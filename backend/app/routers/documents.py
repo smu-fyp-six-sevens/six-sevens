@@ -28,7 +28,8 @@ from ..models import (
 from ._dependencies import (
     bad_gateway_on_error,
     get_document_or_404,
-    get_document_with_fields_or_404,
+    get_editable_document_or_404,
+    get_editable_document_with_fields_or_404,
     to_thread_or_502,
 )
 
@@ -100,7 +101,7 @@ async def get_document(document_id: str) -> DocumentRecord:
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_document(document_id: str, document: DocumentRecord = Depends(get_document_or_404)) -> None:
+async def delete_document(document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)) -> None:
     """Removes a document from its case. Only once it is out of flight; cancel an in-flight one first."""
     with _handled("Failed to delete the document. Check Supabase table access.", "Failed to delete document %s", document_id):
         await document_service.delete(document)
@@ -108,7 +109,7 @@ async def delete_document(document_id: str, document: DocumentRecord = Depends(g
 
 @router.post("/{document_id}/move", response_model=DocumentRecord)
 async def move_document(
-    document_id: str, body: MoveDocumentRequest, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, body: MoveDocumentRequest, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> DocumentRecord:
     """Reassigns a document to another case. Same eligibility as delete."""
     with _handled(
@@ -139,7 +140,7 @@ async def bulk_delete_documents(body: BulkDeleteRequest) -> BulkDeleteResponse:
 
 @router.patch("/{document_id}/extracted-fields", response_model=DocumentRecord)
 async def update_extracted_fields(
-    document_id: str, request: UpdateExtractedFieldsRequest, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, request: UpdateExtractedFieldsRequest, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> DocumentRecord:
     """The officer correcting extracted fields. Marks the document human-verified (extraction_confidence 1.0)."""
     with _handled(
@@ -151,7 +152,7 @@ async def update_extracted_fields(
 
 @router.post("/{document_id}/extracted-fields", response_model=DocumentRecord)
 async def add_extracted_field(
-    document_id: str, request: AddExtractedFieldRequest, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, request: AddExtractedFieldRequest, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> DocumentRecord:
     """Adds one manually entered field, stored at confidence 1.0."""
     with _handled(
@@ -163,7 +164,7 @@ async def add_extracted_field(
 
 @router.delete("/{document_id}/extracted-fields/{field_id}", response_model=DocumentRecord)
 async def delete_extracted_field(
-    document_id: str, field_id: str, document: DocumentRecord = Depends(get_document_or_404)
+    document_id: str, field_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> DocumentRecord:
     """Deletes one field of this document and recomputes fulfilled requirements."""
     with _handled(
@@ -174,14 +175,14 @@ async def delete_extracted_field(
 
 
 @router.post("/{document_id}/approve", response_model=DocumentRecord)
-async def approve_document(document_id: str, document: DocumentRecord = Depends(get_document_or_404)) -> DocumentRecord:
+async def approve_document(document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)) -> DocumentRecord:
     """Approves an analysed document after officer review, and starts detection."""
     with _handled("Failed to approve document.", "Failed to approve document %s", document_id):
         return await document_service.approve(document)
 
 
 @router.post("/{document_id}/reject", response_model=DocumentRecord)
-async def reject_document(document_id: str, document: DocumentRecord = Depends(get_document_or_404)) -> DocumentRecord:
+async def reject_document(document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)) -> DocumentRecord:
     with _handled("Failed to reject document.", "Failed to reject document %s", document_id):
         return await document_service.reject(document)
 
@@ -190,7 +191,7 @@ async def reject_document(document_id: str, document: DocumentRecord = Depends(g
 async def update_document_type(
     document_id: str,
     request: UpdateDocumentTypeRequest,
-    document: DocumentRecord = Depends(get_document_with_fields_or_404),
+    document: DocumentRecord = Depends(get_editable_document_with_fields_or_404),
 ) -> DocumentRecord:
     """
     The officer confirming or correcting a low-confidence type (enforced here, not just in the UI).
@@ -205,7 +206,7 @@ async def update_document_type(
 
 
 @router.post("/{document_id}/retry", response_model=DocumentRecord)
-async def retry_document(document_id: str, document: DocumentRecord = Depends(get_document_or_404)) -> DocumentRecord:
+async def retry_document(document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)) -> DocumentRecord:
     """
     Re-enqueues a FAILED document, or one stuck in PROCESSING past the threshold (the in-memory queue
     doesn't survive a restart). A merely queued or running one is refused: a second run would duplicate
@@ -216,7 +217,7 @@ async def retry_document(document_id: str, document: DocumentRecord = Depends(ge
 
 
 @router.post("/{document_id}/cancel", response_model=DocumentRecord)
-async def cancel_document(document_id: str, document: DocumentRecord = Depends(get_document_or_404)) -> DocumentRecord:
+async def cancel_document(document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)) -> DocumentRecord:
     """
     Stops a QUEUED, PROCESSING or EXTRACTING document. The status write is a compare-and-swap, so
     racing cancels or a finishing run can't both win; only then is the in-flight run interrupted.
@@ -273,7 +274,7 @@ async def get_content_guard(
     result = await asyncio.to_thread(document_service.guard_result, document_id)
     blocked = document_service.is_guard_blocked(document)
     if result is None:
-        # From before the guard, not ingested yet, or no guard_result column.
+        # Not ingested yet, or saving the guard's result at ingest failed.
         return ContentGuardResponse(checked=False, risk=None, blocked=blocked)
     return ContentGuardResponse(
         checked=bool(result.get("checks_run")),

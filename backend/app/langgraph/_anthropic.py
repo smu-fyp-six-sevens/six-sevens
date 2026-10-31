@@ -9,7 +9,8 @@ constructor is called with those.
 
 No `temperature`: API version 2026-10-21 rejects it on every model. Thinking is
 adaptive (the models' default) and `effort` sets how much; thinking blocks come
-back beside the text and llm_io.message_text skips them.
+back beside the text, summarised (_with_thinking_summaries), and
+llm_io.message_text skips them.
 """
 
 from __future__ import annotations
@@ -58,6 +59,32 @@ def warm_up() -> None:
     import langchain_anthropic  # noqa: F401
 
 
+# One summarising subclass per ChatAnthropic class (a test may patch the class).
+_summarising: dict[Any, Any] = {}
+
+
+def _with_thinking_summaries(chat_class: Any) -> Any:
+    """
+    The class with `thinking.display: "summarized"` added to every request, so replies carry a readable summary of
+    the reasoning (the default leaves it empty) for the traces (llm_io.thinking_summaries). Visibility only: the
+    thinking is the models' adaptive default either way. Added to the request, not set as the model's `thinking`:
+    langchain drops a forced tool_choice from a model with `thinking` set, and the specialists force their first
+    tool call. A test's stand-in for the class is used as it is.
+    """
+    if not isinstance(chat_class, type):
+        return chat_class
+    if chat_class not in _summarising:
+
+        class SummarisingChatAnthropic(chat_class):
+            def _get_request_payload(self, input_: Any, *, stop: Any = None, **kwargs: Any) -> dict:
+                payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+                payload["thinking"] = {**(payload.get("thinking") or {"type": "adaptive"}), "display": "summarized"}
+                return payload
+
+        _summarising[chat_class] = SummarisingChatAnthropic
+    return _summarising[chat_class]
+
+
 def build_chat_anthropic(model: str, max_tokens: int, *, effort: Effort) -> "ChatAnthropic":
     from langchain_anthropic import ChatAnthropic  # local import: keeps the SDK out of module import time
 
@@ -66,7 +93,7 @@ def build_chat_anthropic(model: str, max_tokens: int, *, effort: Effort) -> "Cha
         # Pydantic alias names: pyright's plugin only accepts these, and they are
         # always valid at runtime. timeout/stop are required by that view of the
         # signature.
-        _models[key] = ChatAnthropic(
+        _models[key] = _with_thinking_summaries(ChatAnthropic)(
             model_name=model,
             api_key=SecretStr(settings.ANTHROPIC_API_KEY),
             max_tokens_to_sample=max_tokens,

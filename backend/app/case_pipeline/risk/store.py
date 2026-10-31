@@ -36,8 +36,6 @@ def save(case_id: str, risk: CaseRisk | None) -> None:
             "overall_score": risk.score if risk.state == "scored" and risk.score is not None else 0,
             "risk_level": risk.level if risk.state == "scored" and risk.level else _STATE_LABELS.get(risk.state, risk.state),
             "reasoning": " ".join(risk.reasons) or None,
-            # Real flags-table ids: findings no specialist approved, and case-level ones, have none.
-            "flag_ids": [f.flag_id for f in risk.contributing_findings if f.flag_id],
             "scored_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
     except Exception:
@@ -59,7 +57,7 @@ def _to_risk(row: dict[str, Any]) -> CaseRisk:
 
 
 def latest_many(case_ids: list[str]) -> dict[str, CaseRisk]:
-    """The newest saved risk of each case. The findings behind it are not stored, only their ids."""
+    """The newest saved risk of each case, without the findings behind it (those are on the run)."""
     latest: dict[str, CaseRisk] = {}
     for start in range(0, len(case_ids), _CHUNK):
         rows = (

@@ -152,7 +152,7 @@ async def test_detection_failure_announces_failed(published_events) -> None:
     assert [(e.type, e.outcome) for e in published_events] == [(types.DETECTION_FAILED, "failed")]
 
 
-async def test_an_officer_cancel_reverts_detection_to_approved(published_events) -> None:
+async def test_an_officer_cancel_saves_the_error_and_ends_the_run(published_events) -> None:
     started = asyncio.Event()
 
     async def slow(_: str) -> dict:
@@ -164,7 +164,8 @@ async def test_an_officer_cancel_reverts_detection_to_approved(published_events)
         patch("app.workers.detection.run_detection", new=slow),
         patch("app.workers.detection.push_case_snapshot", new=AsyncMock()),
         patch("app.workers.detection.langgraph_trace") as trace,
-        patch("app.workers.detection.document_repository") as repo,
+        patch("app.workers.detection.detection_results") as results,
+        patch("app.workers.detection.end_unfinished_run") as end_run,
     ):
         run = asyncio.create_task(detection_worker.on_requested(
             Event(type=types.DOCUMENT_APPROVED, document_id="d", case_id="c")
@@ -173,8 +174,9 @@ async def test_an_officer_cancel_reverts_detection_to_approved(published_events)
         await detection_worker.on_cancel_requested(Event(type=types.DETECTION_CANCEL_REQUESTED, document_id="d"))
         await asyncio.wait_for(run, timeout=2)
 
-    repo.revert_to_approved.assert_called_once_with("d")
+    end_run.assert_called_once_with("d")
     trace.record.assert_called_once_with("d", "detection_error", error="Cancelled by loan officer")
+    results.save_error.assert_called_once_with("d", "Cancelled by loan officer")
     assert [(e.type, e.outcome) for e in published_events] == [(types.DETECTION_FAILED, "cancelled")]
 
 

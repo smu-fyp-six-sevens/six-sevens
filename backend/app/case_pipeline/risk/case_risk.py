@@ -42,9 +42,12 @@ from typing import Any
 
 from ..categories import category_for_finding
 from ..models import CrossDocFinding
+from ...finding_keys import UNASSESSED_RATIONALE, report_findings
 from ...models import (
+    APPROVED_STATUSES,
     CaseRisk,
     ContributingFinding,
+    DismissedFinding,
     DocumentRecord,
     DocumentStatus,
     RiskLevel,
@@ -70,10 +73,6 @@ SCORE_BANDS: dict[str, tuple[int, int, float, float]] = {
     "Critical": (80, 100, 24, 40),
 }
 
-# A specialist that never assessed a finding keeps it as medium with this
-# rationale (see langgraph/detection/specialists.py's _collect_node).
-_UNASSESSED_RATIONALE = "Not assessed by the specialist."
-
 def _detection_started(document: DocumentRecord, reports: dict[str, Any], failed_ids: set[str]) -> bool:
     return (
         document.status in (DocumentStatus.DETECTING, DocumentStatus.DETECTED)
@@ -86,12 +85,13 @@ def counts_towards_risk(
     document: DocumentRecord, reports: dict[str, Any], failed_ids: set[str]
 ) -> bool:
     """
-    Documents detection runs on: not rejected or cancelled. An Other
-    document counts only once its detection has started, so one approved
-    before Other documents were scanned (no run, no report) stays out
-    instead of holding its case at pending.
+    Documents the score is built from: approved ones detection runs on. A document not yet approved (still
+    processing, waiting for an officer, failed, rejected or cancelled) is left out, so a case can be scored on what
+    is approved; approving another makes the analysis out of date (state.compute_fingerprint) until it runs
+    again. An Other document counts only once its detection has started, so one approved before Other documents
+    were scanned (no run, no report) stays out instead of holding its case at pending.
     """
-    if skips_detection(document) or document.status in (DocumentStatus.REJECTED, DocumentStatus.CANCELLED):
+    if skips_detection(document) or document.status not in APPROVED_STATUSES:
         return False
     if document.document_type == "unrecognised":
         return _detection_started(document, reports, failed_ids)
@@ -184,13 +184,32 @@ def _score_document(
             summary=finding.get("summary") or "",
             rationale=finding.get("rationale") or "",
             points=round(points * (1.0 if finding["severity"] == "high" else noise_scale), 2),
-            unreviewed=finding.get("rationale") == _UNASSESSED_RATIONALE,
-            flag_id=finding.get("flag_id"),
+            unreviewed=finding.get("rationale") == UNASSESSED_RATIONALE,
+            fingerprint=finding["fingerprint"],
             category=category_for_finding(finding).value,
             also_on=repeats.primary.get((document.id, finding["id"]), 0) if repeats else 0,
             repeat_of=repeats.repeat_of.get((document.id, finding["id"])) if repeats else None,
         )
         for finding, points in zip(findings, base_points)
+    ]
+
+
+def _dismissed(document: DocumentRecord, report: dict[str, Any]) -> list[DismissedFinding]:
+    return [
+        DismissedFinding(
+            document_id=document.id,
+            filename=document.filename,
+            document_type=document.document_type,
+            finding_id=f"{document.id[:8]}:{finding['id']}",
+            tool=finding.get("tool"),
+            check_code=finding.get("check_code") if isinstance(finding.get("check_code"), str) else None,
+            summary=finding.get("summary") or "",
+            reason=finding.get("reason") or "",
+            category=category_for_finding(finding).value,
+            fingerprint=finding["fingerprint"],
+        )
+        for finding, decision in report_findings(report)
+        if decision == "dismissed"
     ]
 
 
@@ -216,6 +235,7 @@ def contributing_from_cross_document(
         points=round(SEVERITY_POINTS[finding.severity] * max(1.0, multiple), 2),
         category=finding.category.value,
         source="cross_document",
+        fingerprint=finding.fingerprint,
     )
 
 
@@ -291,11 +311,13 @@ def compute_case_risk(
         return CaseRisk(state="pending", documents_scanned=scanned_count, documents_total=total_count)
 
     findings: list[ContributingFinding] = []
+    dismissed: list[DismissedFinding] = []
     unassessed: list[UnassessedCheck] = []
     repeats = _plan_repeats(scanned, reports) if dedupe else None
     for document in scanned:
         report = reports[document.id]
         findings.extend(_score_document(document, report, repeats))
+        dismissed.extend(_dismissed(document, report))
         unassessed.extend(
             UnassessedCheck(
                 document_id=document.id,
@@ -318,6 +340,7 @@ def compute_case_risk(
         score=score,
         points=points,
         contributing_findings=findings,
+        dismissed_findings=dismissed,
         unassessed_checks=unassessed,
         reasons=[reason],
         documents_scanned=scanned_count, documents_total=total_count,

@@ -10,7 +10,8 @@ import type { DetectionReport, IndividualCheckId } from '../../services/uploadSe
 // Detection Agent state for one document: the stored report, cancel/retry, and individual checks.
 // `status` is the document's live status: a cancelled or crashed run is only visible in the stored error,
 // so the report is read again whenever the document leaves 'detecting'.
-export function useDetection(documentId: string, status: string | undefined) {
+// `onRunStarted` runs once a rerun is accepted: a detected document's page isn't listening for updates until then.
+export function useDetection(documentId: string, status: string | undefined, onRunStarted?: () => void) {
   // The stored report for this document.
   const [detectionReport, setDetectionReport] = useState<DetectionReport | null>(null);
   // Set when a run crashed or was cancelled.
@@ -45,8 +46,9 @@ export function useDetection(documentId: string, status: string | undefined) {
     setIsCancellingDetection(true);
     setCancelError(null);
     try {
-      await cancelDetection(documentId);
-      setIsCancelPending(true);
+      // A run still waiting for a worker stops at once, and the document stays approved: read its error now.
+      if ((await cancelDetection(documentId)) === 'cancelled') await refreshDetectionReport();
+      else setIsCancelPending(true);
     } catch (err) {
       // Not a failed run: the cancel itself didn't go through, so the panel keeps showing what it showed.
       setCancelError(err instanceof Error ? err.message : 'Failed to cancel detection.');
@@ -60,6 +62,7 @@ export function useDetection(documentId: string, status: string | undefined) {
     setIsRetryingDetection(true);
     try {
       await retryDetection(documentId);
+      onRunStarted?.();
       await refreshDetectionReport();
     } catch (err) {
       setDetectionError(err instanceof Error ? err.message : 'Failed to retry detection.');
@@ -89,6 +92,8 @@ export function useDetection(documentId: string, status: string | undefined) {
 
     if (before === status) return;
     if (status !== 'detecting') setIsCancelPending(false);
+    // A new run started: the last one's error no longer describes it.
+    if (status === 'detecting') setDetectionError(null);
     if (before === 'detecting' && (status === 'approved' || status === 'detected')) {
       void refreshDetectionReport();
     }

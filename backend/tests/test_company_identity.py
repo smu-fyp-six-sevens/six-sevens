@@ -386,11 +386,11 @@ def test_endpoint_compares_against_the_case_documents() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as dep_repo,
         patch("app.routers.detection.document_repository") as repo,
-        patch("app.routers.detection.langgraph_trace") as trace,
+        patch("app.routers.detection.detection_results") as results,
     ):
         dep_repo.get_document.return_value = doc
         repo.list_documents.return_value = [doc, other]
-        trace.load.return_value = {"detection_report": {"verdict": "clean"}}
+        results.get.return_value = ({"verdict": "clean"}, None)
 
         response = client.get("/documents/doc-1/detection/company-name-consistency")
 
@@ -404,10 +404,10 @@ def test_endpoint_requires_full_detection_first() -> None:
     doc = _company("bank_statement", "ACME Pte Ltd", "doc-1")
     with (
         patch("app.routers._dependencies.document_repository") as dep_repo,
-        patch("app.routers.detection.langgraph_trace") as trace,
+        patch("app.routers.detection.detection_results") as results,
     ):
         dep_repo.get_document.return_value = doc
-        trace.load.return_value = None
+        results.get.return_value = (None, None)
 
         response = client.get("/documents/doc-1/detection/company-name-consistency")
 

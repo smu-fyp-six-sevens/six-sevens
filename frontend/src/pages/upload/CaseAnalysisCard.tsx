@@ -7,7 +7,7 @@ import { analysisFindingAnchor } from './analysisSummary';
 import { PreviousRuns } from './PreviousRuns';
 import { CaseAnalysisTracePanel } from './CaseAnalysisTracePanel';
 import { ErrorMessage } from '../../components/ErrorMessage';
-import { outOfDateMessage } from './caseSections';
+import { missingRequirementsText, outOfDateMessage } from './caseSections';
 
 const CATEGORY_LABELS: Record<string, string> = {
   identity_entity_conflict: 'Identity conflict',
@@ -23,10 +23,13 @@ export function CaseAnalysisCard({
   caseId,
   analysisReady,
   overview,
+  missingRequirements = 0,
 }: {
   caseId: string;
   analysisReady: boolean;
   overview: CaseAnalysisOverview | null;
+  // How many required checklist documents are not yet on file: the analysis waits for every one.
+  missingRequirements?: number;
 }) {
   const [analysis, setAnalysis] = useState<CaseAnalysis | null>(null);
   const [starting, setStarting] = useState(false);
@@ -140,7 +143,11 @@ export function CaseAnalysisCard({
           <span className="summary-message-icon">ⓘ</span>
           <div>
             <strong>Not ready yet.</strong>
-            <p>The analysis can be run once every approved document has been scanned.</p>
+            <p>
+              {missingRequirements
+                ? `Every required document must be approved first: ${missingRequirementsText(missingRequirements)}.`
+                : 'The analysis can be run once every approved document has been scanned.'}
+            </p>
           </div>
         </div>
       )}

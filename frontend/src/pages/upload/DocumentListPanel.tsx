@@ -10,6 +10,7 @@ export function DocumentListPanel({
   onOpenDocument,
   selection,
   rowActions,
+  readOnly = false,
 }: {
   documents: DocumentRecord[];
   extractedDocuments: DocumentRecord[];
@@ -18,6 +19,8 @@ export function DocumentListPanel({
   onOpenDocument: (documentId: string) => void;
   selection: DocumentSelection;
   rowActions: DocumentRowActions;
+  // A finalised case: documents can be opened, but nothing in the list can be changed.
+  readOnly?: boolean;
 }) {
   if (documents.length === 0) return null;
   return (
@@ -30,6 +33,7 @@ export function DocumentListPanel({
           onOpenDocument={onOpenDocument}
           selection={selection}
           rowActions={rowActions}
+          readOnly={readOnly}
         />
       )}
     </>
