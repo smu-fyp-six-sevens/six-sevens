@@ -327,18 +327,19 @@ def test_get_case_delegates_to_case_repository() -> None:
         mock_case_repo.get_case.assert_called_once_with("case-1")
 
 
-def test_create_case_delegates_to_case_repository_and_records_the_opening_stage() -> None:
+def test_create_case_fixes_the_checklist_rule_and_reviews_at_creation() -> None:
     with (
         patch("app.case_service.case_repository") as mock_case_repo,
-        patch("app.case_service.case_stage.record_created") as record_created,
+        patch.object(case_service.settings, "REQUIRE_COMPLETE_CHECKLIST", True),
     ):
         mock_case_repo.create_case.return_value = _make_case("case-1")
 
-        result = case_service.create_case("Acme Pte Ltd", "officer-a")
+        result = case_service.create_case("Acme Pte Ltd", reviews_required=False)
 
         assert result == _make_case("case-1")
-        mock_case_repo.create_case.assert_called_once_with("Acme Pte Ltd")
-        record_created.assert_called_once_with(_make_case("case-1"), "officer-a")
+        mock_case_repo.create_case.assert_called_once_with(
+            "Acme Pte Ltd", checklist_enforced=True, reviews_required=False,
+        )
 
 
 def test_update_case_delegates_to_case_repository() -> None:

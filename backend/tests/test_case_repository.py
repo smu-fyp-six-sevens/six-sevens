@@ -21,8 +21,8 @@ def _row(**overrides) -> dict:
         "greenlink_case_id": "GLDB-1",
         "company_name": None,
         "status": "open",
-        "submission_finalized": False,
-        "finalized_at": None,
+        "checklist_enforced": False,
+        "reviews_required": True,
         "recommended_additional_documents": [],
         "created_at": "2026-08-26T00:00:00Z",
         "updated_at": "2026-08-26T00:00:00Z",
@@ -46,7 +46,9 @@ def test_create_case_inserts_expected_row_and_returns_record() -> None:
         inserted_row = mock_client.table.return_value.insert.call_args[0][0]
         assert inserted_row["company_name"] is None
         assert inserted_row["status"] == "open"
-        assert inserted_row["submission_finalized"] is False
+        # Set once, at creation.
+        assert inserted_row["checklist_enforced"] is False
+        assert inserted_row["reviews_required"] is True
         assert inserted_row["recommended_additional_documents"] == []
 
 
@@ -160,26 +162,6 @@ def test_an_unknown_number_is_none() -> None:
         assert case_repository.get_case_by_number("GLDB-404") is None
 
 
-def test_set_submission_finalized_true_sets_finalized_at() -> None:
-    with patch("app.case_repository.supabase_client") as mock_client:
-        case_repository.set_submission_finalized("case-1", True)
-
-        update_payload = mock_client.table.return_value.update.call_args[0][0]
-        assert update_payload["submission_finalized"] is True
-        assert update_payload["finalized_at"] is not None
-        mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
-            "id", "case-1"
-        )
-
-
-def test_set_submission_finalized_false_clears_finalized_at() -> None:
-    with patch("app.case_repository.supabase_client") as mock_client:
-        case_repository.set_submission_finalized("case-1", False)
-
-        update_payload = mock_client.table.return_value.update.call_args[0][0]
-        assert update_payload == {"submission_finalized": False, "finalized_at": None}
-
-
 def test_update_case_writes_company_name_and_touches_updated_at() -> None:
     with patch("app.case_repository.supabase_client") as mock_client:
         mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
@@ -208,7 +190,7 @@ def test_update_case_returns_none_when_no_row_matched() -> None:
         assert case_repository.update_case("missing-id", "Acme Pte Ltd") is None
 
 
-def test_delete_case_deletes_the_row() -> None:
+def test_delete_case_deletes_only_the_case_row_which_cascades() -> None:
     with patch("app.case_repository.service_supabase_client") as mock_service:
         mock_client = mock_service.return_value
         mock_client.table.return_value.delete.return_value.eq.return_value.execute.return_value = (
@@ -217,16 +199,9 @@ def test_delete_case_deletes_the_row() -> None:
 
         case_repository.delete_case("case-1")
 
-    # What hangs off the case first (a foreign key can block the case delete), then the case itself.
-    assert [c.args for c in mock_client.table.call_args_list] == [
-        ("risk_scores",), ("case_analysis_runs",), ("flags",), ("case_notes",), ("finding_reviews",),
-        ("case_status_history",), ("cases",),
-    ]
-    assert [c.args for c in mock_client.table.return_value.delete.return_value.eq.call_args_list] == [
-        ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"), ("case_id", "case-1"),
-        ("case_id", "case-1"), ("case_id", "case-1"), ("id", "case-1"),
-    ]
-    assert mock_client.table.return_value.delete.return_value.eq.return_value.execute.call_count == 7
+    # Every table keyed by the case cascades from it (backend/sql/schema.sql).
+    assert [c.args for c in mock_client.table.call_args_list] == [("cases",)]
+    mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "case-1")
 
 
 def test_delete_case_raises_when_no_row_was_removed() -> None:

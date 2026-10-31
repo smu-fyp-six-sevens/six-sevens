@@ -10,7 +10,8 @@ import type { DetectionReport, IndividualCheckId } from '../../services/uploadSe
 // Detection Agent state for one document: the stored report, cancel/retry, and individual checks.
 // `status` is the document's live status: a cancelled or crashed run is only visible in the stored error,
 // so the report is read again whenever the document leaves 'detecting'.
-export function useDetection(documentId: string, status: string | undefined) {
+// `onRunStarted` runs once a rerun is accepted: a detected document's page isn't listening for updates until then.
+export function useDetection(documentId: string, status: string | undefined, onRunStarted?: () => void) {
   // The stored report for this document.
   const [detectionReport, setDetectionReport] = useState<DetectionReport | null>(null);
   // Set when a run crashed or was cancelled.
@@ -61,6 +62,7 @@ export function useDetection(documentId: string, status: string | undefined) {
     setIsRetryingDetection(true);
     try {
       await retryDetection(documentId);
+      onRunStarted?.();
       await refreshDetectionReport();
     } catch (err) {
       setDetectionError(err instanceof Error ? err.message : 'Failed to retry detection.');

@@ -110,13 +110,8 @@ export function DetectionPanel({
         ) : !detectionReport ? (
           // With an error, the line above says what happened.
           !detectionError && (
-            <p>
-              {running
-                ? 'Scanning…'
-                : queued
-                  ? 'Waiting for a detection worker…'
-                  : 'Detection starts automatically once the document is approved.'}
-            </p>
+            // Waiting for a worker reads the same as running, as the status above does.
+            <p>{running || queued ? 'Scanning…' : 'Detection starts automatically once the document is approved.'}</p>
           )
         ) : (
           <>

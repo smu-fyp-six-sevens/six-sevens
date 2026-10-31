@@ -1253,6 +1253,7 @@ def test_move_document_success_pushes_both_case_snapshots() -> None:
         # The live push lives in app/snapshots.py and builds through case_service itself.
         patch("app.snapshots.broadcaster") as mock_broadcaster,
         patch("app.case_service.build_case_snapshot") as mock_build,
+        patch("app.document_service.case_stage.sync_case_stage") as mock_case_stage,
     ):
         mock_dep_repo.get_document.return_value = document
         mock_repo.get_document.return_value = moved
@@ -1269,7 +1270,7 @@ def test_move_document_success_pushes_both_case_snapshots() -> None:
     # new case itself via its own _sync_case call — only the old case still
     # needs resyncing from the router, since its own Realtime event (if any)
     # never carries this document's old case_id.
-    mock_case_service.sync_submission_finalized.assert_called_once_with("case-1")
+    mock_case_stage.assert_called_once_with("case-1")
     assert mock_build.call_args_list == [call("case-1")]
     assert mock_broadcaster.publish.call_args_list == [
         call("case-1", {"case": {"id": "case-1"}}),

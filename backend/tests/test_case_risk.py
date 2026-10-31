@@ -8,6 +8,7 @@ import pytest
 from app import case_service
 from app.case_pipeline.risk.case_risk import compute_case_risk
 from app.models import CaseRecord, DocumentRecord, DocumentStatus
+from app.finding_keys import assign_document_fingerprints
 
 
 def _document(
@@ -40,7 +41,10 @@ def _finding(
 
 
 def _report(*findings: dict, unable: list[dict] | None = None) -> dict:
-    return {"verdict": "flagged" if findings else "clean", "findings": list(findings), "unable_to_assess": unable or []}
+    # Fingerprinted as the detection graph does when a run finishes.
+    report = {"verdict": "flagged" if findings else "clean", "findings": list(findings), "unable_to_assess": unable or []}
+    assign_document_fingerprints(report)
+    return report
 
 
 # --- gate -------------------------------------------------------------------
@@ -102,10 +106,8 @@ def test_an_other_document_whose_scan_crashed_fails_the_case() -> None:
     assert risk.state == "failed"
 
 
-@pytest.mark.parametrize(
-    "status", [DocumentStatus.ANALYZED, DocumentStatus.APPROVED, DocumentStatus.DETECTING]
-)
-def test_a_document_not_yet_detected_holds_the_case_at_pending(status: DocumentStatus) -> None:
+@pytest.mark.parametrize("status", [DocumentStatus.APPROVED, DocumentStatus.DETECTING])
+def test_an_approved_document_not_yet_detected_holds_the_case_at_pending(status: DocumentStatus) -> None:
     documents = [_document("done"), _document("waiting", status)]
 
     risk = compute_case_risk(documents, {"done": _report(_finding("high", "font_consistency_tool"))}, set())
@@ -114,6 +116,17 @@ def test_a_document_not_yet_detected_holds_the_case_at_pending(status: DocumentS
     assert risk.level is None
     assert risk.contributing_findings == []
     assert (risk.documents_scanned, risk.documents_total) == (1, 2)
+
+
+@pytest.mark.parametrize("status", [DocumentStatus.ANALYZED, DocumentStatus.PROCESSING, DocumentStatus.FAILED])
+def test_a_document_not_yet_approved_is_left_out_of_the_score(status: DocumentStatus) -> None:
+    """The case is scored on its approved documents; approving another makes the analysis out of date."""
+    documents = [_document("done"), _document("waiting", status)]
+
+    risk = compute_case_risk(documents, {"done": _report(_finding("high", "font_consistency_tool"))}, set())
+
+    assert risk.state == "scored"
+    assert (risk.documents_scanned, risk.documents_total) == (1, 1)
 
 
 def test_detected_status_without_a_stored_report_is_still_pending() -> None:
@@ -398,12 +411,12 @@ def test_case_summary_shows_the_risk_its_analysis_produced() -> None:
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.detection_results") as trace,
         patch("app.case_service.analysis_repository") as analyses,
     ):
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [_document("doc")]
-        trace.get_detection_states.return_value = ({"doc": _report()}, set())
+        trace.get_states.return_value = ({"doc": _report()}, set())
         analyses.get_latest_summary.return_value = _analysis(risk)
 
         summary = case_service.get_case_summary("case-1")
@@ -416,12 +429,12 @@ def test_case_never_analysed_has_no_risk() -> None:
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.detection_results") as trace,
         patch("app.case_service.analysis_repository") as analyses,
     ):
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [_document("doc")]
-        trace.get_detection_states.return_value = ({"doc": _report(_finding("high", "font_consistency_tool"))}, set())
+        trace.get_states.return_value = ({"doc": _report(_finding("high", "font_consistency_tool"))}, set())
         analyses.get_latest_summary.return_value = None
 
         summary = case_service.get_case_summary("case-1")
@@ -435,12 +448,12 @@ def test_case_summary_keeps_the_last_complete_risk_while_a_rerun_is_going() -> N
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.detection_results") as trace,
         patch("app.case_service.analysis_repository") as analyses,
     ):
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [_document("doc")]
-        trace.get_detection_states.return_value = ({"doc": _report()}, set())
+        trace.get_states.return_value = ({"doc": _report()}, set())
         analyses.get_latest_summary.return_value = _analysis(None, status="running")
         analyses.get_latest_complete.return_value = _analysis(risk)
         # A run reads as running only within the time limit after it started.
@@ -459,12 +472,12 @@ def test_a_running_analysis_past_its_time_limit_reads_as_interrupted() -> None:
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.detection_results") as trace,
         patch("app.case_service.analysis_repository") as analyses,
     ):
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = [_document("doc")]
-        trace.get_detection_states.return_value = ({"doc": _report()}, set())
+        trace.get_states.return_value = ({"doc": _report()}, set())
         analyses.get_latest_summary.return_value = _analysis(None, status="running")
         analyses.get_latest_complete.return_value = _analysis(risk)
 
@@ -481,7 +494,7 @@ def test_case_list_reads_saved_scores_and_never_detection_reports() -> None:
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.detection_results") as trace,
         patch("app.case_service.risk_store") as store,
     ):
         case_repo.list_cases_page.return_value = ([_case(), other_case], 2)
@@ -491,7 +504,7 @@ def test_case_list_reads_saved_scores_and_never_detection_reports() -> None:
         items = case_service.list_cases_page(limit=25, offset=0, sort="newest", statuses=[], q=None).items
 
     assert [(i.id, i.risk.level if i.risk else None) for i in items] == [("case-1", "High"), ("case-2", None)]
-    trace.get_detection_states.assert_not_called()
+    trace.get_states.assert_not_called()
 
 
 # --- the same fact on several documents ----------------------------------------

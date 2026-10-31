@@ -77,11 +77,12 @@ def test_case_cost_adds_up_runs_per_document_and_case():
         row(types.DOCUMENT_ANALYZED, "doc-3", "document", None),  # from before events carried cost
         row(types.CASE_ANALYSIS_COMPLETED, None, "case_analysis", 0.04),
     ]
-    client = MagicMock()
-    client.table.return_value.select.return_value.eq.return_value.in_.return_value.order.return_value \
-        .limit.return_value.execute.return_value.data = rows
-    with patch("app.audit.service_supabase_client", return_value=client):
-        summary = audit.case_cost("case-1")
+    with (
+        patch("app.audit.service_supabase_client", return_value=MagicMock()),
+        # The case's costed runs, then the upload events that name its documents (none here).
+        patch("app.audit.fetch_all", side_effect=[rows, []]),
+    ):
+        summary = audit.case_cost("case-1", [])
     assert summary.total_usd == 0.12
     assert summary.documents_usd == {"doc-1": 0.07, "doc-2": 0.01}
     assert summary.case_analysis_usd == 0.04

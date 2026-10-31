@@ -136,7 +136,7 @@
         "underline": false
       },
       "field_name": null,
-      "flag_id": "flag-1",
+      "fingerprint": "3944f908eaa0a56c1e920531",
       "id": "font_consistency_tool-1",
       "locations": [
         {
@@ -170,7 +170,7 @@
       "ai_accepted": true,
       "confidence": 0.0,
       "field": "creator",
-      "flag_id": "flag-2",
+      "fingerprint": "1831e3a1abb9d0965ad0cee4",
       "id": "metadata_tool-2",
       "rationale": "Rated medium.",
       "reason": "Adobe Acrobat can edit existing PDF content, and a credit report should reach us exactly as its issuer generated it",
@@ -194,7 +194,7 @@
       "ai_accepted": true,
       "confidence": 0.0,
       "field": "producer",
-      "flag_id": "flag-3",
+      "fingerprint": "5767636fd490e751f10fd10e",
       "id": "metadata_tool-3",
       "rationale": "Rated medium.",
       "reason": "Adobe Acrobat can edit existing PDF content, and a credit report should reach us exactly as its issuer generated it",
@@ -218,7 +218,7 @@
       "ai_accepted": true,
       "confidence": 0.0,
       "field": "author",
-      "flag_id": "flag-4",
+      "fingerprint": "19b9387c45ec55bbf208c4bb",
       "id": "metadata_tool-1",
       "rationale": "Rated low.",
       "reason": "Author looks like a test/template artefact rather than a real name \u2014 a genuine document's metadata wouldn't carry it",

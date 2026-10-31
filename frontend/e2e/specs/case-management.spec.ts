@@ -699,7 +699,7 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
 
     const created = backend.requestsTo('POST', '/cases');
     expect(created).toHaveLength(1);
-    expect(created[0].body).toEqual({ company_name: 'Ironclad Security Services Pte Ltd' });
+    expect(created[0].body).toEqual({ company_name: 'Ironclad Security Services Pte Ltd', reviews_required: true });
   });
 
   test('CM-010 a company name of exactly 100 characters is accepted @CM-010', async ({ page, backend }) => {
@@ -710,7 +710,7 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
 
     const created = backend.requestsTo('POST', '/cases');
     expect(created).toHaveLength(1);
-    expect(created[0].body).toEqual({ company_name: hundred });
+    expect(created[0].body).toEqual({ company_name: hundred, reviews_required: true });
   });
 
   test('CM-010 typing past 100 characters stops the company name at 100 @CM-010', async ({ page, backend }) => {

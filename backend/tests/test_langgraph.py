@@ -341,30 +341,39 @@ async def test_run_extraction_calls_the_model_and_parses_its_response():
 
 # --- tool staging + graph shape ---------------------------------------------
 
-def test_available_tools_enforces_llm_first_vision_last():
+def test_the_tool_order_is_enforced_llm_first_vision_last():
     """
-    The agent's first turn is only ever offered llm_classify_tool; vision_llm
-    only becomes available from the second turn onward, and only until it's
-    been called once — enforced in code (classify_graph._available_tools),
-    not just prompted, since vision sends the whole document image and is by
-    far the most expensive tool. See classify_graph.py's module docstring.
+    llm_classify_tool only on the agent's first turn; vision_llm from the second turn on, and only once. Enforced
+    in code (classify_graph._refusal, applied by tools_node), not just prompted, since vision sends the whole
+    document image and is by far the most expensive tool. Both tools are offered every turn, so a call out of
+    turn gets an error result instead of running.
     """
-    from langchain_core.messages import AIMessage, HumanMessage
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-    from app.langgraph.classify_graph import _available_tools
+    from app.langgraph.classify_graph import _NOT_RUN, _refusal
 
-    assert [t.name for t in _available_tools([])] == ["llm_classify_tool"]
+    start = [HumanMessage(content="go")]
+    assert _refusal("llm_classify_tool", start) is None
+    assert _refusal("vision_llm", start) is not None
 
-    first_turn = [
-        HumanMessage(content="go"),
+    first_turn = start + [
         AIMessage(content="", tool_calls=[{"name": "llm_classify_tool", "args": {}, "id": "1"}]),
+        ToolMessage(content="{}", tool_call_id="1", name="llm_classify_tool"),
     ]
-    assert [t.name for t in _available_tools(first_turn)] == ["vision_llm"]
+    assert _refusal("llm_classify_tool", first_turn) is not None
+    assert _refusal("vision_llm", first_turn) is None
 
-    used_vision = first_turn + [
-        AIMessage(content="", tool_calls=[{"name": "vision_llm", "args": {}, "id": "2"}])
+    # A refused vision call didn't run, so vision is still available; one that ran isn't.
+    refused = first_turn + [
+        AIMessage(content="", tool_calls=[{"name": "vision_llm", "args": {}, "id": "2"}]),
+        ToolMessage(content=f"{_NOT_RUN}no", tool_call_id="2", name="vision_llm"),
     ]
-    assert _available_tools(used_vision) == []
+    assert _refusal("vision_llm", refused) is None
+    used_vision = first_turn + [
+        AIMessage(content="", tool_calls=[{"name": "vision_llm", "args": {}, "id": "2"}]),
+        ToolMessage(content="{}", tool_call_id="2", name="vision_llm"),
+    ]
+    assert _refusal("vision_llm", used_vision) is not None
 
 
 def test_route_after_ingest():

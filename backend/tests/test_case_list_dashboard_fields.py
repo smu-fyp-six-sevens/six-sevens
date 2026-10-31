@@ -93,7 +93,7 @@ def test_the_case_list_carries_its_document_types_and_flags_grouped_by_check() -
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.risk_store") as store,
         patch("app.case_service.audit") as trail,
-        patch("app.case_service.flags_repository") as flags,
+        patch("app.case_service.findings_repository") as flags,
     ):
         case_repo.list_cases_page.return_value = ([case], 1)
         doc_repo.list_document_statuses.return_value = [
@@ -102,7 +102,7 @@ def test_the_case_list_carries_its_document_types_and_flags_grouped_by_check() -
         store.latest_many.return_value = {}
         trail.processing_ms_many.return_value = {}
         trail.created_by_many.return_value = {}
-        flags.list_for_cases.return_value = [
+        flags.list_flags_for_cases.return_value = [
             flag("doc-1", "spelling_tool", "low"),
             flag("doc-2", "numerical_checks_tool", "medium"), flag("doc-1", "numerical_checks_tool", "high"),
             flag("deleted-doc", "metadata_tool", "high"),  # its document is gone: not counted

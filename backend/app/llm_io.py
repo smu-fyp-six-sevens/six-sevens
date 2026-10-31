@@ -13,7 +13,6 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
-from langchain_core.messages import AIMessage
 from pydantic import BaseModel, BeforeValidator, ValidationError
 
 from .run_context import record_repair

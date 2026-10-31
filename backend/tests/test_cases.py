@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -52,7 +52,7 @@ def test_create_case() -> None:
 
     assert response.status_code == 201
     assert response.json()["id"] == "new-case"
-    mock_case_service.create_case.assert_called_once_with(None, ANY)
+    mock_case_service.create_case.assert_called_once_with(None, reviews_required=True)
 
 
 def test_create_case_endpoint_with_company_name() -> None:
@@ -63,7 +63,7 @@ def test_create_case_endpoint_with_company_name() -> None:
 
     assert response.status_code == 201
     assert response.json()["company_name"] == "Acme Pte Ltd"
-    mock_case_service.create_case.assert_called_once_with("Acme Pte Ltd", ANY)
+    mock_case_service.create_case.assert_called_once_with("Acme Pte Ltd", reviews_required=True)
 
 
 def test_get_case_not_found() -> None:

@@ -34,7 +34,7 @@ def _list(rows: list[dict], *, requested: list[SimpleNamespace] | None = None, a
     with (
         patch.object(service.repository, "list_runs", return_value=rows),
         patch.object(service.document_repository, "list_documents", return_value=[]),
-        patch.object(service.langgraph_trace, "get_detection_states", return_value=({}, set())),
+        patch.object(service.detection_results, "get_states", return_value=({}, set())),
         patch.object(service.state, "compute_fingerprint", return_value="now"),
         patch.object(service.audit, "list_events", side_effect=RuntimeError("down") if audit_error else None,
                      return_value=requested or []),

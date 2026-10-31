@@ -130,7 +130,7 @@ async def test_the_detection_lead_fences_the_document_context() -> None:
     with patch("app.langgraph._anthropic.build_chat_anthropic", return_value=model):
         await detection_graph._ask_lead(
             detection_graph._PLAN_SYSTEM_PROMPT, {"document_type": "payslip", "fields": {"employer": CANARY}},
-            LeadPlan, span_name="detection.lead_plan", cache_key="test-envelope-lead",
+            LeadPlan, span_name="detection.lead_plan", cache_key="test-envelope-lead", document_id="doc-1",
         )
     _assert_fenced(_sent(model))
 
@@ -153,7 +153,7 @@ async def test_the_binder_fences_the_field_list() -> None:
 
 def _risk() -> CaseRisk:
     finding = ContributingFinding(
-        document_id="d", filename="f.pdf", finding_id="f1", severity="medium", summary=CANARY, rationale="r",
+        document_id="d", filename="f.pdf", finding_id="f1", fingerprint="f1", severity="medium", summary=CANARY, rationale="r",
         points=5, category="cross_document_variance",
     )
     return CaseRisk(state="scored", level="Medium", score=40, points=5, contributing_findings=[finding])

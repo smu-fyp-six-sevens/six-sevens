@@ -1,4 +1,4 @@
-"""SCRUM-80: each case moves through clear stages, and every change records the stage, the time and the person."""
+"""SCRUM-80: each case moves through clear stages; the audit trail records who finalised it."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -15,7 +15,7 @@ from app.case_stage import sync_case_stage as real_sync_case_stage  # bound befo
 from app.main import app
 from tests.conftest import TEST_USER
 from app.models import (
-    AdditionalDocument, AdditionalDocuments, CaseFailure, CaseRecord, CaseRisk, CaseStage, ContributingFinding, FindingReview, CaseStageChange, CaseSummary, DocumentRecord,
+    AdditionalDocument, AdditionalDocuments, CaseFailure, CaseRecord, CaseRisk, CaseStage, ContributingFinding, DismissedFinding, FindingReview, CaseSummary, DocumentRecord,
     DocumentStatus, RoutingStatus,
 )
 
@@ -33,13 +33,6 @@ def _document(status: DocumentStatus, doc_id: str = "doc-1") -> DocumentRecord:
     return DocumentRecord(
         id=doc_id, case_id="case-1", filename=f"{doc_id}.pdf", status=status,
         uploaded_at=datetime.now(timezone.utc),
-    )
-
-
-def _change(to_status: str, from_status: str | None = None, changed_by: str = "System") -> CaseStageChange:
-    return CaseStageChange(
-        id="change-1", case_id="case-1", from_status=from_status, to_status=to_status,
-        changed_by=changed_by, changed_at=datetime.now(timezone.utc),
     )
 
 
@@ -76,7 +69,7 @@ def _analysis(status: str, fingerprint: str = "fp") -> CaseAnalysis:
 def test_the_document_furthest_behind_decides_the_cases_stage(statuses, expected) -> None:
     documents = [_document(status, f"doc-{i}") for i, status in enumerate(statuses)]
 
-    result = case_stage.document_stage(documents, missing_requirements=())
+    result = case_stage.document_stage(documents, requirements_missing=lambda: False)
 
     assert (result.stage if result else None) == expected
 
@@ -85,20 +78,20 @@ def test_a_document_sent_to_manual_review_puts_the_case_in_pending_review() -> N
     sent_to_review = _document(DocumentStatus.ANALYZED, "doc-1")
     sent_to_review.routing_status = RoutingStatus.MANUAL_REVIEW
 
-    result = case_stage.document_stage([sent_to_review, _document(DocumentStatus.DETECTED, "doc-2")], missing_requirements=())
+    result = case_stage.document_stage([sent_to_review, _document(DocumentStatus.DETECTED, "doc-2")], requirements_missing=lambda: False)
 
     assert result == case_stage.StageResult(CaseStage.PENDING_REVIEW)
 
 
 def test_a_failure_says_which_step_failed() -> None:
-    processing = case_stage.document_stage([_document(DocumentStatus.FAILED)], missing_requirements=())
+    processing = case_stage.document_stage([_document(DocumentStatus.FAILED)], requirements_missing=lambda: False)
     documents = [_document(DocumentStatus.APPROVED, "doc-1"), _document(DocumentStatus.DETECTED, "doc-2")]
-    detection = case_stage.document_stage(documents, failed_detection_ids=frozenset({"doc-1"}), missing_requirements=())
+    detection = case_stage.document_stage(documents, failed_detection_ids=frozenset({"doc-1"}), requirements_missing=lambda: False)
 
     assert processing == case_stage.StageResult(CaseStage.FAILED, CaseFailure.DOCUMENT_PROCESSING)
     assert detection == case_stage.StageResult(CaseStage.FAILED, CaseFailure.FRAUD_DETECTION)
     # Waiting for its turn, not failed: still being scanned.
-    assert case_stage.document_stage(documents, missing_requirements=()) == case_stage.StageResult(CaseStage.FRAUD_DETECTION)
+    assert case_stage.document_stage(documents, requirements_missing=lambda: False) == case_stage.StageResult(CaseStage.FRAUD_DETECTION)
 
 
 @pytest.mark.parametrize("statuses", [
@@ -108,7 +101,7 @@ def test_a_failure_says_which_step_failed() -> None:
 def test_a_missing_required_document_makes_the_case_incomplete(statuses) -> None:
     documents = [_document(status, f"doc-{i}") for i, status in enumerate(statuses)]
 
-    result = case_stage.document_stage(documents, missing_requirements=["bank_statement"])
+    result = case_stage.document_stage(documents, requirements_missing=lambda: True)
 
     assert result == case_stage.StageResult(CaseStage.DOCUMENTS_INCOMPLETE)
 
@@ -116,24 +109,41 @@ def test_a_missing_required_document_makes_the_case_incomplete(statuses) -> None
 def test_a_document_waiting_for_review_outranks_a_missing_required_document() -> None:
     documents = [_document(DocumentStatus.ANALYZED, "doc-1"), _document(DocumentStatus.DETECTED, "doc-2")]
 
-    result = case_stage.document_stage(documents, missing_requirements=["bank_statement"])
+    result = case_stage.document_stage(documents, requirements_missing=lambda: True)
 
     assert result == case_stage.StageResult(CaseStage.PENDING_REVIEW)
 
 
-def test_derive_reads_the_missing_requirements_from_the_checklist() -> None:
+def test_a_case_that_enforces_the_checklist_waits_for_every_required_document_approved() -> None:
+    case = _case().model_copy(update={"checklist_enforced": True})
     with (
         patch("app.case_stage.document_repository.list_documents",
               return_value=[_document(DocumentStatus.DETECTED)]),
-        patch("app.case_stage.compute_requirement_coverage", return_value=(["payslip"], ["bank_statement"])),
+        patch("app.case_stage.document_repository.attach_extracted_fields"),
+        patch("app.case_stage.unapproved_requirements", return_value=["bank_statement"]) as unapproved,
     ):
-        assert case_stage.derive(_case()) == case_stage.StageResult(CaseStage.DOCUMENTS_INCOMPLETE)
+        assert case_stage.derive(case) == case_stage.StageResult(CaseStage.DOCUMENTS_INCOMPLETE)
+
+    unapproved.assert_called_once()
+
+
+def test_a_case_that_does_not_enforce_the_checklist_is_not_held_by_it() -> None:
+    with (
+        patch("app.case_stage.document_repository.list_documents",
+              return_value=[_document(DocumentStatus.DETECTED)]),
+        patch("app.case_stage.document_repository.attach_extracted_fields"),
+        patch("app.case_stage.unapproved_requirements") as unapproved,
+        patch("app.case_stage.analysis_stage", return_value=case_stage.StageResult(CaseStage.READY_FOR_ANALYSIS)),
+    ):
+        assert case_stage.derive(_case()) == case_stage.StageResult(CaseStage.READY_FOR_ANALYSIS)
+
+    unapproved.assert_not_called()
 
 
 def test_a_failure_outranks_a_document_waiting_for_review() -> None:
     documents = [_document(DocumentStatus.ANALYZED, "doc-1"), _document(DocumentStatus.FAILED, "doc-2")]
 
-    assert case_stage.document_stage(documents, missing_requirements=()).stage == CaseStage.FAILED
+    assert case_stage.document_stage(documents, requirements_missing=lambda: False).stage == CaseStage.FAILED
 
 
 @pytest.mark.parametrize(
@@ -162,7 +172,7 @@ def test_failure_of_names_the_earliest_failed_step(documents, failed_ids, expect
 def test_once_every_document_is_scanned_the_analysis_decides(analysis, expected) -> None:
     with (
         patch("app.case_stage.analysis_repository.get_latest_summary", return_value=analysis),
-        patch("app.case_stage.langgraph_trace.get_detection_states", return_value=({}, set())),
+        patch("app.case_stage.detection_results.get_states", return_value=({}, set())),
         patch("app.case_stage.analysis_state.compute_fingerprint", return_value="current"),
     ):
         assert case_stage.analysis_stage(_case(), []) == expected
@@ -182,7 +192,7 @@ def test_an_analysis_asking_for_more_evidence_is_evaluated_like_any_other() -> N
     )])
     with (
         patch("app.case_stage.analysis_repository.get_latest_summary", return_value=_analysis("complete", "current")),
-        patch("app.case_stage.langgraph_trace.get_detection_states", return_value=({}, set())),
+        patch("app.case_stage.detection_results.get_states", return_value=({}, set())),
         patch("app.case_stage.analysis_state.compute_fingerprint", return_value="current"),
     ):
         assert case_stage.analysis_stage(case, []).stage == CaseStage.CASE_ANALYSED
@@ -190,12 +200,14 @@ def test_an_analysis_asking_for_more_evidence_is_evaluated_like_any_other() -> N
 
 def test_an_analysis_is_pending_evaluation_until_every_finding_has_a_verdict() -> None:
     analysis = _analysis("complete", "current")
-    analysis.risk = CaseRisk(state="scored", level="High", score=70, contributing_findings=[_finding("f1"), _finding("f2")])
+    analysis.risk = CaseRisk(
+        state="scored", level="High", score=70, contributing_findings=[_finding("f1")], dismissed_findings=[_dismissed("f2")],
+    )
     with (
         patch("app.case_stage.analysis_repository.get_latest_summary", return_value=analysis),
-        patch("app.case_stage.langgraph_trace.get_detection_states", return_value=({}, set())),
+        patch("app.case_stage.detection_results.get_states", return_value=({}, set())),
         patch("app.case_stage.analysis_state.compute_fingerprint", return_value="current"),
-        patch("app.case_stage.finding_reviews_repository.list_for_case") as reviews,
+        patch("app.case_stage.findings_repository.list_reviews_for_case") as reviews,
     ):
         reviews.return_value = [_verdict("f1")]
         assert case_stage.analysis_stage(_case(), []).stage == CaseStage.PENDING_EVALUATION
@@ -208,7 +220,7 @@ def test_derive_checks_detection_failures_of_the_waiting_documents() -> None:
     with (
         patch("app.case_stage.document_repository.list_documents",
               return_value=[_document(DocumentStatus.APPROVED)]),
-        patch("app.case_stage.langgraph_trace.get_detection_states", return_value=({}, {"doc-1"})) as states,
+        patch("app.case_stage.detection_results.get_states", return_value=({}, {"doc-1"})) as states,
     ):
         assert case_stage.derive(_case()) == case_stage.StageResult(CaseStage.FAILED, CaseFailure.FRAUD_DETECTION)
 
@@ -218,20 +230,17 @@ def test_derive_checks_detection_failures_of_the_waiting_documents() -> None:
 # --- Automatic changes ------------------------------------------------------------------------
 
 
-def test_a_derived_change_is_saved_and_recorded_as_system() -> None:
+def test_a_derived_change_is_saved() -> None:
     with (
         patch("app.case_stage.case_repository") as repo,
         patch("app.case_stage.derive", return_value=case_stage.StageResult(CaseStage.PENDING_REVIEW)),
     ):
         repo.get_case.return_value = _case("processing_documents")
         repo.set_status.return_value = True
-        repo.add_status_change.return_value = _change("pending_review", "processing_documents")
 
-        change = real_sync_case_stage("case-1")
+        assert real_sync_case_stage("case-1") is True
 
     repo.set_status.assert_called_once_with("case-1", "processing_documents", "pending_review")
-    repo.add_status_change.assert_called_once_with("case-1", "processing_documents", "pending_review", "System")
-    assert change is not None and change.to_status == "pending_review"
 
 
 def test_nothing_is_recorded_when_the_stage_has_not_changed() -> None:
@@ -241,10 +250,9 @@ def test_nothing_is_recorded_when_the_stage_has_not_changed() -> None:
     ):
         repo.get_case.return_value = _case("fraud_detection")
 
-        assert real_sync_case_stage("case-1") is None
+        assert real_sync_case_stage("case-1") is False
 
     repo.set_status.assert_not_called()
-    repo.add_status_change.assert_not_called()
 
 
 def test_a_change_another_process_already_made_is_not_recorded_twice() -> None:
@@ -255,9 +263,7 @@ def test_a_change_another_process_already_made_is_not_recorded_twice() -> None:
         repo.get_case.return_value = _case("pending_review")
         repo.set_status.return_value = False  # the compare-and-swap lost: the case moved meanwhile
 
-        assert real_sync_case_stage("case-1") is None
-
-    repo.add_status_change.assert_not_called()
+        assert real_sync_case_stage("case-1") is False
 
 
 def test_a_finalised_case_is_not_moved_by_document_changes() -> None:
@@ -267,7 +273,7 @@ def test_a_finalised_case_is_not_moved_by_document_changes() -> None:
     ):
         repo.get_case.return_value = _case("finalised")
 
-        assert real_sync_case_stage("case-1") is None
+        assert real_sync_case_stage("case-1") is False
 
     derive.assert_not_called()
     repo.set_status.assert_not_called()
@@ -281,20 +287,19 @@ def test_a_case_still_missing_documents_cannot_be_finalised() -> None:
         repo.get_case.return_value = _case("documents_incomplete")
 
         with pytest.raises(case_stage.StageChangeNotAllowed):
-            case_stage.finalise("case-1", "officer-a")
+            case_stage.finalise("case-1")
 
-    repo.add_status_change.assert_not_called()
+    repo.set_status.assert_not_called()
 
 
-def test_an_officer_finalises_an_evaluated_case_under_their_username() -> None:
+def test_an_officer_finalises_an_evaluated_case() -> None:
     with patch("app.case_stage.case_repository") as repo:
         repo.get_case.return_value = _case("case_analysed")
         repo.set_status.return_value = True
 
-        case_stage.finalise("case-1", "officer-a")
+        case_stage.finalise("case-1")
 
     repo.set_status.assert_called_once_with("case-1", "case_analysed", "finalised")
-    repo.add_status_change.assert_called_once_with("case-1", "case_analysed", "finalised", "officer-a")
 
 
 def test_a_case_with_findings_still_to_evaluate_cannot_be_finalised() -> None:
@@ -302,35 +307,55 @@ def test_a_case_with_findings_still_to_evaluate_cannot_be_finalised() -> None:
         repo.get_case.return_value = _case("pending_evaluation")
 
         with pytest.raises(case_stage.StageChangeNotAllowed, match="Every finding needs a verdict"):
-            case_stage.finalise("case-1", "officer-a")
+            case_stage.finalise("case-1")
 
-    repo.add_status_change.assert_not_called()
+    repo.set_status.assert_not_called()
 
 
-def _finding(finding_id: str, summary: str = "Totals differ") -> ContributingFinding:
+def _finding(fingerprint: str, document_id: str = "doc-1") -> ContributingFinding:
     return ContributingFinding(
-        finding_id=finding_id, document_id="doc-1", filename="a.pdf", severity="medium", summary=summary, rationale="Seen on the statement", points=10,
+        finding_id=fingerprint, fingerprint=fingerprint, document_id=document_id, filename="a.pdf", severity="medium",
+        summary="Totals differ", rationale="Seen on the statement", points=10,
     )
 
 
-def _verdict(finding_id: str, summary: str = "Totals differ", verdict: str | None = "correct") -> FindingReview:
+def _dismissed(fingerprint: str, document_id: str = "doc-1") -> DismissedFinding:
+    return DismissedFinding(
+        finding_id=fingerprint, fingerprint=fingerprint, document_id=document_id, filename="a.pdf",
+        summary="A font differs", reason="Explained by the template",
+    )
+
+
+def _verdict(fingerprint: str, document_id: str | None = "doc-1", verdict: str | None = "correct") -> FindingReview:
     now = datetime.now(timezone.utc)
     return FindingReview(
-        id=f"r-{finding_id}", case_id="case-1", scope="document", kind="verdict", finding_id=finding_id,
-        check_name="numerical_validation", summary=summary, verdict=verdict, reviewer="officer-a",
-        created_at=now, updated_at=now,
+        id=f"r-{fingerprint}", case_id="case-1", scope="document" if document_id else "case", kind="verdict",
+        fingerprint=fingerprint, document_id=document_id, check_name="numerical_validation", verdict=verdict,
+        reviewer="officer-a", created_at=now, updated_at=now,
     )
 
 
 def test_only_a_verdict_on_the_same_finding_counts_as_evaluated() -> None:
-    findings = [_finding("f1"), _finding("f2"), _finding("f3", summary="Font mismatch")]
+    risk = CaseRisk(
+        state="scored", contributing_findings=[_finding("f1"), _finding("f2"), _finding("f3", document_id="doc-2")],
+        dismissed_findings=[_dismissed("d1")],
+    )
     reviews = [
-        _verdict("f1"),                                # evaluated
-        _verdict("f3", summary="An older summary"),    # given on a different finding of the same id: doesn't count
+        _verdict("f1"),                        # evaluated
+        _verdict("f3"),                        # the same fingerprint on another document: doesn't count
+        _verdict("d1", verdict="wrong"),       # a dismissal the officer agreed with: evaluated
     ]
 
-    assert case_stage.count_unreviewed(findings, reviews) == 2
-    assert case_stage.count_unreviewed([], reviews) == 0
+    assert case_stage.count_unreviewed(risk, reviews) == 2
+    assert case_stage.count_unreviewed(None, reviews) == 0
+
+
+def test_a_cross_document_finding_is_reviewed_on_the_case_not_a_document() -> None:
+    finding = _finding("x1").model_copy(update={"source": "cross_document"})
+    risk = CaseRisk(state="scored", contributing_findings=[finding])
+
+    assert case_stage.count_unreviewed(risk, [_verdict("x1")]) == 1
+    assert case_stage.count_unreviewed(risk, [_verdict("x1", document_id=None)]) == 0
 
 
 def test_saving_a_verdict_brings_the_case_stage_up_to_date() -> None:
@@ -353,43 +378,12 @@ def test_only_an_analysed_case_can_be_finalised(status) -> None:
         repo.get_case.return_value = _case(status)
 
         with pytest.raises(case_stage.StageChangeNotAllowed):
-            case_stage.finalise("case-1", "officer-a")
+            case_stage.finalise("case-1")
 
-    repo.add_status_change.assert_not_called()
-
-
-def test_creating_a_case_records_it_opening_under_the_creator() -> None:
-    with (
-        patch("app.case_service.case_repository") as repo,
-        patch("app.case_stage.case_repository") as stage_repo,
-    ):
-        repo.create_case.return_value = _case()
-
-        case_service.create_case("Acme Pte Ltd", "officer-a")
-
-    stage_repo.add_status_change.assert_called_once_with("case-1", None, "open", "officer-a")
+    repo.set_status.assert_not_called()
 
 
 # --- What is saved (the acceptance criterion) -------------------------------------------------
-
-
-@pytest.mark.story("SCRUM-80", "AC1")
-def test_a_saved_stage_change_records_the_stage_the_time_and_the_person() -> None:
-    """Given a case changes stage, when the change is saved, then the stage, the time and the person are recorded."""
-    before = datetime.now(timezone.utc)
-    with patch("app.case_repository.supabase_client") as mock_client:
-        insert = mock_client.table.return_value.insert
-        insert.return_value.execute.side_effect = lambda: MagicMock(data=[insert.call_args[0][0]])
-
-        change = case_repository.add_status_change("case-1", "case_analysed", "finalised", "officer-a")
-
-    mock_client.table.assert_called_with("case_status_history")
-    row = insert.call_args[0][0]
-    assert row["case_id"] == "case-1"
-    assert (row["from_status"], row["to_status"]) == ("case_analysed", "finalised")
-    assert row["changed_by"] == "officer-a"
-    assert before <= datetime.fromisoformat(row["changed_at"]) <= datetime.now(timezone.utc)
-    assert change.to_status == "finalised" and change.changed_by == "officer-a"
 
 
 def test_the_stage_only_moves_from_the_stage_it_was_read_at() -> None:
@@ -404,8 +398,7 @@ def test_the_stage_only_moves_from_the_stage_it_was_read_at() -> None:
     update.return_value.eq.return_value.eq.assert_called_once_with("status", "fraud_detection")
 
 
-def test_the_case_summary_carries_its_stage_history() -> None:
-    history = [_change("open", changed_by="officer-a"), _change("processing_documents", "open")]
+def test_the_case_summary_carries_its_stage() -> None:
     with (
         patch("app.case_service.case_repository") as repo,
         patch("app.case_service.document_repository.list_documents", return_value=[]),
@@ -413,14 +406,12 @@ def test_the_case_summary_carries_its_stage_history() -> None:
         patch("app.case_service._load_detection_states", return_value=({}, set())),
     ):
         repo.get_case.return_value = _case("processing_documents")
-        repo.list_status_history.return_value = history
 
         summary = case_service.get_case_summary("case-1")
 
     assert summary is not None
     assert summary.status == "processing_documents"
     assert summary.failure is None
-    assert [c.to_status for c in summary.status_history] == ["open", "processing_documents"]
 
 
 def test_a_failed_case_summary_says_which_step_failed() -> None:
@@ -432,7 +423,6 @@ def test_a_failed_case_summary_says_which_step_failed() -> None:
         patch("app.case_service._load_detection_states", return_value=({}, {"doc-1"})),
     ):
         repo.get_case.return_value = _case("failed")
-        repo.list_status_history.return_value = []
 
         summary = case_service.get_case_summary("case-1")
 
@@ -463,7 +453,7 @@ def _summary(status: str) -> CaseSummary:
     return CaseSummary(**_case(status).model_dump(), documents_status="analyzed")
 
 
-def test_finalise_endpoint_records_the_signed_in_username(published_events) -> None:
+def test_finalise_endpoint_records_who_finalised_in_the_audit_trail(published_events) -> None:
     with (
         patch("app.routers._dependencies.case_service.get_case", return_value=_case("case_analysed")),
         patch("app.routers.cases.case_service.finalise_case", return_value=_summary("finalised")) as finalise,
@@ -472,8 +462,8 @@ def test_finalise_endpoint_records_the_signed_in_username(published_events) -> N
 
     assert response.status_code == 200
     assert response.json()["status"] == "finalised"
-    finalise.assert_called_once_with("case-1", TEST_USER)
-    assert [e.type for e in published_events] == ["case.finalised"]
+    finalise.assert_called_once_with("case-1")
+    assert [(e.type, e.actor) for e in published_events] == [("case.finalised", TEST_USER)]
 
 
 def test_finalising_a_case_that_is_not_analysed_is_a_conflict() -> None:
@@ -522,7 +512,7 @@ def test_startup_brings_every_case_up_to_date_and_skips_one_that_fails() -> None
     def sync(case_id):
         if case_id == "case-2":
             raise RuntimeError("boom")
-        return _change("case_analysed") if case_id == "case-1" else None
+        return case_id == "case-1"
 
     with (
         patch("app.case_stage.case_repository.list_case_ids", return_value=["case-1", "case-2", "case-3"]),

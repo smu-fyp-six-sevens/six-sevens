@@ -127,9 +127,14 @@ def runs(monkeypatch) -> Runs:
 def case(monkeypatch) -> Case:
     fake = Case(c001_documents())
     monkeypatch.setattr("app.case_pipeline.service.document_repository.list_documents", fake.list_documents)
-    monkeypatch.setattr("app.case_pipeline.service.langgraph_trace.get_detection_states", fake.get_detection_states)
+    monkeypatch.setattr("app.case_pipeline.service.detection_results.get_states", fake.get_detection_states)
+    monkeypatch.setattr("app.case_pipeline.service.findings_repository.sync_case", lambda case_id, findings: len(findings))
     monkeypatch.setattr(
-        "app.case_pipeline.service.compute_requirement_coverage", lambda documents: ([], fake.missing_requirements)
+        "app.case_pipeline.service.case_repository.get_case",
+        lambda case_id: CaseRecord(id=case_id, greenlink_case_id="GLDB-130", created_at=_NOW, updated_at=_NOW),
+    )
+    monkeypatch.setattr(
+        "app.case_pipeline.service.unapproved_requirements", lambda case, documents: fake.missing_requirements
     )
     monkeypatch.setattr("app.case_pipeline.service.push_case_snapshot", AsyncMock())
     monkeypatch.setattr("app.case_pipeline.service.risk_store.save", lambda case_id, risk: fake.saved_risks.append(risk))
@@ -194,8 +199,8 @@ def test_the_analysis_cannot_run_while_a_required_document_is_missing(runs, case
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "Every required document must be on file before the case can be analysed. "
-        "Missing: Corporate Bank Statement, Identity Document (NRIC/Passport)."
+        "Every required document must be approved before the case can be analysed. "
+        "Not yet approved: Corporate Bank Statement, Identity Document (NRIC/Passport)."
     )
     assert runs.rows == {}
     assert published_events == []

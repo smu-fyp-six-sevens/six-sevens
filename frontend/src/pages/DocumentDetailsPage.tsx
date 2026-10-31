@@ -273,7 +273,10 @@ export default function DocumentDetailsPage({
     individualCheckError,
     individualCheckResults,
     handleRunIndividualCheck,
-  } = useDetection(documentId, document?.status);
+  } = useDetection(documentId, document?.status, () =>
+    // Opens the live connection; its first snapshot then brings the real status.
+    setDocument((current) => (current ? { ...current, status: 'detecting' } : current)),
+  );
 
   const { langGraphTrace, isRefreshingTrace, refreshLangGraphTrace } = useLangGraphTrace(documentId);
 

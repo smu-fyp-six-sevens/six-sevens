@@ -78,7 +78,7 @@ class FakeClaude:
     def __init__(self, script: Script, step: str) -> None:
         self.script, self.step = script, step
 
-    def bind_tools(self, tools):
+    def bind_tools(self, tools, **kwargs):
         return self
 
     async def ainvoke(self, messages):

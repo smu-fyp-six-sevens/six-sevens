@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,7 +25,7 @@ REVIEW_ID = "44444444-4444-4444-4444-444444444444"
 def _review(**overrides) -> FindingReview:
     return FindingReview(**{
         "id": REVIEW_ID, "case_id": CASE_ID, "document_id": DOCUMENT_ID, "scope": "document", "kind": "verdict",
-        "finding_id": "33333333:numerical_checks_tool-1", "check_name": "numerical_checks_tool",
+        "fingerprint": "numerical_checks_tool:PAY.NET:1", "check_name": "numerical_checks_tool",
         "verdict": "correct", "reviewer": TEST_USER, "created_at": _TIMESTAMP, "updated_at": _TIMESTAMP,
         **overrides,
     })
@@ -37,7 +37,7 @@ def _review(**overrides) -> FindingReview:
 def test_precision_counts_correct_against_wrong_and_recall_against_missed() -> None:
     reviews = [
         _review(verdict="correct"), _review(verdict="correct"), _review(verdict="wrong"),
-        _review(kind="missed", verdict=None, finding_id=None),
+        _review(kind="missed", verdict=None, fingerprint=None),
     ]
     summary = detection_metrics.summarize(reviews)
     [check] = summary.by_check
@@ -48,7 +48,7 @@ def test_precision_counts_correct_against_wrong_and_recall_against_missed() -> N
 
 def test_a_check_with_nothing_to_measure_has_no_rate_not_zero_or_one_hundred() -> None:
     # Only misses: nothing it raised was reviewed (no precision), and it caught none of them (recall 0).
-    [missed_only] = detection_metrics.summarize([_review(kind="missed", verdict=None, finding_id=None)]).by_check
+    [missed_only] = detection_metrics.summarize([_review(kind="missed", verdict=None, fingerprint=None)]).by_check
     assert missed_only.precision is None and missed_only.recall == 0.0
     # Only wrong findings: precision 0, and nothing real it should have caught (no recall).
     [wrong_only] = detection_metrics.summarize([_review(verdict="wrong")]).by_check
@@ -68,9 +68,9 @@ def test_checks_below_target_or_with_few_reviews_are_flagged() -> None:
 def test_case_metrics_split_per_document_and_across_documents() -> None:
     reviews = [
         _review(),
-        _review(document_id=OTHER_DOCUMENT_ID, finding_id="66666666:spelling_tool-1", check_name="spelling_tool",
+        _review(document_id=OTHER_DOCUMENT_ID, fingerprint="spelling_tool:1", check_name="spelling_tool",
                 verdict="wrong"),
-        _review(scope="case", document_id=None, finding_id="xd-1", check_name="cross_document_variance"),
+        _review(scope="case", document_id=None, fingerprint="xd:1", check_name="cross_document_variance"),
     ]
     result = detection_metrics.case_metrics(reviews)
     assert set(result.documents) == {DOCUMENT_ID, OTHER_DOCUMENT_ID}
@@ -91,8 +91,11 @@ def test_the_checks_are_the_specialists_tools_and_the_finding_categories() -> No
 # --- endpoints -----------------------------------------------------------------------------------------------
 
 
-def _case(case_id: str = CASE_ID) -> CaseRecord:
-    return CaseRecord(id=case_id, greenlink_case_id="GLDB-1", created_at=_TIMESTAMP, updated_at=_TIMESTAMP)
+def _case(case_id: str = CASE_ID, *, reviews_required: bool = True) -> CaseRecord:
+    return CaseRecord(
+        id=case_id, greenlink_case_id="GLDB-1", created_at=_TIMESTAMP, updated_at=_TIMESTAMP,
+        reviews_required=reviews_required,
+    )
 
 
 def _document(case_id: str = CASE_ID) -> DocumentRecord:
@@ -106,120 +109,128 @@ def _document(case_id: str = CASE_ID) -> DocumentRecord:
 def repos():
     with (
         patch("app.routers._dependencies.case_service") as case_service,
-        patch("app.routers.finding_reviews.finding_reviews_repository") as reviews_repo,
+        patch("app.routers.finding_reviews.findings_repository") as findings_repo,
         patch("app.routers.finding_reviews.document_repository") as document_repo,
-        patch("app.routers.finding_reviews.app_settings_repository") as app_settings,
+        patch("app.routers.finding_reviews.push_case_snapshot", new=AsyncMock()),
     ):
-        app_settings.get_finding_reviews_enabled.return_value = True
         case_service.get_case.side_effect = lambda case_id: _case(case_id) if case_id in (CASE_ID, OTHER_CASE_ID) else None
         document_repo.get_document.return_value = _document()
-        reviews_repo.list_for_case.return_value = [_review()]
-        yield reviews_repo, document_repo
+        findings_repo.list_reviews_for_case.return_value = [_review()]
+        # Every fingerprint names a current finding, whose row id is "row:<fingerprint>".
+        findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {"id": f"row:{fingerprint}"}
+        yield findings_repo, document_repo
 
 
 _VERDICT = {
-    "scope": "document", "document_id": DOCUMENT_ID, "finding_id": "33333333:numerical_checks_tool-1",
-    "check_name": "numerical_checks_tool", "check_code": "PAY.NET", "summary": "Net pay doesn't add up",
+    "scope": "document", "document_id": DOCUMENT_ID, "fingerprint": "numerical_checks_tool:PAY.NET:1",
     "verdict": "correct",
 }
+_VERDICTS = f"/cases/{CASE_ID}/finding-reviews/verdicts"
 
 
-def test_a_verdict_is_signed_by_the_officer_and_returns_the_metrics(repos) -> None:
-    reviews_repo, _ = repos
-    response = client.put(f"/cases/{CASE_ID}/finding-reviews/verdict", json=_VERDICT)
+def test_a_group_review_saves_every_finding_signed_by_the_officer_and_returns_the_metrics(repos) -> None:
+    findings_repo, _ = repos
+    response = client.put(_VERDICTS, json={"verdicts": [
+        _VERDICT, {**_VERDICT, "fingerprint": "spelling_tool:1", "verdict": "wrong"},
+    ]})
     assert response.status_code == 200
-    kwargs = reviews_repo.set_verdict.call_args.kwargs
-    assert kwargs["reviewer"] == TEST_USER and kwargs["verdict"] == "correct" and kwargs["check_code"] == "PAY.NET"
+    assert [c.args for c in findings_repo.set_verdict.call_args_list] == [
+        ("row:numerical_checks_tool:PAY.NET:1", "correct", TEST_USER),
+        ("row:spelling_tool:1", "wrong", TEST_USER),
+    ]
+    findings_repo.find_current.assert_any_call(CASE_ID, "document", DOCUMENT_ID, "spelling_tool:1")
     assert response.json()["case"]["precision"] == 1.0
-    assert response.json()["checks"]["document"] == list(detection_metrics.document_checks())
 
 
 def test_a_null_verdict_clears_the_mark(repos) -> None:
-    reviews_repo, _ = repos
-    response = client.put(f"/cases/{CASE_ID}/finding-reviews/verdict", json={**_VERDICT, "verdict": None})
+    findings_repo, _ = repos
+    response = client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": None}]})
     assert response.status_code == 200
-    reviews_repo.clear_verdict.assert_called_once_with(CASE_ID, _VERDICT["finding_id"])
-    reviews_repo.set_verdict.assert_not_called()
+    findings_repo.set_verdict.assert_called_once_with("row:numerical_checks_tool:PAY.NET:1", None, TEST_USER)
 
 
-def test_a_review_must_name_a_check_of_its_scope_and_a_document_in_the_case(repos) -> None:
-    reviews_repo, document_repo = repos
-    wrong_check = client.put(f"/cases/{CASE_ID}/finding-reviews/verdict", json={**_VERDICT, "check_name": "cross_document_variance"})
-    assert wrong_check.status_code == 400
+def test_a_review_must_name_a_document_in_the_case(repos) -> None:
+    findings_repo, document_repo = repos
     # A document review without its document, or a case review with one, is malformed.
-    assert client.put(f"/cases/{CASE_ID}/finding-reviews/verdict", json={**_VERDICT, "document_id": None}).status_code == 422
+    assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "document_id": None}]}).status_code == 422
+    assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "scope": "case"}]}).status_code == 422
     document_repo.get_document.return_value = _document(case_id=OTHER_CASE_ID)
-    assert client.put(f"/cases/{CASE_ID}/finding-reviews/verdict", json=_VERDICT).status_code == 404
-    reviews_repo.set_verdict.assert_not_called()
+    assert client.put(_VERDICTS, json={"verdicts": [_VERDICT]}).status_code == 404
+    findings_repo.set_verdict.assert_not_called()
 
 
-def test_a_group_review_saves_every_ticked_finding_correct_and_the_rest_wrong(repos) -> None:
-    reviews_repo, _ = repos
-    response = client.put(f"/cases/{CASE_ID}/finding-reviews/verdicts", json={"verdicts": [
-        _VERDICT,
-        {**_VERDICT, "finding_id": "33333333:spelling_tool-1", "check_name": "spelling_tool", "verdict": "wrong"},
-    ]})
+def test_a_group_with_a_finding_a_newer_run_replaced_saves_nothing(repos) -> None:
+    findings_repo, _ = repos
+    findings_repo.find_current.side_effect = (
+        lambda case_id, scope, document_id, fingerprint: None if fingerprint == "gone:1" else {"id": "row"}
+    )
+    response = client.put(_VERDICTS, json={"verdicts": [_VERDICT, {**_VERDICT, "fingerprint": "gone:1"}]})
+    assert response.status_code == 409
+    assert "newer run" in response.json()["detail"]
+    findings_repo.set_verdict.assert_not_called()
+    assert client.put(_VERDICTS, json={"verdicts": []}).status_code == 422
+
+
+def test_a_case_finding_is_looked_up_without_a_document(repos) -> None:
+    findings_repo, document_repo = repos
+    response = client.put(_VERDICTS, json={"verdicts": [{"scope": "case", "fingerprint": "xd:1", "verdict": "correct"}]})
     assert response.status_code == 200
-    saved = [(c.kwargs["finding_id"], c.kwargs["verdict"], c.kwargs["reviewer"]) for c in reviews_repo.set_verdict.call_args_list]
-    assert saved == [
-        ("33333333:numerical_checks_tool-1", "correct", TEST_USER),
-        ("33333333:spelling_tool-1", "wrong", TEST_USER),
-    ]
-
-
-def test_a_group_review_with_one_bad_entry_saves_nothing(repos) -> None:
-    reviews_repo, _ = repos
-    response = client.put(f"/cases/{CASE_ID}/finding-reviews/verdicts", json={"verdicts": [
-        _VERDICT, {**_VERDICT, "finding_id": "x", "check_name": "not_a_check"},
-    ]})
-    assert response.status_code == 400
-    reviews_repo.set_verdict.assert_not_called()
-    assert client.put(f"/cases/{CASE_ID}/finding-reviews/verdicts", json={"verdicts": []}).status_code == 422
+    findings_repo.find_current.assert_called_once_with(CASE_ID, "case", None, "xd:1")
+    document_repo.get_document.assert_not_called()
 
 
 def test_a_missed_issue_is_recorded_against_the_check_that_should_have_caught_it(repos) -> None:
-    reviews_repo, _ = repos
+    findings_repo, _ = repos
     response = client.post(f"/cases/{CASE_ID}/finding-reviews/missed", json={
         "scope": "case", "check_name": "identity_entity_conflict", "note": "  Director's NRIC differs on the CBR  ",
     })
     assert response.status_code == 201
-    kwargs = reviews_repo.add_missed.call_args.kwargs
+    kwargs = findings_repo.add_missed.call_args.kwargs
     assert kwargs["scope"] == "case" and kwargs["document_id"] is None
     assert kwargs["note"] == "Director's NRIC differs on the CBR" and kwargs["reviewer"] == TEST_USER
+    # A check from the other scope is refused.
+    assert client.post(f"/cases/{CASE_ID}/finding-reviews/missed", json={
+        "scope": "case", "check_name": "metadata_tool",
+    }).status_code == 400
+    assert findings_repo.add_missed.call_count == 1
 
 
 def test_a_missed_issue_can_be_corrected_but_a_verdict_cannot(repos) -> None:
-    reviews_repo, _ = repos
-    reviews_repo.get.return_value = _review(kind="missed", verdict=None, finding_id=None)
+    findings_repo, _ = repos
+    findings_repo.get_review.return_value = _review(kind="missed", verdict=None, fingerprint=None)
     response = client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={
         "check_name": "metadata_tool", "note": "  Author was edited  ",
     })
     assert response.status_code == 200
-    reviews_repo.update_missed.assert_called_once_with(
+    findings_repo.update_missed.assert_called_once_with(
         REVIEW_ID, check_name="metadata_tool", note="Author was edited", reviewer=TEST_USER,
     )
     # A check from the wrong scope, or a verdict row, can't be edited this way.
     assert client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={"check_name": "cross_document_variance"}).status_code == 400
-    reviews_repo.get.return_value = _review()
+    findings_repo.get_review.return_value = _review()
     assert client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={"check_name": "metadata_tool"}).status_code == 400
-    reviews_repo.get.return_value = _review(case_id=OTHER_CASE_ID, kind="missed", verdict=None, finding_id=None)
+    findings_repo.get_review.return_value = _review(case_id=OTHER_CASE_ID, kind="missed", verdict=None, fingerprint=None)
     assert client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={"check_name": "metadata_tool"}).status_code == 404
-    assert reviews_repo.update_missed.call_count == 1
+    assert findings_repo.update_missed.call_count == 1
 
 
-def test_a_review_can_only_be_deleted_from_its_own_case(repos) -> None:
-    reviews_repo, _ = repos
-    reviews_repo.get.return_value = _review(case_id=OTHER_CASE_ID)
+def test_removing_a_missed_issue_deletes_it_and_removing_a_verdict_clears_it(repos) -> None:
+    findings_repo, _ = repos
+    findings_repo.get_review.return_value = _review(case_id=OTHER_CASE_ID)
     assert client.delete(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}").status_code == 404
-    reviews_repo.delete.assert_not_called()
-    reviews_repo.get.return_value = _review()
+    findings_repo.get_review.return_value = _review(kind="missed", verdict=None, fingerprint=None)
     assert client.delete(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}").status_code == 200
-    reviews_repo.delete.assert_called_once_with(REVIEW_ID)
+    findings_repo.delete_missed.assert_called_once_with(REVIEW_ID)
+    # The finding stays; only the officer's mark goes.
+    findings_repo.get_review.return_value = _review()
+    assert client.delete(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}").status_code == 200
+    findings_repo.set_verdict.assert_called_once_with(REVIEW_ID, None, TEST_USER)
+    assert findings_repo.delete_missed.call_count == 1
 
 
 def test_detection_metrics_cover_every_reviewed_case(repos) -> None:
-    reviews_repo, _ = repos
-    reviews_repo.list_all.return_value = [
+    findings_repo, _ = repos
+    findings_repo.list_all_reviews.return_value = [
         _review(), _review(case_id=OTHER_CASE_ID, document_id=OTHER_DOCUMENT_ID, verdict="wrong"),
     ]
     body = client.get("/detection-metrics").json()
@@ -232,11 +243,11 @@ def test_detection_metrics_cover_every_reviewed_case(repos) -> None:
 
 
 def test_a_saved_review_is_recorded_per_document_with_the_officer(repos, published_events) -> None:
-    response = client.put(f"/cases/{CASE_ID}/finding-reviews/verdicts", json={"verdicts": [
+    response = client.put(_VERDICTS, json={"verdicts": [
         _VERDICT,
-        {**_VERDICT, "finding_id": "33333333:spelling_tool-1", "check_name": "spelling_tool", "verdict": "wrong"},
-        {**_VERDICT, "finding_id": "33333333:metadata_tool-1", "check_name": "metadata_tool", "verdict": "wrong"},
-        {"scope": "case", "finding_id": "xd-1", "check_name": "cross_document_variance", "verdict": "correct"},
+        {**_VERDICT, "fingerprint": "spelling_tool:1", "verdict": "wrong"},
+        {**_VERDICT, "fingerprint": "metadata_tool:1", "verdict": "wrong"},
+        {"scope": "case", "fingerprint": "xd:1", "verdict": "correct"},
     ]})
     assert response.status_code == 200
     saved = [event for event in published_events if event.type == "finding_review.saved"]
@@ -249,18 +260,18 @@ def test_a_saved_review_is_recorded_per_document_with_the_officer(repos, publish
 
 
 def test_a_review_that_fails_to_save_records_nothing(repos, published_events) -> None:
-    reviews_repo, _ = repos
-    reviews_repo.set_verdict.side_effect = RuntimeError("supabase down")
-    assert client.put(f"/cases/{CASE_ID}/finding-reviews/verdict", json=_VERDICT).status_code == 502
+    findings_repo, _ = repos
+    findings_repo.set_verdict.side_effect = RuntimeError("supabase down")
+    assert client.put(_VERDICTS, json={"verdicts": [_VERDICT]}).status_code == 502
     assert published_events == []
 
 
 def test_missed_issues_reported_edited_and_removed_are_recorded(repos, published_events) -> None:
-    reviews_repo, _ = repos
+    findings_repo, _ = repos
     client.post(f"/cases/{CASE_ID}/finding-reviews/missed", json={
         "scope": "document", "document_id": DOCUMENT_ID, "check_name": "metadata_tool", "note": "Author was edited",
     })
-    reviews_repo.get.return_value = _review(kind="missed", verdict=None, finding_id=None, check_name="metadata_tool")
+    findings_repo.get_review.return_value = _review(kind="missed", verdict=None, fingerprint=None, check_name="metadata_tool")
     client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={"check_name": "font_consistency_tool"})
     client.delete(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}")
     assert [(event.type, event.document_id, event.actor) for event in published_events] == [
@@ -275,21 +286,21 @@ def test_missed_issues_reported_edited_and_removed_are_recorded(repos, published
 
 
 @pytest.mark.parametrize(
-    "method, path",
+    "method, path, body",
     [
-        ("GET", f"/cases/{CASE_ID}/finding-reviews"),
-        ("PUT", f"/cases/{CASE_ID}/finding-reviews/verdict"),
-        ("POST", f"/cases/{CASE_ID}/finding-reviews/missed"),
-        ("GET", "/detection-metrics"),
+        ("GET", f"/cases/{CASE_ID}/finding-reviews", None),
+        ("PUT", _VERDICTS, {"verdicts": [_VERDICT]}),
+        ("POST", f"/cases/{CASE_ID}/finding-reviews/missed", {"scope": "case", "check_name": "identity_entity_conflict"}),
     ],
 )
-def test_with_finding_reviews_turned_off_nothing_is_read_or_saved(repos, method, path) -> None:
-    reviews_repo, _ = repos
-    with patch("app.routers.finding_reviews.app_settings_repository") as app_settings:
-        app_settings.get_finding_reviews_enabled.return_value = False
-        response = client.request(method, path, json=_VERDICT)
+def test_a_case_created_without_reviews_takes_none(repos, method, path, body) -> None:
+    findings_repo, _ = repos
+    with patch("app.routers._dependencies.case_service") as case_service:
+        case_service.get_case.return_value = _case(reviews_required=False)
+        response = client.request(method, path, json=body)
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Finding reviews are turned off by an admin."
-    reviews_repo.list_for_case.assert_not_called()
-    reviews_repo.list_all.assert_not_called()
+    assert response.json()["detail"] == "This case was created without finding reviews."
+    findings_repo.list_reviews_for_case.assert_not_called()
+    findings_repo.set_verdict.assert_not_called()
+    findings_repo.add_missed.assert_not_called()

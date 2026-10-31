@@ -73,12 +73,12 @@ def _analysis(status: str = "complete", stale: bool = False) -> CaseAnalysis:
             contributing_findings=[
                 ContributingFinding(
                     document_id="d1", filename="uob_statement_aug.pdf", document_type="bank_statement",
-                    finding_id="f1", tool="font_consistency_tool", severity="high",
+                    finding_id="f1", fingerprint="f1", tool="font_consistency_tool", severity="high",
                     summary="Fonts change mid-page", rationale="Line 14 uses a different font from the rest.",
                     points=8,
                 ),
                 ContributingFinding(
-                    document_id="", filename="", finding_id="x1", severity="medium", source="cross_document",
+                    document_id="", filename="", finding_id="x1", fingerprint="x1", severity="medium", source="cross_document",
                     category="cross_document_variance", summary="Company name differs", rationale="", points=3,
                 ),
             ],

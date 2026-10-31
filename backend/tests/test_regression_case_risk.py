@@ -27,6 +27,7 @@ import pytest
 from app.case_pipeline.models import CrossDocFinding, FindingCategory
 from app.case_pipeline.risk.case_risk import compute_case_risk, scoring_breakdown
 from app.models import CaseRisk, DocumentRecord, DocumentStatus
+from app.finding_keys import assign_document_fingerprints
 
 FIXTURES = Path(__file__).parent / "fixtures" / "regression"
 CASE_RISK_FIXTURE = FIXTURES / "case-risk-sprint4.json"
@@ -46,8 +47,11 @@ def _finding(number: int, tool: str, severity: str, summary: str, rationale: str
 
 
 def _report(*findings: dict) -> dict:
-    return {"verdict": "flagged" if findings else "clean", "findings": list(findings),
-            "unable_to_assess": [], "consulted": []}
+    # Fingerprinted as the detection graph does when a run finishes.
+    report = {"verdict": "flagged" if findings else "clean", "findings": list(findings),
+              "unable_to_assess": [], "consulted": []}
+    assign_document_fingerprints(report)
+    return report
 
 
 # --- the scenarios -----------------------------------------------------------------

@@ -893,31 +893,40 @@ export class MockBackend {
       // 404 until the document has one, which the page shows as "none yet".
       if (method === 'GET' && rest === '/detection/report') {
         const report = this.detectionReports[documentId];
-        if (report) return json(report);
         const error = this.detectionErrors[documentId];
+        // A rerun that didn't finish leaves the earlier report standing, with why beside it.
+        if (report) return json(error ? { ...report, last_run_error: error } : report);
         return error
           ? json({ detail: `Detection failed: ${error}. Run detection again.` }, 502)
           : json({ detail: 'No detection report for this document yet.' }, 404);
       }
-      // Like the worker: the run stops, leaves its error and the document returns to approved. The page only
-      // hears of it with the next snapshot, so a test pushes one.
+      // Like routers/detection.py cancel_document_detection and the worker. A run in flight stops and leaves its
+      // error; the document returns to detected when an earlier report still stands, else to approved. The page
+      // only hears of it with the next snapshot, so a test pushes one. A run still waiting for a worker (approved,
+      // nothing stored) is cancelled at once ("cancelled").
       if (method === 'POST' && rest === '/detection/cancel') {
-        if (document.status !== 'detecting') {
+        const queued =
+          document.status === 'approved' && !this.detectionReports[documentId] && !this.detectionErrors[documentId];
+        if (document.status !== 'detecting' && !queued) {
           return json({ detail: 'No detection run is currently in progress for this document.' }, 409);
         }
         this.detectionErrors[documentId] = 'Cancelled by loan officer';
-        document.status = 'approved';
+        document.status = this.detectionReports[documentId] ? 'detected' : 'approved';
         document.has_detection_error = true;
-        return json({ status: 'cancelling' });
+        return json({ status: queued ? 'cancelled' : 'cancelling' });
       }
-      // Same rules as routers/detection.py retry_document_detection: only after a cancelled or failed run that
-      // left no report, and never while one is running. The run then starts, as the detection-worker would.
+      // Same rules as routers/detection.py retry_document_detection: on an approved or detected document, after a
+      // cancelled or failed run or over a finished report, never while one runs or waits for a worker. The run
+      // then starts, as the detection-worker would.
       if (method === 'POST' && rest === '/detection/retry') {
         if (document.status === 'detecting') {
-          return json({ detail: 'Detection is already running for this document.' }, 409);
+          return json({ detail: 'Detection is already running for this document. Cancel it first.' }, 409);
         }
-        if (this.detectionReports[documentId] || !this.detectionErrors[documentId]) {
-          return json({ detail: 'Detection can only be retried after a cancelled or failed run.' }, 409);
+        if (document.status !== 'approved' && document.status !== 'detected') {
+          return json({ detail: 'Detection runs only on an approved document.' }, 409);
+        }
+        if (!this.detectionReports[documentId] && !this.detectionErrors[documentId]) {
+          return json({ detail: 'Detection is already queued for this document. Cancel it first.' }, 409);
         }
         delete this.detectionErrors[documentId];
         document.status = 'detecting';

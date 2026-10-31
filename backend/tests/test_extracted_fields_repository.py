@@ -6,8 +6,15 @@ from app import extracted_fields_repository
 from app.fraud_detection.font_consistency import ExtractedField
 
 
-def test_replace_extracted_fields_deletes_then_inserts_one_row_per_field() -> None:
-    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+def _saved(mock_service) -> tuple[str, list[dict]]:
+    """(the document id, the rows) the save handed to the replace_extracted_fields function."""
+    name, params = mock_service.return_value.rpc.call_args.args
+    assert name == "replace_extracted_fields"
+    return params["p_document_id"], params["p_rows"]
+
+
+def test_replace_extracted_fields_saves_one_row_per_field_in_one_call() -> None:
+    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
         extracted_fields_repository.replace_extracted_fields(
             "doc-1",
             {"individual_name": "Jane Tan", "net_pay": 5000, "loan_purpose": "renovation"},
@@ -15,11 +22,8 @@ def test_replace_extracted_fields_deletes_then_inserts_one_row_per_field() -> No
             required_field_names={"individual_name", "net_pay"},
         )
 
-        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with(
-            "document_id", "doc-1"
-        )
-
-        inserted_rows = mock_client.table.return_value.insert.call_args[0][0]
+        document_id, inserted_rows = _saved(mock_service)
+        assert document_id == "doc-1"
         assert len(inserted_rows) == 3
 
         by_name = {row["field_name"]: row for row in inserted_rows}
@@ -31,12 +35,11 @@ def test_replace_extracted_fields_deletes_then_inserts_one_row_per_field() -> No
         assert by_name["loan_purpose"]["field_category"] == "additional"
 
         for row in inserted_rows:
-            assert row["document_id"] == "doc-1"
             assert row["confidence"] == 0.9
 
 
 def test_replace_extracted_fields_uses_per_field_confidence_with_fallback() -> None:
-    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
         extracted_fields_repository.replace_extracted_fields(
             "doc-1",
             {"bank_name": "OCBC", "account_number": "1234", "loan_purpose": "renovation"},
@@ -45,7 +48,7 @@ def test_replace_extracted_fields_uses_per_field_confidence_with_fallback() -> N
             required_field_names={"bank_name", "account_number"},
         )
 
-        inserted_rows = mock_client.table.return_value.insert.call_args[0][0]
+        _, inserted_rows = _saved(mock_service)
         by_name = {row["field_name"]: row for row in inserted_rows}
         # Fields the LLM gave a confidence for keep their own number...
         assert by_name["bank_name"]["confidence"] == 0.98
@@ -55,20 +58,17 @@ def test_replace_extracted_fields_uses_per_field_confidence_with_fallback() -> N
         assert by_name["loan_purpose"]["confidence"] == 0.7
 
 
-def test_replace_extracted_fields_skips_insert_when_no_fields() -> None:
-    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+def test_replace_extracted_fields_with_no_fields_clears_the_set() -> None:
+    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
         extracted_fields_repository.replace_extracted_fields(
             "doc-1", {}, default_confidence=0.0, required_field_names=set()
         )
 
-        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with(
-            "document_id", "doc-1"
-        )
-        mock_client.table.return_value.insert.assert_not_called()
+        assert _saved(mock_service) == ("doc-1", [])
 
 
 def test_replace_extracted_fields_infers_types_for_lists_dicts_and_null() -> None:
-    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
+    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
         extracted_fields_repository.replace_extracted_fields(
             "doc-1",
             {
@@ -81,7 +81,7 @@ def test_replace_extracted_fields_infers_types_for_lists_dicts_and_null() -> Non
             required_field_names={"transactions"},
         )
 
-        inserted_rows = mock_client.table.return_value.insert.call_args[0][0]
+        _, inserted_rows = _saved(mock_service)
         by_name = {row["field_name"]: row for row in inserted_rows}
         assert by_name["transactions"]["field_type"] == "array"
         assert by_name["metadata_blob"]["field_type"] == "object"
@@ -166,11 +166,14 @@ def test_get_extracted_fields_for_documents_groups_rows_by_document_id() -> None
                 "confidence": 0.8,
             },
         ]
-        mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = result
+        def fetch_all(query, order_column):
+            query()
+            return result.data
 
-        by_document = extracted_fields_repository.get_extracted_fields_for_documents(
-            ["doc-1", "doc-2"]
-        )
+        with patch("app.extracted_fields_repository.fetch_all", side_effect=fetch_all):
+            by_document = extracted_fields_repository.get_extracted_fields_for_documents(
+                ["doc-1", "doc-2"]
+            )
 
         mock_client.table.assert_called_once_with("extracted_fields")
         mock_client.table.return_value.select.assert_called_once_with("*")
@@ -222,35 +225,6 @@ def test_delete_extracted_field_scopes_delete_to_its_own_document() -> None:
         delete_query = mock_client.table.return_value.delete.return_value
         delete_query.eq.assert_called_once_with("id", "field-1")
         delete_query.eq.return_value.eq.assert_called_once_with("document_id", "doc-1")
-
-
-def test_delete_fields_for_document_removes_every_row_for_that_document() -> None:
-    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
-        mock_client = mock_service.return_value
-        extracted_fields_repository.delete_fields_for_document("doc-1")
-
-    mock_client.table.assert_called_with("extracted_fields")
-    mock_client.table.return_value.delete.return_value.eq.assert_called_once_with(
-        "document_id", "doc-1"
-    )
-
-
-def test_delete_fields_for_documents_batches_the_delete_for_many_documents() -> None:
-    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
-        mock_client = mock_service.return_value
-        extracted_fields_repository.delete_fields_for_documents(["doc-1", "doc-2"])
-
-    mock_client.table.assert_called_with("extracted_fields")
-    mock_client.table.return_value.delete.return_value.in_.assert_called_once_with(
-        "document_id", ["doc-1", "doc-2"]
-    )
-
-
-def test_delete_fields_for_documents_is_a_noop_for_an_empty_list() -> None:
-    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
-        extracted_fields_repository.delete_fields_for_documents([])
-
-    mock_service.assert_not_called()
 
 
 def test_normalise_field_name_lowercases_and_joins_with_underscores() -> None:

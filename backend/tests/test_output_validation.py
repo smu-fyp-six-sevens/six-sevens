@@ -246,7 +246,7 @@ async def test_a_lead_reply_that_is_not_json_gives_default_briefs_and_no_second_
 
 def _risk() -> CaseRisk:
     finding = ContributingFinding(
-        document_id="d", filename="f.pdf", finding_id="f1", severity="medium", summary="s", rationale="r",
+        document_id="d", filename="f.pdf", finding_id="f1", fingerprint="f1", severity="medium", summary="s", rationale="r",
         points=5, category="cross_document_variance",
     )
     return CaseRisk(state="scored", level="Medium", score=40, points=5, contributing_findings=[finding])

@@ -13,7 +13,7 @@ from app.case_pipeline.cross_document import agents
 from app.case_pipeline.cross_document.evidence import CaseContext
 from app.langgraph import _anthropic, pipeline
 from app.langgraph.detection import specialists
-from app.llm_io import ModelRefused, refusal_reason, without_thinking
+from app.llm_io import ModelRefused, refusal_reason, thinking_summaries
 
 _REFUSAL = {"stop_reason": "refusal", "stop_details": {"type": "refusal", "category": "cyber", "explanation": None}}
 
@@ -123,25 +123,27 @@ async def test_a_specialist_out_of_tool_budget_keeps_its_tools_but_cannot_call_t
     assert result["messages"][-1].content == "{}"
 
 
-def test_a_conversation_can_drop_its_thinking_and_keep_everything_else():
-    call = {"name": "vision_llm", "args": {}, "id": "1", "type": "tool_call"}
-    turn = AIMessage(
-        content=[
-            {"type": "thinking", "thinking": "", "signature": "abc"},
-            {"type": "redacted_thinking", "data": "xyz"},
-            {"type": "text", "text": "Looking."},
-            {"type": "tool_use", "name": "vision_llm", "input": {}, "id": "1"},
-        ],
-        tool_calls=[call],
-    )
-    question = HumanMessage(content="go")
+def test_the_thinking_summaries_of_a_reply_are_read_for_the_traces():
+    turn = AIMessage(content=[
+        {"type": "thinking", "thinking": "The totals differ by one row.", "signature": "abc"},
+        {"type": "thinking", "thinking": "  ", "signature": "def"},
+        {"type": "redacted_thinking", "data": "xyz"},
+        {"type": "text", "text": "Looking."},
+    ])
 
-    kept_question, stripped = without_thinking([question, turn])
+    assert thinking_summaries(turn) == ["The totals differ by one row."]
+    assert thinking_summaries(AIMessage(content="plain text")) == []
 
-    assert kept_question is question
-    assert [block["type"] for block in stripped.content] == ["text", "tool_use"]
-    assert stripped.tool_calls == turn.tool_calls
-    assert turn.content[0]["type"] == "thinking"  # the state's own message is left as it was
+
+def test_every_request_asks_for_thinking_summaries_and_a_forced_tool_survives():
+    tool = {"name": "t", "description": "d", "input_schema": {"type": "object", "properties": {}}}
+    model = _model("claude-haiku-5-5", "low")
+    bound = model.bind_tools([tool], tool_choice="any")
+
+    payload = model._get_request_payload([HumanMessage(content="hi")], **bound.kwargs)  # type: ignore[attr-defined]
+
+    assert payload["thinking"] == {"type": "adaptive", "display": "summarized"}
+    assert payload["tool_choice"] == {"type": "any"}
 
 
 # --- the cross-document agent asks for its tool ----------------------------------------------------

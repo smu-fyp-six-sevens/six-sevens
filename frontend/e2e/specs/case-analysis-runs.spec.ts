@@ -23,7 +23,7 @@ const EARLIER = 'run-1';
 function contributing(overrides: Partial<CaseRiskFinding> & Pick<CaseRiskFinding, 'document_id' | 'finding_id'>): CaseRiskFinding {
   return {
     filename: 'document.pdf', document_type: null, tool: null, check_code: null, severity: 'medium', summary: '',
-    rationale: '', points: 0, unreviewed: false, fingerprint: 'fp-1', category: null, source: 'document', repeat_of: null,
+    rationale: '', points: 0, unreviewed: false, fingerprint: `fp-${overrides.finding_id}`, category: null, source: 'document', repeat_of: null,
     also_on: 0, ...overrides,
   };
 }
@@ -38,7 +38,7 @@ const payslip = contributing({
 });
 const risk: CaseRisk = {
   state: 'scored', level: 'High', score: 48, points: 20, documents_scanned: 2, documents_total: 2,
-  contributing_findings: [crossDocument, payslip], unassessed_checks: [], reasons: [],
+  contributing_findings: [crossDocument, payslip], dismissed_findings: [], unassessed_checks: [], reasons: [],
 };
 
 function analysis(runId: string, overrides: Partial<CaseAnalysis> = {}): CaseAnalysis {
@@ -48,6 +48,7 @@ function analysis(runId: string, overrides: Partial<CaseAnalysis> = {}): CaseAna
     findings: [{
       id: 'xdoc-1', hypothesis_id: 'h1', summary: ADDRESS, rationale: 'The two addresses differ.', severity: 'high',
       category: 'cross_document_variance', citations: [], document_ids: ['doc-bizfile'], probe_summary: '', breach_flags: [], confidence: 0.8,
+      fingerprint: 'fp-xdoc-1',
     }],
     ...overrides,
   });

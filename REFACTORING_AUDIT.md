@@ -71,7 +71,7 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 ## 4. Deletes, the audit trail and the schema
 
-Checked 2026-10-27 by reading the code and PostgREST's table listing (no rows read). The listing doesn't show grants, RLS or foreign-key delete rules; the two queries below do (Supabase SQL editor).
+The delete rules are in `backend/sql/schema.sql` (every table keyed by a document or a case cascades from it). Grants and RLS aren't: the query below shows them (Supabase SQL editor).
 
 **What a delete removes:**
 - A document: by cascade, `extracted_fields`, `findings`, `langgraph_trace`, `detection_results` and its `case_notes`; the code removes its stored file (best effort) and the cross-document findings resting on it (`document_repository._delete_document_children`).
@@ -80,18 +80,15 @@ Checked 2026-10-27 by reading the code and PostgREST's table listing (no rows re
 
 | # | Finding | Fix | Effort |
 |---|---|---|---|
-| 1 | **`case_status_history` blocks a case delete** if it has rows: it has a foreign key to `cases` and nothing clears it (no code on any branch uses the table; it belongs to other developers) | Check the delete rule; clear it in `delete_case`, or cascade | S |
 | 2 | **Delete audit events are fire-and-forget** (`events.record`): if publishing fails, the delete stands with no audit row. A case delete logs one `case.deleted` with a count, not a `document.deleted` per document | `publish` for deletes (fail the request), or accept; per-document events on case delete | S |
 | 3 | **`audit_events` can't be edited or removed only if grants say so.** `audit.py` says the service role has INSERT and SELECT only; Supabase's default gives `service_role` everything, so this holds only if someone revoked it by hand. The dashboard owner can always delete. No retention policy | Run the grants query; revoke UPDATE and DELETE if missing | S |
-| 4 | **Deletes aren't a transaction:** a failure partway leaves the rest (a retry finishes the job). A stored file that fails to delete is only logged, so it stays in storage | Accept; or a Postgres function per delete once the schema is in the repo | M, later |
+| 4 | **A delete's steps outside the database aren't in its transaction:** the cross-document findings citing a document go first, then the stored files, then the row (whose cascades are atomic). A failure partway leaves the row (a retry finishes the job); a stored file that fails to delete is only logged, so it stays in storage | Accept | - |
 
 ```sql
 select grantee, privilege_type from information_schema.role_table_grants where table_name = 'audit_events';
-select conrelid::regclass as tbl, conname, confdeltype from pg_constraint where contype = 'f';  -- c = cascade, a/r = blocks
 ```
 
-**Unused schema on `main`** (rows read on 2026-10-30; STABILITY_AUDIT §2 has the rest):
-- Written by an unmerged branch, unknown to `main`: every `cases.status` value except `open` (STABILITY_AUDIT D1).
+**Unused schema** (read 2026-10-30):
 - Written, never read: `risk_scores.scored_at`, `extracted_fields.field_category` and `extracted_at`.
 
 ---

@@ -726,12 +726,12 @@ def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.extracted_fields_repository") as fields_repo,
-        patch("app.case_service.langgraph_trace") as trace,
+        patch("app.case_service.detection_results") as trace,
         patch("app.case_service.analysis_repository") as analyses,
     ):
         case_repo.get_case.return_value = _case()
         doc_repo.list_documents.return_value = docs
-        trace.get_detection_states.return_value = ({}, set())
+        trace.get_states.return_value = ({}, set())
         analyses.get_latest_summary.return_value = None
         # Enrichment rewrites extracted_fields into {value, confidence}
         # wrappers — the case match must not see that shape.

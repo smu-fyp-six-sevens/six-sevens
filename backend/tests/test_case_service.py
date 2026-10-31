@@ -9,7 +9,6 @@ from app.case_service import (
     _enrich_with_extracted_fields,
     compute_documents_status,
     compute_requirement_coverage,
-    sync_submission_finalized,
 )
 from app.fraud_detection.font_consistency import ExtractedField
 from app.config import settings
@@ -551,54 +550,13 @@ def _make_fully_covered_documents() -> list[DocumentRecord]:
     ]
 
 
-class _FakeCases:
-    """Holds the one thing sync_submission_finalized writes: each case's stored flag."""
+def test_a_case_with_every_requirement_met_has_nothing_missing() -> None:
+    _, missing = compute_requirement_coverage(_make_fully_covered_documents())
 
-    def __init__(self) -> None:
-        self.finalized: dict[str, bool] = {}
-        self.writes = 0
-
-    def set_submission_finalized(self, case_id: str, finalized: bool) -> None:
-        self.finalized[case_id] = finalized
-        self.writes += 1
+    assert missing == []
 
 
-class _FakeDocuments:
-    def __init__(self, documents: list[DocumentRecord]) -> None:
-        self.documents = documents
-        self.reads = 0
-
-    def list_documents(self, case_id=None, **_) -> list[DocumentRecord]:
-        self.reads += 1
-        return self.documents
-
-
-def _sync_with(documents: list[DocumentRecord], cases: _FakeCases, times: int = 1) -> _FakeDocuments:
-    store = _FakeDocuments(documents)
-    with patch("app.case_service.document_repository", store), patch("app.case_service.case_repository", cases):
-        for _ in range(times):
-            sync_submission_finalized("case-1")
-    return store
-
-
-def test_a_case_with_every_requirement_met_is_stored_as_finalized() -> None:
-    cases = _FakeCases()
-    _sync_with(_make_fully_covered_documents(), cases)
-
-    assert cases.finalized == {"case-1": True}
-
-
-def test_an_unchanged_answer_is_written_once_however_often_it_is_synced() -> None:
-    cases = _FakeCases()
-    store = _sync_with(_make_fully_covered_documents(), cases, times=3)
-
-    # Three syncs and one unchanged answer: one write (and one Realtime event), though every sync re-reads.
-    assert cases.finalized == {"case-1": True}
-    assert cases.writes == 1
-    assert store.reads == 3
-
-
-def test_a_case_missing_a_requirement_is_stored_as_not_finalized() -> None:
+def test_a_case_missing_a_requirement_lists_it() -> None:
     documents = [
         _make_document(
             "doc-1",
@@ -607,26 +565,22 @@ def test_a_case_missing_a_requirement_is_stored_as_not_finalized() -> None:
             fulfilled_requirements=["bank_statement"],
         )
     ]
-    cases = _FakeCases()
-    _sync_with(documents, cases)
 
-    assert cases.finalized == {"case-1": False}
+    _, missing = compute_requirement_coverage(documents)
+
+    assert missing and set(missing) <= set(REQUIRED_DOCUMENT_TYPES)
 
 
-def test_a_finalized_case_flips_back_when_coverage_drops() -> None:
-    """A /retry that reclassifies a document away from a requirement nothing else covers must undo a stale True."""
-    cases = _FakeCases()
-    _sync_with(_make_fully_covered_documents(), cases)
-    assert cases.finalized == {"case-1": True}
-
+def test_coverage_drops_when_a_document_is_reclassified_away() -> None:
+    """A /retry that reclassifies a document away from a requirement nothing else covers leaves it missing again."""
+    dropped = _make_fully_covered_documents()
     # doc-0 (the bank statement, not the identity document) is reclassified away: its requirements go empty,
     # leaving the NRIC's own address-based proof_of_address coverage untouched.
-    dropped = _make_fully_covered_documents()
     dropped[0] = dropped[0].model_copy(update={"fulfilled_requirements": []})
-    _sync_with(dropped, cases)
 
-    assert cases.finalized == {"case-1": False}
-    assert cases.writes == 2
+    _, missing = compute_requirement_coverage(dropped)
+
+    assert missing != []
 
 
 def test_required_and_additional_requirements_are_distinct() -> None:
@@ -641,18 +595,10 @@ def test_required_and_additional_requirements_are_distinct() -> None:
     assert "notice_of_assessment" in REQUIRED_DOCUMENT_TYPES
 
 
-def test_case_finalizes_without_additional_document() -> None:
+def test_case_is_complete_without_additional_document() -> None:
     """AC2: a case with every required document is complete, additional or not."""
     documents = _make_fully_covered_documents()
     assert not any(doc.document_type in ADDITIONAL_DOCUMENT_TYPES for doc in documents)
-
-    with (
-        patch("app.case_service.document_repository") as mock_doc_repo,
-        patch("app.case_service.case_repository") as mock_case_repo,
-    ):
-        mock_doc_repo.list_documents.return_value = documents
-        sync_submission_finalized("case-1")
-        mock_case_repo.set_submission_finalized.assert_called_once_with("case-1", finalized=True)
 
     _, missing = compute_requirement_coverage(documents)
     assert missing == []

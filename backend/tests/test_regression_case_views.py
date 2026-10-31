@@ -25,6 +25,7 @@ from app.case_pipeline.risk.case_risk import compute_case_risk
 from app.case_pipeline.risk.outlook import build_outlook
 from app.case_pipeline.risk.supporting_documents import recommend_supporting_documents
 from app.models import DocumentRecord, DocumentStatus, RoutingStatus
+from app.finding_keys import assign_document_fingerprints
 
 CASE_VIEWS_FIXTURE = Path(__file__).parent / "fixtures" / "regression" / "case-views.json"
 _UPLOADED = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -44,8 +45,11 @@ def _finding(number: int, tool: str, severity: str, summary: str, rationale: str
 
 
 def _report(*findings: dict, unable: tuple[dict, ...] = ()) -> dict:
-    return {"verdict": "flagged" if findings else "clean", "findings": list(findings),
-            "unable_to_assess": list(unable), "consulted": []}
+    # Fingerprinted as the detection graph does when a run finishes.
+    report = {"verdict": "flagged" if findings else "clean", "findings": list(findings),
+              "unable_to_assess": list(unable), "consulted": []}
+    assign_document_fingerprints(report)
+    return report
 
 
 def scored_case_view() -> dict:

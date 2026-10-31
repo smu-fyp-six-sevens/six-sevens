@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import ANY, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -101,7 +101,7 @@ def test_a_case_cannot_be_created_with_a_company_name_over_100_characters():
         exactly_100 = client.post("/cases", json={"company_name": "A" * 100})
 
     assert too_long.status_code == 422
-    service.create_case.assert_called_once_with("A" * 100, ANY)
+    service.create_case.assert_called_once_with("A" * 100, reviews_required=True)
     assert exactly_100.status_code == 201
 
 

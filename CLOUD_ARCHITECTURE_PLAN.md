@@ -31,7 +31,7 @@ The award requirement is a *genuinely* decoupled architecture, not a monolith on
 |---|---|---|---|---|
 | **api** | via Kong | HTTP | Reads, login, officer commands (publish events), uploads (ingestion lives here), WebSocket live updates, case match, notes | 1 CPU, 1 GiB, max 3 |
 | **doc-worker** | no | `document.uploaded`, `retyped`, `retry_requested`, `cancelled`; its recoveries | OCR, classify, extract, reclassify loop | 2 CPU, 4 GiB, 2 at once, max 3 |
-| **detection-worker** | no | `document.approved`, detection retry and cancel; its recoveries | Lead agent, 3 specialists, 10 checks, flags | 2 CPU, 4 GiB, 2 at once, max 3; carries the zoning index |
+| **detection-worker** | no | `document.approved`, detection retry and cancel; its recoveries | Lead agent, 3 specialists, 10 checks, findings | 2 CPU, 4 GiB, 2 at once, max 3; carries the zoning index |
 | **case-worker** | no | `case.analysis.requested`; its recoveries | Cross-document analysis, deterministic risk score, summary | 1 CPU, 2 GiB, max 2 |
 | **audit-metrics** | via Kong (`/audit`) | every event | Stores each event in `audit_events`; serves the audit trail and per-case cost; runs the sweeper | 1 CPU, 1 GiB, max 2 |
 | **kong** | public | HTTP | The single entry point (section 4) | |
@@ -49,7 +49,7 @@ One topic, `domain-events`, plus `domain-events-dead-letter` (and a pull subscri
 - **Kong's request id** goes into `detail`, so one request can be followed through the audit trail.
 - **Traces:** each message carries a W3C `traceparent`, so an upload is one trace in Cloud Trace across services.
 
-**One writer per transition:** `documents` up to `queued` and officer actions: api. `queued` to `analyzed`/`failed`/`cancelled` and extracted fields: doc-worker. `approved` to `detected`, flags, the detection trace: detection-worker. `case_analysis_runs`, `risk_scores`: case-worker. `audit_events`: audit-metrics only. Recovery of a stuck stage: the worker that owns it (the sweeper only publishes). `cases.submission_finalized` stays debounced in api: each request runs any pending refresh before returning (`flush_pending_syncs`), because Cloud Run throttles CPU after a response.
+**One writer per transition:** `documents` up to `queued` and officer actions: api. `queued` to `analyzed`/`failed`/`cancelled` and extracted fields: doc-worker. `approved` to `detected`, `detection_results`, the document's findings, the detection trace: detection-worker. The case's cross-document findings: case-worker. `case_analysis_runs`, `risk_scores`: case-worker. `audit_events`: audit-metrics only. Recovery of a stuck stage: the worker that owns it (the sweeper only publishes). The case's stage (`cases.status`, `case_stage.sync_case_stage`) is debounced in api: each request runs any pending refresh before returning (`document_repository.flush_syncs`), because Cloud Run throttles CPU after a response.
 
 ## 4. Gateway (Kong)
 
@@ -183,7 +183,7 @@ Cost: about $0 idle and cents per merge or night (Cloud Run and Supabase only; n
 
 **The split locally** (opt-in): `docker compose up --build` (stop uvicorn first; Kong takes :8000), then `npm run dev`. Containers: the Pub/Sub emulator plus `pubsub-init` (creates the topic and subscriptions, then exits), Kong, api, one `workers` container running the three workers (to save memory) and audit-metrics: about 3.5 GB. `--profile frontend` adds the nginx build on :5173. To debug the workers in the IDE: `PUSH_HOST=host.docker.internal PUSH_PORT=8001 docker compose up --build --scale workers=0`, then run uvicorn on :8001 from `backend/` with `ROLE=doc-worker,detection-worker,case-worker EVENT_TRANSPORT=pubsub PUBSUB_EMULATOR_HOST=localhost:8085 GOOGLE_CLOUD_PROJECT=local`. The emulator has no OIDC or IAM, so `/push` takes unsigned requests locally.
 
-**Walkthrough before a risky change** (real Supabase and Claude): upload a document (reaches `analyzed`), approve it (`detected`, flags appear), run case analysis (score and summary), read `GET /audit/events?case_id=<id>`; `docker compose restart workers` mid-detection (the run returns to `approved`, is redelivered, still reaches `detected`); stop and start audit-metrics (missed events appear); `docker compose run --rm pubsub-init python -m app.events.emulator_setup --poison` (retried, then dead-lettered).
+**Walkthrough before a risky change** (real Supabase and Claude): upload a document (reaches `analyzed`), approve it (`detected`, findings appear), run case analysis (score and summary), read `GET /audit/events?case_id=<id>`; `docker compose restart workers` mid-detection (the run returns to `approved`, is redelivered, still reaches `detected`); stop and start audit-metrics (missed events appear); `docker compose run --rm pubsub-init python -m app.events.emulator_setup --poison` (retried, then dead-lettered).
 
 **Deploying:** push to `main`. Manual rollback: `gcloud run services update-traffic <service> --to-revisions=<revision>=100 --region asia-southeast1`. Configuration changes go in Terraform (`main.tf`, then `apply`); a changed subscription needs `python -m app.events.types`, then `apply`.
 

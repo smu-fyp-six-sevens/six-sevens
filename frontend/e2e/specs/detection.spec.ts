@@ -182,6 +182,47 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toBeVisible();
   });
 
+  test('a scanned document can be run again; a cancelled rerun leaves the earlier report standing @SCRUM-299', async ({ page, backend }) => {
+    const { fixture, document } = creditReport(backend);
+    document.status = 'detected';
+    backend.detectionReports[document.id] = { ...C028_REPORT, document_id: document.id };
+    await page.goto(fixture.documentUrl(document));
+    await expect(detectionPanel(page)).toContainText('Verdict: FLAGGED');
+    await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toHaveCount(0);
+
+    // Running again asks first: it costs a full run and replaces the report and findings.
+    await detectionPanel(page).getByRole('button', { name: 'Run detection again' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Run detection again?');
+    await dialog.getByRole('button', { name: 'Run again' }).click();
+    await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/detection/retry`).length).toBe(1);
+
+    backend.push(document.case_id!);
+    await expect(documentStatus(page)).toHaveText('Scanning…');
+    await expect(detectionPanel(page)).toContainText('the report below is from the previous run');
+    await detectionPanel(page).getByRole('button', { name: 'Cancel detection' }).click();
+    expect(backend.requestsTo('POST', `/documents/${document.id}/detection/cancel`)).toHaveLength(1);
+
+    // The rerun stopped: the document is back to scanned, on the earlier report, which says the last run didn't finish.
+    backend.push(document.case_id!);
+    await expect(detectionPanel(page)).toContainText('The last run did not finish');
+    await expect(detectionPanel(page)).toContainText('Verdict: FLAGGED');
+    await expect(detectionPanel(page).getByRole('button', { name: 'Run detection again' })).toBeVisible();
+  });
+
+  test('a scan still waiting for a worker can be cancelled at once @SCRUM-299', async ({ page, backend }) => {
+    const { fixture, document } = creditReport(backend);
+    document.status = 'approved';
+    await page.goto(fixture.documentUrl(document));
+    await expect(detectionPanel(page)).toContainText('Scanning…');
+
+    await detectionPanel(page).getByRole('button', { name: 'Cancel detection' }).click();
+
+    // Nothing was running, so there is nothing to wait for: the panel offers a retry straight away.
+    await expect(detectionPanel(page).getByRole('button', { name: 'Retry detection' })).toBeVisible();
+    await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toHaveCount(0);
+  });
+
   test('MA-011 detection does not run on a rejected document @MA-011', async ({ page, backend }) => {
     const { fixture, document } = creditReport(backend);
     await page.goto(fixture.documentUrl(document));
