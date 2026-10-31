@@ -75,7 +75,7 @@ def _with_thinking_summaries(chat_class: Any) -> Any:
         return chat_class
     if chat_class not in _summarising:
 
-        class SummarisingChatAnthropic(chat_class):  # type: ignore[valid-type, misc]
+        class SummarisingChatAnthropic(chat_class):
             def _get_request_payload(self, input_: Any, *, stop: Any = None, **kwargs: Any) -> dict:
                 payload = super()._get_request_payload(input_, stop=stop, **kwargs)
                 payload["thinking"] = {**(payload.get("thinking") or {"type": "adaptive"}), "display": "summarized"}
