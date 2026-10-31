@@ -14,8 +14,8 @@ from datetime import datetime, timezone
 from typing import Any, cast
 
 from .. import (
-    audit, case_repository, case_stage, detection_results, document_repository, events, finding_reviews_repository,
-    read_pool,
+    audit, case_repository, case_stage, detection_results, document_repository, events, finding_keys,
+    findings_repository, read_pool,
 )
 from ..config import settings
 from ..snapshots import push_case_snapshot
@@ -154,6 +154,7 @@ async def _execute(
                                           for k, v in context.docs.items()})
         result = await run_cross_document_analysis(context)
         findings = result.get("findings") or []
+        finding_keys.assign_case_fingerprints(findings)
         trace.save()
 
         risk = compute_case_risk(documents, reports, failed_ids, findings)
@@ -233,11 +234,11 @@ async def _store_result(analysis: CaseAnalysis) -> None:
     """Saves a finished run; only the case's newest complete run also updates the case's score and requested documents."""
     published = await asyncio.to_thread(repository.finish_run, analysis)
     if published and analysis.status == "complete":
-        # Officers' reviews of cross-document findings named the previous run's findings, which this one replaces.
+        # The run (case_analysis_runs) is the source of truth, so a failure here is logged, not raised.
         try:
-            await asyncio.to_thread(finding_reviews_repository.clear_case_scope, analysis.case_id)
+            await asyncio.to_thread(findings_repository.sync_case, analysis.case_id, analysis.findings)
         except Exception:
-            logger.exception("Failed to clear the previous analysis's finding reviews for case %s", analysis.case_id)
+            logger.exception("Failed to store the case analysis findings of case %s", analysis.case_id)
         # The case list reads the score from here rather than opening every run.
         await asyncio.to_thread(risk_store.save, analysis.case_id, analysis.risk)
         await asyncio.to_thread(

@@ -30,6 +30,9 @@ export type CaseRisk = Omit<Schemas['CaseRisk'], 'contributing_findings'> & {
   contributing_findings: CaseRiskFinding[];
 };
 
+// A tool's finding a specialist dismissed as a false positive: never scored, listed for the officer's review.
+export type DismissedFinding = Schemas['DismissedFinding'];
+
 export type SupportingDocumentRecommendation = Schemas['SupportingDocumentRecommendation'];
 export type RecommendationItem = Schemas['RecommendationItem'];
 
@@ -146,6 +149,8 @@ export interface DetectionReport {
   // Checks the document had nothing for (no images, no metadata, no dates): a pass, shown for the record.
   nothing_to_check: { specialist: string; tool: string | null; reason: string | null }[];
   generated_at: string;
+  // Set when a later run crashed or was cancelled: this report, from the run before, still stands.
+  last_run_error?: string;
 }
 
 export type IndividualCheckId =
@@ -216,4 +221,3 @@ export type CaseFindingReviews = Omit<Schemas['CaseFindingReviews'], 'checks'> &
   checks: Record<ReviewScope, string[]>;
 };
 export type DetectionMetrics = Schemas['DetectionMetrics'];
-export type AppSettings = Schemas['AppSettings'];

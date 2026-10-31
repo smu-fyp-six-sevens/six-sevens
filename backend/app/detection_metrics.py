@@ -1,9 +1,10 @@
 """
-Precision and recall per detection check, from loan officers' reviews of findings (finding_reviews table).
+Precision and recall per detection check, from loan officers' reviews of findings (the findings table).
 
 A reviewed finding is a true positive when the officer marked it correct and a false positive when marked
-wrong. A missed issue (something real that no finding raised) is a false negative for the check that should
-have caught it. So, per check:
+wrong. A false negative is something real the system didn't flag: a missed issue (no finding raised it) against
+the check that should have caught it, or a finding the specialists dismissed that the officer marked correct (a
+dismissal marked wrong was right to go, and counts for neither). So, per check:
 
 * precision = correct / (correct + wrong)    None when none of the check's findings were reviewed
 * recall    = correct / (correct + missed)   None when there was nothing the check should have caught
@@ -65,6 +66,9 @@ def summarize(reviews: Iterable[FindingReview]) -> MetricsSummary:
         bucket = counts[(review.scope, review.check_name)]
         if review.kind == "missed":
             bucket["missed"] += 1
+        elif review.agent_decision == "dismissed":
+            if review.verdict == "correct":
+                bucket["missed"] += 1
         elif review.verdict in ("correct", "wrong"):
             bucket[review.verdict] += 1
 

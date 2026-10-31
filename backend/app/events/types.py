@@ -17,6 +17,9 @@ DOCUMENT_TYPE_CORRECTED = "document.type_corrected"
 DOCUMENT_FIELD_EDITED = "document.field_edited"
 DOCUMENT_MOVED = "document.moved"
 DOCUMENT_DELETED = "document.deleted"
+# A classify/extract run an officer's cancel stopped, with what it had spent on Claude (workers/documents.py):
+# audit only, for the case's cost.
+DOCUMENT_RUN_STOPPED = "document.run_stopped"
 
 DETECTION_RETRY_REQUESTED = "detection.retry_requested"
 DETECTION_CANCEL_REQUESTED = "detection.cancel_requested"

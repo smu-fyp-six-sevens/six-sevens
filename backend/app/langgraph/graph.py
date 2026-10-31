@@ -13,7 +13,6 @@ No checkpointer yet (see PENDING_WORK.md).
 from __future__ import annotations
 
 from langgraph.graph import END, StateGraph
-from langgraph.prebuilt import ToolNode
 
 from . import classify_graph, nodes
 from .classify_graph import get_classify_graph
@@ -76,10 +75,7 @@ def build_document_graph():
     graph.add_node("record_escalation", nodes.record_escalation_node)
     graph.add_node("prepare_reclassify", classify_graph.prepare_reclassify_node)
     graph.add_node("reclassify_agent", classify_graph.agent_node)
-    graph.add_node(
-        "reclassify_tools",
-        ToolNode(classify_graph._TOOLS, messages_key="agent_messages", handle_tool_errors=True),
-    )
+    graph.add_node("reclassify_tools", classify_graph.tools_node)
     graph.add_node("reclassify_validate", classify_graph.validate_node)
     graph.add_node("reclassify_repair", classify_graph.repair_node)
 

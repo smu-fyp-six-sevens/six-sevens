@@ -24,6 +24,10 @@ export async function deleteCase(caseId: string): Promise<void> {
 
 // The case report PDF (GET /cases/{id}/report.pdf) and the filename the server gave it ("GLDB-148 Case Report.pdf").
 // The name is built from the case number too, for when a proxy doesn't expose Content-Disposition.
+// What the officer sees when the report fails in a way no server message explains.
+export const REPORT_FAILED =
+  "The case report couldn't be downloaded. Try again, and tell the team if it keeps happening.";
+
 export async function downloadCaseReport(
   caseId: string,
   caseNumber?: string | null,
@@ -31,6 +35,11 @@ export async function downloadCaseReport(
   const response = await authFetch(`/cases/${caseId}/report.pdf`);
 
   await assertOk(response, 'Failed to download the case report');
+  // A 200 that isn't the PDF (a proxy's error page) would save as a broken file.
+  if (!(response.headers.get('Content-Type') ?? '').includes('application/pdf')) {
+    console.error('The case report response was not a PDF:', response.headers.get('Content-Type'), await response.text());
+    throw new Error(REPORT_FAILED);
+  }
 
   const disposition = response.headers.get('Content-Disposition') ?? '';
   const filename =

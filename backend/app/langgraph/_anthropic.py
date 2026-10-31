@@ -71,6 +71,9 @@ def build_chat_anthropic(model: str, max_tokens: int, *, effort: Effort) -> "Cha
             api_key=SecretStr(settings.ANTHROPIC_API_KEY),
             max_tokens_to_sample=max_tokens,
             effort=effort,
+            # Adaptive is the default; "summarized" returns a readable summary of the reasoning (the default leaves
+            # it empty) for the traces (llm_io.thinking_summaries). Visibility only: the thinking is the same.
+            thinking={"type": "adaptive", "display": "summarized"},
             timeout=settings.LLM_TIMEOUT_SECONDS,
             max_retries=settings.LLM_MAX_RETRIES,
             stop=None,

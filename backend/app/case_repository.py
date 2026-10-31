@@ -137,18 +137,15 @@ def update_case(case_id: str, company_name: str) -> CaseRecord | None:
 
 def delete_case(case_id: str) -> None:
     """
-    Removes the case's analysis runs, saved risk history, flags, notes and finding reviews, and then its row. Callers
-    delete its documents first. These are historical per-analysis rows, but a foreign key can prevent deleting the case
-    until they are removed.
+    Removes the case's row; the database cascades it to everything keyed by the case (documents, analysis runs,
+    risk scores, findings, notes: backend/sql/schema.sql). Callers delete its documents first, for their stored
+    files. audit_events stays.
 
     Uses the service client so row-level security cannot turn this into a
     no-op that still looks successful. An empty result means the row is
     still there.
     """
-    client = service_supabase_client()
-    for table in ("risk_scores", "case_analysis_runs", "flags", "case_notes", "finding_reviews"):
-        client.table(table).delete().eq("case_id", case_id).execute()
-    result = client.table("cases").delete().eq("id", case_id).execute()
+    result = service_supabase_client().table("cases").delete().eq("id", case_id).execute()
     if not result.data:
         raise RuntimeError(f"Case {case_id} was not deleted")
 

@@ -12,7 +12,7 @@ Detection runs in the background once a loan officer approves a document. Nothin
 4. **Merge.** Plain code combines the findings into one report with a verdict (`flagged`, `inconclusive`, `clean`), stored on the document's LangGraph trace (not the `documents` table, so the large trace loads only when needed).
 5. **Individual checks.** An officer can re-run one check from the panel, only after a full run has produced a report.
 
-**Flags.** After the report is saved, code writes each finding a specialist assessed and did not dismiss to the `flags` table (`app/flags_repository.py`), before the document becomes `detected`. A finding nobody assessed stays in the report (and counts towards case risk as "unreviewed") but is not a flag; case-level findings never are. Each flag's UUID is stamped on the finding as `flag_id`, so the report, the `flags` row and `risk_scores.flag_ids` agree. A retry replaces the document's open flags (the delete uses the service client; the backend role may only read and insert under RLS). A failed write is recorded on the trace as `flags_error` and does not fail the run.
+**Findings.** After the report is saved, code fingerprints every finding a tool returned (`app/finding_keys.py`) and writes them all, kept and dismissed, to the `findings` table (`app/findings_repository.py`, one transaction), replacing the previous run's findings and their verdicts, before the document becomes `detected`. A failed write is recorded on the trace as `findings_error` and does not fail the run. **Rerun and cancel:** an officer can cancel a run in flight or still waiting for a worker, and run detection again after a cancelled or failed run or over a finished report; a rerun that doesn't finish leaves the earlier report standing (the document returns to `detected`, and the report says the last run didn't finish).
 
 An approved "Other" (unrecognised) document is scanned like any other. Checks that need a type report "nothing to check", and layout runs in generic mode (no per-type reference). Comparing a document with the rest of its case is not done here; that is the per-case analysis (§1B).
 
@@ -88,7 +88,7 @@ Shared: `app/identifiers.py` is a leaf module (it imports neither `case_match` n
   A finding the LLM doesn't assess is kept at `medium` with `ai_accepted: false`; one it assessed and kept has `ai_accepted: true`. A tool with a severity floor (`_MIN_SEVERITY_BY_TOOL`) keeps that floor even when dismissed. Only `ai_accepted` per-document findings become flags.
 - **Per-run fetch cache (`tools.py`)**: the document row, its fields and its file are each fetched once per run. The cache holds the in-flight fetch, so parallel specialists share one; a failed fetch is dropped and retried. `load_context` primes it.
 - **`graph.py`**: the lead graph, the merge into a verdict, the lead's prompts, and `run_detection()`.
-- **`flags_repository.py`**: builds `flags` rows from a report and replaces a document's open flags.
+- **`findings_repository.py`**: builds `findings` rows from a report or a case analysis and syncs them; officers' verdicts and missed issues. **`finding_keys.py`**: the fingerprints.
 
 ## 2A. Wiring reference
 

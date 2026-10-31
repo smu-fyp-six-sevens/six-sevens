@@ -2,9 +2,10 @@
 Loan officers' reviews of detection findings, and the precision and recall per check they give.
 
 On the case page an officer marks each finding correct or wrong, per document and for the cross-document
-findings, and reports issues detection missed against the check that should have caught them. Every change
-returns the case's reviews and metrics afresh, so the page never computes them itself. Only a case created
-with reviews (cases.reviews_required) takes them.
+findings, and reports issues detection missed against the check that should have caught them. A verdict is
+stored on the finding's row (findings_repository), named by its fingerprint. Every change returns the case's
+reviews and metrics afresh, so the page never computes them itself. Only a case created with reviews
+(cases.reviews_required) takes them.
 """
 
 from __future__ import annotations
@@ -22,13 +23,13 @@ from .. import (
     detection_metrics,
     document_repository,
     events,
-    finding_reviews_repository,
+    findings_repository,
 )
 from ..auth import CurrentUser
 from ..events import officer_event, types
 from ..models import (
-    CaseFindingReviews, CaseRecord, CaseStage, DetectionMetrics, ReportMissedIssueRequest,
-    SetFindingVerdictRequest, SetFindingVerdictsRequest, UpdateMissedIssueRequest,
+    CaseFindingReviews, CaseRecord, CaseStage, DetectionMetrics, FindingReview, ReportMissedIssueRequest,
+    SetFindingVerdictsRequest, UpdateMissedIssueRequest,
 )
 from ._dependencies import bad_gateway_on_error, get_case_or_404, get_editable_case_or_404, to_thread_or_502
 from ..snapshots import push_case_snapshot
@@ -55,20 +56,30 @@ _SAVE_FAILED = "Failed to save the review. Check Supabase table access."
 
 
 async def _case_reviews(case_id: str) -> CaseFindingReviews:
-    reviews = await asyncio.to_thread(finding_reviews_repository.list_for_case, case_id)
+    reviews = await asyncio.to_thread(findings_repository.list_reviews_for_case, case_id)
     return detection_metrics.case_metrics(reviews)
 
 
-async def _check_target(case_id: str, scope: str, document_id: UUID | None, check_name: str) -> str | None:
-    """The document id as a string, after checking the document is in this case and the check fits the scope."""
-    if check_name not in detection_metrics.checks_by_scope()[scope]:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"That check can't be reviewed on a {scope}.")
+async def _document_in_case(case_id: str, document_id: UUID | None) -> str | None:
+    """The document id as a string, after checking the document is in this case."""
     if document_id is None:
         return None
     document = await asyncio.to_thread(document_repository.get_document, str(document_id), include_fields=False)
     if document is None or document.case_id != case_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found in this case")
     return str(document_id)
+
+
+def _check_fits(scope: str, check_name: str) -> None:
+    if check_name not in detection_metrics.checks_by_scope()[scope]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"That check can't be reviewed on a {scope}.")
+
+
+async def _review_in_case(case_id: str, review_id: UUID) -> FindingReview:
+    review = await asyncio.to_thread(findings_repository.get_review, str(review_id))
+    if review is None or review.case_id != case_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found in this case")
+    return review
 
 
 async def _record_saved(case_id: str, verdicts: list[tuple[str, str | None, str | None]]) -> None:
@@ -102,52 +113,31 @@ async def get_case_finding_reviews(case_id: str, case: CaseRecord = Depends(_rev
         return await _case_reviews(case_id)
 
 
-@router.put("/cases/{case_id}/finding-reviews/verdict", response_model=CaseFindingReviews)
-async def set_finding_verdict(
-    case_id: str, request: SetFindingVerdictRequest, user: CurrentUser, case: CaseRecord = Depends(_editable_reviewed_case),
-) -> CaseFindingReviews:
-    """Marks one finding correct or wrong, signed by the officer; a null verdict clears the mark. Any officer
-    can change a verdict; the latest one stands."""
-    with bad_gateway_on_error(_SAVE_FAILED, "Failed to save a verdict on case %s", case_id):
-        document_id = await _check_target(case_id, request.scope, request.document_id, request.check_name)
-        if request.verdict is None:
-            await asyncio.to_thread(finding_reviews_repository.clear_verdict, case_id, request.finding_id)
-        else:
-            await asyncio.to_thread(
-                finding_reviews_repository.set_verdict,
-                case_id=case_id, scope=request.scope, document_id=document_id, finding_id=request.finding_id,
-                check_name=request.check_name, check_code=request.check_code, summary=request.summary,
-                verdict=request.verdict, reviewer=user,
-            )
-        reviews = await _case_reviews(case_id)
-    await _record_saved(case_id, [(request.scope, document_id, request.verdict)])
-    return reviews
-
-
 @router.put("/cases/{case_id}/finding-reviews/verdicts", response_model=CaseFindingReviews)
 async def set_finding_verdicts(
     case_id: str, request: SetFindingVerdictsRequest, user: CurrentUser, case: CaseRecord = Depends(_editable_reviewed_case),
 ) -> CaseFindingReviews:
     """Saves one group's review in one request: the officer ticked the findings that are real (correct) and left
-    the rest (wrong). Every target is checked before anything is written, so a bad entry saves nothing."""
+    the rest (wrong); a null verdict clears the mark. Any officer can change a verdict; the latest one stands.
+    Every finding is looked up before anything is written, so a bad entry saves nothing."""
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to save verdicts on case %s", case_id):
-        documents = {
-            (item.scope, item.document_id): await _check_target(case_id, item.scope, item.document_id, item.check_name)
-            for item in request.verdicts
-        }
+        targets: list[tuple[str, str | None, str]] = []
         for item in request.verdicts:
-            if item.verdict is None:
-                await asyncio.to_thread(finding_reviews_repository.clear_verdict, case_id, item.finding_id)
-                continue
-            await asyncio.to_thread(
-                finding_reviews_repository.set_verdict,
-                case_id=case_id, scope=item.scope, document_id=documents[(item.scope, item.document_id)],
-                finding_id=item.finding_id, check_name=item.check_name, check_code=item.check_code,
-                summary=item.summary, verdict=item.verdict, reviewer=user,
+            document_id = await _document_in_case(case_id, item.document_id)
+            row = await asyncio.to_thread(
+                findings_repository.find_current, case_id, item.scope, document_id, item.fingerprint,
             )
+            if row is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="A finding was replaced by a newer run. Reload the case and review again.",
+                )
+            targets.append((item.scope, document_id, row["id"]))
+        for (_, _, row_id), item in zip(targets, request.verdicts):
+            await asyncio.to_thread(findings_repository.set_verdict, row_id, item.verdict, user)
         reviews = await _case_reviews(case_id)
     await _record_saved(
-        case_id, [(item.scope, documents[(item.scope, item.document_id)], item.verdict) for item in request.verdicts],
+        case_id, [(scope, document_id, item.verdict) for (scope, document_id, _), item in zip(targets, request.verdicts)],
     )
     return reviews
 
@@ -159,10 +149,11 @@ async def report_missed_issue(
     case_id: str, request: ReportMissedIssueRequest, user: CurrentUser, case: CaseRecord = Depends(_editable_reviewed_case),
 ) -> CaseFindingReviews:
     """Records an issue no finding raised, against the check that should have caught it: a false negative."""
+    _check_fits(request.scope, request.check_name)
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to save a missed issue on case %s", case_id):
-        document_id = await _check_target(case_id, request.scope, request.document_id, request.check_name)
+        document_id = await _document_in_case(case_id, request.document_id)
         await asyncio.to_thread(
-            finding_reviews_repository.add_missed,
+            findings_repository.add_missed,
             case_id=case_id, scope=request.scope, document_id=document_id, check_name=request.check_name,
             note=request.note, reviewer=user,
         )
@@ -182,14 +173,12 @@ async def update_missed_issue(
     """Corrects a reported missed issue (its check or note), e.g. one filed against the wrong check. A verdict
     on a finding is changed by reviewing the finding again, not here."""
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to update review %s", review_id):
-        review = await asyncio.to_thread(finding_reviews_repository.get, str(review_id))
-        if review is None or review.case_id != case_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found in this case")
+        review = await _review_in_case(case_id, review_id)
         if review.kind != "missed":
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only a missed issue can be edited")
-        await _check_target(case_id, review.scope, None, request.check_name)
+        _check_fits(review.scope, request.check_name)
         await asyncio.to_thread(
-            finding_reviews_repository.update_missed, str(review_id),
+            findings_repository.update_missed, str(review_id),
             check_name=request.check_name, note=request.note, reviewer=user,
         )
         reviews = await _case_reviews(case_id)
@@ -205,14 +194,15 @@ async def update_missed_issue(
 
 @router.delete("/cases/{case_id}/finding-reviews/{review_id}", response_model=CaseFindingReviews)
 async def delete_finding_review(
-    case_id: str, review_id: UUID, case: CaseRecord = Depends(_editable_reviewed_case),
+    case_id: str, review_id: UUID, user: CurrentUser, case: CaseRecord = Depends(_editable_reviewed_case),
 ) -> CaseFindingReviews:
-    """Removes a verdict or a missed issue (e.g. one reported by mistake)."""
+    """Removes a missed issue (e.g. one reported by mistake), or clears a verdict; the finding itself stays."""
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to delete review %s", review_id):
-        review = await asyncio.to_thread(finding_reviews_repository.get, str(review_id))
-        if review is None or review.case_id != case_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found in this case")
-        await asyncio.to_thread(finding_reviews_repository.delete, str(review_id))
+        review = await _review_in_case(case_id, review_id)
+        if review.kind == "missed":
+            await asyncio.to_thread(findings_repository.delete_missed, str(review_id))
+        else:
+            await asyncio.to_thread(findings_repository.set_verdict, str(review_id), None, user)
         reviews = await _case_reviews(case_id)
     await events.record(officer_event(
         types.FINDING_REVIEW_REMOVED, case_id=case_id, document_id=review.document_id,
@@ -221,6 +211,8 @@ async def delete_finding_review(
             "verdict": review.verdict,
         },
     ))
+    if review.kind != "missed":
+        await _record_saved(case_id, [])
     return reviews
 
 
@@ -234,7 +226,7 @@ async def get_detection_metrics(
     cases created on or after `since` and at these stages, as the dashboard's filters pick.
     """
     reviews = await to_thread_or_502(
-        finding_reviews_repository.list_all,
+        findings_repository.list_all_reviews,
         detail="Failed to load the finding reviews. Check Supabase table access.",
         log=("Failed to list finding reviews",),
     )

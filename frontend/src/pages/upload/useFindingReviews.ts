@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CaseFindingReviews, CaseRiskFinding, FindingReview, ReviewScope, ReviewVerdict } from '../../services/uploadService';
+import type { CaseFindingReviews, FindingReview, ReviewScope, ReviewVerdict } from '../../services/uploadService';
 import {
   deleteFindingReview,
   getCaseFindingReviews,
@@ -8,20 +8,30 @@ import {
   updateMissedIssue,
 } from '../../services/uploadService';
 
-export function findingScope(finding: CaseRiskFinding): ReviewScope {
+// Anything an officer gives a verdict on: a scored finding, or one the specialists dismissed (no source: a
+// document's own).
+export interface ReviewTarget {
+  document_id: string;
+  fingerprint: string;
+  source?: string | null;
+}
+
+export function findingScope(finding: ReviewTarget): ReviewScope {
   return finding.source === 'cross_document' ? 'case' : 'document';
 }
 
-// A cross-document finding is filed under its category; a document finding under its tool.
-export function findingCheck(finding: CaseRiskFinding): string {
-  return findingScope(finding) === 'case' ? finding.category ?? 'cross_document_variance' : finding.tool ?? 'unknown';
+// The document a finding's review sits on: none for a cross-document finding.
+function reviewDocument(finding: ReviewTarget): string | null {
+  return findingScope(finding) === 'case' ? null : finding.document_id;
 }
 
-// The officer's verdict on this finding. A verdict only counts against the same finding it was given on (same
-// id and summary): a rerun renumbers findings, so an old verdict never lands on a different one.
-export function verdictFor(reviews: FindingReview[], finding: CaseRiskFinding): FindingReview | undefined {
+// The officer's verdict on this finding: the same document and fingerprint. A rerun replaces the findings and
+// their verdicts, so a verdict only ever matches a finding of the run it was given on.
+export function verdictFor(reviews: FindingReview[], finding: ReviewTarget): FindingReview | undefined {
+  const documentId = reviewDocument(finding);
   return reviews.find(
-    (review) => review.kind === 'verdict' && review.finding_id === finding.finding_id && review.summary === finding.summary,
+    (review) =>
+      review.kind === 'verdict' && review.fingerprint === finding.fingerprint && (review.document_id ?? null) === documentId,
   );
 }
 
@@ -64,23 +74,17 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
   // One group's review: each row is correct (ticked) or wrong (not), and a row can stand for several identical
   // findings (same check and summary), so its verdict goes on each of them. One request for the whole group.
   const saveGroup = useCallback(
-    (key: string, rows: { members: CaseRiskFinding[]; verdict: ReviewVerdict }[]) =>
+    (key: string, rows: { members: ReviewTarget[]; verdict: ReviewVerdict }[]) =>
       run(key, () =>
         setFindingVerdicts(
           caseId,
           rows.flatMap(({ members, verdict }) =>
-            members.map((finding) => {
-              const scope = findingScope(finding);
-              return {
-                scope,
-                documentId: scope === 'document' ? finding.document_id : null,
-                findingId: finding.finding_id,
-                checkName: findingCheck(finding),
-                checkCode: finding.check_code ?? null,
-                summary: finding.summary,
-                verdict,
-              };
-            }),
+            members.map((finding) => ({
+              scope: findingScope(finding),
+              documentId: reviewDocument(finding),
+              fingerprint: finding.fingerprint,
+              verdict,
+            })),
           ),
         ),
       ),

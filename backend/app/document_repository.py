@@ -6,7 +6,7 @@ import uuid
 from contextvars import ContextVar
 from datetime import datetime, timezone
 
-from . import extracted_fields_repository, finding_reviews_repository, notes_repository, storage_service
+from . import extracted_fields_repository, findings_repository, notes_repository, storage_service
 from .models import DocumentRecord, DocumentStatus, RoutingStatus
 from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import fetch_all, row as _row
@@ -207,9 +207,12 @@ def mark_detected(document_id: str) -> None:
     _set_detection_status(document_id, DocumentStatus.DETECTED)
 
 
-def revert_to_approved(document_id: str) -> None:
-    """A detection run crashed or was cancelled: back to APPROVED â€” still locked, eligible for Retry."""
-    _set_detection_status(document_id, DocumentStatus.APPROVED)
+def end_unfinished_detection(document_id: str, *, has_report: bool) -> None:
+    """
+    A detection run crashed or was cancelled. With a report from an earlier run (a rerun that didn't finish),
+    back to DETECTED: that report still stands. Otherwise back to APPROVED: still locked, and it can be run again.
+    """
+    _set_detection_status(document_id, DocumentStatus.DETECTED if has_report else DocumentStatus.APPROVED)
 
 
 def reject_document(document_id: str) -> DocumentRecord | None:
@@ -248,7 +251,7 @@ def move_documents(document_ids: list[str], case_id: str) -> None:
         "id", document_ids
     ).execute()
     notes_repository.move_with_documents(document_ids, case_id)
-    finding_reviews_repository.move_with_documents(document_ids, case_id)
+    findings_repository.move_with_documents(document_ids, case_id)
 
 
 def move_document(document_id: str, case_id: str) -> None:
@@ -268,7 +271,7 @@ def move_document(document_id: str, case_id: str) -> None:
     )
     if result.data:
         notes_repository.move_with_documents([document_id], case_id)
-        finding_reviews_repository.move_with_documents([document_id], case_id)
+        findings_repository.move_with_documents([document_id], case_id)
         _sync_case(case_id)
 
 
@@ -404,29 +407,23 @@ def get_guard_result(document_id: str) -> dict | None:
     return value if isinstance(value, dict) else None
 
 
-# Tables whose rows belong to one document, besides extracted_fields (which has its own helper).
-_DOCUMENT_CHILD_TABLES = (
-    "flags", "langgraph_trace", "detection_results", notes_repository.TABLE, finding_reviews_repository.TABLE,
-)
-
-
 def _delete_document_children(document_ids: list[str]) -> None:
-    """Removes what hangs off the documents: field rows, flags, notes, finding reviews and the detection trace. Runs before the
-    documents delete, so a foreign key on any of them cannot block it, and works whether or not they cascade."""
+    """
+    What the database's cascades don't cover: the cross-document findings resting on these documents, and the traces
+    held in memory. Every table keyed by document (extracted_fields, findings, detection_results, langgraph_trace,
+    case_notes) cascades from the documents delete (backend/sql/schema.sql). audit_events stays: it is the trail and
+    the cost record.
+    """
     from .langgraph import trace
 
-    extracted_fields_repository.delete_fields_for_documents(document_ids)
-    client = service_supabase_client()
-    for table in _DOCUMENT_CHILD_TABLES:
-        client.table(table).delete().in_("document_id", document_ids).execute()
+    findings_repository.delete_case_findings_citing(document_ids)
     trace.forget(document_ids)
 
 
 def remove_document(document: DocumentRecord) -> None:
     """
-    Permanently removes a document: its extracted-field rows, flags, notes
-    and trace, the stored file, and the documents row. The dependent rows go
-    first so a foreign key cannot block the documents delete.
+    Permanently removes a document: the stored file, then the documents row, which takes every row keyed by it
+    (_delete_document_children).
 
     Storage deletion is best-effort. A missing object should not leave the
     row in place; a later retry still deletes the row.

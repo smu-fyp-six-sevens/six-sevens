@@ -19,7 +19,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import case_repository, detection_results, document_repository, finding_reviews_repository
+from . import case_repository, detection_results, document_repository, findings_repository
 from .case_pipeline import repository as analysis_repository, state as analysis_state
 from .case_pipeline.readiness import unapproved_requirements
 from .models import (
@@ -27,7 +27,7 @@ from .models import (
     CaseFailure,
     CaseRecord,
     CaseStage,
-    ContributingFinding,
+    CaseRisk,
     DocumentRecord,
     DocumentStatus,
     FindingReview,
@@ -131,11 +131,10 @@ def analysis_stage(case: CaseRecord, documents: list[DocumentRecord]) -> StageRe
         return _failed(CaseFailure.CASE_ANALYSIS)
     if analysis.status != "complete":
         return StageResult(CaseStage.READY_FOR_ANALYSIS)
-    findings = analysis.risk.contributing_findings if analysis.risk else []
     if (
-        findings
-        and case.reviews_required
-        and count_unreviewed(findings, finding_reviews_repository.list_for_case(case.id))
+        case.reviews_required
+        and reviewable(analysis.risk)
+        and count_unreviewed(analysis.risk, findings_repository.list_reviews_for_case(case.id))
     ):
         return StageResult(CaseStage.PENDING_EVALUATION)
     return StageResult(CaseStage.CASE_ANALYSED)
@@ -178,13 +177,22 @@ def failure_of(documents: list[DocumentRecord], failed_detection_ids: set[str] |
     return CaseFailure.CASE_ANALYSIS
 
 
-def count_unreviewed(findings: list[ContributingFinding], reviews: list[FindingReview]) -> int:
+def reviewable(risk: CaseRisk | None) -> list[tuple[str | None, str]]:
     """
-    Findings with no correct/wrong verdict. A verdict only counts against the finding it was given on (same id
-    and summary), as on the Risk Summary: a rerun renumbers findings, so an old verdict never covers a new one.
+    What an officer reviews on the Risk Summary, as (document id, fingerprint): every scored finding (a
+    cross-document one has no document) and every finding the specialists dismissed.
     """
-    reviewed = {(r.finding_id, r.summary) for r in reviews if r.kind == "verdict" and r.verdict is not None}
-    return sum(1 for f in findings if (f.finding_id, f.summary) not in reviewed)
+    if risk is None:
+        return []
+    return [
+        (None if f.source == "cross_document" else f.document_id, f.fingerprint) for f in risk.contributing_findings
+    ] + [(f.document_id, f.fingerprint) for f in risk.dismissed_findings]
+
+
+def count_unreviewed(risk: CaseRisk | None, reviews: list[FindingReview]) -> int:
+    """Reviewable findings with no correct/wrong verdict, matched on document and fingerprint."""
+    reviewed = {(r.document_id, r.fingerprint) for r in reviews if r.kind == "verdict" and r.verdict is not None}
+    return sum(1 for key in reviewable(risk) if key not in reviewed)
 
 
 def _move(case: CaseRecord, to_stage: CaseStage) -> bool:

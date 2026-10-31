@@ -41,13 +41,13 @@ from . import tools as detection_tools
 from ...guardrails.envelope import fence
 from ...llm_contracts import LeadPlan, LeadReview
 from ... import run_context
-from ...llm_io import message_text, parse_json_object, validate
+from ...llm_io import message_text, parse_json_object, thinking_summaries, validate
 from ...run_context import spend_model_call
 from ..detection_report import SCHEMA_VERSION
 from .specialists import SEVERITIES, SPECIALISTS, document_side, run_specialist, today_in_singapore
 from .. import trace
 from ... import (
-    detection_results, document_repository, extracted_fields_repository, finding_reviews_repository, flags_repository,
+    detection_results, document_repository, extracted_fields_repository, finding_keys, findings_repository,
     telemetry,
 )
 from ...config import settings
@@ -142,7 +142,7 @@ _REVIEW_SYSTEM_PROMPT = _REVIEW_PROMPT.format(catalogue=_catalogue())
 
 
 async def _ask_lead(
-    system_prompt: str, user_payload: dict, contract: type[T], *, span_name: str, cache_key: str
+    system_prompt: str, user_payload: dict, contract: type[T], *, span_name: str, cache_key: str, document_id: str,
 ) -> T | None:
     """
     The lead's reply as `contract`, or None when the call fails or the reply is unusable. The lead only
@@ -166,6 +166,8 @@ async def _ask_lead(
     except Exception as exc:
         logger.warning("%s call failed: %s", span_name, exc)
         return None
+    if thinking := thinking_summaries(response):
+        trace.record(document_id, "lead_thinking", call=span_name, thinking=thinking)
     text = message_text(response.content)
     return validate(contract, parse_json_object(text), site=span_name, raw=text).value
 
@@ -238,7 +240,7 @@ def _normalise_plan(raw: LeadPlan | None) -> dict:
 async def lead_plan_node(state: DetectionState) -> dict:
     plan = _normalise_plan(await _ask_lead(
         _PLAN_SYSTEM_PROMPT, {"document": _context(state)}, LeadPlan,
-        span_name="detection.lead_plan", cache_key="detection_lead_plan",
+        span_name="detection.lead_plan", cache_key="detection_lead_plan", document_id=state["document_id"],
     ))
     logger.info("Document %s: lead plan — briefs written for all specialists", state["document_id"])
     trace.record(
@@ -344,7 +346,8 @@ async def lead_review_node(state: DetectionState) -> dict:
         "document": _context(state),
         "reports": _compact_reports(state["reports"]),
         "second_look_already_used": used,
-    }, LeadReview, span_name="detection.lead_review", cache_key="detection_lead_review")
+    }, LeadReview, span_name="detection.lead_review", cache_key="detection_lead_review",
+        document_id=state["document_id"])
     summary = review.summary if review is not None else ""
     request = None if used or review is None else _validated_second_look(review.second_look, state["reports"])
     logger.info(
@@ -547,7 +550,7 @@ async def synthesize_node(state: DetectionState) -> dict:
             result["summary"] = "No findings, but the run hit its model call limit before every check finished."
     result = {**result, "schema_version": SCHEMA_VERSION}
     _record_run_audit(state["document_id"])
-    flags_repository.assign_flag_ids(result["findings"])
+    finding_keys.assign_document_fingerprints(result)
     logger.info(
         "Document %s: detection done — verdict %s, %d finding(s)",
         state["document_id"], result["verdict"], len(result["findings"]),
@@ -588,19 +591,22 @@ def get_detection_graph():
     return _detection_graph
 
 
-async def _store_flags(document_id: str, case_id: str | None, report: dict) -> None:
+async def _store_findings(document_id: str, case_id: str | None, report: dict) -> None:
     """The saved report (detection_results) is the source of truth, so a failure here is recorded, not raised."""
+    if case_id is None:
+        logger.warning("Document %s: no case, so its findings are not stored", document_id)
+        return
     try:
-        count = await asyncio.to_thread(flags_repository.replace_for_document, document_id, case_id, report["findings"])
-        logger.info("Document %s: %d flag(s) stored", document_id, count)
+        count = await asyncio.to_thread(findings_repository.sync_document, document_id, case_id, report)
+        logger.info("Document %s: %d finding(s) stored", document_id, count)
     except Exception as exc:
-        logger.exception("Document %s: failed to store flags", document_id)
-        trace.record(document_id, "flags_error", flags_error=f"{type(exc).__name__}: {exc}")
-    # Officers' reviews named the previous run's findings, which this report replaces.
-    try:
-        await asyncio.to_thread(finding_reviews_repository.clear_document, document_id)
-    except Exception:
-        logger.exception("Document %s: failed to clear the previous run's finding reviews", document_id)
+        logger.exception("Document %s: failed to store findings", document_id)
+        trace.record(document_id, "findings_error", findings_error=f"{type(exc).__name__}: {exc}")
+
+
+def end_unfinished_run(document_id: str) -> None:
+    """A run crashed or was cancelled (its error already saved): the document's status after it. Sync."""
+    document_repository.end_unfinished_detection(document_id, has_report=detection_results.has_report(document_id))
 
 
 async def run_detection(document_id: str) -> dict:
@@ -639,7 +645,7 @@ async def _run_detection(document_id: str) -> dict:
             # Saved before the status changes, so the case's stage (case_stage.py) sees the failure.
             await asyncio.to_thread(detection_results.save_error, document_id, error)
             await asyncio.to_thread(trace.flush, document_id)
-            await asyncio.to_thread(document_repository.revert_to_approved, document_id)
+            await asyncio.to_thread(end_unfinished_run, document_id)
             raise
         result = final["result"]
         span.set_attribute("verdict", result["verdict"])
@@ -647,6 +653,6 @@ async def _run_detection(document_id: str) -> dict:
         # The report must be saved before the status says "detected", or a snapshot can show detected with no report.
         await asyncio.to_thread(detection_results.save_report, document_id, result)
         await asyncio.to_thread(trace.flush, document_id)
-        await _store_flags(document_id, final.get("case_id"), result)
+        await _store_findings(document_id, final.get("case_id"), result)
         await asyncio.to_thread(document_repository.mark_detected, document_id)
         return result

@@ -8,13 +8,11 @@ check if audit trail watches for cancel/retry etc.
 
 ## Database
 
-- **Run part 2 of `backend/sql/0002_integration_branch.sql`** (the drops), unless already run. Keep prod unused until `integration` is deployed: `main`'s code still writes what it drops.
+- **Keep prod unused until `integration` is deployed:** the database no longer has the tables and columns `main`'s code writes (`flags`, `finding_reviews`, `case_status_history`, `app_settings`, `cases.submission_finalized`).
 
 ## Product
 
 - **Automatic case analysis** (this sprint). The officer clicks it today. Not built: the gate on every document completion, supersede with a run-id fence, debounce and a re-run cap (`CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0).
-- **Case-level flags.** Cross-document and identity findings live only inside each run's JSON (`case_analysis_runs.result.findings`), so there's no row per finding, no status and no dismissal. A case-level flags table and module would give them that.
-- **Officer review of flags.** `flags` has `status`, `reviewed_by` and `reviewed_at`, but no endpoint or UI uses them. Needs an endpoint, a UI, and a decision on how a dismissal affects the score.
 - **Guard against repeated runs.** Each "Run again" spends about 12k tokens even when nothing changed; skipping a run whose fingerprint matches the last complete one would stop that, but changes what the button does.
 - **Agent-raised findings.** A specialist can only assess findings a tool returns; something it notices itself (a "modified copy" subject) appears in its summary but never scores. Needs a way to raise a finding that cites the field it read.
 
@@ -22,7 +20,6 @@ check if audit trail watches for cancel/retry etc.
 
 - **Live check of the switch to Sonnet 5.5 and Haiku 5.5** (effort `low` everywhere except the detection lead and the cross-document planner and judge at `medium`). Run a few known cases end to end and compare against earlier runs: types, fields, findings, the case analysis, cost per case and time per stage. `backend/.env` may still name the old models; remove those lines. Watch for: replies cut off at the raised token caps; the specialists' first turn, which starts with a code-made tool call that has no thinking block (accepted in principle, unconfirmed live); and how often the cross-document planner or judge needs its one retry (`attempt` on the span).
 - **Billed cost per role.** Per-call cost is exact (token counts × list price, `pricing.py`). To reconcile with the bill, give each worker role its own Claude workspace and API key; the Cost API (`/v1/organizations/cost_report`, Admin API key, daily) then reports billed USD per workspace. Per-request tags don't exist.
-- **Show thinking in the agent traces.** The models think adaptively; the summaries come back as `thinking` blocks beside the text (skipped by `llm_io.message_text`). Record them in the traces and the debug panels.
 
 ## Deployment note (report and commercialisation document)
 
@@ -48,7 +45,7 @@ Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 ## Evals and verification
 
 - **Evals aren't built** (next few days): an evaluation framework run on demand when a prompt or model changes, not nightly, as the reference for quality. Golden-set runs from `documents_generated/` (classification accuracy, per-field extraction, escalation rate, cost per document, cache hit rate); detection precision and recall per defect type from `injection_manifest.json` (a case may upload the clean, non-`_F` file; check names first); for case analysis, false positives on clean cases, recall on planted contradictions, parity across subgroups. Synthetic companies always fail the ACRA check (8 points once per case). Keep the synthetic-to-real caveat.
-- **Checks that exist only as scratch scripts,** worth turning into tests: the verifier rules, the bias screens (`bias.py`), year-less statement dates (`tools/common.row_date`), the single-flight detection cache and snapshot builder, the flag write-on-change memo, `flags_repository.build_rows`.
+- **Checks that exist only as scratch scripts,** worth turning into tests: the verifier rules, the bias screens (`bias.py`), year-less statement dates (`tools/common.row_date`), the single-flight detection cache and snapshot builder, the finding fingerprints and the kept/dismissed split (`finding_keys.py`), `findings_repository`'s row builders.
 
 ## Performance
 
@@ -89,4 +86,3 @@ Budgets are in `HOW_IT_WORKS.md` §8; query-level fixes are in `REFACTORING_AUDI
   - **Leave alone:** the developer panels that print JSON on purpose (`LangGraphTracePanel`, `CaseAnalysisTracePanel`, the individual check results in `DetectionPanel`, all `debug-*`).
   - The mock backend (`e2e/support/mockBackend.ts`) and any spec that matches error text change with it.
 - **Dev StrictMode** fires some document-page requests twice.
-- **`submission_finalized`** is remembered per process (`case_service._synced_finalized`), so with several instances or a hand edit the stored value is only corrected on the next change.

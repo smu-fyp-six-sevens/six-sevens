@@ -31,14 +31,18 @@ export async function getDetectionReport(documentId: string): Promise<DetectionR
   return (await response.json()) as DetectionReport;
 }
 
-// Interrupts an in-flight run (the "Scanning"/"Detecting" stage).
-export async function cancelDetection(documentId: string): Promise<void> {
+// Interrupts a run. "cancelling": one in flight, which stops at its next step; "cancelled": one that was still
+// waiting for a worker, stopped at once.
+export async function cancelDetection(documentId: string): Promise<'cancelling' | 'cancelled'> {
   const response = await authFetch(`/documents/${documentId}/detection/cancel`, { method: 'POST' });
 
   await assertOk(response, 'Failed to cancel detection');
+
+  return ((await response.json()) as { status: 'cancelling' | 'cancelled' }).status;
 }
 
-// Re-launches detection after a cancelled or crashed run.
+// Runs detection again: after a cancelled or crashed run, or over a finished report (replaced once the new run
+// completes).
 export async function retryDetection(documentId: string): Promise<void> {
   const response = await authFetch(`/documents/${documentId}/detection/retry`, { method: 'POST' });
 

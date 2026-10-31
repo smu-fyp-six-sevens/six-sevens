@@ -34,7 +34,8 @@ from ...guardrails.envelope import fence
 from ...llm_contracts import SpecialistAssessment, ToolResult
 from ... import run_context
 from ...run_context import RunBudgetExceeded, spend_model_call
-from ...llm_io import ModelRefused, message_text, parse_json_object, salvage_list, validate
+from ...llm_io import ModelRefused, message_text, parse_json_object, salvage_list, thinking_summaries, validate
+from .. import trace
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.specialists")
 
@@ -265,6 +266,11 @@ async def _invoke(call) -> AIMessage:
         return AIMessage(content="", response_metadata={"refusal": str(exc)})
 
 
+def _note_thinking(document_id: str, specialist: str, response: AIMessage) -> None:
+    if thinking := thinking_summaries(response):
+        trace.record(document_id, "specialist_thinking", specialist=specialist, thinking=thinking)
+
+
 def _make_agent_node(spec: Specialist):
     async def agent_node(state: SpecialistState) -> dict:
         from .._anthropic import build_chat_anthropic
@@ -296,12 +302,14 @@ def _make_agent_node(spec: Specialist):
                     wrap_up = HumanMessage(content="Tool budget used up. Reply with the JSON report now, with no more tool calls.")
                     response = await _invoke(lambda: no_more_tools.ainvoke([*existing, wrap_up]))
                     telemetry.record_usage(span, response)
+                    _note_thinking(state["document_id"], spec.name, response)
                     return {"messages": [wrap_up, response]}
                 # cache_control breakpoint is already in `existing`'s system
                 # message — this call naturally lands after whichever call
                 # first warmed the cache for this specialist.
                 response = await _invoke(lambda: model.ainvoke(existing))
                 telemetry.record_usage(span, response)
+                _note_thinking(state["document_id"], spec.name, response)
                 return {"messages": [response]}
 
             static_text = _SPECIALIST_STATIC_PROMPT.format(title=spec.title, expertise=spec.expertise)
@@ -336,6 +344,7 @@ def _make_agent_node(spec: Specialist):
                 lambda: cache_gate.run(f"detection_specialist:{spec.name}", lambda: first_model.ainvoke(seed))
             )
             telemetry.record_usage(span, response)
+            _note_thinking(state["document_id"], spec.name, response)
             return {"messages": [*seed, response]}
 
     return agent_node
@@ -450,10 +459,10 @@ def _collect_node(state: SpecialistState) -> dict:
         floor = _severity_floor(finding)
         hard = _is_hard_breach(finding)
         if assessed is not None and assessed.dismiss and floor is None and not hard:
+            # The whole finding, so the findings table keeps what the tool returned.
             dismissed.append({
+                **finding,
                 "id": finding_id,
-                "tool": finding.get("tool"),
-                "summary": finding["summary"],
                 "reason": assessed.rationale or "Dismissed as a false positive.",
                 "confidence": assessed.confidence,
             })

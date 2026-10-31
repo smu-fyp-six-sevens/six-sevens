@@ -30,7 +30,7 @@ from ...guardrails.envelope import fence
 from ...langgraph._anthropic import build_chat_anthropic
 from ...langgraph.cache_gate import cache_gate
 from ...run_context import spend_model_call
-from ...llm_io import forced_args, message_text, parse_json_object, salvage_list, was_cut_off
+from ...llm_io import forced_args, message_text, parse_json_object, salvage_list, thinking_summaries, was_cut_off
 from ..models import Hypothesis, PlannedCheck
 from .bias import has_protected_text
 from .evidence import CaseContext, render_dossier
@@ -242,6 +242,8 @@ async def _ask_for_tool(
             else:
                 response = await model.ainvoke(prompt)
             telemetry.record_usage(span, response)
+        if thinking := thinking_summaries(response):
+            context.note("thinking", agent=span_name, attempt=attempt + 1, thinking=thinking)
         args = forced_args(response, tool["name"])
         if args is not None or was_cut_off(response) or key in (parse_json_object(message_text(response.content)) or {}):
             return response, args

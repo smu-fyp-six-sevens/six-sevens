@@ -70,7 +70,8 @@ export interface paths {
         };
         /**
          * Get Case Cost
-         * @description Claude spend for one case at list price: per run, per document and in total, from the audit trail.
+         * @description Claude spend for one case at list price: per run, per document and in total, from the audit trail. Every run
+         *     counts: failed, cancelled, retried and rerun ones, earlier case analyses, and runs on documents since deleted.
          */
         get: operations["get_case_cost_audit_cases__case_id__cost_get"];
         put?: never;
@@ -395,27 +396,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/cases/{case_id}/finding-reviews/verdict": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set Finding Verdict
-         * @description Marks one finding correct or wrong, signed by the officer; a null verdict clears the mark. Any officer
-         *     can change a verdict; the latest one stands.
-         */
-        put: operations["set_finding_verdict_cases__case_id__finding_reviews_verdict_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/cases/{case_id}/finding-reviews/verdicts": {
         parameters: {
             query?: never;
@@ -427,7 +407,8 @@ export interface paths {
         /**
          * Set Finding Verdicts
          * @description Saves one group's review in one request: the officer ticked the findings that are real (correct) and left
-         *     the rest (wrong). Every target is checked before anything is written, so a bad entry saves nothing.
+         *     the rest (wrong); a null verdict clears the mark. Any officer can change a verdict; the latest one stands.
+         *     Every finding is looked up before anything is written, so a bad entry saves nothing.
          */
         put: operations["set_finding_verdicts_cases__case_id__finding_reviews_verdicts_put"];
         post?: never;
@@ -449,7 +430,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Finding Review
-         * @description Removes a verdict or a missed issue (e.g. one reported by mistake).
+         * @description Removes a missed issue (e.g. one reported by mistake), or clears a verdict; the finding itself stays.
          */
         delete: operations["delete_finding_review_cases__case_id__finding_reviews__review_id__delete"];
         options?: never;
@@ -793,12 +774,11 @@ export interface paths {
         put?: never;
         /**
          * Cancel Document Detection
-         * @description Interrupts an in-flight detection run — the Detection panel's Cancel
-         *     action while a document reads "Scanning"/"Detecting". Only takes effect
-         *     at the graph's next await point (an Anthropic call already in flight
-         *     still completes) — see workers/detection.py. The cancellation is then
-         *     recorded the same way a crash is, so GET .../detection/report and
-         *     retry_document_detection below both already know how to handle it.
+         * @description Interrupts a detection run: one in flight ("Detecting"), or one still waiting for a worker slot (approved, with
+         *     no report and no error yet). An in-flight run stops at the graph's next await point (an Anthropic call already
+         *     in flight still completes) — see workers/detection.py — and records the cancellation the way a crash is
+         *     recorded. A waiting one is recorded as cancelled here, so it can be run again at once ("cancelled"); the
+         *     worker drops it when its turn comes.
          */
         post: operations["cancel_document_detection_documents__document_id__detection_cancel_post"];
         delete?: never;
@@ -1079,12 +1059,10 @@ export interface paths {
         put?: never;
         /**
          * Retry Document Detection
-         * @description Re-launches detection after a previous attempt was cancelled or
-         *     crashed. NOT a general "run detection" trigger — that only ever
-         *     happens automatically on approval (routers/documents.py's
-         *     approve_document) — so this is only allowed when the last attempt left
-         *     an error/cancellation behind and produced no report, and only when
-         *     nothing is already running for this document.
+         * @description Runs detection again on an approved document: after a cancelled or crashed run, or over a finished report
+         *     (a fresh run replaces the report and the document's findings, and the officer's verdicts on them, once it
+         *     completes; if it doesn't, the earlier report stands). Detection first runs by itself on approval. Refused
+         *     while a run is in flight or still waiting for a worker slot (cancel it first).
          */
         post: operations["retry_document_detection_documents__document_id__detection_retry_post"];
         delete?: never;
@@ -2027,10 +2005,27 @@ export interface components {
             case_analysis_usd: number;
             /** Case Id */
             case_id: string;
+            /**
+             * Documents
+             * @default {}
+             */
+            documents: {
+                [key: string]: components["schemas"]["CaseCostDocument"];
+            };
             /** Documents Usd */
             documents_usd: {
                 [key: string]: number;
             };
+            /**
+             * Failed Or Cancelled Usd
+             * @default 0
+             */
+            failed_or_cancelled_usd: number;
+            /**
+             * Repeated Runs Usd
+             * @default 0
+             */
+            repeated_runs_usd: number;
             /** Runs */
             runs: components["schemas"]["CaseCostRun"][];
             /** Timings */
@@ -2039,10 +2034,33 @@ export interface components {
             total_usd: number;
         };
         /**
+         * CaseCostDocument
+         * @description A document a costed run was on: its file name, whether it is still in the case, and whether it was deleted.
+         */
+        CaseCostDocument: {
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /** Filename */
+            filename: string | null;
+            /**
+             * In Case
+             * @default true
+             */
+            in_case: boolean;
+        };
+        /**
          * CaseCostRun
          * @description One costed run, at list price.
          */
         CaseCostRun: {
+            /**
+             * Attempt
+             * @default 1
+             */
+            attempt: number;
             /** Document Id */
             document_id: string | null;
             /** Llm Cache Read Tokens */
@@ -2056,6 +2074,12 @@ export interface components {
              * Format: date-time
              */
             occurred_at: string;
+            /**
+             * Outcome
+             * @default success
+             * @enum {string}
+             */
+            outcome: "success" | "failed" | "cancelled";
             /** Run */
             run: ("document" | "extraction_rerun" | "detection" | "case_analysis") | null;
             /** Type */
@@ -2282,6 +2306,8 @@ export interface components {
         CaseRisk: {
             /** Contributing Findings */
             contributing_findings: components["schemas"]["ContributingFinding"][];
+            /** Dismissed Findings */
+            dismissed_findings: components["schemas"]["DismissedFinding"][];
             /**
              * Documents Scanned
              * @default 0
@@ -2529,8 +2555,8 @@ export interface components {
             filename: string;
             /** Finding Id */
             finding_id: string;
-            /** Flag Id */
-            flag_id: string | null;
+            /** Fingerprint */
+            fingerprint: string;
             /** Points */
             points: number;
             /** Rationale */
@@ -2581,6 +2607,11 @@ export interface components {
             confidence: number;
             /** Document Ids */
             document_ids: string[];
+            /**
+             * Fingerprint
+             * @default
+             */
+            fingerprint: string;
             /** Hypothesis Id */
             hypothesis_id: string;
             /** Id */
@@ -2683,6 +2714,33 @@ export interface components {
             target_precision: number;
             /** Target Recall */
             target_recall: number;
+        };
+        /**
+         * DismissedFinding
+         * @description A tool's finding a specialist dismissed as a false positive (case_risk). An officer marks it correct when it
+         *     is a real problem after all.
+         */
+        DismissedFinding: {
+            /** Category */
+            category: string | null;
+            /** Check Code */
+            check_code: string | null;
+            /** Document Id */
+            document_id: string;
+            /** Document Type */
+            document_type: string | null;
+            /** Filename */
+            filename: string;
+            /** Finding Id */
+            finding_id: string;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Reason */
+            reason: string;
+            /** Summary */
+            summary: string;
+            /** Tool */
+            tool: string | null;
         };
         /** DocumentCaseMatch */
         DocumentCaseMatch: {
@@ -2925,11 +2983,14 @@ export interface components {
         FindingCategory: "tampering_forensic" | "registry_discrepancy" | "identity_entity_conflict" | "cross_document_variance" | "behavioural_anomaly" | "unsupported_claim";
         /**
          * FindingReview
-         * @description An officer's verdict on one finding (kind "verdict": correct or wrong), or an issue the officer found that
-         *     no finding raised (kind "missed"). scope "document" is a finding on one document; "case" a cross-document
-         *     finding from the case analysis. check_name is the tool for a document finding, the category for a case one.
+         * @description An officer's verdict on one current finding (kind "verdict": correct or wrong, the finding's row in the
+         *     findings table), or an issue the officer found that no finding raised (kind "missed"). scope "document" is a
+         *     finding on one document; "case" a cross-document finding from the case analysis. check_name is the tool for
+         *     a document finding, the category for a case one.
          */
         FindingReview: {
+            /** Agent Decision */
+            agent_decision: ("accepted" | "not_assessed" | "overridden" | "dismissed") | null;
             /** Case Id */
             case_id: string;
             /** Check Code */
@@ -2943,8 +3004,8 @@ export interface components {
             created_at: string;
             /** Document Id */
             document_id: string | null;
-            /** Finding Id */
-            finding_id: string | null;
+            /** Fingerprint */
+            fingerprint: string | null;
             /** Id */
             id: string;
             /**
@@ -3856,24 +3917,15 @@ export interface components {
          * @description Marks one finding correct or wrong; verdict null clears the officer's mark.
          */
         SetFindingVerdictRequest: {
-            /** Check Code */
-            check_code?: string | null;
-            /** Check Name */
-            check_name: string;
             /** Document Id */
             document_id?: string | null;
-            /** Finding Id */
-            finding_id: string;
+            /** Fingerprint */
+            fingerprint: string;
             /**
              * Scope
              * @enum {string}
              */
             scope: "document" | "case";
-            /**
-             * Summary
-             * @default
-             */
-            summary: string;
             /** Verdict */
             verdict?: ("correct" | "wrong") | null;
         };
@@ -4913,43 +4965,6 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CaseFindingReviews"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_finding_verdict_cases__case_id__finding_reviews_verdict_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                case_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetFindingVerdictRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -44,10 +44,9 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 ### Backend
 
 1. **Private helpers shared across packages.** `case_pipeline/*` (6 modules), `dates/date_anomalies.py`, `giro.py`, the `reference_checks` and two `registry_lookups` modules import `_as_number`, `_rows`, `_parse_field_date` (and `_money`, `_CURRENCY_WORDS`, `_fields_by_name`, …) from `fraud_detection/numerical_validation/common.py`. Those are a public field-value API in practice: make them public in `fraud_detection/shared/field_values.py`, as `decode_field_value` already is. Similarly, `field_checks/*` and `tool_timeout.py` import `_result` and `_with_ids` from `detection/tools.py`. M
-2. **`case_service.py` (516 lines) mixes jobs:** the documents-status rollup, pass-throughs (`get_case`, `create_case`, `update_case`), the snapshot builder, and `submission_finalized`. The required-documents rules are split across `models.py`, `case_service.py` and `mapper.py`. M
-3. **`submission_finalized` machinery.** A debounce with timer threads (`document_repository`), a flush before each request returns, and a per-process "last written" cache (`case_service._synced_finalized`), all for a flag nothing reads yet. Decide its shape when automatic case analysis is built: keep it stored, or compute it inside the gate and delete the machinery. Decision pending this sprint
-4. **`models.py` (665 lines)** mixes enums and business rules, API schemas, and risk models that have a twin in `case_pipeline/models.py`. M
-5. **Blocking calls in routers without the 502 wrapper.** A Supabase error at these becomes a bare 500 with no log line, instead of `to_thread_or_502` / `bad_gateway_on_error`'s logged 502: `cases.py` (the summary re-read in `update_case`); `detection.py` (`langgraph_trace.load` in the check gate, the report and retry; `list_documents` in the company-name check; `langgraph_trace.resume`); `upload.py` (the case lookup in single and bulk upload). S
+2. **`case_service.py` (516 lines) mixes jobs:** the documents-status rollup, pass-throughs (`get_case`, `create_case`, `update_case`), and the snapshot builder. The required-documents rules are split across `models.py`, `case_service.py` and `mapper.py`. M
+3. **`models.py` (665 lines)** mixes enums and business rules, API schemas, and risk models that have a twin in `case_pipeline/models.py`. M
+4. **Blocking calls in routers without the 502 wrapper.** A Supabase error at these becomes a bare 500 with no log line, instead of `to_thread_or_502` / `bad_gateway_on_error`'s logged 502: `cases.py` (the summary re-read in `update_case`); `detection.py` (`langgraph_trace.load` in the check gate, the report and retry; `list_documents` in the company-name check; `langgraph_trace.resume`); `upload.py` (the case lookup in single and bulk upload). S
 
 ### Frontend (types)
 
@@ -55,7 +54,7 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 ### Deployment and repo
 
-1. **The database schema isn't in the repo.** Everything else is code; the schema lives only in Supabase. Export it as versioned migrations (the first step of staging, `CLOUD_ARCHITECTURE_PLAN.md` section 9). M (reading the schema needs your go-ahead)
+1. **The schema is a hand-kept snapshot** (`backend/sql/schema.sql`), not versioned migrations. Staging (`CLOUD_ARCHITECTURE_PLAN.md` section 9) would want migrations it can replay. M
 
 ---
 
@@ -75,8 +74,8 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 Checked 2026-10-27 by reading the code and PostgREST's table listing (no rows read). The listing doesn't show grants, RLS or foreign-key delete rules; the two queries below do (Supabase SQL editor).
 
 **What a delete removes:**
-- A document: `extracted_fields`, `flags`, `langgraph_trace`, its `case_notes` (replies carry the note's `document_id`), `finding_reviews`, the stored file (best effort), then the row (`document_repository._delete_document_children`).
-- A case: its documents as above, then `risk_scores`, `case_analysis_runs`, `flags`, `case_notes`, `finding_reviews`, then the row (`case_repository.delete_case`).
+- A document: by cascade, `extracted_fields`, `findings`, `langgraph_trace`, `detection_results` and its `case_notes`; the code removes its stored file (best effort) and the cross-document findings resting on it (`document_repository._delete_document_children`).
+- A case: its documents as above, then the row, which cascades to `risk_scores`, `case_analysis_runs`, `findings` and `case_notes` (`case_repository.delete_case`).
 - `audit_events` is never deleted: it has no foreign keys, so events outlive what they name. Intended.
 
 | # | Finding | Fix | Effort |
@@ -92,9 +91,8 @@ select conrelid::regclass as tbl, conname, confdeltype from pg_constraint where 
 ```
 
 **Unused schema on `main`** (rows read on 2026-10-30; STABILITY_AUDIT §2 has the rest):
-- Not used at all: `case_status_history` (no code), `flags.reviewed_by` and `reviewed_at` (never set; `status` is only filtered on in the delete), `flags.related_document_ids` (null on every row).
 - Written by an unmerged branch, unknown to `main`: every `cases.status` value except `open` (STABILITY_AUDIT D1).
-- Written, never read: the whole `flags` table (risk and the UI read the detection report), `risk_scores.flag_ids` and `scored_at`, `extracted_fields.field_category` and `extracted_at`.
+- Written, never read: `risk_scores.scored_at`, `extracted_fields.field_category` and `extracted_at`.
 
 ---
 
@@ -113,7 +111,6 @@ The database was wiped on 2026-10-31 and the fallbacks for older rows were remov
 ## Suggested order
 
 1. **The two SQL queries** (§4.1, 4.3): whether a case delete can be blocked, and whether the audit trail can be edited.
-2. **Quick win:** the 502 wrappers (backend 2.5), S.
+2. **Quick win:** the 502 wrappers (backend 2.4), S.
 3. **Public field-value helpers** (backend 2.1).
 4. **The one-off colours** (frontend 1.1), as you restyle each component.
-5. **Decide `submission_finalized`** (backend 2.3) as part of automatic case analysis.

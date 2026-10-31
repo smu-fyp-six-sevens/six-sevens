@@ -1,4 +1,4 @@
-import type { DocumentRecord } from '../../services/uploadService';
+import type { CaseCostRun, DocumentRecord } from '../../services/uploadService';
 import { formatUsd as usd } from './processingTimes';
 import { useCaseCost } from './useCaseCost';
 
@@ -13,7 +13,21 @@ const RUN_LABELS: Record<string, string> = {
 export function CaseCostCard({ caseId, documents }: { caseId: string; documents: DocumentRecord[] }) {
   const { cost, error, loading, reload } = useCaseCost(caseId);
 
-  const filename = (id: string) => documents.find((document) => document.id === id)?.filename ?? `${id.slice(0, 8)}… (removed)`;
+  // A document still in the case by its name now; one deleted or moved out by the name it was uploaded with.
+  const filename = (id: string) => {
+    const current = documents.find((document) => document.id === id)?.filename;
+    if (current) return current;
+    const known = cost?.documents?.[id];
+    const name = known?.filename ?? `${id.slice(0, 8)}…`;
+    return `${name} (${known?.deleted ? 'deleted' : known && !known.in_case ? 'moved to another case' : 'removed'})`;
+  };
+
+  const runLabel = (run: CaseCostRun) => {
+    const label = RUN_LABELS[run.run ?? ''] ?? run.type;
+    const repeat = (run.attempt ?? 1) > 1 ? ` · run ${run.attempt}` : '';
+    const ending = run.outcome === 'failed' ? ' · failed' : run.outcome === 'cancelled' ? ' · cancelled' : '';
+    return `${label}${repeat}${ending}`;
+  };
 
   return (
     <section className="summary-card">
@@ -43,9 +57,16 @@ export function CaseCostCard({ caseId, documents }: { caseId: string; documents:
             <strong>Total: {usd(cost.total_usd)}</strong> · documents{' '}
             {usd(cost.total_usd - cost.case_analysis_usd)} · case analysis {usd(cost.case_analysis_usd)}
           </p>
+          {((cost.repeated_runs_usd ?? 0) > 0 || (cost.failed_or_cancelled_usd ?? 0) > 0) && (
+            <p>
+              Included: retries and reruns {usd(cost.repeated_runs_usd ?? 0)} · failed or cancelled runs{' '}
+              {usd(cost.failed_or_cancelled_usd ?? 0)}
+            </p>
+          )}
           <p>
             <small>
-              At Anthropic list prices, from each run's record in the audit trail.
+              At Anthropic list prices, from each run's record in the audit trail: every run counts, including
+              earlier case analyses, retries, cancelled runs and documents since deleted.
             </small>
           </p>
 
@@ -87,7 +108,7 @@ export function CaseCostCard({ caseId, documents }: { caseId: string; documents:
                   {cost.runs.map((run, index) => (
                     <tr key={`${run.occurred_at}-${index}`}>
                       <td>{new Date(run.occurred_at).toLocaleString()}</td>
-                      <td>{RUN_LABELS[run.run ?? ''] ?? run.type}</td>
+                      <td>{runLabel(run)}</td>
                       <td>{run.document_id ? filename(run.document_id) : '—'}</td>
                       <td>{run.llm_calls ?? '—'}</td>
                       <td>{usd(run.llm_cost_usd)}</td>

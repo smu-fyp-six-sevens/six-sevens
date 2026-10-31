@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import type { DetectionReport, IndividualCheckId } from '../../services/uploadService';
 import { INDIVIDUAL_DETECTION_CHECKS } from '../../services/uploadService';
 import { RefreshButton } from '../../components/RefreshButton';
 import { ErrorMessage } from '../../components/ErrorMessage';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 function confidenceLabel(value: number | undefined): string | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
@@ -46,11 +48,56 @@ export function DetectionPanel({
   // A finalised case: the report shows, but detection can't be retried or cancelled.
   readOnly?: boolean;
 }) {
+  const [confirmRerun, setConfirmRerun] = useState(false);
+  const running = status === 'detecting';
+  // Approved, with nothing stored yet: the run is waiting for a worker.
+  const queued = status === 'approved' && !detectionReport && !detectionError;
+  const runnable = isApproved && !detectionSkipped && (status === 'approved' || status === 'detected');
+  const canCancel = !readOnly && !detectionSkipped && (running || queued);
+  const canRerun = !readOnly && runnable && !running && !queued;
+
   return (
         <section className="details-card debug-card">
           <RefreshButton isRefreshing={isRefreshingDetection} onClick={() => void refreshDetectionReport()} label="detection" />
           <h2>Detection</h2>
         {detectionError && <ErrorMessage className="action-error" message={detectionError} />}
+        {detectionReport?.last_run_error && !running && (
+          <p>The last run did not finish ({detectionReport.last_run_error}). The report below is from the run before it.</p>
+        )}
+        {running && detectionReport && <p>Running again… the report below is from the previous run until this one finishes.</p>}
+        {(canCancel || canRerun) && (
+          <div className="detection-actions">
+            {canCancel && (
+              <button type="button" disabled={isCancellingDetection} onClick={() => void handleCancelDetection()}>
+                {isCancellingDetection ? 'Cancelling…' : 'Cancel detection'}
+              </button>
+            )}
+            {canRerun && (
+              <button
+                type="button"
+                disabled={isRetryingDetection}
+                onClick={() => (detectionReport ? setConfirmRerun(true) : void handleRetryDetection())}
+              >
+                {isRetryingDetection ? 'Starting…' : detectionReport ? 'Run detection again' : 'Retry detection'}
+              </button>
+            )}
+          </div>
+        )}
+        {cancelError && <ErrorMessage className="action-error" message={cancelError} />}
+        {confirmRerun && (
+          <ConfirmDialog
+            title="Run detection again?"
+            message="This is a full run, with its own model cost. When it finishes, its report and findings replace these, and any verdicts on this document's findings are cleared. If it's cancelled or fails, this report stays."
+            confirmLabel="Run again"
+            busyLabel="Starting…"
+            tone="primary"
+            isConfirming={isRetryingDetection}
+            onConfirm={() => {
+              void Promise.resolve(handleRetryDetection()).finally(() => setConfirmRerun(false));
+            }}
+            onCancel={() => setConfirmRerun(false)}
+          />
+        )}
         {status === 'rejected' ? (
           // Reject only works on an extracted, unapproved document, so a rejected one has never been scanned.
           <p>Detection doesn't run on rejected documents.</p>
@@ -61,22 +108,16 @@ export function DetectionPanel({
               ' Choose a document type above to have it scanned after approval.'}
           </p>
         ) : !detectionReport ? (
-          <>
-            {/* With an error, the line above says what happened. */}
-            {!detectionError && <p>Scanning… detection starts automatically once the document is approved.</p>}
-            {readOnly ? null : detectionError ? (
-              <button type="button" disabled={isRetryingDetection} onClick={() => void handleRetryDetection()}>
-                {isRetryingDetection ? 'Retrying…' : 'Retry detection'}
-              </button>
-            ) : (
-              isApproved && (
-                <button type="button" disabled={isCancellingDetection} onClick={() => void handleCancelDetection()}>
-                  {isCancellingDetection ? 'Cancelling…' : 'Cancel detection'}
-                </button>
-              )
-            )}
-            {cancelError && <ErrorMessage className="action-error" message={cancelError} />}
-          </>
+          // With an error, the line above says what happened.
+          !detectionError && (
+            <p>
+              {running
+                ? 'Scanning…'
+                : queued
+                  ? 'Waiting for a detection worker…'
+                  : 'Detection starts automatically once the document is approved.'}
+            </p>
+          )
         ) : (
           <>
             <p>

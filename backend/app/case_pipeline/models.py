@@ -70,6 +70,8 @@ class CrossDocFinding(BaseModel):
     probe_summary: str = ""
     # Set by code when a tool result carried a hard breach.
     breach_flags: list[str] = Field(default_factory=list)
+    # Set by finding_keys once the run's findings are final; names its row in the findings table.
+    fingerprint: str = ""
 
 
 class EvidenceRequest(BaseModel):

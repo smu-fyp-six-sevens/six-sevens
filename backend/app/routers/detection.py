@@ -15,6 +15,7 @@ from ..models import DocumentRecord, DocumentStatus, skips_detection
 from .. import case_service, detection_results, document_repository, events, extracted_fields_repository, storage_service
 from ..events import Stopwatch, officer_event, types
 from ..cpu_pool import run_cpu
+from ..snapshots import push_case_snapshot
 from ._dependencies import (
     get_document_or_404, get_document_with_metadata_or_404, get_editable_document_or_404, to_thread_or_502,
 )
@@ -366,7 +367,9 @@ async def get_document_detection_report(document_id: str) -> dict:
         detail="Failed to load the detection report.", log=("Failed to load the detection report of %s", document_id),
     )
     if report:
-        return await _with_finding_locations(document_id, report)
+        placed = await _with_finding_locations(document_id, report)
+        # A rerun that crashed or was cancelled leaves the earlier report standing; say so beside it.
+        return {**placed, "last_run_error": error} if error else placed
     # A report always wins over a stale error from an earlier failed attempt
     # (above) — only fall back to reporting the error when there's no report
     # at all, so the frontend can tell "crashed" apart from "never run yet"
@@ -384,14 +387,17 @@ async def cancel_document_detection(
     document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> dict:
     """
-    Interrupts an in-flight detection run — the Detection panel's Cancel
-    action while a document reads "Scanning"/"Detecting". Only takes effect
-    at the graph's next await point (an Anthropic call already in flight
-    still completes) — see workers/detection.py. The cancellation is then
-    recorded the same way a crash is, so GET .../detection/report and
-    retry_document_detection below both already know how to handle it.
+    Interrupts a detection run: one in flight ("Detecting"), or one still waiting for a worker slot (approved, with
+    no report and no error yet). An in-flight run stops at the graph's next await point (an Anthropic call already
+    in flight still completes) — see workers/detection.py — and records the cancellation the way a crash is
+    recorded. A waiting one is recorded as cancelled here, so it can be run again at once ("cancelled"); the
+    worker drops it when its turn comes.
     """
-    if document.status != DocumentStatus.DETECTING:
+    queued = False
+    if document.status == DocumentStatus.APPROVED and not skips_detection(document):
+        report, error = await asyncio.to_thread(detection_results.get, document_id)
+        queued = report is None and error is None
+    if document.status != DocumentStatus.DETECTING and not queued:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No detection run is currently in progress for this document.",
@@ -399,6 +405,11 @@ async def cancel_document_detection(
     await events.publish(officer_event(
         types.DETECTION_CANCEL_REQUESTED, document_id=document_id, case_id=document.case_id,
     ))
+    if queued:
+        await asyncio.to_thread(detection_results.save_error, document_id, "Cancelled by loan officer")
+        if document.case_id:
+            await push_case_snapshot(document.case_id)
+        return {"status": "cancelled"}
     return {"status": "cancelling"}
 
 
@@ -407,12 +418,10 @@ async def retry_document_detection(
     document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
 ) -> dict:
     """
-    Re-launches detection after a previous attempt was cancelled or
-    crashed. NOT a general "run detection" trigger — that only ever
-    happens automatically on approval (routers/documents.py's
-    approve_document) — so this is only allowed when the last attempt left
-    an error/cancellation behind and produced no report, and only when
-    nothing is already running for this document.
+    Runs detection again on an approved document: after a cancelled or crashed run, or over a finished report
+    (a fresh run replaces the report and the document's findings, and the officer's verdicts on them, once it
+    completes; if it doesn't, the earlier report stands). Detection first runs by itself on approval. Refused
+    while a run is in flight or still waiting for a worker slot (cancel it first).
     """
     if skips_detection(document):
         raise HTTPException(
@@ -422,13 +431,18 @@ async def retry_document_detection(
     if document.status == DocumentStatus.DETECTING:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Detection is already running for this document.",
+            detail="Detection is already running for this document. Cancel it first.",
         )
-    report, error = await asyncio.to_thread(detection_results.get, document_id)
-    if report or not error:
+    if document.status not in (DocumentStatus.APPROVED, DocumentStatus.DETECTED):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Detection can only be retried after a cancelled or failed run.",
+            detail="Detection runs only on an approved document.",
+        )
+    report, error = await asyncio.to_thread(detection_results.get, document_id)
+    if report is None and error is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Detection is already queued for this document. Cancel it first.",
         )
     await events.publish(officer_event(
         types.DETECTION_RETRY_REQUESTED, document_id=document_id, case_id=document.case_id,

@@ -90,8 +90,9 @@ async def _run(
     except asyncio.CancelledError:
         if not _runs.cancelled_by_officer(document_id):
             raise
-        # The officer's cancel already wrote CANCELLED and its own event.
+        # The officer's cancel already wrote CANCELLED and its own event; this one carries what the run spent.
         logger.info("Processing of document %s was cancelled", document_id)
+        await _record_stopped(document_id, timer, {"run": kind, **usage}, requested_by)
         return
     except Exception as exc:
         logger.exception("Unhandled error processing document %s", document_id)
@@ -104,6 +105,18 @@ async def _run(
         except Exception:
             logger.exception("Failed to mark document %s FAILED after an unhandled error", document_id)
     await _announce(document_id, timer, {"run": kind, **usage}, requested_by)
+
+
+async def _record_stopped(document_id: str, timer: Stopwatch, usage: dict, requested_by: str | None) -> None:
+    if not usage.get("llm_calls"):
+        return
+    document = await asyncio.to_thread(document_repository.get_document, document_id, include_fields=False)
+    detail = {**usage, "requested_by": requested_by} if requested_by is not None else usage
+    await events.record(Event(
+        type=types.DOCUMENT_RUN_STOPPED, actor_type="agent", actor=_ACTOR,
+        case_id=document.case_id if document else None, document_id=document_id,
+        outcome="cancelled", detail=detail, **timer.fields(),
+    ))
 
 
 async def _announce(document_id: str, timer: Stopwatch, usage: dict, requested_by: str | None = None) -> None:

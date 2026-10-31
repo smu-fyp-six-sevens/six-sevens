@@ -14,8 +14,7 @@ from . import (
     detection_results,
     document_repository,
     extracted_fields_repository,
-    finding_reviews_repository,
-    flags_repository,
+    findings_repository,
 )
 from .case_match import CaseMatchResult, DocumentCaseMatch, check_case_match
 from .case_pipeline import repository as analysis_repository, state as analysis_state
@@ -101,9 +100,8 @@ def update_case(case_id: str, company_name: str) -> CaseRecord | None:
 def delete_case(case_id: str) -> None:
     """
     Removes a case and every document that belongs to it. Documents go
-    first (via document_repository.remove_documents, which batch-clears
-    their extracted-field rows and stored files) so nothing is left orphaned
-    if the case delete were to run first and fail partway through.
+    first (document_repository.remove_documents), so their stored files are
+    removed; the database cascades the rest.
     """
     documents = document_repository.list_documents(case_id=case_id, include_fields=False)
     document_repository.remove_documents(documents)
@@ -154,7 +152,7 @@ def _load_reviews(case: CaseRecord) -> list[FindingReview] | None:
     if case.status not in (CaseStage.CASE_ANALYSED.value, CaseStage.PENDING_EVALUATION.value):
         return []
     try:
-        return finding_reviews_repository.list_for_case(case.id)
+        return findings_repository.list_reviews_for_case(case.id)
     except Exception:
         logger.exception("Failed to load the finding reviews of case %s", case.id)
         return None
@@ -227,7 +225,7 @@ def build_summary(
             if case.status == CaseStage.FAILED.value else None
         ),
         findings_to_review=(
-            case_stage.count_unreviewed(completed.risk.contributing_findings if completed and completed.risk else [], reviews)
+            case_stage.count_unreviewed(completed.risk if completed else None, reviews)
             if reviews is not None and case.status in (CaseStage.CASE_ANALYSED.value, CaseStage.PENDING_EVALUATION.value)
             else None
         ),
@@ -519,7 +517,7 @@ def _load_flag_counts(documents_by_case: dict[str, list[DocumentRecord]]) -> dic
     flags can't be read: the list then shows no flags.
     """
     try:
-        rows = flags_repository.list_for_cases(list(documents_by_case))
+        rows = findings_repository.list_flags_for_cases(list(documents_by_case))
     except Exception:
         logger.exception("Failed to load flags for %d case(s)", len(documents_by_case))
         return {}

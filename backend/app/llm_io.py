@@ -38,15 +38,18 @@ def message_text(content: Any) -> str:
     )
 
 
-def without_thinking(messages: list) -> list:
-    """The conversation with the assistant turns' thinking blocks removed, for a call that changes the tools offered."""
+def thinking_summaries(message: object) -> list[str]:
+    """
+    The summaries of a reply's reasoning (its `thinking` blocks), for the traces; empty when the model didn't think.
+    Never send them anywhere else, and never edit or drop thinking blocks in a conversation that continues: a block is
+    only valid in the unchanged conversation that produced it.
+    """
+    content = getattr(message, "content", None)
+    if not isinstance(content, list):
+        return []
     return [
-        message.model_copy(update={"content": [
-            block for block in message.content
-            if not (isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))
-        ]})
-        if isinstance(message, AIMessage) and isinstance(message.content, list) else message
-        for message in messages
+        block["thinking"].strip() for block in content
+        if isinstance(block, dict) and block.get("type") == "thinking" and str(block.get("thinking") or "").strip()
     ]
 
 

@@ -1,5 +1,6 @@
 import type { CaseAnalysis } from '../../services/uploadService';
 import { RefreshButton } from '../../components/RefreshButton';
+import { ThinkingLog } from '../../components/ThinkingLog';
 
 // Debug aid, the case-level counterpart of the document page's LangGraph trace
 // (see backend/app/case_pipeline/trace.py). Unlike findings, it also lists hypotheses that were dropped.
@@ -113,6 +114,7 @@ export function CaseAnalysisTracePanel({
             </div>
           )}
           {analysis.error && <div className="debug-error">error: {analysis.error}</div>}
+          <ThinkingLog steps={steps} />
           <details className="debug-section">
             <summary>Full step log ({steps.length} steps)</summary>
             <pre className="debug-json">{JSON.stringify(steps, null, 2)}</pre>

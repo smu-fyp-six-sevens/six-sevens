@@ -23,7 +23,7 @@ const EARLIER = 'run-1';
 function contributing(overrides: Partial<CaseRiskFinding> & Pick<CaseRiskFinding, 'document_id' | 'finding_id'>): CaseRiskFinding {
   return {
     filename: 'document.pdf', document_type: null, tool: null, check_code: null, severity: 'medium', summary: '',
-    rationale: '', points: 0, unreviewed: false, flag_id: null, category: null, source: 'document', repeat_of: null,
+    rationale: '', points: 0, unreviewed: false, fingerprint: 'fp-1', category: null, source: 'document', repeat_of: null,
     also_on: 0, ...overrides,
   };
 }

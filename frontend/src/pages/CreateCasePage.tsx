@@ -7,6 +7,7 @@ import {
   validateCompanyName,
 } from '../utils/caseValidation';
 import { ErrorMessage } from '../components/ErrorMessage';
+import { CharacterCount } from '../components/CharacterCount';
 
 // The case's path after it is created, as the case summary's progress stages show it.
 const NEXT_STEPS = [
@@ -122,12 +123,10 @@ export default function CreateCasePage({
                 aria-describedby={error ? 'company-name-error' : 'company-name-hint'}
               />
 
+              <CharacterCount length={companyName.length} />
               <div className="form-field-hint">
                 <span id="company-name-hint">
                   Use the registered name. You can rename the case later.
-                </span>
-                <span aria-hidden="true">
-                  {companyName.length}/{MAX_COMPANY_NAME_LENGTH}
                 </span>
               </div>
             </div>

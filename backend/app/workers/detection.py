@@ -12,7 +12,7 @@ from ..config import settings
 from ..events import Event, Stopwatch, types
 from ..events.envelope import Outcome, officer_of
 from ..langgraph import trace as langgraph_trace
-from ..langgraph.detection.graph import run_detection
+from ..langgraph.detection.graph import end_unfinished_run, run_detection
 from ..models import DocumentStatus
 from ..snapshots import push_case_snapshot
 from . import recovery
@@ -58,18 +58,27 @@ async def run(document_id: str, case_id: str | None, requested_by: str | None = 
         langgraph_trace.record(document_id, "detection_error", error=reason)
         await asyncio.to_thread(detection_results.save_error, document_id, reason)
         await asyncio.to_thread(langgraph_trace.flush, document_id)
-        await asyncio.to_thread(document_repository.revert_to_approved, document_id)
-        if not by_officer:
-            raise
+        await asyncio.to_thread(end_unfinished_run, document_id)
         outcome, detail = "cancelled", {"error": reason}
+        if not by_officer:
+            # Shutting down: what the run spent still goes on the record before the cancel carries on.
+            await _record_end(document_id, case_id, requested_by, timer, outcome, detail, usage)
+            raise
     except Exception as exc:
         logger.exception("Fraud detection failed for approved document %s", document_id)
         outcome, detail = "failed", {"error": f"{type(exc).__name__}: {exc}"[:300]}
     finally:
         if case_id:
             await push_case_snapshot(case_id)
+    await _record_end(document_id, case_id, requested_by, timer, outcome, detail, usage)
+
+
+async def _record_end(
+    document_id: str, case_id: str | None, requested_by: str | None, timer: Stopwatch, outcome: Outcome,
+    detail: dict[str, Any], usage: dict[str, float | int],
+) -> None:
     if requested_by is not None:
-        detail["requested_by"] = requested_by
+        detail = {**detail, "requested_by": requested_by}
     await events.record(Event(
         type=types.DOCUMENT_DETECTED if outcome == "success" else types.DETECTION_FAILED,
         actor_type="agent", actor=_ACTOR, case_id=case_id, document_id=document_id,
@@ -109,6 +118,8 @@ async def on_recovery_requested(event: Event) -> None:
         langgraph_trace.record(document_id, "detection_error", error=error)
         await asyncio.to_thread(detection_results.save_error, document_id, error)
         await asyncio.to_thread(langgraph_trace.flush, document_id)
+        # A rerun that never finished leaves the earlier report standing.
+        await asyncio.to_thread(end_unfinished_run, document_id)
         await recovery.report(event, _ACTOR, types.RECOVERY_EXHAUSTED, "failed")
         if event.case_id:
             await push_case_snapshot(event.case_id)

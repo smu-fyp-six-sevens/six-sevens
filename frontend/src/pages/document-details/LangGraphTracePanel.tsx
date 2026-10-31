@@ -1,5 +1,6 @@
 import type { LangGraphTrace } from '../../services/uploadService';
 import { RefreshButton } from '../../components/RefreshButton';
+import { ThinkingLog } from '../../components/ThinkingLog';
 
 export function LangGraphTracePanel({
   langGraphTrace,
@@ -27,6 +28,7 @@ export function LangGraphTracePanel({
                 classification_reasoning (debug only — not saved to the database yet):{' '}
                 {String(langGraphTrace.classification_reasoning ?? '—')}
               </div>
+              <ThinkingLog steps={langGraphTrace.steps} />
               <details className="debug-section">
                 <summary>Full step log ({langGraphTrace.steps.length} steps)</summary>
                 <pre className="debug-json">

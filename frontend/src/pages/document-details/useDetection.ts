@@ -45,8 +45,9 @@ export function useDetection(documentId: string, status: string | undefined) {
     setIsCancellingDetection(true);
     setCancelError(null);
     try {
-      await cancelDetection(documentId);
-      setIsCancelPending(true);
+      // A run still waiting for a worker stops at once, and the document stays approved: read its error now.
+      if ((await cancelDetection(documentId)) === 'cancelled') await refreshDetectionReport();
+      else setIsCancelPending(true);
     } catch (err) {
       // Not a failed run: the cancel itself didn't go through, so the panel keeps showing what it showed.
       setCancelError(err instanceof Error ? err.message : 'Failed to cancel detection.');
@@ -89,6 +90,8 @@ export function useDetection(documentId: string, status: string | undefined) {
 
     if (before === status) return;
     if (status !== 'detecting') setIsCancelPending(false);
+    // A new run started: the last one's error no longer describes it.
+    if (status === 'detecting') setDetectionError(null);
     if (before === 'detecting' && (status === 'approved' || status === 'detected')) {
       void refreshDetectionReport();
     }

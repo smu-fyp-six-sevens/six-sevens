@@ -3,6 +3,7 @@ import type { CaseRecord } from '../App';
 import KebabMenu from './KebabMenu';
 import { updateCase } from '../services/uploadService';
 import { MAX_COMPANY_NAME_LENGTH, validateCompanyName } from '../utils/caseValidation';
+import { CharacterCount } from './CharacterCount';
 import { ErrorMessage } from './ErrorMessage';
 
 interface CaseRowProps {
@@ -101,6 +102,7 @@ export default function CaseRow({
             aria-invalid={saveError ? true : undefined}
             autoFocus
           />
+          <CharacterCount length={draft.length} />
           {saveError && <ErrorMessage inline message={saveError} />}
         </span>
 

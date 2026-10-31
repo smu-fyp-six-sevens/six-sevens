@@ -52,7 +52,7 @@ The doc-worker takes each `document.uploaded` (or an officer's `document.retry_r
 ### Step 4: Officer review
 The officer can edit or delete fields, correct the document type (which re-runs extraction), move, delete, cancel or retry a document, and **approve** or **reject** it. Approval locks the document. A **case-match** check (plain code, `case_match.py`) compares each document's company and people with the certificate of incumbency to catch a document in the wrong case; it is not a fraud signal.
 
-The case page also shows the **requirements checklist** (required types, proof of address per person, both sides of each ID). When everything required is covered, `submission_finalized` is set. It is recomputed after classification, field saves, rejection, moves and deletes, batched per case over 1.5 seconds so a burst of classifications costs one recompute, and written only when its value changes. Nothing reads it yet.
+The case page also shows the **requirements checklist** (required types, proof of address per person, both sides of each ID).
 
 ### Step 5: The Detection Agent (`approved` → `detecting` → `detected`)
 Approval publishes `document.approved`; the detection-worker runs it, **two runs at a time** per process (`DETECTION_CONCURRENCY`); the rest wait, shown as "Approved". A cancel or retry is an event too. The run ends with `document.detected` or `detection.failed`.
@@ -75,9 +75,9 @@ Approval publishes `document.approved`; the detection-worker runs it, **two runs
    - **Tool time limits** count the time a tool works, not the time its job waits for a free CPU worker; a wait has its own cap (`CPU_QUEUE_TIMEOUT_SECONDS`).
 4. **Lead reviews**, and may request one second look from another specialist.
 5. **Merge (code).** One report with a verdict: `flagged`, `inconclusive` or `clean`. When a second look dismisses a finding the first pass kept, the later view stands: the finding is removed from the report, the flags and the score (the dismissal stays visible under the specialist). A check that failed and then ran in a retry or the second look is not listed as unable to assess.
-6. **Save.** The report is written to the document's trace, then the findings a specialist **approved** are written to `flags`, then the document becomes `detected`.
+6. **Save.** The report is written to `detection_results`, then every finding a tool returned, kept or dismissed, is written to `findings`, then the document becomes `detected`.
 
-**Flags** are written by code, never by the model. A finding becomes a flag only if a specialist assessed it and did not dismiss it, and it is a per-document finding. Unassessed findings stay in the trace and still count towards the score as "unreviewed". Case-level findings are not flags. A retry replaces the document's open flags. Each flag's UUID is stamped on the finding, so the report, the `flags` row and `risk_scores.flag_ids` name the same id.
+**Findings** are written by code, never by the model (`findings_repository.py`, through the `sync_findings` function, in one transaction). Each row records what the specialists decided (`agent_decision`: accepted, not_assessed, overridden or dismissed) and, once an officer reviews it, the verdict. A finished run replaces the document's findings outright, with any verdicts on them (missed issues officers reported stay); a completed case analysis does the same for the case's cross-document findings, linked to the case only. Officers review at the end, so nothing is carried over. A finding is named within its run by a fingerprint (`finding_keys.py`), which the report and the case risk carry too. The Risk Summary lists the scored findings and, per document, the ones the specialists dismissed (`CaseRisk.dismissed_findings`): an officer ticks any that is real, and a dismissed finding marked real counts as a miss for recall (`detection_metrics.py`).
 
 If detection crashes it is recorded, the document returns to `approved`, and the officer can retry. Single checks can be run on demand once a report exists.
 
@@ -156,13 +156,14 @@ uploaded → queued → processing → extracting → analyzed ──approve─�
 
 | Table | Holds |
 |---|---|
-| `cases` | company name, GreenLink ID, `submission_finalized` (the old `dev` column was dropped on 2026-10-24). `recommended_additional_documents` (jsonb) holds `[]` until a case is analysed, then the whole `additional_documents` result of its latest complete run; the case summary returns it as `additional_documents`. The summary's `missing_requirements` (the checklist types no accepted document covers yet) is computed on every read, not stored |
+| `cases` | company name, GreenLink ID, the stage (`status`), and `checklist_enforced` and `reviews_required`, set at creation. `recommended_additional_documents` (jsonb) holds `[]` until a case is analysed, then the whole `additional_documents` result of its latest complete run; the case summary returns it as `additional_documents`. The summary's `missing_requirements` (the checklist types no accepted document covers yet) is computed on every read, not stored |
 | `documents` | one row per file: status, type, confidences, routing, requirements fulfilled, file metadata (read only by the metadata checks) |
 | `extracted_fields` | one row per field per document |
 | `langgraph_trace` | one JSON trace per document: pipeline steps and the **full detection report** |
-| `flags` | the per-document findings a specialist approved, with severity, check, description and evidence |
+| `detection_results` | each document's latest detection report, or why its last run failed |
+| `findings` | every finding (per document, kept and dismissed, and per case), the agents' decision, and the officer's verdict; missed issues |
 | `case_analysis_runs` | each run: findings (including `xd-det-N`), `consistent_checks`, outlook, summary, **risk**, **additional documents**, audit, step trace |
-| `risk_scores` (+ `latest_risk_scores` view) | one row per completed run: score, level, reasoning, `flag_ids` |
+| `risk_scores` (+ `latest_risk_scores` view) | one row per completed run: score, level, reasoning |
 | `audit_events` | every domain event, stored by audit-metrics (id = the event's id, so a redelivery is ignored): who (officer, agent or system), what, which case or document, outcome, timing, and Kong's request id; read at `GET /audit/events` |
 | Storage bucket `documents` | the uploaded files |
 
@@ -239,7 +240,7 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 ## 9. What is built and what isn't
 
-**Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks; per-document flags; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; case notes; cost logging and per-case Claude cost; the service split on Cloud Run (roles, domain events, Pub/Sub push, audit trail, stuck-work recovery, `/metrics`, Grafana, traces, alerts), Kong, the compose stack, Terraform, and CI/CD that deploys every green push to `main` (`CLOUD_ARCHITECTURE_PLAN.md`).
+**Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks, cancel and rerun; every finding stored with the agents' decision and the officer's verdict (dismissed ones included); the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; case notes; cost logging and per-case Claude cost (every run: retries, reruns, cancelled and failed runs, earlier analyses, deleted documents); the service split on Cloud Run (roles, domain events, Pub/Sub push, audit trail, stuck-work recovery, `/metrics`, Grafana, traces, alerts), Kong, the compose stack, Terraform, and CI/CD that deploys every green push to `main` (`CLOUD_ARCHITECTURE_PLAN.md`).
 
 **Not built:** the Output Aggregator; automatic case analysis when all documents are scanned; case-level flags; an officer review flow for flags (the `status` and `reviewed_by` columns exist, unused); the case dashboard (`/dashboard` is mock data). Open items are in `PENDING_WORK.md` and the cloud plan's section 9.
 
@@ -268,7 +269,7 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 | Classify and extract | `langgraph/pipeline.py`, `graph.py`, `classify_graph.py`, `extract.py` |
 | Approve and detection | `document_service.py` (`approve`), `workers/detection.py`, `langgraph/detection/graph.py`, `specialists.py`, `tools.py` |
 | The forensic checks | `fraud_detection/` |
-| Flags | `flags_repository.py` |
+| Findings and their reviews | `findings_repository.py`, `finding_keys.py`, `routers/finding_reviews.py` |
 | Case snapshot, checklist, case list | `case_service.py` |
 | Comparable keys for IDs, names, companies | `identifiers.py` |
 | Risk score | `case_pipeline/risk/case_risk.py`, `store.py` |

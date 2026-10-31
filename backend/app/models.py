@@ -364,8 +364,8 @@ class ContributingFinding(BaseModel):
     points: float
     # The specialist kept the tool's finding without ever assessing it.
     unreviewed: bool = False
-    # The finding's row in the flags table, set only when a specialist approved it as genuine.
-    flag_id: str | None = None
+    # Names the finding's row in the findings table, with the scope and document (finding_keys).
+    fingerprint: str
     # See case_pipeline.models.FindingCategory: decides whether more evidence can reduce it.
     category: str | None = None
     # "cross_document" for a finding from the case analysis rather than one document's scan.
@@ -374,6 +374,24 @@ class ContributingFinding(BaseModel):
     # carry it. On the copies that score 0: the finding_id of the one that scored.
     also_on: int = 0
     repeat_of: str | None = None
+
+
+class DismissedFinding(BaseModel):
+    """A tool's finding a specialist dismissed as a false positive (case_risk). An officer marks it correct when it
+    is a real problem after all."""
+
+    document_id: str
+    filename: str
+    document_type: str | None = None
+    # Unique per case, as ContributingFinding.finding_id.
+    finding_id: str
+    tool: str | None = None
+    check_code: str | None = None
+    summary: str
+    # The specialist's reason for dismissing it.
+    reason: str
+    category: str | None = None
+    fingerprint: str
 
 
 class UnassessedCheck(BaseModel):
@@ -397,6 +415,8 @@ class CaseRisk(BaseModel):
     # The raw points total the level is banded from.
     points: float | None = None
     contributing_findings: list[ContributingFinding] = Field(default_factory=list)
+    # What the specialists threw away as false positives: never scored, shown for officers to review.
+    dismissed_findings: list[DismissedFinding] = Field(default_factory=list)
     # Checks that couldn't run — listed, never scored: not being able to
     # check something isn't evidence of fraud.
     unassessed_checks: list[UnassessedCheck] = Field(default_factory=list)
@@ -559,7 +579,7 @@ class CaseListItem(CaseRecord):
     recommended_documents: list[str] | None = None
     # The types of the case's documents, each once.
     document_types: list[str] = Field(default_factory=list)
-    # The case's flags (flags_repository), one entry per check, most flags first.
+    # The findings specialists accepted (findings_repository.list_flags_for_cases), one entry per check, most first.
     flags: list[CaseFlagCount] = Field(default_factory=list)
     # The username of the officer who created the case (its case.created event); None when the trail has no record.
     created_by: str | None = None
@@ -669,7 +689,7 @@ class UpdateNoteRequest(BaseModel):
         return _note_body(value)
 
 
-# --- Finding reviews: precision and recall per check (finding_reviews_repository, detection_metrics) ----------
+# --- Finding reviews: precision and recall per check (findings_repository, detection_metrics) ------------------
 
 ReviewScope = Literal["document", "case"]
 ReviewVerdict = Literal["correct", "wrong"]
@@ -678,9 +698,10 @@ MAX_REVIEW_NOTE_LENGTH = 1000
 
 class FindingReview(BaseModel):
     """
-    An officer's verdict on one finding (kind "verdict": correct or wrong), or an issue the officer found that
-    no finding raised (kind "missed"). scope "document" is a finding on one document; "case" a cross-document
-    finding from the case analysis. check_name is the tool for a document finding, the category for a case one.
+    An officer's verdict on one current finding (kind "verdict": correct or wrong, the finding's row in the
+    findings table), or an issue the officer found that no finding raised (kind "missed"). scope "document" is a
+    finding on one document; "case" a cross-document finding from the case analysis. check_name is the tool for
+    a document finding, the category for a case one.
     """
 
     id: str
@@ -688,10 +709,14 @@ class FindingReview(BaseModel):
     document_id: str | None = None
     scope: ReviewScope
     kind: Literal["verdict", "missed"]
-    finding_id: str | None = None
+    # The reviewed finding's (ContributingFinding.fingerprint); None for a missed issue.
+    fingerprint: str | None = None
     check_name: str
     check_code: str | None = None
     summary: str = ""
+    # What the specialists decided on a document finding. A dismissed one marked correct is a real problem the
+    # agents threw away: a miss for recall (detection_metrics).
+    agent_decision: Literal["accepted", "not_assessed", "overridden", "dismissed"] | None = None
     verdict: ReviewVerdict | None = None
     note: str | None = None
     reviewer: str
@@ -699,27 +724,23 @@ class FindingReview(BaseModel):
     updated_at: datetime
 
 
-class _ReviewTarget(BaseModel):
+class _ReviewPlace(BaseModel):
     """Where a review sits: a document finding names its document; a case finding has none."""
 
     scope: ReviewScope
     document_id: UUID | None = None
-    check_name: str = Field(min_length=1, max_length=100)
 
     @model_validator(mode="after")
-    def document_matches_scope(self) -> "_ReviewTarget":
+    def document_matches_scope(self) -> "_ReviewPlace":
         if (self.scope == "document") != (self.document_id is not None):
             raise ValueError("A document review names its document; a case review doesn't")
         return self
 
 
-class SetFindingVerdictRequest(_ReviewTarget):
+class SetFindingVerdictRequest(_ReviewPlace):
     """Marks one finding correct or wrong; verdict null clears the officer's mark."""
 
-    finding_id: str = Field(min_length=1, max_length=200)
-    check_code: str | None = Field(default=None, max_length=100)
-    # The finding's summary when it was reviewed, so a verdict is only shown against the same finding.
-    summary: str = Field(default="", max_length=4000)
+    fingerprint: str = Field(min_length=1, max_length=100)
     verdict: ReviewVerdict | None = None
 
 
@@ -729,9 +750,10 @@ class SetFindingVerdictsRequest(BaseModel):
     verdicts: list[SetFindingVerdictRequest] = Field(min_length=1, max_length=200)
 
 
-class ReportMissedIssueRequest(_ReviewTarget):
+class ReportMissedIssueRequest(_ReviewPlace):
     """An issue the officer found that no finding raised, against the check that should have caught it."""
 
+    check_name: str = Field(min_length=1, max_length=100)
     note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_LENGTH)
 
     @field_validator("note")

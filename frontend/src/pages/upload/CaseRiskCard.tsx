@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { officerName } from '../../lib/officers';
-import type { CaseRisk, CaseRiskFinding, DocumentRecord, FindingReview, ReviewScope } from '../../services/uploadService';
+import type {
+  CaseRisk,
+  CaseRiskFinding,
+  DismissedFinding,
+  DocumentRecord,
+  FindingReview,
+  ReviewScope,
+} from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
 import { formatCheck as formatTool } from '../../utils/checkLabels';
 import type { GroupReviewStatus } from './FindingReviewControls';
@@ -105,11 +112,14 @@ interface DocumentGroup {
   documentType: string | null;
   findings: CaseRiskFinding[];
   rows: FindingRow[];
+  // What the specialists dismissed on this document: reviewed alongside, an officer ticks any that is real.
+  dismissed: DismissedFinding[];
 }
 
 // Grouped per document (cross-document findings in a group of their own), most severe first (documents by their
 // most severe finding, then total points); identical findings (same check, same summary) collapse into one row.
-function groupByDocument(findings: CaseRiskFinding[]): DocumentGroup[] {
+// A document whose findings were all dismissed gets a group too, after the scored ones.
+function groupByDocument(findings: CaseRiskFinding[], dismissed: DismissedFinding[]): DocumentGroup[] {
   const groups = new Map<string, DocumentGroup>();
   for (const finding of [...findings].sort(compareFindings)) {
     const scope = findingScope(finding);
@@ -123,6 +133,7 @@ function groupByDocument(findings: CaseRiskFinding[]): DocumentGroup[] {
         documentType: scope === 'case' ? null : finding.document_type,
         findings: [],
         rows: [],
+        dismissed: [],
       };
       groups.set(key, group);
     }
@@ -137,10 +148,27 @@ function groupByDocument(findings: CaseRiskFinding[]): DocumentGroup[] {
       group.rows.push({ finding, count: 1, members: [finding] });
     }
   }
+  for (const finding of dismissed) {
+    let group = groups.get(finding.document_id);
+    if (!group) {
+      group = {
+        documentId: finding.document_id,
+        scope: 'document',
+        filename: finding.filename,
+        documentType: finding.document_type ?? null,
+        findings: [],
+        rows: [],
+        dismissed: [],
+      };
+      groups.set(finding.document_id, group);
+    }
+    group.dismissed.push(finding);
+  }
   const total = (group: DocumentGroup) => group.findings.reduce((sum, f) => sum + f.points, 0);
-  return Array.from(groups.values()).sort(
-    (a, b) => compareFindings(a.findings[0], b.findings[0]) || total(b) - total(a),
-  );
+  return Array.from(groups.values()).sort((a, b) => {
+    if (a.findings.length === 0 || b.findings.length === 0) return b.findings.length - a.findings.length;
+    return compareFindings(a.findings[0], b.findings[0]) || total(b) - total(a);
+  });
 }
 
 // Scanned documents with no findings, and the cross-document group, so an officer can still report an issue
@@ -155,9 +183,13 @@ function emptyGroups(skip: Set<string>, documents: DocumentRecord[]): DocumentGr
       documentType: document.document_type,
       findings: [],
       rows: [],
+      dismissed: [],
     }));
   if (!skip.has(CASE_GROUP_ID)) {
-    groups.push({ documentId: CASE_GROUP_ID, scope: 'case', filename: 'Across documents', documentType: null, findings: [], rows: [] });
+    groups.push({
+      documentId: CASE_GROUP_ID, scope: 'case', filename: 'Across documents', documentType: null, findings: [], rows: [],
+      dismissed: [],
+    });
   }
   return groups;
 }
@@ -248,13 +280,12 @@ export function CaseRiskCard({
   const allReviews = reviews.data?.reviews ?? [];
 
   const findings = scored?.contributing_findings ?? [];
+  const dismissedFindings = scored?.dismissed_findings ?? [];
   // Every finding is listed, lows and ones a specialist didn't assess included: all of them count towards the
-  // score, and all of them are the officer's to review.
-  const documents = groupByDocument(findings);
-  // Every group that has findings, shown or hidden as minor: only the rest are added as empty groups.
-  const withFindings = new Set(
-    findings.map((finding) => (findingScope(finding) === 'case' ? CASE_GROUP_ID : finding.document_id)),
-  );
+  // score, and all of them are the officer's to review, as are the ones the specialists dismissed.
+  const documents = groupByDocument(findings, dismissedFindings);
+  // Every group that has findings: only the rest are added as empty groups.
+  const withFindings = new Set(documents.map((group) => group.documentId));
   const reviewGroups = emptyGroups(withFindings, caseDocuments);
 
   // A reason in the case analysis summary links here as #risk-finding-<document>-<finding>: open that document for
@@ -298,33 +329,40 @@ export function CaseRiskCard({
     });
   }
 
-  function rowKey(group: DocumentGroup, row: FindingRow) {
-    return `${group.documentId}:${row.finding.finding_id}`;
+  // Every tick in a group, scored rows then dismissed findings: its draft key, the findings it marks, and the one
+  // whose saved verdict it shows.
+  function ticks(group: DocumentGroup) {
+    return [
+      ...group.rows.map((row) => ({ key: `${group.documentId}:${row.finding.finding_id}`, members: row.members, shown: row.finding })),
+      ...group.dismissed.map((finding) => ({
+        key: `${group.documentId}:dismissed:${finding.finding_id}`, members: [finding], shown: finding,
+      })),
+    ];
   }
 
-  function isChecked(group: DocumentGroup, row: FindingRow) {
-    const draft = drafts[rowKey(group, row)];
-    return draft ?? verdictFor(allReviews, row.finding)?.verdict === 'correct';
+  function isTicked(tick: ReturnType<typeof ticks>[number]) {
+    return drafts[tick.key] ?? verdictFor(allReviews, tick.shown)?.verdict === 'correct';
   }
 
   function groupStatus(group: DocumentGroup): GroupReviewStatus {
-    const saved = group.rows.map((row) => verdictFor(allReviews, row.finding)?.verdict ?? null);
-    const changed = group.rows.some((row, index) => {
-      const draft = drafts[rowKey(group, row)];
+    const all = ticks(group);
+    const saved = all.map((tick) => verdictFor(allReviews, tick.shown)?.verdict ?? null);
+    const changed = all.some((tick, index) => {
+      const draft = drafts[tick.key];
       return draft !== undefined && draft !== (saved[index] === 'correct');
     });
     if (changed) return 'unsaved';
     return saved.every((verdict) => verdict !== null) ? 'saved' : 'not_reviewed';
   }
 
-  function setChecked(group: DocumentGroup, rows: FindingRow[], checked: boolean) {
-    setDrafts((current) => ({ ...current, ...Object.fromEntries(rows.map((row) => [rowKey(group, row), checked])) }));
+  function setTicked(keys: string[], checked: boolean) {
+    setDrafts((current) => ({ ...current, ...Object.fromEntries(keys.map((key) => [key, checked])) }));
   }
 
   async function saveGroup(group: DocumentGroup) {
     const saved = await reviews.saveGroup(
       `group:${group.documentId}`,
-      group.rows.map((row) => ({ members: row.members, verdict: isChecked(group, row) ? 'correct' : 'wrong' })),
+      ticks(group).map((tick) => ({ members: tick.members, verdict: isTicked(tick) ? 'correct' : 'wrong' })),
     );
     // Saved: the rows show their saved verdicts again.
     setDrafts((current) =>
@@ -342,8 +380,8 @@ export function CaseRiskCard({
   }
 
   function latestVerdict(group: DocumentGroup): FindingReview | undefined {
-    return group.rows
-      .map((row) => verdictFor(allReviews, row.finding))
+    return ticks(group)
+      .map((tick) => verdictFor(allReviews, tick.shown))
       .filter((review): review is FindingReview => review !== undefined)
       .reduce<FindingReview | undefined>((latest, review) => (!latest || review.updated_at > latest.updated_at ? review : latest), undefined);
   }
@@ -353,7 +391,7 @@ export function CaseRiskCard({
   const reviewsLoading = reviewsOn && scored !== null && reviews.data === null && reviews.error === null;
 
   function needsReview(group: DocumentGroup) {
-    return !reviews.data || (group.rows.length > 0 && groupStatus(group) !== 'saved');
+    return !reviews.data || (ticks(group).length > 0 && groupStatus(group) !== 'saved');
   }
 
   // One group's heading: its document, severity counts and review state.
@@ -366,8 +404,15 @@ export function CaseRiskCard({
             {count} {severity}
           </span>
         ))}
-        {document.findings.length === 0 && <span className="risk-document-none">✓ No findings</span>}
-        {reviews.data && document.rows.length > 0 && <ReviewTag status={groupStatus(document)} latest={latestVerdict(document)} />}
+        {document.dismissed.length > 0 && (
+          <span className="risk-severity risk-severity--dismissed">{document.dismissed.length} dismissed</span>
+        )}
+        {document.findings.length === 0 && document.dismissed.length === 0 && (
+          <span className="risk-document-none">✓ No findings</span>
+        )}
+        {reviews.data && ticks(document).length > 0 && (
+          <ReviewTag status={groupStatus(document)} latest={latestVerdict(document)} />
+        )}
         <MetricsLine summary={metricsFor(document)} />
       </span>
     );
@@ -410,22 +455,25 @@ export function CaseRiskCard({
   // Select all and Save review, the group's findings with a tick each, then the issues reported as missed. With
   // `link`, beside the document: a finding the checks placed can be shown on it, and the one picked there stands out.
   function renderGroupBody(document: DocumentGroup, link?: ReviewLink) {
-    const checkedCount = document.rows.filter((row) => isChecked(document, row)).length;
+    const all = ticks(document);
+    const tickFor = new Map(all.map((tick) => [tick.key, tick]));
+    const checkedCount = all.filter(isTicked).length;
     const saving = reviews.savingKey !== null || reviews.data === null;
     return (
       <>
-        {document.rows.length > 0 && reviews.data && !readOnly && (
+        {all.length > 0 && reviews.data && !readOnly && (
           <GroupReviewBar
             checkedCount={checkedCount}
-            total={document.rows.length}
+            total={all.length}
             status={groupStatus(document)}
             saving={saving}
-            onToggleAll={(checked) => setChecked(document, document.rows, checked)}
+            onToggleAll={(checked) => setTicked(all.map((tick) => tick.key), checked)}
             onSave={() => void saveGroup(document)}
           />
         )}
         <ul className="risk-findings">
           {document.rows.map((row) => {
+            const tick = tickFor.get(`${document.documentId}:${row.finding.finding_id}`)!;
             const { finding, count } = row;
             const detail = finding.unreviewed
               ? 'Not reviewed by a specialist.'
@@ -452,9 +500,9 @@ export function CaseRiskCard({
                     type="checkbox"
                     className="review-tick risk-finding-tick"
                     aria-label={`Real issue: ${finding.summary}`}
-                    checked={isChecked(document, row)}
+                    checked={isTicked(tick)}
                     disabled={saving || readOnly}
-                    onChange={(event) => setChecked(document, [row], event.target.checked)}
+                    onChange={(event) => setTicked([tick.key], event.target.checked)}
                   />
                 )}
                 <span className={`risk-severity risk-severity--${finding.severity}`}>
@@ -495,6 +543,39 @@ export function CaseRiskCard({
             );
           })}
         </ul>
+        {document.dismissed.length > 0 && (
+          <>
+            <p className="risk-dismissed-heading">
+              Dismissed by the specialists ({document.dismissed.length}): not scored.
+              {reviews.data && ' Tick any that is a real issue after all.'}
+            </p>
+            <ul className="risk-findings">
+              {document.dismissed.map((finding) => {
+                const tick = tickFor.get(`${document.documentId}:dismissed:${finding.finding_id}`)!;
+                return (
+                  <li key={`dismissed:${finding.finding_id}`}>
+                    {reviews.data && (
+                      <input
+                        type="checkbox"
+                        className="review-tick risk-finding-tick"
+                        aria-label={`Real issue (dismissed): ${finding.summary}`}
+                        checked={isTicked(tick)}
+                        disabled={saving || readOnly}
+                        onChange={(event) => setTicked([tick.key], event.target.checked)}
+                      />
+                    )}
+                    <span className="risk-severity risk-severity--dismissed">dismissed</span>
+                    <span className="risk-finding-text">
+                      <span className="risk-finding-check">{formatTool(finding.tool)}</span>
+                      <span className="risk-finding-summary">{finding.summary}</span>
+                      {finding.reason && <span className="risk-finding-rationale">Why dismissed: {finding.reason}</span>}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
         {reviews.data && (
           <MissedIssues
             readOnly={readOnly}

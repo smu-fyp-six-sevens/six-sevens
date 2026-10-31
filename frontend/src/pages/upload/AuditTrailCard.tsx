@@ -29,6 +29,7 @@ const ACTION_LABELS: Record<string, string> = {
   'document.failed': 'Document processing failed',
   'document.retry_requested': 'Retried document processing',
   'document.cancelled': 'Cancelled document processing',
+  'document.run_stopped': 'Document processing run stopped',
   'document.retyped': 'Changed document type',
   'document.type_corrected': 'Confirmed document type',
   'document.field_edited': 'Edited extracted fields',

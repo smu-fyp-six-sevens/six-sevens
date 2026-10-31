@@ -536,3 +536,15 @@ h1 {
 .action-error {
   margin-top: 10px;
 }
+
+/* Below a company name field once the name nears its limit (components/CharacterCount.tsx). */
+.character-count {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.character-count--limit {
+  color: var(--red);
+  font-weight: 600;
+}

@@ -49,6 +49,13 @@ def get(document_id: str) -> tuple[dict[str, Any] | None, str | None]:
     return read_report(row.get("report")), row.get("error") or None
 
 
+def has_report(document_id: str) -> bool:
+    rows = service_supabase_client().table(TABLE).select("document_id").eq("document_id", document_id).not_.is_(
+        "report", "null"
+    ).execute().data
+    return bool(rows)
+
+
 def get_states(document_ids: list[str], *, slim: bool = False) -> tuple[dict[str, dict[str, Any]], set[str]]:
     """
     (reports by document_id, ids whose last run failed and left no report), in one query per 100 documents.

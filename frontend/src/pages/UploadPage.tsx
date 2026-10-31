@@ -20,7 +20,8 @@ import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
 import { CaseRiskCard } from './upload/CaseRiskCard';
 import { CaseOverview } from './upload/CaseOverview';
 import { CaseSectionNav } from './upload/CaseSectionNav';
-import { DownloadReportButton } from './upload/DownloadReportButton';
+import { useCaseReportDownload } from './upload/useCaseReportDownload';
+import { CharacterCount } from '../components/CharacterCount';
 import { CaseStageCard } from './upload/CaseStageCard';
 import { caseSectionStatuses, isCaseSection, type CaseSection } from './upload/caseSections';
 import { FlaggedItemsCard } from './upload/FlaggedItemsCard';
@@ -107,6 +108,7 @@ export default function UploadPage({
 
   const [navCollapsed, setNavCollapsed] = useState(loadNavCollapsed);
   const [reportError, setReportError] = useState<string | null>(null);
+  const report = useCaseReportDownload(selectedCase.id, selectedCase.caseNumber, setReportError);
   useEffect(() => {
     try {
       localStorage.setItem(NAV_COLLAPSED_KEY, String(navCollapsed));
@@ -227,6 +229,7 @@ export default function UploadPage({
                 </button>
               </span>
             </div>
+            <CharacterCount length={companyNameDraft.length} />
             {saveCaseError && (
               <ErrorMessage inline id="case-company-name-error" className="add-field-error" message={saveCaseError} />
             )}
@@ -235,11 +238,16 @@ export default function UploadPage({
           <>
             <CaseTitle caseRecord={selectedCase} />
             <span className="case-title-actions">
-              <DownloadReportButton caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} onError={setReportError} />
               <KebabMenu
                 label={isDeletingCase ? 'Deleting case' : 'Case actions'}
                 disabled={isDeletingCase}
                 items={[
+                  {
+                    id: 'report',
+                    label: report.isDownloading ? 'Preparing report…' : 'Download report',
+                    disabled: report.isDownloading,
+                    onSelect: () => void report.download(),
+                  },
                   {
                     id: 'edit',
                     label: 'Edit case details',
