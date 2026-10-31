@@ -446,18 +446,33 @@
   color: var(--white);
 }
 
-/* A finding the specialists dismissed: never scored, so no severity colour. */
-.risk-severity--dismissed {
+/* A finding the specialists set aside, or an issue an officer reported as missed: never scored, so no severity
+   colour. */
+.risk-severity--dismissed,
+.risk-severity--missed {
   border: 1px solid var(--line);
   background: var(--paper);
   color: var(--ink-soft);
 }
 
 .risk-dismissed-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 14px 0 4px;
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.risk-dismissed-heading::-webkit-details-marker {
+  display: none;
+}
+
+.risk-dismissed[open] > .risk-dismissed-heading .risk-chevron {
+  transform: rotate(90deg);
 }
 
 .risk-finding-text {
@@ -810,6 +825,11 @@
   padding-top: 10px;
   border-top: 1px dashed var(--line);
   font-size: 12.5px;
+}
+
+/* A group with no findings: the review bar's line already separates this. */
+.group-review-bar + .risk-findings:empty + .missed-issues {
+  border-top: none;
 }
 
 /* Each missed issue is set out like a finding row above it (.risk-findings li), so the two read as one list. */
@@ -1231,11 +1251,6 @@
 .risk-review-tag--unsaved {
   background: #fdf0d8;
   color: #8a5a00;
-}
-
-.risk-review-tag--not_reviewed {
-  border: 1px dashed #c4ccd8;
-  color: var(--ink-soft);
 }
 
 /* Reviewed documents, and ones with nothing to review, folded away under the ones still to do. */

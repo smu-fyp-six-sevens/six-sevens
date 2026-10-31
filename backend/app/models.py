@@ -377,8 +377,8 @@ class ContributingFinding(BaseModel):
 
 
 class DismissedFinding(BaseModel):
-    """A tool's finding a specialist dismissed as a false positive (case_risk). An officer marks it correct when it
-    is a real problem after all."""
+    """A tool's finding a specialist set aside (case_risk): dismissed as a false positive, or kept as info, real but
+    explained. An officer marks it correct when it is a real problem after all."""
 
     document_id: str
     filename: str
@@ -388,7 +388,7 @@ class DismissedFinding(BaseModel):
     tool: str | None = None
     check_code: str | None = None
     summary: str
-    # The specialist's reason for dismissing it.
+    # The specialist's reason for setting it aside.
     reason: str
     category: str | None = None
     fingerprint: str
@@ -415,7 +415,7 @@ class CaseRisk(BaseModel):
     # The raw points total the level is banded from.
     points: float | None = None
     contributing_findings: list[ContributingFinding] = Field(default_factory=list)
-    # What the specialists threw away as false positives: never scored, shown for officers to review.
+    # What the specialists set aside, dismissed or info: never scored, shown for officers to review.
     dismissed_findings: list[DismissedFinding] = Field(default_factory=list)
     # Checks that couldn't run — listed, never scored: not being able to
     # check something isn't evidence of fraud.
@@ -714,9 +714,10 @@ class FindingReview(BaseModel):
     check_name: str
     check_code: str | None = None
     summary: str = ""
-    # What the specialists decided on a document finding. A dismissed one marked correct is a real problem the
-    # agents threw away: a miss for recall (detection_metrics).
+    # What the specialists decided on a document finding. One they set aside (dismissed, or severity info) marked
+    # correct is a real problem the agents let go: a miss for recall (detection_metrics).
     agent_decision: Literal["accepted", "not_assessed", "overridden", "dismissed"] | None = None
+    severity: str | None = None
     verdict: ReviewVerdict | None = None
     note: str | None = None
     reviewer: str
@@ -748,6 +749,19 @@ class SetFindingVerdictsRequest(BaseModel):
     """A whole group's review at once: every finding the officer looked at, each correct or wrong."""
 
     verdicts: list[SetFindingVerdictRequest] = Field(min_length=1, max_length=200)
+
+
+class SignOffRequest(_ReviewPlace):
+    """Saves the review of a group with no findings to mark."""
+
+
+class ReviewSignOff(BaseModel):
+    """An officer reviewed a group with no findings: a document, or the cross-document group."""
+
+    scope: ReviewScope
+    document_id: str | None = None
+    reviewer: str
+    updated_at: datetime
 
 
 class ReportMissedIssueRequest(_ReviewPlace):
@@ -804,6 +818,8 @@ class CaseFindingReviews(BaseModel):
     """Every review in a case, and the precision and recall they give: per document, across documents and for the case."""
 
     reviews: list[FindingReview]
+    # The groups with no findings that an officer has saved as reviewed.
+    sign_offs: list[ReviewSignOff] = Field(default_factory=list)
     case: MetricsSummary
     documents: dict[str, MetricsSummary]
     cross_document: MetricsSummary

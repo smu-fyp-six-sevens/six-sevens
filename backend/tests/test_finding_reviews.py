@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app import detection_metrics
 from app.langgraph.detection.specialists import SPECIALISTS
 from app.main import app
-from app.models import CaseRecord, DocumentRecord, DocumentStatus, FindingReview
+from app.models import CaseRecord, DocumentRecord, DocumentStatus, FindingReview, ReviewSignOff
 from tests.conftest import TEST_USER
 
 client = TestClient(app)
@@ -44,6 +44,12 @@ def test_precision_counts_correct_against_wrong_and_recall_against_missed() -> N
     assert (check.correct, check.wrong, check.missed) == (2, 1, 1)
     assert check.precision == pytest.approx(2 / 3, abs=1e-4)
     assert check.recall == pytest.approx(2 / 3, abs=1e-4)
+
+
+@pytest.mark.parametrize("set_aside", [{"agent_decision": "dismissed"}, {"agent_decision": "accepted", "severity": "info"}])
+def test_a_set_aside_finding_is_a_miss_when_real_and_counts_for_neither_when_not(set_aside) -> None:
+    [check] = detection_metrics.summarize([_review(verdict="correct", **set_aside), _review(verdict="wrong", **set_aside)]).by_check
+    assert (check.correct, check.wrong, check.missed) == (0, 0, 1)
 
 
 def test_a_check_with_nothing_to_measure_has_no_rate_not_zero_or_one_hundred() -> None:
@@ -116,6 +122,7 @@ def repos():
         case_service.get_case.side_effect = lambda case_id: _case(case_id) if case_id in (CASE_ID, OTHER_CASE_ID) else None
         document_repo.get_document.return_value = _document()
         findings_repo.list_reviews_for_case.return_value = [_review()]
+        findings_repo.list_sign_offs.return_value = []
         # Every fingerprint names a current finding, whose row id is "row:<fingerprint>".
         findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {"id": f"row:{fingerprint}"}
         yield findings_repo, document_repo
@@ -140,6 +147,19 @@ def test_a_group_review_saves_every_finding_signed_by_the_officer_and_returns_th
     ]
     findings_repo.find_current.assert_any_call(CASE_ID, "document", DOCUMENT_ID, "spelling_tool:1")
     assert response.json()["case"]["precision"] == 1.0
+
+
+def test_a_group_with_no_findings_is_signed_off_by_the_officer(repos) -> None:
+    findings_repo, _ = repos
+    findings_repo.list_sign_offs.return_value = [ReviewSignOff(
+        scope="document", document_id=DOCUMENT_ID, reviewer=TEST_USER, updated_at=_TIMESTAMP,
+    )]
+    response = client.put(
+        f"/cases/{CASE_ID}/finding-reviews/sign-offs", json={"scope": "document", "document_id": DOCUMENT_ID},
+    )
+    assert response.status_code == 200
+    assert [s["document_id"] for s in response.json()["sign_offs"]] == [DOCUMENT_ID]
+    findings_repo.sign_off.assert_called_once_with(CASE_ID, "document", DOCUMENT_ID, TEST_USER)
 
 
 def test_a_null_verdict_clears_the_mark(repos) -> None:

@@ -29,7 +29,7 @@ from ..auth import CurrentUser
 from ..events import officer_event, types
 from ..models import (
     CaseFindingReviews, CaseRecord, CaseStage, DetectionMetrics, FindingReview, ReportMissedIssueRequest,
-    SetFindingVerdictsRequest, UpdateMissedIssueRequest,
+    SetFindingVerdictsRequest, SignOffRequest, UpdateMissedIssueRequest,
 )
 from ._dependencies import bad_gateway_on_error, get_case_or_404, get_editable_case_or_404, to_thread_or_502
 from ..snapshots import push_case_snapshot
@@ -56,8 +56,11 @@ _SAVE_FAILED = "Failed to save the review. Check Supabase table access."
 
 
 async def _case_reviews(case_id: str) -> CaseFindingReviews:
-    reviews = await asyncio.to_thread(findings_repository.list_reviews_for_case, case_id)
-    return detection_metrics.case_metrics(reviews)
+    reviews, sign_offs = await asyncio.gather(
+        asyncio.to_thread(findings_repository.list_reviews_for_case, case_id),
+        asyncio.to_thread(findings_repository.list_sign_offs, case_id),
+    )
+    return detection_metrics.case_metrics(reviews, sign_offs)
 
 
 async def _document_in_case(case_id: str, document_id: UUID | None) -> str | None:
@@ -139,6 +142,23 @@ async def set_finding_verdicts(
     await _record_saved(
         case_id, [(scope, document_id, item.verdict) for (scope, document_id, _), item in zip(targets, request.verdicts)],
     )
+    return reviews
+
+
+@router.put("/cases/{case_id}/finding-reviews/sign-offs", response_model=CaseFindingReviews)
+async def sign_off_group(
+    case_id: str, request: SignOffRequest, user: CurrentUser, case: CaseRecord = Depends(_editable_reviewed_case),
+) -> CaseFindingReviews:
+    """Saves the review of a group with no findings to mark, so it moves to Reviewed like any other."""
+    with bad_gateway_on_error(_SAVE_FAILED, "Failed to save a sign-off on case %s", case_id):
+        document_id = await _document_in_case(case_id, request.document_id)
+        await asyncio.to_thread(findings_repository.sign_off, case_id, request.scope, document_id, user)
+        reviews = await _case_reviews(case_id)
+    await events.record(officer_event(
+        types.FINDING_REVIEW_SAVED, case_id=case_id, document_id=document_id,
+        detail={"scope": request.scope, "real": 0, "false_alarms": 0, "cleared": 0},
+    ))
+    await push_case_snapshot(case_id)
     return reviews
 
 

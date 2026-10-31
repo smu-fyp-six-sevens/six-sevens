@@ -350,15 +350,27 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
   test('RS-007 findings are listed high first, then medium, then low @RS-007', async ({ page, backend }) => {
     const theCase = await openRisk(page, backend, 'RS-006');
 
-    // Every document with findings is still to review, low-only ones included; the empty cross-document group sits under Reviewed.
+    // Every group is to review until it's saved, low-only ones and the empty cross-document group included.
     const documents = reviewCard(page).locator(':scope > .flagged-list .risk-document');
-    await expect(documents).toHaveCount(3);
+    await expect(documents).toHaveCount(4);
     await expect(documents.locator('.risk-document-heading strong')).toHaveText([
-      'C011_Payslip.pdf', 'C011_BankStatement.pdf', 'C011_CertIncorp.pdf',
+      'C011_Payslip.pdf', 'C011_BankStatement.pdf', 'C011_CertIncorp.pdf', 'Across documents',
     ]);
     await expect(documents.locator('.risk-document-meta .risk-severity')).toHaveText(['1 high', '1 medium', '1 low']);
     await openTrace(page, theCase);
     await expect(tracePanel(page).locator('.debug-table tbody tr td:first-child')).toHaveText(['8', '3', '1']);
+  });
+
+  test('a group with no findings moves to Reviewed only once an officer saves it', async ({ page, backend }) => {
+    await openRisk(page, backend, 'RS-006');
+    const card = reviewCard(page);
+    await expect(card.getByText(/^Reviewed \(/)).toHaveCount(0);
+
+    await card.getByRole('button', { name: /Across documents/ }).click();
+    await card.getByRole('button', { name: 'Save review' }).click();
+
+    await expect(card.getByText('Reviewed (1)')).toBeVisible();
+    await expect(card.locator(':scope > .flagged-list .risk-document')).toHaveCount(3);
   });
 
   test('RS-008 / CM-007 the risk summary is reached from case details, and an unscored case shows no score and no findings @RS-008 @CM-007 @sprint2 @SCRUM-83', async ({ page, backend }) => {

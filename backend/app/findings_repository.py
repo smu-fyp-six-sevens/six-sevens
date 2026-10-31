@@ -23,11 +23,12 @@ from typing import Any, cast
 from .case_pipeline.categories import category_for_finding
 from .case_pipeline.models import CrossDocFinding, FindingCategory
 from .finding_keys import report_findings
-from .models import FindingReview, ReviewScope, ReviewVerdict
+from .models import FindingReview, ReviewScope, ReviewSignOff, ReviewVerdict
 from .supabase_client import service_supabase_client
 from .supabase_rows import fetch_all
 
 TABLE = "findings"
+SIGN_OFFS_TABLE = "review_sign_offs"
 _CASE_CHUNK = 100
 _CASE_LEVEL = frozenset({FindingCategory.CROSS_DOCUMENT_VARIANCE, FindingCategory.IDENTITY_ENTITY_CONFLICT})
 # Stored as columns, or under named evidence keys; everything else the tool returned goes in evidence.details.
@@ -36,8 +37,8 @@ _COLUMN_KEYS = frozenset({
     "ai_accepted", "confidence", "agent_confidences", "fingerprint", "check_code",
 })
 _REVIEW_COLUMNS = (
-    "id, case_id, document_id, scope, source, fingerprint, check_name, check_code, summary, agent_decision, verdict, "
-    "reviewer, review_note, reviewed_at, created_at, updated_at"
+    "id, case_id, document_id, scope, source, fingerprint, check_name, check_code, summary, agent_decision, severity, "
+    "verdict, reviewer, review_note, reviewed_at, created_at, updated_at"
 )
 
 
@@ -120,7 +121,8 @@ def _review(row: dict[str, Any]) -> FindingReview:
         id=row["id"], case_id=row["case_id"], document_id=row.get("document_id"), scope=row["scope"],
         kind="missed" if missed else "verdict", fingerprint=row.get("fingerprint"),
         check_name=row["check_name"], check_code=row.get("check_code"), summary=row.get("summary") or "",
-        agent_decision=row.get("agent_decision"), verdict=row.get("verdict"), note=row.get("review_note"), reviewer=row["reviewer"],
+        agent_decision=row.get("agent_decision"), severity=row.get("severity"), verdict=row.get("verdict"),
+        note=row.get("review_note"), reviewer=row["reviewer"],
         created_at=row["created_at"] if missed else row["reviewed_at"], updated_at=row["reviewed_at"],
     )
 
@@ -148,6 +150,27 @@ def get_review(row_id: str) -> FindingReview | None:
         .not_.is_("reviewer", "null").limit(1).execute().data or []
     ))
     return _review(rows[0]) if rows else None
+
+
+def list_sign_offs(case_id: str) -> list[ReviewSignOff]:
+    rows = cast(list[dict[str, Any]], (
+        service_supabase_client().table(SIGN_OFFS_TABLE).select("scope, document_id, reviewer, reviewed_at")
+        .eq("case_id", case_id).execute().data or []
+    ))
+    return [
+        ReviewSignOff(
+            scope=row["scope"], document_id=row.get("document_id"), reviewer=row["reviewer"], updated_at=row["reviewed_at"],
+        )
+        for row in rows
+    ]
+
+
+def sign_off(case_id: str, scope: ReviewScope, document_id: str | None, reviewer: str) -> None:
+    """Saves the review of a group with no findings, replacing any earlier one."""
+    service_supabase_client().table(SIGN_OFFS_TABLE).upsert({
+        "case_id": case_id, "group_key": document_id or "case", "scope": scope, "document_id": document_id,
+        "reviewer": reviewer, "reviewed_at": _now(),
+    }).execute()
 
 
 def find_current(case_id: str, scope: ReviewScope, document_id: str | None, fingerprint: str) -> dict[str, Any] | None:

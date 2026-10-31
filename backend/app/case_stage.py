@@ -180,7 +180,7 @@ def failure_of(documents: list[DocumentRecord], failed_detection_ids: set[str] |
 def reviewable(risk: CaseRisk | None) -> list[tuple[str | None, str]]:
     """
     What an officer reviews on the Risk Summary, as (document id, fingerprint): every scored finding (a
-    cross-document one has no document) and every finding the specialists dismissed.
+    cross-document one has no document) and every finding the specialists set aside.
     """
     if risk is None:
         return []

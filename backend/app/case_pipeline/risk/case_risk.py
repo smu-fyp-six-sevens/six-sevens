@@ -195,6 +195,7 @@ def _score_document(
 
 
 def _dismissed(document: DocumentRecord, report: dict[str, Any]) -> list[DismissedFinding]:
+    """What the specialists set aside unscored: the findings they dismissed and the ones they kept as info."""
     return [
         DismissedFinding(
             document_id=document.id,
@@ -204,12 +205,12 @@ def _dismissed(document: DocumentRecord, report: dict[str, Any]) -> list[Dismiss
             tool=finding.get("tool"),
             check_code=finding.get("check_code") if isinstance(finding.get("check_code"), str) else None,
             summary=finding.get("summary") or "",
-            reason=finding.get("reason") or "",
+            reason=finding.get("reason") or finding.get("rationale") or "",
             category=category_for_finding(finding).value,
             fingerprint=finding["fingerprint"],
         )
         for finding, decision in report_findings(report)
-        if decision == "dismissed"
+        if decision == "dismissed" or finding.get("severity") == "info"
     ]
 
 

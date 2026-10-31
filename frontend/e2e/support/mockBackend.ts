@@ -579,14 +579,20 @@ export class MockBackend {
       return json({ detail: 'This case was created without finding reviews.' }, 409);
     }
     // Officers' reviews of findings (precision/recall): none recorded, so every rate is "nothing to measure".
-    if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {
-      return json({
+    const reviews = (signOffs: unknown[]) =>
+      json({
         reviews: [],
+        sign_offs: signOffs,
         case: emptyMetrics(),
         documents: {},
         cross_document: emptyMetrics(),
         checks: { document: [], case: [] },
       });
+    if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {
+      return reviews([]);
+    }
+    if (method === 'PUT' && /^\/cases\/[^/]+\/finding-reviews\/sign-offs$/.test(path)) {
+      return reviews([{ ...(body as object), reviewer: 'officer', updated_at: '2026-10-31T00:00:00Z' }]);
     }
     if (method === 'GET' && path === '/detection-metrics') {
       return json({

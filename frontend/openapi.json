@@ -1871,6 +1871,13 @@
             "title": "Reviews",
             "type": "array"
           },
+          "sign_offs": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewSignOff"
+            },
+            "title": "Sign Offs",
+            "type": "array"
+          },
           "target_precision": {
             "title": "Target Precision",
             "type": "number"
@@ -1882,6 +1889,7 @@
         },
         "required": [
           "reviews",
+          "sign_offs",
           "case",
           "documents",
           "cross_document",
@@ -3413,7 +3421,7 @@
         "type": "object"
       },
       "DismissedFinding": {
-        "description": "A tool's finding a specialist dismissed as a false positive (case_risk). An officer marks it correct when it\nis a real problem after all.",
+        "description": "A tool's finding a specialist set aside (case_risk): dismissed as a false positive, or kept as info, real but\nexplained. An officer marks it correct when it is a real problem after all.",
         "properties": {
           "category": {
             "anyOf": [
@@ -4307,6 +4315,17 @@
             "title": "Scope",
             "type": "string"
           },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
           "summary": {
             "default": "",
             "title": "Summary",
@@ -4344,6 +4363,7 @@
           "check_code",
           "summary",
           "agent_decision",
+          "severity",
           "verdict",
           "note",
           "reviewer",
@@ -6685,6 +6705,47 @@
         "title": "ReportMissedIssueRequest",
         "type": "object"
       },
+      "ReviewSignOff": {
+        "description": "An officer reviewed a group with no findings: a document, or the cross-document group.",
+        "properties": {
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "reviewer": {
+            "title": "Reviewer",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "document",
+              "case"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "document_id",
+          "reviewer",
+          "updated_at"
+        ],
+        "title": "ReviewSignOff",
+        "type": "object"
+      },
       "RiskOutlook": {
         "properties": {
           "best_case_level": {
@@ -6835,6 +6896,36 @@
           "verdicts"
         ],
         "title": "SetFindingVerdictsRequest",
+        "type": "object"
+      },
+      "SignOffRequest": {
+        "description": "Saves the review of a group with no findings to mark.",
+        "properties": {
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "scope": {
+            "enum": [
+              "document",
+              "case"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope"
+        ],
+        "title": "SignOffRequest",
         "type": "object"
       },
       "SkippedCheck": {
@@ -8829,6 +8920,75 @@
           }
         },
         "summary": "Report Missed Issue",
+        "tags": [
+          "finding-reviews"
+        ]
+      }
+    },
+    "/cases/{case_id}/finding-reviews/sign-offs": {
+      "put": {
+        "description": "Saves the review of a group with no findings to mark, so it moves to Reviewed like any other.",
+        "operationId": "sign_off_group_cases__case_id__finding_reviews_sign_offs_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignOffRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseFindingReviews"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign Off Group",
         "tags": [
           "finding-reviews"
         ]
