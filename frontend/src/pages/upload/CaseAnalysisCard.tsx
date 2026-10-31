@@ -175,7 +175,17 @@ export function CaseAnalysisCard({
         </div>
       )}
 
-      {!viewing && overview?.stale && (
+      {running && (
+        <div className="summary-message summary-message--info" role="status">
+          <span className="analysis-spinner" aria-hidden="true" />
+          <div>
+            <strong>Analysing this case…</strong>
+            <p>The documents are being compared and the case scored. This can take a while, and it carries on if you leave this page.</p>
+          </div>
+        </div>
+      )}
+
+      {!viewing && !running && overview?.stale && (
         <div className="summary-message summary-message--warning">
           <span className="summary-message-icon">⚠</span>
           <div>

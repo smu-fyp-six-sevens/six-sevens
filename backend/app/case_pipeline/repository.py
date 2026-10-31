@@ -35,7 +35,8 @@ def _to_analysis(row: dict) -> CaseAnalysis:
         started_at=row["started_at"],
         finished_at=row.get("finished_at"),
         error=row.get("error"),
-        confidence=result.get("confidence", 0.0),
+        # A list read always has the key: None for a run with no result yet, or from before confidence was recorded.
+        confidence=result.get("confidence") or 0.0,
         findings=[CrossDocFinding(**f) for f in result.get("findings") or []],
         outlook=RiskOutlook(**result["outlook"]) if result.get("outlook") else None,
         structured_summary=AnalysisSummary(**result["structured_summary"]) if result.get("structured_summary") else None,

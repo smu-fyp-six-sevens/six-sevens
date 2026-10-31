@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
+from app.case_pipeline import repository
+
 from datetime import datetime
 
 from app.case_pipeline.state import compute_fingerprint
@@ -59,3 +63,15 @@ def test_waiting_documents_say_what_each_unscanned_document_needs() -> None:
     # Only approved documents count, so only the one still being scanned holds the score back.
     assert waiting == {"doc-scanning": "scanning"}
     assert waiting_documents(SCANNED, REPORTS) == []
+
+
+@pytest.mark.parametrize("confidence, expected", [(None, 0.0), (0.72, 0.72)])
+def test_a_run_reads_from_a_list_query_with_or_without_a_confidence(confidence, expected) -> None:
+    # A list query always returns the key: None while a run is going, and for a run from before it was recorded.
+    row = {
+        "run_id": "run-1", "case_id": "case-1", "status": "running", "fingerprint": "f",
+        "started_at": "2026-10-31T00:00:00+00:00", "confidence": confidence, "findings": None, "risk": None,
+        "supporting_documents": None,
+    }
+
+    assert repository._to_analysis(row).confidence == expected

@@ -129,6 +129,8 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
     backend.push(theCase.id);
     await expect(runButton(page)).toHaveText('Analysing…');
     await expect(runButton(page)).toBeDisabled();
+    await expect(analysisCard(page).getByRole('status')).toContainText('Analysing this case…');
+    await expect(page.locator('.analysis-spinner')).toBeVisible();
     await expect(sectionStatus(page, 'Case Analysis')).toContainText('Running');
     await expect(tracePanel(page)).toContainText(`run_id: ${backend.analyses[theCase.id].run_id}`);
     await expect(tracePanel(page)).toContainText('status: running');

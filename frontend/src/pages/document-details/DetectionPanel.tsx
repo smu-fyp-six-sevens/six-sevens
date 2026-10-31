@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DetectionReport, IndividualCheckId } from '../../services/uploadService';
 import { INDIVIDUAL_DETECTION_CHECKS } from '../../services/uploadService';
 import { RefreshButton } from '../../components/RefreshButton';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import ConfirmDialog from '../../components/ConfirmDialog';
+
+// The reasons a run stops that are written for an officer (detection.py); anything else is an exception's text.
+const OFFICER_STOP_REASONS = ['Cancelled by loan officer', 'Interrupted: the service was stopping'];
 
 function confidenceLabel(value: number | undefined): string | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
@@ -49,6 +52,12 @@ export function DetectionPanel({
   readOnly?: boolean;
 }) {
   const [confirmRerun, setConfirmRerun] = useState(false);
+  // A crashed run's stored error is an exception's text: the console has it, the panel says the run didn't finish.
+  const lastRunError = detectionReport?.last_run_error;
+  const stopReason = lastRunError && OFFICER_STOP_REASONS.includes(lastRunError) ? lastRunError : null;
+  useEffect(() => {
+    if (lastRunError && !stopReason) console.error('The last detection run failed:', lastRunError);
+  }, [lastRunError, stopReason]);
   const running = status === 'detecting';
   // Approved, with nothing stored yet: the run is waiting for a worker.
   const queued = status === 'approved' && !detectionReport && !detectionError;
@@ -61,8 +70,8 @@ export function DetectionPanel({
           <RefreshButton isRefreshing={isRefreshingDetection} onClick={() => void refreshDetectionReport()} label="detection" />
           <h2>Detection</h2>
         {detectionError && <ErrorMessage className="action-error" message={detectionError} />}
-        {detectionReport?.last_run_error && !running && (
-          <p>The last run did not finish ({detectionReport.last_run_error}). The report below is from the run before it.</p>
+        {lastRunError && !running && (
+          <p>The last run did not finish{stopReason ? ` (${stopReason})` : ''}. The report below is from the run before it.</p>
         )}
         {running && detectionReport && <p>Running again… the report below is from the previous run until this one finishes.</p>}
         {(canCancel || canRerun) && (

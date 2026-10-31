@@ -205,9 +205,24 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
 
     // The rerun stopped: the document is back to scanned, on the earlier report, which says the last run didn't finish.
     backend.push(document.case_id!);
-    await expect(detectionPanel(page)).toContainText('The last run did not finish');
+    await expect(detectionPanel(page)).toContainText('The last run did not finish (Cancelled by loan officer)');
     await expect(detectionPanel(page)).toContainText('Verdict: FLAGGED');
     await expect(detectionPanel(page).getByRole('button', { name: 'Run detection again' })).toBeVisible();
+  });
+
+  test('a rerun that crashed says it did not finish; the raw error only goes to the console', async ({ page, backend }) => {
+    const { fixture, document } = creditReport(backend);
+    document.status = 'detected';
+    backend.detectionReports[document.id] = { ...C028_REPORT, document_id: document.id };
+    backend.detectionErrors[document.id] = "AnthropicInvalidRequestError: Error code: 400 - {'type': 'error'}";
+    const logged: string[] = [];
+    page.on('console', (message) => logged.push(message.text()));
+
+    await page.goto(fixture.documentUrl(document));
+
+    await expect(detectionPanel(page)).toContainText('The last run did not finish. The report below is from the run before it.');
+    await expect(detectionPanel(page)).not.toContainText('AnthropicInvalidRequestError');
+    await expect.poll(() => logged.some((line) => line.includes('AnthropicInvalidRequestError'))).toBe(true);
   });
 
   test('a scan still waiting for a worker can be cancelled at once @SCRUM-299', async ({ page, backend }) => {

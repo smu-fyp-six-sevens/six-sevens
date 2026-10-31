@@ -289,3 +289,28 @@
   font-weight: 700;
   color: var(--steel);
 }
+
+/* A run in progress (CaseAnalysisCard.tsx): in the banner, where its icon would be. */
+.analysis-spinner {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 2px solid var(--line);
+  border-top-color: var(--steel);
+  border-radius: 50%;
+  animation: analysis-spin 0.8s linear infinite;
+}
+
+@keyframes analysis-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Slowed, not stopped: it is the only sign the run is still going. */
+@media (prefers-reduced-motion: reduce) {
+  .analysis-spinner {
+    animation-duration: 3s;
+  }
+}
