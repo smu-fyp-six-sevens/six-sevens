@@ -76,7 +76,8 @@ function toHighlight(finding: DetectionFinding): FindingHighlight | null {
 }
 
 // The report's findings that have an area, in reading order of their first area (page, then top to
-// bottom), and how many it has without one (metadata, dates, registry lookups...).
+// bottom), and how many it has without one (metadata, dates, registry lookups...). Info findings were
+// judged benign and aren't in the officer's list, so they get no box.
 export function highlightsFromReport(report: DetectionReport | null): {
   highlights: FindingHighlight[];
   unlocatedCount: number;
@@ -84,11 +85,12 @@ export function highlightsFromReport(report: DetectionReport | null): {
   if (!report) {
     return { highlights: [], unlocatedCount: 0 };
   }
-  const highlights = report.findings
+  const findings = report.findings.filter((finding) => finding.severity !== 'info');
+  const highlights = findings
     .map(toHighlight)
     .filter((h): h is FindingHighlight => h !== null)
     .sort((a, b) => readingOrder(a.areas[0], b.areas[0]));
-  return { highlights, unlocatedCount: report.findings.length - highlights.length };
+  return { highlights, unlocatedCount: findings.length - highlights.length };
 }
 
 // Where one of the highlight's areas sits on a page drawn from `page` (its size in `page.units`). Null

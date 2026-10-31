@@ -47,6 +47,13 @@ def _report(*findings: dict, unable: list[dict] | None = None) -> dict:
     return report
 
 
+def test_an_info_finding_is_set_aside_for_review_and_scores_nothing() -> None:
+    risk = compute_case_risk([_document("d1")], {"d1": _report(_finding("info", rationale="Real but explained."))}, set())
+    assert risk.contributing_findings == [] and risk.points == 0
+    [set_aside] = risk.dismissed_findings
+    assert set_aside.reason == "Real but explained."
+
+
 # --- gate -------------------------------------------------------------------
 
 

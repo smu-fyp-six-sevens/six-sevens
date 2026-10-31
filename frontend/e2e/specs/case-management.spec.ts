@@ -530,19 +530,16 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(section.locator('.risk-gauge')).toHaveAttribute('aria-label', 'Score 58 out of 100, High risk');
     await expect(section).toContainText('2 high · 3 medium · 1 low');
 
-    // The documents are a card of their own. Those with findings, none reviewed yet, are listed collapsed
-    // (the low-only bank statement included); the cross-document group, with nothing to review, is folded
-    // into Reviewed with a green "No findings" badge, still there to report a miss.
+    // The documents are a card of their own, listed collapsed until reviewed (the low-only bank statement
+    // included); the cross-document group, with a green "No findings" badge, waits to be saved like the rest.
     const review = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
     await expect(section.locator('.risk-document')).toHaveCount(0);
     const documents = review.locator('.risk-document');
     await expect(documents).toHaveCount(3);
     await expect(documents.first()).toContainText('C011_Payslip.pdf');
-    await expect(documents.first().locator('.risk-review-tag')).toHaveText('Not reviewed');
+    await expect(documents.first().locator('.risk-review-tag')).toHaveCount(0);
     await expect(documents.nth(1)).toContainText('C011_BankStatement.pdf');
-    await expect(review.getByText('Reviewed (1)')).toBeVisible();
-    await expect(documents.nth(2)).toBeHidden();
-    await review.getByText('Reviewed (1)').click();
+    await expect(review.getByText(/^Reviewed \(/)).toHaveCount(0);
     await expect(documents.nth(2)).toContainText('Across documents');
     await expect(documents.nth(2).locator('.risk-document-none')).toHaveText('✓ No findings');
     await expect(review.locator('.risk-findings')).toHaveCount(0);

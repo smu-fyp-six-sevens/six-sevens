@@ -28,21 +28,26 @@ export function GroupReviewBar({
   const allChecked = total > 0 && checkedCount === total;
   return (
     <div className="group-review-bar">
-      <label className="group-review-select-all">
-        <input
-          type="checkbox"
-          className="review-tick"
-          checked={allChecked}
-          ref={(input) => {
-            if (input) input.indeterminate = checkedCount > 0 && !allChecked;
-          }}
-          disabled={saving}
-          onChange={(event) => onToggleAll(event.target.checked)}
-        />
-        Select all
-      </label>
+      {total > 0 && (
+        <label className="group-review-select-all">
+          <input
+            type="checkbox"
+            className="review-tick"
+            checked={allChecked}
+            ref={(input) => {
+              if (input) input.indeterminate = checkedCount > 0 && !allChecked;
+            }}
+            disabled={saving}
+            onChange={(event) => onToggleAll(event.target.checked)}
+          />
+          Select all
+        </label>
+      )}
       <span className="group-review-hint">
-        <strong>Officer review:</strong> tick the real issues. Unticked ones are saved as false alarms.
+        <strong>Officer review:</strong>{' '}
+        {total > 0
+          ? 'tick the real issues. Unticked ones are saved as false alarms.'
+          : 'no findings here. Save once you have checked it.'}
       </span>
       <span className={`group-review-status group-review-status--${status}`}>
         {status === 'saved' ? 'Review saved' : status === 'unsaved' ? 'Unsaved changes' : 'Not reviewed yet'}

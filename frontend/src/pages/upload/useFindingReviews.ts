@@ -5,6 +5,7 @@ import {
   getCaseFindingReviews,
   reportMissedIssue,
   setFindingVerdicts,
+  signOffGroup,
   updateMissedIssue,
 } from '../../services/uploadService';
 
@@ -91,6 +92,11 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     [caseId, run],
   );
 
+  const signOff = useCallback(
+    (key: string, scope: ReviewScope, documentId: string | null) => run(key, () => signOffGroup(caseId, scope, documentId)),
+    [caseId, run],
+  );
+
   const addMissed = useCallback(
     (key: string, scope: ReviewScope, documentId: string | null, checkName: string, note: string) =>
       run(key, () => reportMissedIssue(caseId, { scope, documentId, checkName, note })),
@@ -108,5 +114,5 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     [caseId, run],
   );
 
-  return { data, error, savingKey, saveGroup, addMissed, editMissed, removeReview };
+  return { data, error, savingKey, saveGroup, signOff, addMissed, editMissed, removeReview };
 }

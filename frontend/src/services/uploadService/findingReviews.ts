@@ -78,6 +78,23 @@ export async function updateMissedIssue(
   return (await response.json()) as CaseFindingReviews;
 }
 
+// The review of a group with no findings to mark, signed by the logged-in officer.
+export async function signOffGroup(
+  caseId: string,
+  scope: ReviewScope,
+  documentId: string | null,
+): Promise<CaseFindingReviews> {
+  const response = await authFetch(`/cases/${caseId}/finding-reviews/sign-offs`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scope, document_id: documentId }),
+  });
+
+  await assertOk(response, 'Failed to save the review');
+
+  return (await response.json()) as CaseFindingReviews;
+}
+
 export async function deleteFindingReview(caseId: string, reviewId: string): Promise<CaseFindingReviews> {
   const response = await authFetch(`/cases/${caseId}/finding-reviews/${reviewId}`, { method: 'DELETE' });
 

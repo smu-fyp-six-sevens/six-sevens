@@ -143,6 +143,22 @@ create table public.findings (
     constraint findings_review_shape check (verdict is null or (reviewer is not null and reviewed_at is not null))
 );
 
+-- An officer's saved review of a group with no findings to mark: a document, or the case's cross-document group.
+-- group_key is the document id, or 'case'.
+create table public.review_sign_offs (
+    case_id text not null,
+    group_key text not null,
+    scope text not null,
+    document_id uuid,
+    reviewer text not null,
+    reviewed_at timestamptz not null default now(),
+    constraint review_sign_offs_pkey primary key (case_id, group_key),
+    constraint review_sign_offs_case_id_fkey foreign key (case_id) references public.cases(id) on delete cascade,
+    constraint review_sign_offs_document_id_fkey foreign key (document_id) references public.documents(id) on delete cascade,
+    constraint review_sign_offs_scope_check check (scope = any (array['document'::text, 'case'::text])),
+    constraint review_sign_offs_scope_shape check ((scope = 'document'::text) = (document_id is not null))
+);
+
 -- Debug trace only, one row per document. No primary key.
 create table public.langgraph_trace (
     document_id uuid,
@@ -307,6 +323,8 @@ alter table public.documents enable row level security;
 alter table public.extracted_fields enable row level security;
 alter table public.detection_results enable row level security;
 alter table public.findings enable row level security;
+alter table public.review_sign_offs enable row level security;
+grant select, insert, update, delete on public.review_sign_offs to service_role;
 alter table public.langgraph_trace enable row level security;
 alter table public.case_analysis_runs enable row level security;
 alter table public.risk_scores enable row level security;

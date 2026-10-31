@@ -3,8 +3,8 @@ Precision and recall per detection check, from loan officers' reviews of finding
 
 A reviewed finding is a true positive when the officer marked it correct and a false positive when marked
 wrong. A false negative is something real the system didn't flag: a missed issue (no finding raised it) against
-the check that should have caught it, or a finding the specialists dismissed that the officer marked correct (a
-dismissal marked wrong was right to go, and counts for neither). So, per check:
+the check that should have caught it, or a finding the specialists set aside (dismissed, or kept as info) that the
+officer marked correct (one marked wrong was right to go, and counts for neither). So, per check:
 
 * precision = correct / (correct + wrong)    None when none of the check's findings were reviewed
 * recall    = correct / (correct + missed)   None when there was nothing the check should have caught
@@ -19,7 +19,9 @@ from functools import lru_cache
 from typing import Iterable
 
 from .case_pipeline.models import FindingCategory
-from .models import CaseFindingReviews, CheckMetrics, DetectionMetrics, FindingReview, MetricsSummary, ReviewScope
+from .models import (
+    CaseFindingReviews, CheckMetrics, DetectionMetrics, FindingReview, MetricsSummary, ReviewScope, ReviewSignOff,
+)
 
 # Placeholders until the team agrees targets: a check under either is flagged on the dashboard.
 TARGET_PRECISION = 0.8
@@ -66,7 +68,7 @@ def summarize(reviews: Iterable[FindingReview]) -> MetricsSummary:
         bucket = counts[(review.scope, review.check_name)]
         if review.kind == "missed":
             bucket["missed"] += 1
-        elif review.agent_decision == "dismissed":
+        elif review.agent_decision == "dismissed" or review.severity == "info":
             if review.verdict == "correct":
                 bucket["missed"] += 1
         elif review.verdict in ("correct", "wrong"):
@@ -89,7 +91,7 @@ def summarize(reviews: Iterable[FindingReview]) -> MetricsSummary:
     )
 
 
-def case_metrics(reviews: list[FindingReview]) -> CaseFindingReviews:
+def case_metrics(reviews: list[FindingReview], sign_offs: Iterable[ReviewSignOff] = ()) -> CaseFindingReviews:
     """One case: per document (its own findings), across documents (the case analysis), and the whole case."""
     by_document: dict[str, list[FindingReview]] = defaultdict(list)
     for review in reviews:
@@ -97,6 +99,7 @@ def case_metrics(reviews: list[FindingReview]) -> CaseFindingReviews:
             by_document[review.document_id].append(review)
     return CaseFindingReviews(
         reviews=reviews,
+        sign_offs=list(sign_offs),
         case=summarize(reviews),
         documents={document_id: summarize(items) for document_id, items in by_document.items()},
         cross_document=summarize(r for r in reviews if r.scope == "case"),

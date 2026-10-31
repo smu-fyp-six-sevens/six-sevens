@@ -112,13 +112,14 @@ interface DocumentGroup {
   documentType: string | null;
   findings: CaseRiskFinding[];
   rows: FindingRow[];
-  // What the specialists dismissed on this document: reviewed alongside, an officer ticks any that is real.
+  // What the specialists set aside on this document, dismissed or info: reviewed alongside, an officer ticks any
+  // that is real.
   dismissed: DismissedFinding[];
 }
 
 // Grouped per document (cross-document findings in a group of their own), most severe first (documents by their
 // most severe finding, then total points); identical findings (same check, same summary) collapse into one row.
-// A document whose findings were all dismissed gets a group too, after the scored ones.
+// A document whose findings were all set aside gets a group too, after the scored ones.
 function groupByDocument(findings: CaseRiskFinding[], dismissed: DismissedFinding[]): DocumentGroup[] {
   const groups = new Map<string, DocumentGroup>();
   for (const finding of [...findings].sort(compareFindings)) {
@@ -210,16 +211,16 @@ function reviewedOn(value: string): string {
 }
 
 // `latest` is the group's most recently saved verdict: who last reviewed it, and when.
-function ReviewTag({ status, latest }: { status: GroupReviewStatus; latest?: FindingReview }) {
+function ReviewTag({ status, latest }: { status: GroupReviewStatus; latest?: Pick<FindingReview, 'reviewer' | 'updated_at'> }) {
+  // Waiting on a review needs no tag: the group is under Documents to Review.
+  if (status === 'not_reviewed') return null;
   return (
     <span className={`risk-review-tag risk-review-tag--${status}`}>
       {status === 'saved'
         ? latest
           ? `✓ Reviewed by ${officerName(latest.reviewer)} · ${reviewedOn(latest.updated_at)}`
           : '✓ Reviewed'
-        : status === 'unsaved'
-          ? 'Unsaved changes'
-          : 'Not reviewed'}
+        : 'Unsaved changes'}
     </span>
   );
 }
@@ -282,7 +283,7 @@ export function CaseRiskCard({
   const findings = scored?.contributing_findings ?? [];
   const dismissedFindings = scored?.dismissed_findings ?? [];
   // Every finding is listed, lows and ones a specialist didn't assess included: all of them count towards the
-  // score, and all of them are the officer's to review, as are the ones the specialists dismissed.
+  // score, and all of them are the officer's to review, as are the ones the specialists set aside.
   const documents = groupByDocument(findings, dismissedFindings);
   // Every group that has findings: only the rest are added as empty groups.
   const withFindings = new Set(documents.map((group) => group.documentId));
@@ -329,7 +330,7 @@ export function CaseRiskCard({
     });
   }
 
-  // Every tick in a group, scored rows then dismissed findings: its draft key, the findings it marks, and the one
+  // Every tick in a group, scored rows then set-aside findings: its draft key, the findings it marks, and the one
   // whose saved verdict it shows.
   function ticks(group: DocumentGroup) {
     return [
@@ -344,8 +345,16 @@ export function CaseRiskCard({
     return drafts[tick.key] ?? verdictFor(allReviews, tick.shown)?.verdict === 'correct';
   }
 
+  // A group with no findings to mark is reviewed once an officer saves it.
+  function signOffFor(group: DocumentGroup) {
+    return reviews.data?.sign_offs.find((signOff) =>
+      group.scope === 'case' ? signOff.scope === 'case' : signOff.document_id === group.documentId,
+    );
+  }
+
   function groupStatus(group: DocumentGroup): GroupReviewStatus {
     const all = ticks(group);
+    if (all.length === 0) return signOffFor(group) ? 'saved' : 'not_reviewed';
     const saved = all.map((tick) => verdictFor(allReviews, tick.shown)?.verdict ?? null);
     const changed = all.some((tick, index) => {
       const draft = drafts[tick.key];
@@ -360,10 +369,18 @@ export function CaseRiskCard({
   }
 
   async function saveGroup(group: DocumentGroup) {
-    const saved = await reviews.saveGroup(
-      `group:${group.documentId}`,
-      ticks(group).map((tick) => ({ members: tick.members, verdict: isTicked(tick) ? 'correct' : 'wrong' })),
-    );
+    const all = ticks(group);
+    const saved =
+      all.length > 0
+        ? await reviews.saveGroup(
+            `group:${group.documentId}`,
+            all.map((tick) => ({ members: tick.members, verdict: isTicked(tick) ? 'correct' : 'wrong' })),
+          )
+        : await reviews.signOff(
+            `group:${group.documentId}`,
+            group.scope,
+            group.scope === 'case' ? null : group.documentId,
+          );
     // Saved: the rows show their saved verdicts again.
     setDrafts((current) =>
       Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${group.documentId}:`))),
@@ -379,19 +396,20 @@ export function CaseRiskCard({
     }
   }
 
-  function latestVerdict(group: DocumentGroup): FindingReview | undefined {
+  function latestVerdict(group: DocumentGroup) {
+    if (ticks(group).length === 0) return signOffFor(group);
     return ticks(group)
       .map((tick) => verdictFor(allReviews, tick.shown))
       .filter((review): review is FindingReview => review !== undefined)
       .reduce<FindingReview | undefined>((latest, review) => (!latest || review.updated_at > latest.updated_at ? review : latest), undefined);
   }
 
-  // Still the officer's to do: it has findings and they aren't all saved. Unknown until the reviews load, so the
+  // Still the officer's to do: its review isn't saved, findings or none. Unknown until the reviews load, so the
   // list waits for them rather than showing every document first; if they fail to load, every document is listed.
   const reviewsLoading = reviewsOn && scored !== null && reviews.data === null && reviews.error === null;
 
   function needsReview(group: DocumentGroup) {
-    return !reviews.data || (ticks(group).length > 0 && groupStatus(group) !== 'saved');
+    return !reviews.data || groupStatus(group) !== 'saved';
   }
 
   // One group's heading: its document, severity counts and review state.
@@ -404,13 +422,13 @@ export function CaseRiskCard({
             {count} {severity}
           </span>
         ))}
-        {document.dismissed.length > 0 && (
-          <span className="risk-severity risk-severity--dismissed">{document.dismissed.length} dismissed</span>
+        {missedFor(document).length > 0 && (
+          <span className="risk-severity risk-severity--missed">{missedFor(document).length} missed</span>
         )}
-        {document.findings.length === 0 && document.dismissed.length === 0 && (
+        {document.findings.length === 0 && document.dismissed.length === 0 && missedFor(document).length === 0 && (
           <span className="risk-document-none">✓ No findings</span>
         )}
-        {reviews.data && ticks(document).length > 0 && (
+        {reviews.data && (
           <ReviewTag status={groupStatus(document)} latest={latestVerdict(document)} />
         )}
         <MetricsLine summary={metricsFor(document)} />
@@ -461,7 +479,7 @@ export function CaseRiskCard({
     const saving = reviews.savingKey !== null || reviews.data === null;
     return (
       <>
-        {all.length > 0 && reviews.data && !readOnly && (
+        {reviews.data && !readOnly && (
           <GroupReviewBar
             checkedCount={checkedCount}
             total={all.length}
@@ -544,11 +562,14 @@ export function CaseRiskCard({
           })}
         </ul>
         {document.dismissed.length > 0 && (
-          <>
-            <p className="risk-dismissed-heading">
-              Dismissed by the specialists ({document.dismissed.length}): not scored.
-              {reviews.data && ' Tick any that is a real issue after all.'}
-            </p>
+          <details className="risk-dismissed">
+            <summary className="risk-dismissed-heading">
+              <span className="risk-chevron" aria-hidden="true">›</span>
+              <span>
+                Set aside by the specialists ({document.dismissed.length}): not scored.
+                {reviews.data && ' Tick any that is a real issue after all.'}
+              </span>
+            </summary>
             <ul className="risk-findings">
               {document.dismissed.map((finding) => {
                 const tick = tickFor.get(`${document.documentId}:dismissed:${finding.finding_id}`)!;
@@ -558,23 +579,23 @@ export function CaseRiskCard({
                       <input
                         type="checkbox"
                         className="review-tick risk-finding-tick"
-                        aria-label={`Real issue (dismissed): ${finding.summary}`}
+                        aria-label={`Real issue (set aside): ${finding.summary}`}
                         checked={isTicked(tick)}
                         disabled={saving || readOnly}
                         onChange={(event) => setTicked([tick.key], event.target.checked)}
                       />
                     )}
-                    <span className="risk-severity risk-severity--dismissed">dismissed</span>
+                    <span className="risk-severity risk-severity--dismissed">set aside</span>
                     <span className="risk-finding-text">
                       <span className="risk-finding-check">{formatTool(finding.tool)}</span>
                       <span className="risk-finding-summary">{finding.summary}</span>
-                      {finding.reason && <span className="risk-finding-rationale">Why dismissed: {finding.reason}</span>}
+                      {finding.reason && <span className="risk-finding-rationale">Why set aside: {finding.reason}</span>}
                     </span>
                   </li>
                 );
               })}
             </ul>
-          </>
+          </details>
         )}
         {reviews.data && (
           <MissedIssues
@@ -727,7 +748,7 @@ export function CaseRiskCard({
               <summary>
                 <span className="risk-chevron" aria-hidden="true">›</span>
                 Reviewed ({done.length})
-                <span className="risk-reviewed-hint">Reviewed, or nothing to review</span>
+                <span className="risk-reviewed-hint">Saved by an officer</span>
               </summary>
               <div className="flagged-list">{done.map(renderGroup)}</div>
             </details>

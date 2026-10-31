@@ -396,6 +396,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cases/{case_id}/finding-reviews/sign-offs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Sign Off Group
+         * @description Saves the review of a group with no findings to mark, so it moves to Reviewed like any other.
+         */
+        put: operations["sign_off_group_cases__case_id__finding_reviews_sign_offs_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases/{case_id}/finding-reviews/verdicts": {
         parameters: {
             query?: never;
@@ -2147,6 +2167,8 @@ export interface components {
             };
             /** Reviews */
             reviews: components["schemas"]["FindingReview"][];
+            /** Sign Offs */
+            sign_offs: components["schemas"]["ReviewSignOff"][];
             /** Target Precision */
             target_precision: number;
             /** Target Recall */
@@ -2717,8 +2739,8 @@ export interface components {
         };
         /**
          * DismissedFinding
-         * @description A tool's finding a specialist dismissed as a false positive (case_risk). An officer marks it correct when it
-         *     is a real problem after all.
+         * @description A tool's finding a specialist set aside (case_risk): dismissed as a false positive, or kept as info, real but
+         *     explained. An officer marks it correct when it is a real problem after all.
          */
         DismissedFinding: {
             /** Category */
@@ -3022,6 +3044,8 @@ export interface components {
              * @enum {string}
              */
             scope: "document" | "case";
+            /** Severity */
+            severity: string | null;
             /**
              * Summary
              * @default
@@ -3887,6 +3911,26 @@ export interface components {
              */
             scope: "document" | "case";
         };
+        /**
+         * ReviewSignOff
+         * @description An officer reviewed a group with no findings: a document, or the cross-document group.
+         */
+        ReviewSignOff: {
+            /** Document Id */
+            document_id: string | null;
+            /** Reviewer */
+            reviewer: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "document" | "case";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** RiskOutlook */
         RiskOutlook: {
             /** Best Case Level */
@@ -3936,6 +3980,19 @@ export interface components {
         SetFindingVerdictsRequest: {
             /** Verdicts */
             verdicts: components["schemas"]["SetFindingVerdictRequest"][];
+        };
+        /**
+         * SignOffRequest
+         * @description Saves the review of a group with no findings to mark.
+         */
+        SignOffRequest: {
+            /** Document Id */
+            document_id?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "document" | "case";
         };
         /** SkippedCheck */
         SkippedCheck: {
@@ -4965,6 +5022,43 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseFindingReviews"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sign_off_group_cases__case_id__finding_reviews_sign_offs_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignOffRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
