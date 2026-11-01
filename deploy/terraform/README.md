@@ -17,10 +17,6 @@ Services are created on a placeholder image (Cloud Run's "Congratulations" page)
 
 **Run Terraform from a fresh terminal.** It's installed with winget (1.16.6, the same version CI checks with); a VS Code terminal opened before the install doesn't see it. Restart VS Code fully, or use a separate Command Prompt.
 
-## Open
-
-- **Artifact Registry cleanup:** turned on in `main.tf`, waiting for `terraform apply` (checked as in "Problems met").
-
 ## One-time setup (already done for this project; for a new one)
 
 From `deploy/terraform`:

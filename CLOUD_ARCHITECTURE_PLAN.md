@@ -91,7 +91,7 @@ Terraform owns everything else about a service (`deploy/terraform`); `apply` is 
 
 **Security:** a service account per service; secrets in Secret Manager, each readable only by the services that need it (the Anthropic key in the three workers, the token key in the public services); Workload Identity Federation for GitHub, no stored keys; containers run as non-root with health checks; Checkov findings that don't apply are skipped inline with a reason.
 
-**Cost:** everything scales to zero (idle costs about nothing); a budget alert; Claude spend tracked per agent, document and case. Artifact Registry cleanup policies are in dry-run mode (`PENDING_WORK.md`).
+**Cost:** everything scales to zero (idle costs about nothing); a budget alert; Claude spend tracked per agent, document and case. Artifact Registry cleanup policies delete versions older than 7 days (untagged ones after 1) and always keep the 5 newest of each image.
 
 ## 7. Observability
 

@@ -114,12 +114,12 @@ resource "google_artifact_registry_repository" "app" {
   # Checked 2026-11-01 by applying the policies to the image list: no serving image would be deleted.
   cleanup_policy_dry_run = false
 
-  # KEEP beats DELETE: the 10 newest versions of each image (rollback targets) are never deleted.
+  # KEEP beats DELETE: the 5 newest versions of each image (the serving one and four rollback targets) are never deleted.
   cleanup_policies {
     id     = "keep-recent"
     action = "KEEP"
     most_recent_versions {
-      keep_count = 10
+      keep_count = 5
     }
   }
 
@@ -128,7 +128,7 @@ resource "google_artifact_registry_repository" "app" {
     action = "DELETE"
     condition {
       tag_state  = "ANY"
-      older_than = "1209600s" # 14 days
+      older_than = "604800s" # 7 days
     }
   }
 
@@ -138,7 +138,7 @@ resource "google_artifact_registry_repository" "app" {
     action = "DELETE"
     condition {
       tag_state  = "UNTAGGED"
-      older_than = "604800s" # 7 days
+      older_than = "86400s" # 1 day
     }
   }
 
