@@ -8,27 +8,30 @@ import { officerName } from '../../lib/officers';
 
 export type GroupReviewStatus = 'not_reviewed' | 'saved' | 'unsaved';
 
-// Above a group's findings: tick all of them at once, and save the group's review. Saving is what makes an
+// Above a group's findings: tick the scored ones at once, and save the group's review. Saving is what makes an
 // unticked finding count as wrong; before that, nothing in the group counts.
 export function GroupReviewBar({
   checkedCount,
+  selectable,
   total,
   status,
   saving,
   onToggleAll,
   onSave,
 }: {
+  // Ticked among the `selectable` findings Select all covers; `total` adds the ones ticked one by one.
   checkedCount: number;
+  selectable: number;
   total: number;
   status: GroupReviewStatus;
   saving: boolean;
   onToggleAll: (checked: boolean) => void;
   onSave: () => void;
 }) {
-  const allChecked = total > 0 && checkedCount === total;
+  const allChecked = selectable > 0 && checkedCount === selectable;
   return (
     <div className="group-review-bar">
-      {total > 0 && (
+      {selectable > 0 && (
         <label className="group-review-select-all">
           <input
             type="checkbox"

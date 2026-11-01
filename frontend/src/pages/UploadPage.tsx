@@ -38,6 +38,7 @@ import KebabMenu from '../components/KebabMenu';
 import {
   MAX_COMPANY_NAME_LENGTH,
 } from '../utils/caseValidation';
+import { TERMINAL_DOCUMENT_STATUSES } from '../services/uploadService';
 import { ErrorMessage } from '../components/ErrorMessage';
 
 
@@ -282,8 +283,13 @@ export default function UploadPage({
           statuses={caseSectionStatuses({
             documentCount: documents.length,
             approvedCount: approvedDocuments.length,
-            hasInFlightDocument: caseHasInFlightDocument,
+            detectedCount: approvedDocuments.filter((document) => document.status === 'detected').length,
+            // Not yet approved or rejected, so still uploading or extracting (detection comes after approval).
+            processingCount: extractedDocuments.filter((document) => !TERMINAL_DOCUMENT_STATUSES.has(document.status)).length,
             flaggedCount: flaggedDocuments.length,
+            toApproveCount: extractedDocuments.filter(
+              (document) => document.status === 'analyzed' && !flaggedDocuments.includes(document),
+            ).length,
             analysisReady,
             analysisOverview,
             risk,
@@ -517,7 +523,7 @@ export default function UploadPage({
             />
           )}
 
-          {activeSection === 'notes' && <NotesCard readOnly={isFinalised} caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
+          {activeSection === 'notes' && <NotesCard finalised={isFinalised} caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 
           {activeSection === 'audit' && <AuditTrailCard caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 

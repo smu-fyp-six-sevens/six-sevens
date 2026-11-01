@@ -77,23 +77,34 @@ test.describe('Track case status @SCRUM-80', () => {
     expect(backend.requestsTo('POST', /^\/cases\/case-acme\/finalise$/)).toHaveLength(0);
   });
 
-  test('a finalised case is view-only, its documents and notes included @SCRUM-80', async ({ page, backend }) => {
+  test('a finalised case is view-only, but notes can still be added @SCRUM-80', async ({ page, backend }) => {
+    await page.addInitScript(() => localStorage.setItem('authToken', `${btoa(JSON.stringify({ sub: 'officer' }))}.sig`));
     seedCase(backend, { status: 'finalised' });
     const document = makeDocument({
       id: 'doc-acme', case_id: 'case-acme', filename: 'bank-statement.pdf', status: 'analyzed',
       document_type: 'bank_statement', classification_confidence: 0.99, routing_status: 'accepted',
     });
     backend.documents.push(document);
+    backend.notes.push({
+      id: 'note-before', case_id: 'case-acme', document_id: null, parent_id: null, author: 'officer',
+      body: 'Written before finalising.', created_at: '2026-10-20T03:00:00+00:00', edited_at: null, deleted_at: null,
+    });
 
     await page.goto('/cases/GLDB-1200?section=notes');
     await expect(page.getByText('This case is view-only.')).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'New note' })).toHaveCount(0);
+    // Notes written before finalising stay as they were.
+    const before = page.getByTestId('note').filter({ hasText: 'Written before finalising.' });
+    await expect(before.getByRole('button', { name: 'Edit' })).toHaveCount(0);
+    await expect(before.getByRole('button', { name: 'Delete' })).toHaveCount(0);
+    await page.getByRole('textbox', { name: 'New note' }).fill('Client called after finalising.');
+    await page.getByRole('button', { name: 'Save note' }).click();
+    await expect(page.getByTestId('note').filter({ hasText: 'Client called after finalising.' })).toBeVisible();
 
     await page.goto('/cases/GLDB-1200/documents/doc-acme');
     await expect(page.getByText('This case is view-only.')).toBeVisible();
     await expect(page.getByRole('button', { name: /Approve Document/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Reject Document/ })).toHaveCount(0);
-    await expect(page.getByRole('textbox', { name: 'New note' })).toHaveCount(0);
+    await expect(page.getByRole('textbox', { name: 'New note' })).toBeVisible();
   });
 
   test('a case that is not analysed cannot be finalised @SCRUM-80', async ({ page, backend }) => {

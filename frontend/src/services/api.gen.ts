@@ -480,8 +480,8 @@ export interface paths {
          * Add Case Note
          * @description Saves a note signed by the officer making the request. Allowed on any document, approved and
          *     rejected ones included: a note is stored on its own and never edits the document, so the
-         *     document's lock is untouched. Any officer can reply to a note (parent_id). A finalised case is
-         *     view-only, notes included.
+         *     document's lock is untouched. Any officer can reply to a note (parent_id). Allowed on a
+         *     finalised case too; the notes it had when finalised can no longer be edited or deleted.
          */
         post: operations["add_case_note_cases__case_id__notes_post"];
         delete?: never;

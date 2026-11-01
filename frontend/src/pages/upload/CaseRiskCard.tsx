@@ -334,9 +334,11 @@ export function CaseRiskCard({
   // whose saved verdict it shows.
   function ticks(group: DocumentGroup) {
     return [
-      ...group.rows.map((row) => ({ key: `${group.documentId}:${row.finding.finding_id}`, members: row.members, shown: row.finding })),
+      ...group.rows.map((row) => ({
+        key: `${group.documentId}:${row.finding.finding_id}`, members: row.members, shown: row.finding, setAside: false,
+      })),
       ...group.dismissed.map((finding) => ({
-        key: `${group.documentId}:dismissed:${finding.finding_id}`, members: [finding], shown: finding,
+        key: `${group.documentId}:dismissed:${finding.finding_id}`, members: [finding], shown: finding, setAside: true,
       })),
     ];
   }
@@ -475,17 +477,19 @@ export function CaseRiskCard({
   function renderGroupBody(document: DocumentGroup, link?: ReviewLink) {
     const all = ticks(document);
     const tickFor = new Map(all.map((tick) => [tick.key, tick]));
-    const checkedCount = all.filter(isTicked).length;
+    // Select all covers the scored findings only: a set-aside one is ticked on its own, once the officer has read it.
+    const scoredTicks = all.filter((tick) => !tick.setAside);
     const saving = reviews.savingKey !== null || reviews.data === null;
     return (
       <>
         {reviews.data && !readOnly && (
           <GroupReviewBar
-            checkedCount={checkedCount}
+            checkedCount={scoredTicks.filter(isTicked).length}
+            selectable={scoredTicks.length}
             total={all.length}
             status={groupStatus(document)}
             saving={saving}
-            onToggleAll={(checked) => setTicked(all.map((tick) => tick.key), checked)}
+            onToggleAll={(checked) => setTicked(scoredTicks.map((tick) => tick.key), checked)}
             onSave={() => void saveGroup(document)}
           />
         )}

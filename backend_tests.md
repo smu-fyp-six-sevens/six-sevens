@@ -76,7 +76,7 @@ Also untested, lower weight: `CR.TENOR`, `FATCA.TIN_FORMAT`, `case_pipeline/risk
 | `document_repository.flush_syncs` | none | One test: a scheduled refresh runs on flush, not later |
 | `emulator_setup.py` | none | Fine: a local dev tool, exercised by the compose walkthrough |
 
-**Infrastructure in CI:** Terraform `fmt` and `validate` run in the `terraform` job, Checkov scans Terraform, Dockerfiles and workflows, and the deploy's gateway check is the post-deploy smoke test. These have no CI check, so a broken change can still merge:
+**Infrastructure in CI:** Terraform `fmt` and `validate` run in the `security` job, Checkov scans Terraform, Dockerfiles and workflows, and the deploy's gateway check is the post-deploy smoke test. These have no CI check, so a broken change can still merge:
 
 | Check | Command |
 |---|---|

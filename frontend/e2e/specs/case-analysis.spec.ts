@@ -363,6 +363,30 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await expect(tracePanel(page).locator('.debug-table tbody tr td:first-child')).toHaveText(['8', '3', '1']);
   });
 
+  test('Select all ticks the scored findings, not the ones the specialists set aside', async ({ page, backend }) => {
+    const base = CASE_RISK['RS-006'].risk;
+    const payslip = base.contributing_findings.find((finding) => finding.filename === 'C011_Payslip.pdf')!;
+    const risk: CaseRisk = {
+      ...base,
+      dismissed_findings: [{
+        finding_id: 'spelling_tool-1', fingerprint: 'spelling_tool:1', document_id: payslip.document_id,
+        document_type: payslip.document_type, filename: payslip.filename, tool: 'spelling_tool', check_code: null,
+        category: null, summary: '"Pte" is not in the dictionary.', reason: 'A normal company suffix.',
+      }],
+    };
+    const theCase = makeCase({ greenlink_case_id: 'GLDB-4106', risk });
+    backend.cases.push(theCase);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+
+    await reviewCard(page).locator('.risk-document', { hasText: 'C011_Payslip.pdf' }).getByRole('button').click();
+    const dialog = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
+    await dialog.getByRole('checkbox', { name: 'Select all' }).check();
+
+    await expect(dialog.getByRole('checkbox', { name: /^Real issue: / })).toBeChecked();
+    await dialog.getByText(/^Set aside by the specialists/).click();
+    await expect(dialog.getByRole('checkbox', { name: /^Real issue \(set aside\): / })).not.toBeChecked();
+  });
+
   test('a group with no findings moves to Reviewed only once an officer saves it', async ({ page, backend }) => {
     await openRisk(page, backend, 'RS-006');
     const card = reviewCard(page);

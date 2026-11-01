@@ -395,7 +395,7 @@ export default function DocumentDetailsPage({
         {caseFinalised && <FinalisedBanner />}
 
         <NotesCard
-          readOnly={caseFinalised}
+          finalised={caseFinalised}
           caseId={selectedCase.id}
           caseNumber={selectedCase.caseNumber}
           documents={[{ id: document.id, filename: document.filename }]}

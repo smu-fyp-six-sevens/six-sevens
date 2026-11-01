@@ -124,8 +124,7 @@ Defined in `.github/workflows/`:
 - `ci-cd.yml` runs on pull requests and on pushes to `main` (not docs-only ones). Jobs:
   - **backend:** ruff, pyright (a type error fails the build; `# type: ignore` and a weakened pyright config are rejected), `openapi.json` matching the models, the tests with coverage;
   - **frontend:** lint, `api.gen.ts` matching `openapi.json`, type-check, build and the Playwright suite (in Microsoft's Playwright container);
-  - **security:** Checkov, plus Snyk or pip-audit and npm audit;
-  - **Terraform:** `fmt` and `validate`.
+  - **security:** Checkov, Snyk, and Terraform `fmt` and `validate`.
 
-  All four must pass. On a push to `main` it then calls `deploy.yml`.
+  All three must pass. On a push to `main` it then calls `deploy.yml`.
 - `deploy.yml` builds one image per service, rolls them out to Cloud Run, checks the gateway, and rolls everything back if a check fails. It also runs by hand. It signs in through Workload Identity Federation (repository *variables* `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`); the only repository secrets are `DATA_GOV_SG_API_KEY` and `SNYK_TOKEN`. The services read their own keys from Secret Manager.

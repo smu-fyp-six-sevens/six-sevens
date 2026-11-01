@@ -16,6 +16,10 @@ from app.models import DocumentRecord, DocumentStatus
         ("Tampines Nth UPP CTRL", "Tampines North Upper Central"),
         ("S460022", "Singapore 460022"),
         ("Blk 22 C'wealth Ave", "22 Commonwealth Avenue"),
+        ("Block 21 Media Circle, Floor 03 - Unit 05, Singapore 138562", "21 MEDIA CIRCLE #03-05 SINGAPORE 138562"),
+        ("50, Tuas Avenue 11, Unit #01-30, Singapore 639107", "50 Tuas Avenue 11 #01-30 Singapore 639107"),
+        ("Tuas Avenue 11 Block 50 #01-30 Singapore 639107", "50 Tuas Avenue 11 #01-30 Singapore 639107"),
+        ("50 Tuas Avenue 11, 01-30, Singapore 639107", "50 Tuas Avenue 11 #01-30 Singapore 639107"),
     ],
 )
 def test_address_variants_normalize_to_the_same_value(first: str, second: str) -> None:

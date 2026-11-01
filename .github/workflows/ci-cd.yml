@@ -154,7 +154,7 @@ jobs:
   security:
     # Blocking: a high-severity finding fails the build and stops the deploy. Findings that don't apply are
     # skipped inline with a reason (#checkov:skip=...), never by making this job optional.
-    name: Security (Checkov, Snyk)
+    name: Security (Checkov, Snyk, Terraform)
     runs-on: ubuntu-latest
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -191,43 +191,32 @@ jobs:
         run: checkov -d .github/workflows --framework github_actions --compact --quiet
 
       - name: Snyk (Python dependencies)
-        if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
+        if: ${{ !cancelled() }}
         run: |
           # Snyk reads installed packages for a requirements file, so install them first.
           python -m pip install -r backend/requirements.lock
           npx --yes snyk@1 test --file=backend/requirements.lock --package-manager=pip --severity-threshold=high
 
       - name: Snyk (npm dependencies)
-        if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
+        if: ${{ !cancelled() }}
         run: cd frontend && npm ci && npx --yes snyk@1 test --severity-threshold=high
 
-      - name: pip-audit and npm audit (when there is no Snyk token)
-        if: ${{ !cancelled() && env.SNYK_TOKEN == '' }}
-        run: |
-          python -m pip install pip-audit
-          pip-audit -r backend/requirements.lock
-          cd frontend && npm ci && npm audit --audit-level=high
-
-  terraform:
-    # Format and validity only: no state, no credentials. `apply` stays a manual step (deploy/terraform/README.md).
-    name: Terraform (fmt, validate)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: deploy/terraform
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
+      # Terraform format and validity only: no state, no credentials. `apply` stays a manual step
+      # (deploy/terraform/README.md). Here rather than in its own job, which billed a minute for seconds of work.
       - uses: hashicorp/setup-terraform@v3
+        if: ${{ !cancelled() }}
         with:
           # The version `terraform apply` runs with locally; keep them the same.
           terraform_version: 1.16.6
 
       - name: terraform fmt
+        if: ${{ !cancelled() }}
+        working-directory: deploy/terraform
         run: terraform fmt -check -recursive
 
       - name: terraform validate
+        if: ${{ !cancelled() }}
+        working-directory: deploy/terraform
         run: |
           terraform init -backend=false -input=false
           terraform validate
@@ -235,7 +224,7 @@ jobs:
   deploy:
     # Continuous deployment: every push to main whose checks all pass goes to Cloud Run.
     name: Deploy to Cloud Run
-    needs: [backend-ci, frontend-ci, security, terraform]
+    needs: [backend-ci, frontend-ci, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read

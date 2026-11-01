@@ -31,13 +31,13 @@ async def add_case_note(
     case_id: str,
     request: CreateNoteRequest,
     user: CurrentUser,
-    case: CaseRecord = Depends(get_editable_case_or_404),
+    case: CaseRecord = Depends(get_case_or_404),
 ) -> CaseNote:
     """
     Saves a note signed by the officer making the request. Allowed on any document, approved and
     rejected ones included: a note is stored on its own and never edits the document, so the
-    document's lock is untouched. Any officer can reply to a note (parent_id). A finalised case is
-    view-only, notes included.
+    document's lock is untouched. Any officer can reply to a note (parent_id). Allowed on a
+    finalised case too; the notes it had when finalised can no longer be edited or deleted.
     """
     document_id = str(request.document_id) if request.document_id else None
     parent_id = str(request.parent_id) if request.parent_id else None

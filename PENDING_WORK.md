@@ -1,6 +1,6 @@
 # Pending work
 
-Open product and platform work only: remove an item once it's done. Elsewhere: code smells and optimisations in `REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, case dashboard, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10; backwards-compatibility fallbacks in `REFACTORING_AUDIT.md` §5. Updated 2026-10-30.
+Open product and platform work only: remove an item once it's done. Elsewhere: code smells and optimisations in `REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, case dashboard, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10; backwards-compatibility fallbacks in `REFACTORING_AUDIT.md` §5. Updated 2026-11-01.
 
 ## Database
 
@@ -21,6 +21,23 @@ Open product and platform work only: remove an item once it's done. Elsewhere: c
 
 - **Data residency asterisk.** Put this wherever the report describes the model calls, and carry it into the commercialisation document the supervisor asked for (server, model, RAM, storage requirements): *"This prototype calls the public Claude API. In production, GLDB would reach Claude through an enterprise agreement or its cloud provider (for example Vertex AI), with regional processing and zero data retention, subject to its outsourcing and MAS requirements."* Before relying on it: check whether Vertex AI serves Claude in Singapore (`asia-southeast1`); the Claude API's own residency option is global or US only. Don't name banks that have signed such contracts without a source.
 
+## Extraction agent
+
+Extraction is one Sonnet call over the page text (`langgraph/extract.py`). The text loses table columns, and the model says so in `low_confidence_reason`: a statement's debit and credit "inferred from balance movement", a credit report's "table layout is garbled; balance column alignment unclear". Plan: escalate field by field, the way classification escalates (rules, then the text classifier, then vision).
+1. **Text pass:** today's call, unchanged.
+2. **Code picks the fields for a second look:** below a confidence threshold, a required field that's missing, or one a guard dropped (`_drop_unprinted_numbers` and the like). None picked means no extra cost, as on most clean native PDFs.
+3. **An extraction agent on those fields only,** a subgraph shaped like `classify_graph` (`extract_graph.py`, tools in `extraction_tools.py`), with the order enforced in code like `classify_graph._refusal`:
+   - `layout_lookup(fields)`: the words near each field's label with their positions (PyMuPDF), and table cells by column (pdfplumber) for statement and credit-report rows. Free, so it runs first; on a scan it uses the OCR boxes.
+   - `vision_read(fields, pages)`: renders only those pages and asks only for those fields. Once at most, only for fields layout didn't settle; straight away on an image-only document.
+   - The agent may leave an unimportant optional field alone.
+
+**Rules code enforces:**
+- A second look may fill a field or raise its confidence, never "correct" a value to make the arithmetic work. A statement whose balances don't add up may be forged; a disagreement between the text and the image is kept for detection, not resolved.
+- On a native PDF, vision can't add a number the text layer doesn't hold (as `_drop_unprinted_numbers`): a forged overlay is exactly where the image and the text disagree.
+- Each field records its source (text, layout or vision) in the trace.
+
+**Also:** `extract_node` and `rerun_extraction` both hand over to the subgraph. The CLAUDE.md design rule ("classifier and extraction are plain pipelines") and `HOW_IT_WORKS.md`'s extraction section change with it. Mocked tests cover the tool order, the field picking and the merge rules. An eval on bank statements and payslips (spends tokens; on demand) decides whether it beats the single call.
+
 ## Detection and the document pipeline
 
 - **Watch the new CPU process pool** on the first deployed runs (`CPU_WORKER_PROCESSES=2` on doc-worker and detection-worker): memory per instance (each process loads PyMuPDF and the OCR model), and the "CPU worker process died" log line.
@@ -37,6 +54,7 @@ Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 - **Plan-then-judge has no follow-up round;** add one optional round if the evals show low recall.
 - **The run trace lists dropped hypotheses,** while the design says unproven ones are never shown. Decide before exposing it beyond developers.
 - **Guardrails still open:** a dismissal flow for cross-document findings, audit retention, the three sponsor questions in the plan.
+- **The evidence requests (`risk/outlook.py`) are one Haiku call, not an agent, and need more ideation.** A document can only lower the score, so "ask for all of them" always looks best. Ideas so far: the smallest set that reaches a target level (code, not a model); scoring a document that goes against the client too, since one that can swing either way tells the officer more; an agent that checks the case's existing documents before asking, and tries sets with a re-scoring tool. The score stays deterministic either way.
 
 ## Evals and verification
 
@@ -57,7 +75,7 @@ Budgets are in `HOW_IT_WORKS.md` §8; query-level fixes are in `REFACTORING_AUDI
   2. Set `cleanup_policy_dry_run = false` and apply.
 - **Billed cost in Grafana:** set `billing_export_table` once the export table appears (`deploy/terraform/README.md`, "Open").
 - **Snyk's npm scan has never completed a run.** The security job blocks the deploy: if it finds a high-severity frontend issue, fix or upgrade rather than making the job optional again.
-- **Branch protection on `main` is off on purpose** (small changes are pushed directly). Turning it on (require Backend CI, Frontend CI, Security, Terraform) would stop a failing change from landing at all.
+- **Branch protection on `main` is off on purpose** (small changes are pushed directly). Turning it on (require Backend CI, Frontend CI, Security) would stop a failing change from landing at all.
 - **Frontend fully non-root:** nginx's workers already run as `nginx`; going all the way means `nginx-unprivileged` on 8080 (change `nginx.conf`, the frontend's `container_port` in `run.tf` and the compose port together, apply before deploying).
 - **Dead-lettered messages** stay in `domain-events-dead-letter-pull` until someone reads them (the sweeper rescues the document behind them).
 - **WebSocket ticket replay** within 10 s on a different api instance would be accepted; not worth a shared store.

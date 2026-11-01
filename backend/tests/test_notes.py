@@ -72,6 +72,16 @@ def test_note_is_signed_by_the_officer_and_timestamped(repos, published_events) 
     assert published_events[-1].actor == TEST_USER
 
 
+def test_a_note_can_still_be_added_to_a_finalised_case(repos, published_events) -> None:
+    notes_repo, _ = repos
+    with patch("app.routers._dependencies.case_service.get_case",
+               return_value=_case().model_copy(update={"status": "finalised"})):
+        response = client.post(f"/cases/{CASE_ID}/notes", json={"body": "Client called after finalising."})
+
+    assert response.status_code == 201
+    notes_repo.add_note.assert_called_once()
+
+
 def test_note_on_an_approved_document_is_saved_and_leaves_the_document_alone(repos) -> None:
     notes_repo, document_repo = repos
     document_repo.get_document.return_value = _document(DocumentStatus.APPROVED)

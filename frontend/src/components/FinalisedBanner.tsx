@@ -7,7 +7,7 @@ export default function FinalisedBanner() {
         <path d="M8 11V7a4 4 0 0 1 8 0v4" />
       </svg>
       <span>
-        <strong>This case is view-only.</strong> No edits are allowed.
+        <strong>This case is view-only.</strong> Only notes can be added.
       </span>
     </p>
   );

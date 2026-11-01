@@ -94,8 +94,10 @@ export function outOfDateMessage(overview: CaseAnalysisOverview): OutOfDateMessa
 export function caseSectionStatuses({
   documentCount,
   approvedCount,
-  hasInFlightDocument,
+  detectedCount,
+  processingCount,
   flaggedCount,
+  toApproveCount,
   analysisReady,
   analysisOverview,
   risk,
@@ -103,8 +105,11 @@ export function caseSectionStatuses({
 }: {
   documentCount: number;
   approvedCount: number;
-  hasInFlightDocument: boolean;
+  detectedCount: number;
+  // Documents still waiting on the officer's decision: being uploaded or extracted, flagged, or ready to approve.
+  processingCount: number;
   flaggedCount: number;
+  toApproveCount: number;
   analysisReady: boolean;
   analysisOverview: CaseAnalysisOverview | null;
   risk: CaseRisk | null;
@@ -112,22 +117,25 @@ export function caseSectionStatuses({
 }): Partial<Record<CaseSection, SectionStatus>> {
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
-  // The upload and review tab: what still needs the officer, flagged items first.
+  // The upload and review tab: only documents not yet approved or rejected count. What needs the officer comes
+  // first, flagged ones before the rest; detection is the Approved tab's.
+  const waiting = [
+    flaggedCount > 0 && `${flaggedCount} To Review`,
+    toApproveCount > 0 && `${toApproveCount} To Approve`,
+    processingCount > 0 && `${processingCount} Processing`,
+  ].filter(Boolean);
   const documents: SectionStatus =
     documentCount === 0
       ? { tone: 'idle', text: 'None Uploaded' }
-      : hasInFlightDocument
-        ? { tone: 'progress', text: 'Processing' }
-        : flaggedCount > 0
-          ? { tone: 'action', text: `${flaggedCount} To Review` }
-          : approvedCount < documentCount
-            ? { tone: 'action', text: `${documentCount - approvedCount} To Approve` }
-            : { tone: 'done', text: 'All Reviewed' };
+      : waiting.length === 0
+        ? { tone: 'done', text: 'All Decided' }
+        : { tone: flaggedCount + toApproveCount > 0 ? 'action' : 'progress', text: waiting.slice(0, 2).join(' · ') };
 
+  // The approved documents, and how many of them detection has finished.
   const approved: SectionStatus =
     approvedCount === 0
       ? { tone: 'idle', text: 'None Yet' }
-      : { tone: approvedCount === documentCount ? 'done' : 'idle', text: `${approvedCount}/${documentCount} Approved` };
+      : { tone: detectedCount === approvedCount ? 'done' : 'progress', text: `${detectedCount}/${approvedCount} Detected` };
 
   const analysis: SectionStatus = !analysisOverview
     ? analysisReady

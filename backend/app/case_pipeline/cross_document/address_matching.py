@@ -78,12 +78,14 @@ class AddressMismatch:
     reason: str
 
 
-# A floor and unit written out ("Floor 01, Unit 30", "Level 1 Unit 30", "Storey 01 #30") rather than as "#01-30".
+# A floor and unit written out ("Floor 01, Unit 30", "Floor 03 - Unit 05", "Storey 01 #30") rather than as "#01-30".
 _FLOOR_UNIT_RE = re.compile(
-    r"\b(?:FLOOR|FLR|FL|LEVEL|LVL|STOREY|STOREYS)\s*(?:NO\.?\s*)?(\d+[A-Z]?)\s*[,;]?\s*(?:UNIT|#)\s*(?:NO\.?\s*)?(\w+)"
+    r"\b(?:FLOOR|FLR|FL|LEVEL|LVL|STOREY|STOREYS)\s*(?:NO\.?\s*)?(\d+[A-Z]?)\s*[,;\-–]?\s*(?:UNIT|#)\s*#?\s*(?:NO\.?\s*)?(\w+)"
 )
-# "#01-30" and "Unit 01-30": floor, then unit.
-_UNIT_PAIR_RE = re.compile(r"(?:#|\bUNIT\s*(?:NO\.?\s*)?)\s*(\d+[A-Z]?)\s*[-–]\s*(\w+)")
+# "#01-30", "Unit 01-30" and "Unit #01-30": floor, then unit.
+_UNIT_PAIR_RE = re.compile(r"(?:\bUNIT\s*(?:NO\.?\s*)?#?|#)\s*(\d+[A-Z]?)\s*[-–]\s*(\w+)")
+# A bare "01-30" between commas: a zero-padded floor, then the unit.
+_BARE_UNIT_RE = re.compile(r"(?:^|,)\s*(\d{2})\s*[-–]\s*(\d{2,5}[A-Z]?)\s*(?=,|$)", re.MULTILINE)
 
 
 def normalize_address(value: object) -> str:
@@ -98,9 +100,15 @@ def normalize_address(value: object) -> str:
     text = "".join(char for char in text if not unicodedata.combining(char)).upper()
     text = _FLOOR_UNIT_RE.sub(r" UNIT \1 \2 ", text)
     text = _UNIT_PAIR_RE.sub(r" UNIT \1 \2 ", text)
+    text = _BARE_UNIT_RE.sub(r", UNIT \1 \2 ", text)
     text = re.sub(r"#\s*", " UNIT ", text)
     text = re.sub(r"\bC['’]?WEALTH\b", "COMMONWEALTH", text)
     tokens: list[str] = re.findall(r"[A-Z0-9]+", text)
+    # "Tuas Avenue 11 Block 50": the block number goes first, where "50 Tuas Avenue 11" has it.
+    for index in range(1, len(tokens) - 1):
+        if tokens[index] in ("BLOCK", "BLK") and tokens[index + 1].isdigit():
+            tokens = [tokens[index + 1], *tokens[:index], *tokens[index + 2:]]
+            break
     normalized: list[str] = []
     for index, token in enumerate(tokens):
         # Singapore's older six-digit postal format is often written S123456.

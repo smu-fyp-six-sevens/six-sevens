@@ -555,12 +555,11 @@ def test_nothing_can_be_uploaded_to_a_finalised_case(finalised_case) -> None:
 
 @pytest.mark.parametrize(("method", "path"), [
     ("patch", "/cases/case-1"), ("delete", "/cases/case-1"), ("post", "/cases/case-1/analysis/run"),
-    ("post", "/cases/case-1/notes"),
     ("patch", "/cases/case-1/notes/00000000-0000-0000-0000-000000000001"),
     ("delete", "/cases/case-1/notes/00000000-0000-0000-0000-000000000001"),
     ("delete", "/cases/case-1/finding-reviews/00000000-0000-0000-0000-000000000001"),
 ])
-def test_a_finalised_case_cannot_be_edited_deleted_reanalysed_or_noted(method, path) -> None:
+def test_a_finalised_case_cannot_be_edited_deleted_reanalysed_or_have_its_notes_changed(method, path) -> None:
     with patch("app.routers._dependencies.case_service.get_case", return_value=_case("finalised")):
         response = client.request(method.upper(), path, json={"company_name": "Acme", "body": "A note"})
 

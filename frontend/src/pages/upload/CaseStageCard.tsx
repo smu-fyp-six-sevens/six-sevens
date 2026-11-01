@@ -73,7 +73,7 @@ function nextStep({ stage, failure, analysisRunning, findingsToReview, missingRe
     case 'case_analysed':
       return { text: 'The case has been analysed. Check the risk summary, then finalise the case.', link: { label: 'View risk summary', section: 'risk' } };
     case 'finalised':
-      return { text: 'This case is finalised and closed. It is view-only, so no further edits can be made.' };
+      return { text: 'This case is finalised and closed. It is view-only: only notes can be added.' };
     case 'failed':
       return {
         text: caseFailureMessage(failure) ?? 'Something failed. Check the documents and the analysis.',
@@ -204,7 +204,7 @@ export function CaseStageCard({
       {confirmingFinalise && (
         <ConfirmDialog
           title={`Finalise ${caseLabel ?? 'this case'}?`}
-          message="The case will be closed and become view-only, and no edits are allowed. This can't be undone."
+          message="The case will be closed and become view-only: only notes can be added. This can't be undone."
           confirmLabel="Finalise Case"
           busyLabel="Finalising…"
           tone="primary"
