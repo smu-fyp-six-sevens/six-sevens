@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.health import check_db_connection
-from app.main import app, lifespan
+from app.main import app, check_signing_key, lifespan
 
 
 client = TestClient(app)
@@ -81,11 +81,27 @@ def test_check_db_connection_lets_a_database_failure_through() -> None:
         check_db_connection()
 
 
-def test_message_endpoint() -> None:
-    response = client.get("/message")
-
-    assert response.status_code == 200
-    assert response.json() == {"message": "Hello from FastAPI"}
+@pytest.mark.parametrize(
+    ("roles", "in_process", "key", "refused"),
+    [
+        ({"api"}, False, "", True),
+        ({"audit-metrics"}, False, "", True),
+        ({"api"}, False, "real-key", False),
+        ({"api"}, True, "", False),
+        ({"doc-worker"}, False, "", False),
+    ],
+)
+def test_a_deployed_token_checking_role_refuses_an_empty_signing_key(roles, in_process, key, refused) -> None:
+    with (
+        patch("app.main.ROLES", frozenset(roles)),
+        patch("app.main.IN_PROCESS", in_process),
+        patch("app.main.settings.AUTH_SECRET_KEY", key),
+    ):
+        if refused:
+            with pytest.raises(RuntimeError, match="AUTH_SECRET_KEY"):
+                check_signing_key()
+        else:
+            check_signing_key()
 
 
 async def test_lifespan_passes_db_check() -> None:

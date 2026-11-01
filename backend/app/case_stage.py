@@ -237,7 +237,7 @@ def sync_all_cases() -> int:
     cases moved. Never raises.
     """
     try:
-        case_ids = case_repository.list_case_ids()
+        case_ids = case_repository.list_unfinalised_case_ids()
     except Exception:
         logger.exception("Failed to list cases to bring their stages up to date")
         return 0

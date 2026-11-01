@@ -75,7 +75,7 @@
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: #3a4a66;
+  color: var(--slate-29);
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -100,7 +100,7 @@
 }
 
 .document-preview-tool:focus-visible {
-  outline: 2px solid #3b6fd8;
+  outline: 2px solid var(--blue-45);
   outline-offset: 2px;
 }
 
@@ -205,7 +205,7 @@
 
 .document-status--cancelled {
   background: var(--slate-94);
-  color: #4b5568;
+  color: var(--slate-34);
 }
 
 .document-status--stuck {
@@ -244,7 +244,7 @@
   min-width: 0;
   box-sizing: border-box;
   padding: 8px 10px;
-  border: 1px solid #e4a3a3;
+  border: 1px solid var(--red-77);
   border-radius: 7px;
   background: var(--white);
   color: var(--slate-20);
@@ -286,7 +286,7 @@
 .details-label {
   display: block;
   margin-bottom: 7px;
-  color: #718096;
+  color: var(--slate-53);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
@@ -535,7 +535,7 @@
 }
 
 .confidence-badge--warning {
-  background: #fff4dc;
+  background: var(--orange-92);
   color: var(--orange-30);
 }
 
@@ -684,17 +684,17 @@
 }
 
 .confirm-dialog-danger:hover:not(:disabled) {
-  background: #9a3522;
+  background: var(--red-37);
 }
 
 .confirm-dialog-primary {
   border: 0;
-  background: #1f7a4d;
+  background: var(--green-30);
   color: var(--white);
 }
 
 .confirm-dialog-primary:hover:not(:disabled) {
-  background: #17603c;
+  background: var(--green-23);
 }
 
 .confirm-dialog-cancel:disabled,
@@ -872,7 +872,7 @@
 }
 
 .finding-highlight {
-  --highlight: #8a96a8;
+  --highlight: var(--slate-60);
   position: absolute;
   /* The box sits a few pixels outside the area, so it frames the text rather than striking it. */
   box-sizing: content-box;
@@ -888,9 +888,9 @@
   transition: box-shadow 0.15s, background 0.15s;
 }
 
-.finding-highlight--low { --highlight: #d9824f; }
-.finding-highlight--medium { --highlight: #e0632e; }
-.finding-highlight--high { --highlight: #b83c22; }
+.finding-highlight--low { --highlight: var(--orange-58); }
+.finding-highlight--medium { --highlight: var(--orange-53); }
+.finding-highlight--high { --highlight: var(--red-43); }
 
 .finding-highlight:hover,
 .finding-highlight:focus-visible {
@@ -1193,7 +1193,7 @@
 }
 
 .array-modal-save:hover {
-  background: #1558ad;
+  background: var(--blue-43);
 }
 
 .details-save-button {
@@ -1231,9 +1231,9 @@
   align-items: flex-start;
   gap: 12px;
   padding: 16px;
-  border: 1px solid #cde9e2;
+  border: 1px solid var(--teal-bg);
   border-radius: 9px;
-  background: #eefaf7;
+  background: var(--green-94);
   color: var(--slate-40);
   font-size: 13px;
   line-height: 1.5;
@@ -1246,7 +1246,7 @@
 }
 
 .review-message--warning {
-  border-color: #f0d99c;
+  border-color: var(--orange-76);
   background: var(--orange-95);
 }
 
@@ -1256,7 +1256,7 @@
 
 .review-message--error {
   background: var(--red-97);
-  border: 1px solid #fecaca;
+  border: 1px solid var(--red-89);
   color: var(--red-42);
 }
 
@@ -1393,20 +1393,20 @@
 }
 
 .document-action--approve:disabled {
-  border-color: #c7cdd6;
+  border-color: var(--slate-84a);
   background: var(--slate-84);
   color: var(--slate-46);
 }
 
 .approval-warning {
   margin: 0 0 8px;
-  color: #f21039;
+  color: var(--red-51a);
   font-size: 13px;
   line-height: 1.4;
 }
 
 .approval-warning strong {
-  color: #e0114f;
+  color: var(--red-47a);
   font-weight: 600;
 }
 

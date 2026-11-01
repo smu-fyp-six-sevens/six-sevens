@@ -115,7 +115,7 @@
 .create-case-next {
   margin-top: 20px;
   padding: 28px 48px 24px;
-  background: #fafbfc;
+  background: var(--slate-97);
 }
 
 .create-case-next h2 {
@@ -151,7 +151,7 @@
   height: 28px;
   margin-bottom: 8px;
   border-radius: 50%;
-  background: #eaf0f7;
+  background: var(--slate-94a);
   color: var(--steel);
   font-size: 12px;
   font-weight: 700;

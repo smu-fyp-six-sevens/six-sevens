@@ -8,6 +8,9 @@ import {
   signOffGroup,
   updateMissedIssue,
 } from '../../services/uploadService';
+import { remember, sharedRead } from '../../lib/sharedRead';
+
+const reviewsKey = (caseId: string) => `finding-reviews:${caseId}`;
 
 // Anything an officer gives a verdict on: a scored finding, or one the specialists dismissed (no source: a
 // document's own).
@@ -36,7 +39,8 @@ export function verdictFor(reviews: FindingReview[], finding: ReviewTarget): Fin
   );
 }
 
-// The case's reviews and metrics, and the actions that change them. Every change returns them afresh.
+// The case's reviews and metrics, and the actions that change them. Every change returns them afresh. The overview
+// and the risk summary both show them: one read serves both (sharedRead).
 export function useFindingReviews(caseId: string, enabled: boolean) {
   const [data, setData] = useState<CaseFindingReviews | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +49,7 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    getCaseFindingReviews(caseId)
+    sharedRead(reviewsKey(caseId), () => getCaseFindingReviews(caseId))
       .then((loaded) => {
         if (!cancelled) setData(loaded);
       })
@@ -62,7 +66,9 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     setSavingKey(key);
     setError(null);
     try {
-      setData(await action());
+      const saved = await action();
+      remember(reviewsKey(caseId), saved);
+      setData(saved);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save the review');
@@ -70,7 +76,7 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     } finally {
       setSavingKey(null);
     }
-  }, []);
+  }, [caseId]);
 
   // One group's review: each row is correct (ticked) or wrong (not), and a row can stand for several identical
   // findings (same check and summary), so its verdict goes on each of them. One request for the whole group.

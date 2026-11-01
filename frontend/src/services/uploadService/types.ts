@@ -172,6 +172,7 @@ export type BulkActionFailure = Schemas['BulkActionFailure'];
 export type AuditEvent = Schemas['Event'];
 export type BulkMoveResponse = Schemas['BulkMoveResponse'];
 export type BulkDeleteResponse = Schemas['BulkDeleteResponse'];
+export type BulkApproveResponse = Omit<Schemas['BulkApproveResponse'], 'approved'> & { approved: DocumentRecord[] };
 
 // Lightweight view of a case for the "move document" picker.
 export type CaseOption = Pick<Schemas['CaseListItem'], 'id' | 'greenlink_case_id' | 'company_name'>;

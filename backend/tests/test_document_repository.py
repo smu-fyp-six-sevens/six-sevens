@@ -290,7 +290,10 @@ def test_get_documents_in_status_queries_with_enum_values() -> None:
         patch("app.document_repository.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_in = mock_client.table.return_value.select.return_value.in_
-        mock_in.return_value.execute.return_value = _execute_result([_row(status="queued")])
+        # Paged (fetch_all): ordered by id, a page at a time.
+        mock_in.return_value.order.return_value.range.return_value.execute.return_value = _execute_result(
+            [_row(status="queued")]
+        )
         mock_fields_repo.get_extracted_fields_dicts_for_documents.return_value = {}
 
         results = document_repository.get_documents_in_status(
@@ -410,12 +413,12 @@ def test_record_escalation_sends_reason() -> None:
         )
 
 
-def test_update_metadata_sends_metadata() -> None:
+def test_ingest_results_are_one_write_of_the_guard_result_and_metadata() -> None:
     with patch("app.document_repository.supabase_client") as mock_client:
-        document_repository.update_metadata("doc-1", {"Author": "Jane Tan"})
+        document_repository.update_ingest_results("doc-1", guard_result={"risk": "none"}, metadata={"Author": "Jane Tan"})
 
         update_payload = mock_client.table.return_value.update.call_args[0][0]
-        assert update_payload == {"metadata": {"Author": "Jane Tan"}}
+        assert update_payload == {"guard_result": {"risk": "none"}, "metadata": {"Author": "Jane Tan"}}
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
             "id", "doc-1"
         )

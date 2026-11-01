@@ -125,7 +125,7 @@ kong = p1.box(S("Kong API Gateway", "single entry point · CORS<br>rate limits �
 p1.box("Public, behind Kong (each checks the app's token)", 790, 100, 560, 170, "group")
 api = p1.box(S("api", "reads, login, officer commands<br>uploads · WebSocket live updates<br>case match"), 810, 140, 240, 110)
 audit = p1.box(S("audit-metrics", "stores every event in audit_events<br>/audit/events · /audit/cases/{id}/cost<br>runs the sweeper (stuck work)"), 1090, 140, 250, 110)
-sched = p1.box(S("Cloud Scheduler", "sweep.requested<br>every 2 minutes"), 1410, 140, 190, 90, "external")
+sched = p1.box(S("Cloud Scheduler", "sweep.requested<br>every 5 minutes"), 1410, 140, 190, 90, "external")
 
 BUS_X, BUS_W = 480, 1120
 bus = p1.box(S("Pub/Sub topic: domain-events", "one topic · a filtered push subscription per role · at-least-once delivery · OIDC-signed pushes"), BUS_X, 330, BUS_W, 70, "bus")
@@ -283,7 +283,7 @@ p3.box(
 # ------------------------------------------------------------------ 4. Stuck work recovery
 p4 = Page("4 Stuck work recovery", 1680, 920)
 p4.box("Recovering stuck work (no database changes; the audit trail is the memory)", 40, 20, 1200, 40, "title")
-s_sched = p4.box(S("Cloud Scheduler", "every 2 minutes"), 40, 225, 170, 80, "external")
+s_sched = p4.box(S("Cloud Scheduler", "every 5 minutes"), 40, 225, 170, 80, "external")
 s_topic = p4.box(S("domain-events", "type = sweep.requested"), 270, 215, 170, 100, "bus")
 s_sweep = p4.box(S("Sweeper (in audit-metrics)", "finds work past its limit:<br>queued/uploaded &gt; 5 min (event lost)<br>processing/extracting/detecting &gt; 15 min<br>case analysis running &gt; 15 min"), 540, 185, 280, 160, "service")
 s_db = p4.box(S("Supabase", "documents, runs<br>audit_events (earlier attempts)"), 580, 430, 200, 90, "data")

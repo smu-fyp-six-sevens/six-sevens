@@ -66,7 +66,6 @@ Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 Budgets are in `HOW_IT_WORKS.md` §8; query-level fixes are in `REFACTORING_AUDIT.md` §3.
 - A burst of changes can chain snapshot builds, and the first requester waits for the follow-up.
 - **Opening a case still waits in sequence on a direct link or refresh:** the case lookup, then the WebSocket ticket, connection and first snapshot. (From the queue the case is handed over and the page code is prefetched.) Not done yet: fetching the first snapshot over a plain request alongside the socket, and putting the case's own details in the snapshot so a direct load needs one request.
-- **The queue's status filter, risk filter and risk sort read every matching case** (and `/cases/counts` reads every document's status) because status and risk are computed, not stored. Fine at today's volume; a stored rollup or index would be needed if the case count grows a lot.
 
 ## Cloud operations
 

@@ -1,4 +1,5 @@
--- The live Supabase schema (public, plus the storage bucket and its policies), as read on 2026-10-31.
+-- The live Supabase schema (public, plus the storage bucket and its policies), as read on 2026-11-01, plus the case
+-- list columns, view and indexes of the same day.
 -- A snapshot, not a migration: it rebuilds an empty database (staging, a fresh project). Keep it in step by hand
 -- when the schema changes.
 
@@ -26,7 +27,9 @@ $$;
 
 -- Tables ------------------------------------------------------------------------------------------------------------
 
--- status is the case's stage (app/case_stage.py). checklist_enforced and reviews_required are set once, at creation.
+-- status is the case's stage (app/case_stage.py). checklist_enforced, reviews_required and created_by are set once, at
+-- creation. Kept for the case list: risk_rank (0 unscored, 1 Low to 4 Critical) from each run's saved score, and
+-- processing_ms, which audit-metrics rewrites after each timed run.
 create table public.cases (
     id text not null default ''::text,
     status text not null default 'open'::text,
@@ -37,6 +40,9 @@ create table public.cases (
     greenlink_case_id text,
     checklist_enforced boolean not null default false,
     reviews_required boolean not null default true,
+    created_by text,
+    processing_ms integer,
+    risk_rank smallint not null default 0,
     constraint cases_pkey primary key (id)
 );
 
@@ -159,11 +165,11 @@ create table public.review_sign_offs (
     constraint review_sign_offs_scope_shape check ((scope = 'document'::text) = (document_id is not null))
 );
 
--- Debug trace only, one row per document. No primary key.
+-- Debug trace only, one row per document.
 create table public.langgraph_trace (
-    document_id uuid,
+    document_id uuid not null,
     trace jsonb,
-    constraint langgraph_trace_document_id_key unique (document_id),
+    constraint langgraph_trace_pkey primary key (document_id),
     constraint langgraph_trace_document_id_fkey foreign key (document_id) references public.documents(id) on delete cascade
 );
 
@@ -241,6 +247,16 @@ create index case_analysis_runs_case_started_idx on public.case_analysis_runs (c
 create index case_notes_case_idx on public.case_notes (case_id, created_at);
 create index audit_events_case_idx on public.audit_events (case_id, occurred_at desc);
 create index audit_events_document_idx on public.audit_events (document_id, occurred_at desc);
+create index cases_created_idx on public.cases (created_at desc, id);
+create index cases_status_idx on public.cases (status);
+create index documents_status_idx on public.documents (status);
+create index case_analysis_runs_running_idx on public.case_analysis_runs (started_at) where status = 'running'::text;
+create index risk_scores_case_scored_idx on public.risk_scores (case_id, scored_at desc);
+create index case_notes_document_idx on public.case_notes (document_id);
+create index case_notes_parent_idx on public.case_notes (parent_id);
+create index review_sign_offs_document_idx on public.review_sign_offs (document_id);
+create index cases_risk_idx on public.cases (risk_rank, created_at desc);
+create index findings_reviewed_idx on public.findings (case_id) where reviewer is not null;
 
 -- Trigger -----------------------------------------------------------------------------------------------------------
 
@@ -255,6 +271,12 @@ select distinct on (case_id) id, case_id, overall_score, risk_level, reasoning, 
 from public.risk_scores
 where case_id is not null
 order by case_id, scored_at desc;
+
+-- The case queue's stage counts, counted here rather than by reading every case.
+create view public.case_stage_counts as
+select status, count(*)::integer as cases
+from public.cases
+group by status;
 
 -- Write functions (backend only) ------------------------------------------------------------------------------------
 
@@ -362,7 +384,7 @@ declare t text;
 begin
     foreach t in array array[
         'cases', 'documents', 'extracted_fields', 'detection_results', 'findings', 'langgraph_trace',
-        'case_analysis_runs', 'risk_scores', 'case_notes', 'audit_events', 'latest_risk_scores'
+        'case_analysis_runs', 'risk_scores', 'case_notes', 'audit_events', 'latest_risk_scores', 'case_stage_counts'
     ] loop
         execute format('revoke all on public.%I from anon, authenticated, service_role', t);
     end loop;
@@ -379,6 +401,7 @@ grant select, insert, update, delete on public.case_notes to service_role;
 grant select, insert, truncate, references, trigger on public.audit_events to service_role;
 grant select, truncate, references, trigger on public.latest_risk_scores to anon, authenticated;
 grant truncate, references, trigger on public.latest_risk_scores to service_role;
+grant select on public.case_stage_counts to anon, authenticated;
 grant select, usage on sequence public.greenlink_case_id_seq to anon, authenticated, service_role;
 
 -- Realtime ----------------------------------------------------------------------------------------------------------

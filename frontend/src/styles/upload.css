@@ -1,5 +1,5 @@
 .dropzone {
-  border: 1.5px dashed #b7af9c;
+  border: 1.5px dashed var(--sand-66);
   border-radius: 10px;
   background: var(--orange-99);
   padding: 28px 20px;
@@ -187,6 +187,11 @@
 }
 
 .upload-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--white);
+  border: none;
+  cursor: pointer;
   background: var(--steel);
   border-radius: 7px;
   padding: 9px 16px;
@@ -215,13 +220,13 @@
 
 .toast.mixed {
   background: var(--amber-bg);
-  border-color: #ead6a6;
-  color: #7a5407;
+  border-color: var(--orange-76);
+  color: var(--orange-25);
 }
 
 .toast.all-ok {
   background: var(--teal-bg);
-  border-color: #bfe1d6;
+  border-color: var(--green-82);
   color: var(--teal);
 }
 
@@ -442,11 +447,11 @@
 
 /* Same hues as .risk-badge--* in case-summary.css. */
 .case-nav-dot--risk-low {
-  background: #e8a27e;
+  background: var(--orange-74);
 }
 
 .case-nav-dot--risk-medium {
-  background: #d9703f;
+  background: var(--orange-55);
 }
 
 .case-nav-dot--risk-high {

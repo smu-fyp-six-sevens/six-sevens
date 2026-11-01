@@ -49,8 +49,7 @@ class Settings:
     nothing sensitive (API keys, service role key) is hardcoded.
     """
     # Every account that can log in, in one place (see app/auth.py).
-    # AUTH_SECRET_KEY signs bearer tokens — must be a real random value in
-    # any deployed environment; the "" default is only safe for local dev.
+    # AUTH_SECRET_KEY signs bearer tokens; outside local dev an empty one stops startup (main.check_signing_key).
     AUTH_USERS: dict[str, str] = _users(_env("AUTH_USERS"))
     AUTH_SECRET_KEY: str = _env("AUTH_SECRET_KEY")
 

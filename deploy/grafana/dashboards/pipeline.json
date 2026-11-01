@@ -815,7 +815,7 @@
     {
       "type": "stat",
       "title": "Stuck now",
-      "description": "Work past its stage's limit at the last sweep (every 2 minutes).",
+      "description": "Work past its stage's limit at the last sweep (every 5 minutes).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"

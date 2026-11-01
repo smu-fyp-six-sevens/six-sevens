@@ -238,7 +238,7 @@ L.add(series("Dead-lettered per hour", [("sum by (subscription_id) (increase(pub
 
 L.row("Stuck work and recovery")
 L.add(stat("Stuck now", "sum(max by (stage) (stuck_work))", "short",
-           "Work past its stage's limit at the last sweep (every 2 minutes).", decimals=0,
+           "Work past its stage's limit at the last sweep (every 5 minutes).", decimals=0,
            thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 1}]), 6, 4)
 L.add(stat("Recovered (range)", "sum(increase(recoveries_total{result=\"recovered\"}[$__range]))", "short", decimals=0), 6, 4)
 L.add(stat("Gave up (range)", "sum(increase(recoveries_total{result=\"exhausted\"}[$__range]))", "short",

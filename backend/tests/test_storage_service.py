@@ -119,6 +119,21 @@ def test_a_signed_url_for_viewing_has_no_download_option() -> None:
     assert client.bucket.signed == [("case-1/uuid_statement.pdf", 300, {})]
 
 
+def test_a_signed_url_is_reused_while_it_has_time_left_and_dropped_with_its_file() -> None:
+    client, patched = _storage()
+    path = "case-1/uuid_reused.pdf"
+    with patched:
+        first, first_left = storage_service.signed_url(path, 1800)
+        again, again_left = storage_service.signed_url(path, 1800)
+        download, _ = storage_service.signed_url(path, 1800, download_filename="reused.pdf")
+        storage_service.delete_file(path)
+        storage_service.signed_url(path, 1800)
+
+    assert again == first and first_left == 1800 and 0 < again_left <= 1800
+    assert download.endswith("?download=reused.pdf")  # another option set: signed on its own
+    assert [signed[0] for signed in client.bucket.signed] == [path, path, path]
+
+
 def test_a_signed_url_can_ask_the_browser_to_download_under_a_filename() -> None:
     client, patched = _storage()
     with patched:

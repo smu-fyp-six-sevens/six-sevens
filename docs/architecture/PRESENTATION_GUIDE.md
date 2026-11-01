@@ -135,7 +135,7 @@ The UI updates live: Supabase Realtime tells api a row changed, and api pushes a
 
 - **Region:** `asia-southeast1`. **Project:** `fyp-six-sevens`.
 - **Services:** 6 backend roles (api, audit-metrics, doc-worker, detection-worker, case-worker; ingestion runs inside api), plus Kong, the frontend and Grafana. That's 8 Cloud Run services.
-- **Messaging:** 1 topic and 4 filtered push subscriptions, plus a dead-letter topic and a sweep every 2 minutes.
+- **Messaging:** 1 topic and 4 filtered push subscriptions, plus a dead-letter topic and a sweep every 5 minutes.
 - **Observability:** 4 Grafana dashboards and 4 alert policies.
 - **Tests:** about 1,640 backend test functions and 116 Playwright tests, run in CI on every push.
 
@@ -156,7 +156,7 @@ Dashed arrows are data reads and writes; solid arrows are requests and events.
   - **Top row:** the officer's path in. Browser → frontend → Kong → the two public services, api and audit-metrics. audit-metrics receives every event (the audit trail) and publishes `recovery.requested` when it finds stuck work.
   - **Middle:** the orange bar is the one Pub/Sub topic.
   - **Below it:** the three private workers. Each two-headed arrow is labelled with the events a worker receives ("in") and the event it publishes back ("out"). Their arrow to Supabase has two heads too: they read and write it.
-  - **Around them:** Supabase on the left, Claude underneath, the dead-letter topic and public registries on the right. Cloud Scheduler drops a sweep tick onto the topic every 2 minutes.
+  - **Around them:** Supabase on the left, Claude underneath, the dead-letter topic and public registries on the right. Cloud Scheduler drops a sweep tick onto the topic every 5 minutes.
 - **Point to make:** there's no arrow from one service to another. Everything goes through the topic or Supabase, which is what "decoupled" means here.
 
 **Page 2: GCP infrastructure.** Where everything runs.
@@ -175,7 +175,7 @@ Dashed arrows are data reads and writes; solid arrows are requests and events.
 
 **Page 4: Stuck work recovery.** What happens when a run dies halfway.
 - **How to read it:** left to right.
-  1. Cloud Scheduler publishes a sweep every 2 minutes.
+  1. Cloud Scheduler publishes a sweep every 5 minutes.
   2. The sweeper (inside audit-metrics) reads Supabase for work past its time limit.
   3. It publishes one `recovery.requested` event per stuck item, tagged with the worker that owns it.
   4. It's the same `domain-events` topic, not a new one. Each worker's subscription filters on the `owner` attribute, so each event reaches only its owner, which resets and reruns the work. Case analysis is the exception: it's marked failed instead, because a rerun costs Claude calls and the officer decides.

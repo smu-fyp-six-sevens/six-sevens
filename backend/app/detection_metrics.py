@@ -32,14 +32,17 @@ MIN_REVIEWS = 5
 # The checks a missed issue can be reported against. Per-case: the categories a cross-document finding is
 # filed under. Per-document: whatever tools the detection specialists carry, read from them so the list can't
 # drift as checks are added (imported on first use: the specialists module pulls in the whole agent stack).
-CASE_CHECKS: tuple[str, ...] = tuple(category.value for category in FindingCategory)
+# Both lists end with OTHER_CHECK, for an issue no check covers; its note (required) says what it was. It counts
+# against recall like any missed issue, under its own row.
+OTHER_CHECK = "other"
+CASE_CHECKS: tuple[str, ...] = (*(category.value for category in FindingCategory), OTHER_CHECK)
 
 
 @lru_cache(maxsize=1)
 def document_checks() -> tuple[str, ...]:
     from .langgraph.detection.specialists import SPECIALISTS
 
-    return tuple(dict.fromkeys(tool.name for spec in SPECIALISTS.values() for tool in spec.tools))
+    return (*dict.fromkeys(tool.name for spec in SPECIALISTS.values() for tool in spec.tools), OTHER_CHECK)
 
 
 def checks_by_scope() -> dict[str, tuple[str, ...]]:

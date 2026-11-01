@@ -196,9 +196,8 @@ async def _ingest(file_bytes: bytes, raw_text: str, save=None, traced: list | No
             "raw_text": raw_text, "needs_review": False, "extraction_method": "native_pdf",
         }),
         patch.object(nodes, "extract_metadata", return_value={}),
-        patch.object(nodes.document_repository, "update_metadata"),
-        patch.object(nodes.document_repository, "update_guard_result",
-                     side_effect=save or (lambda document_id, result: saved.append((document_id, result)))),
+        patch.object(nodes.document_repository, "update_ingest_results",
+                     side_effect=save or (lambda document_id, guard_result, metadata: saved.append((document_id, guard_result)))),
         patch.object(nodes.trace, "record", side_effect=lambda *args, **kwargs: traced.append((args, kwargs))),
     ):
         text, guard = await nodes.ingest_document_text("doc-1", document)
@@ -234,7 +233,7 @@ async def test_the_trace_shows_what_the_guard_found() -> None:
 
 
 async def test_ingest_carries_on_when_the_guard_result_cannot_be_saved() -> None:
-    def missing_column(document_id: str, result: dict) -> None:
+    def missing_column(document_id: str, guard_result: dict, metadata: dict | None) -> None:
         raise RuntimeError("column documents.guard_result does not exist")
 
     text, _ = await _ingest(_pdf(lambda page: None), "Net pay SGD 5,000.00", save=missing_column)

@@ -29,6 +29,14 @@ _channel: AsyncRealtimeChannel | None = None
 # Separate, so a table missing from the Realtime publication can't break the main channel.
 _analysis_channel: AsyncRealtimeChannel | None = None
 _pending: dict[str, asyncio.Task] = {}
+# Cases with a documents-row change since their last build. A build for the case row or its analysis run alone
+# reuses the last build's documents, fields and reports (case_service.build_case_snapshot).
+_documents_changed: set[str] = set()
+
+
+def listening() -> bool:
+    """Whether this process is subscribed to the changes, so its own snapshot pushes would be repeats."""
+    return _channel is not None
 
 
 async def _debounced_publish(case_id: str) -> None:
@@ -40,10 +48,16 @@ async def _debounced_publish(case_id: str) -> None:
         # instead. Not an error, just the coalescing working as intended.
         return
 
+    documents_changed = case_id in _documents_changed
+    _documents_changed.discard(case_id)
     try:
         with query_stats.scope("realtime snapshot"):
-            snapshot = await asyncio.to_thread(case_service.build_case_snapshot, case_id)
+            snapshot = await asyncio.to_thread(
+                case_service.build_case_snapshot, case_id, documents_changed=documents_changed,
+            )
     except Exception:
+        if documents_changed:
+            _documents_changed.add(case_id)  # the next build must still read the documents
         logger.exception("Failed to build case snapshot for case %s", case_id)
         return
     finally:
@@ -74,6 +88,8 @@ def _on_change(payload: PostgresChangesPayload) -> None:
     if not broadcaster.has_subscribers(case_id):
         query_stats.count_event("realtime.no_viewer")
         return  # nobody has this case open
+    if data.get("table") == "documents":
+        _documents_changed.add(case_id)
 
     existing = _pending.get(case_id)
     if existing is not None and not existing.done():
@@ -123,6 +139,7 @@ async def stop() -> None:
     for task in _pending.values():
         task.cancel()
     _pending.clear()
+    _documents_changed.clear()
 
     if _client is not None:
         await _client.realtime.close()

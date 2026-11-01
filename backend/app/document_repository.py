@@ -374,25 +374,16 @@ def record_escalation(document_id: str, reason: str) -> None:
     ).execute()
 
 
-def update_metadata(document_id: str, metadata: dict) -> None:
+def update_ingest_results(document_id: str, *, guard_result: dict, metadata: dict | None) -> None:
     """
-    Persists the file metadata pulled by ingestion.metadata_extractor
-    (exiftool â€” author/creation-date/software/etc.) alongside the raw-text
-    extraction step, independent of classification/Extraction succeeding â€”
-    it's captured as soon as the file is read, not gated on downstream
-    stages.
+    What ingest learnt about the file, in one write: what the content guard found (guardrails/content_guard.py,
+    for detection's hidden-text and prompt injection checks) and the file's exiftool metadata
+    (ingestion.metadata_extractor), when it was read. Written on every ingest, so a rerun replaces both.
     """
-    supabase_client.table("documents").update({"metadata": metadata}).eq(
-        "id", document_id
-    ).execute()
-
-
-def update_guard_result(document_id: str, guard_result: dict) -> None:
-    """
-    What the content guard found at ingest (guardrails/content_guard.py), for detection's prompt injection
-    check. Needs the documents.guard_result jsonb column. Written on every ingest, so a rerun replaces it.
-    """
-    supabase_client.table("documents").update({"guard_result": guard_result}).eq("id", document_id).execute()
+    update: dict = {"guard_result": guard_result}
+    if metadata:
+        update["metadata"] = metadata
+    supabase_client.table("documents").update(update).eq("id", document_id).execute()
 
 
 def get_guard_result(document_id: str) -> dict | None:
@@ -505,16 +496,28 @@ def get_document(
     return document
 
 
+def get_document_for_detection(document_id: str) -> tuple[DocumentRecord, dict | None] | None:
+    """The row with its metadata, and its guard_result: everything a detection run reads from it, in one query."""
+    result = (
+        supabase_client.table("documents").select(f"{_LIST_COLUMNS}, metadata, guard_result")
+        .eq("id", document_id).execute()
+    )
+    if not result.data:
+        return None
+    row = dict(_row(result.data[0]))
+    guard = row.pop("guard_result", None)
+    return DocumentRecord(**row), guard if isinstance(guard, dict) else None
+
+
 def get_documents_in_status(
     statuses: list[DocumentStatus], *, include_fields: bool = True
 ) -> list[DocumentRecord]:
-    result = (
-        supabase_client.table("documents")
-        .select(_LIST_COLUMNS)
-        .in_("status", [s.value for s in statuses])
-        .execute()
+    # Paged: failed documents only accumulate, and one read stops at PostgREST's 1,000 rows.
+    rows = fetch_all(
+        lambda: supabase_client.table("documents").select(_LIST_COLUMNS).in_("status", [s.value for s in statuses]),
+        "id",
     )
-    documents = [DocumentRecord(**_row(row)) for row in result.data]
+    documents = [DocumentRecord(**_row(row)) for row in rows]
     return attach_extracted_fields(documents) if include_fields else documents
 
 

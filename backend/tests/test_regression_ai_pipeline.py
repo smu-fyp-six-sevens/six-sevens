@@ -187,10 +187,7 @@ class FakeStore:
     def record_escalation(self, document_id, reason):
         self.escalations[document_id].append(reason)
 
-    def update_metadata(self, document_id, metadata):
-        pass
-
-    def update_guard_result(self, document_id, guard_result):
+    def update_ingest_results(self, document_id, *, guard_result, metadata):
         pass
 
     # extracted_fields_repository

@@ -247,6 +247,16 @@ function hasExtractedInformation(document: DocumentRow): boolean {
   });
 }
 
+/** Same rules as backend document_service.approve: why this document can't be approved, or null. */
+function approvalRefusal(document: DocumentRow): string | null {
+  if (document.status !== 'analyzed') return 'Only completed documents can be approved.';
+  if (!isClassificationConfirmed(document)) return 'Cannot approve document. Confirm the document type first.';
+  if (!hasExtractedInformation(document)) return 'Cannot approve document. No information was extracted from it.';
+  const missing = missingRequiredFields(document);
+  if (missing.length > 0) return `Cannot approve document. Required fields are missing or empty: ${missing.join(', ')}`;
+  return null;
+}
+
 // The finished runs backend audit.case_cost reads (its _COSTED).
 const COSTED_EVENTS = new Set([
   'document.analyzed', 'document.failed', 'document.detected', 'detection.failed', 'case.analysis.completed',
@@ -777,6 +787,25 @@ export class MockBackend {
       }
       return json({ moved, failed });
     }
+    // Same rules as routers/documents.py bulk_approve_documents: each document is approved as a single one would be,
+    // and refusals come back one by one.
+    if (method === 'POST' && path === '/documents/bulk-approve') {
+      const { document_ids } = body as { document_ids: string[] };
+      if (document_ids.length === 0) return json({ detail: 'No documents specified.' }, 400);
+      const approved: DocumentRow[] = [];
+      const failed: { document_id: string; reason: string }[] = [];
+      for (const id of document_ids) {
+        const document = this.documents.find((d) => d.id === id);
+        const refusal = document ? approvalRefusal(document) : 'Document not found';
+        if (refusal) {
+          failed.push({ document_id: id, reason: refusal });
+        } else {
+          document!.status = 'approved';
+          approved.push(document!);
+        }
+      }
+      return json({ approved, failed });
+    }
     if (method === 'GET' && path === '/documents') {
       const caseId = url.searchParams.get('case_id');
       return json(this.documents.filter((d) => d.case_id === caseId));
@@ -804,19 +833,8 @@ export class MockBackend {
         return route.fulfill({ status: 204, headers: corsHeaders() });
       }
       if (method === 'POST' && rest === '/approve') {
-        if (document.status !== 'analyzed') {
-          return json({ detail: 'Only completed documents can be approved.' }, 400);
-        }
-        if (!isClassificationConfirmed(document)) {
-          return json({ detail: 'Cannot approve document. Confirm the document type first.' }, 400);
-        }
-        if (!hasExtractedInformation(document)) {
-          return json({ detail: 'Cannot approve document. No information was extracted from it.' }, 400);
-        }
-        const missing = missingRequiredFields(document);
-        if (missing.length > 0) {
-          return json({ detail: `Cannot approve document. Required fields are missing or empty: ${missing.join(', ')}` }, 400);
-        }
+        const refusal = approvalRefusal(document);
+        if (refusal) return json({ detail: refusal }, 400);
         document.status = 'approved';
         return json(document);
       }

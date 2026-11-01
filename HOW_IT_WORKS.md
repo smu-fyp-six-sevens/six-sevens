@@ -133,10 +133,11 @@ Every model reply and tool result is checked against an expected shape before an
 ## 4. How live updates work
 
 1. A change to a `documents`, `cases` or `case_analysis_runs` row fires a Supabase Realtime event; one subscription serves the whole api process. This is how a result written by a worker in another service reaches the browser (`case_analysis_runs` must be in the `supabase_realtime` publication).
-2. The backend waits **0.5 s** to merge a burst, then builds a **case snapshot**: case, documents with fields, detection states, the latest analysis (risk, additional documents, overview) and case-match. For a case with no analysis it reads only each report's verdict, not the full report.
+2. The backend waits **0.5 s** to merge a burst, then builds a **case snapshot**: case, documents with fields, detection states, the latest analysis (risk, additional documents, overview) and case-match. For a case with no analysis it reads only each report's verdict, not the full report. When only the case row or its analysis run changed, it reuses the documents, fields and detection states of the case's last full build (neither can change them) and reads the rest; the payload is the same full snapshot either way.
 3. It pushes the snapshot to every browser with that case open (`/ws/cases/{case_id}`). **No snapshot is built for a case nobody has open.**
 4. **One build runs per case at a time.** A request that arrives mid-build waits for one follow-up build shared by everyone who arrived meanwhile; it is never handed the in-flight result, which may predate its change.
 5. On (re)connect the browser always gets a fresh snapshot. It reconnects with backoff (1 s, 2 s, 4 s … capped at 30 s, with jitter).
+6. The detection worker's and the case analysis's own snapshot pushes are skipped when the Realtime listener runs in the same process (locally), since it already turns the same write into a snapshot.
 
 ---
 
@@ -173,7 +174,7 @@ Deleting a document removes its fields, flags, trace and file; deleting a case r
 
 ## 7. Configuration
 
-Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, `AUTH_USERS`, `AUTH_SECRET_KEY`.
+Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, `AUTH_USERS`, `AUTH_SECRET_KEY`. With `EVENT_TRANSPORT=pubsub` (the cloud and the compose stack), `api` and `audit-metrics` refuse to start while `AUTH_SECRET_KEY` is empty.
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -227,7 +228,7 @@ Labels are routes, event types, stages, agents and models, never ids. Kong block
 
 Each event's Pub/Sub message carries `traceparent`, so one upload is one trace across services. `OTEL_TRACES_SAMPLE_RATIO` (default 1.0) samples fewer.
 
-**Stuck work** (`sweeper.py`, `CLOUD_ARCHITECTURE_PLAN.md` section 5). In the cloud, Cloud Scheduler publishes `sweep.requested` every 2 minutes and audit-metrics runs the sweeper (`SWEEPER_ENABLED`; off locally, because the database is shared).
+**Stuck work** (`sweeper.py`, `CLOUD_ARCHITECTURE_PLAN.md` section 5). In the cloud, Cloud Scheduler publishes `sweep.requested` every 5 minutes and audit-metrics runs the sweeper (`SWEEPER_ENABLED`; off locally, because the database is shared).
 - **What counts as stuck:** a document uploaded or queued for over 5 minutes (its event was lost), or processing, extracting or detecting for over 15 minutes (its run died); or a case analysis still running past `CASE_ANALYSIS_TIMEOUT_SECONDS`.
 - **What happens:** the sweeper publishes `recovery.requested` to the worker that owns the stage. That worker resets the status (compare-and-swap) and reruns it. After 3 attempts it fails the document (detection: back to approved with an error) and publishes `recovery.exhausted`. A stuck case analysis is marked failed, not rerun.
 - **Locally:** `python -m app.sweeper --once --case <id>` runs one pass for one case and does the recovery in the same process.

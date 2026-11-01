@@ -8,6 +8,8 @@ import { officerName } from '../../lib/officers';
 
 export type GroupReviewStatus = 'not_reviewed' | 'saved' | 'unsaved';
 
+const OTHER_CHECK = 'other';
+
 // Above a group's findings: tick the scored ones at once, and save the group's review. Saving is what makes an
 // unticked finding count as wrong; before that, nothing in the group counts.
 export function GroupReviewBar({
@@ -95,6 +97,9 @@ function MissedIssueForm({
   const [checkName, setCheckName] = useState(initialCheck);
   const [note, setNote] = useState(initialNote);
   const unchanged = checkName === initialCheck && note.trim() === initialNote.trim();
+  // "Other" (OTHER_CHECK in backend detection_metrics.py) is for an issue none of the checks covers, so it needs
+  // the description.
+  const needsNote = checkName === OTHER_CHECK;
 
   return (
     <form
@@ -118,9 +123,10 @@ function MissedIssueForm({
         </select>
       </label>
       <label>
-        <span>What was missed (optional)</span>
+        <span>{needsNote ? 'What was missed' : 'What was missed (optional)'}</span>
         <input
           value={note}
+          required={needsNote}
           maxLength={1000}
           placeholder={scope === 'case' ? 'e.g. Director NRIC differs between the CBR and the NRIC' : 'e.g. Closing balance was edited'}
           onChange={(event) => setNote(event.target.value)}
@@ -130,7 +136,11 @@ function MissedIssueForm({
         <button type="button" className="missed-issue-cancel" onClick={onCancel}>
           Cancel
         </button>
-        <button type="submit" className="missed-issue-save" disabled={!checkName || saving || (initialCheck !== '' && unchanged)}>
+        <button
+          type="submit"
+          className="missed-issue-save"
+          disabled={!checkName || (needsNote && !note.trim()) || saving || (initialCheck !== '' && unchanged)}
+        >
           {submitLabel}
         </button>
       </div>

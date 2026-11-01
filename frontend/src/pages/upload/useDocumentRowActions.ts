@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import {
-  approveDocument,
+  bulkApproveDocuments,
   cancelDocument,
   retryDocument,
 } from '../../services/uploadService';
@@ -84,21 +84,27 @@ export function useDocumentRowActions({
     setApproveError(null);
 
     try {
-      const updatedDocuments = await Promise.all(
-        eligible.map((document) => approveDocument(document.id)),
-      );
+      const result = await bulkApproveDocuments(eligible.map((document) => document.id));
       if (!isMountedRef.current) return;
 
       setDocumentDetails((current) => {
         const next = new Map(current);
-        for (const updated of updatedDocuments) next.set(updated.id, updated);
+        for (const updated of result.approved) next.set(updated.id, updated);
         return next;
       });
       setSelectedDocumentIds((current) => {
         const next = new Set(current);
-        for (const updated of updatedDocuments) next.delete(updated.id);
+        for (const updated of result.approved) next.delete(updated.id);
         return next;
       });
+      if (result.failed.length > 0) {
+        // One refusal is shown as the backend worded it; several are counted.
+        setApproveError(
+          result.failed.length === 1
+            ? result.failed[0].reason
+            : `${result.failed.length} of ${eligible.length} documents could not be approved.`,
+        );
+      }
     } catch (err) {
       if (!isMountedRef.current) return;
       setApproveError(err instanceof Error ? err.message : 'Failed to approve selected documents.');

@@ -86,11 +86,11 @@
 
 .summary-message--warning {
   background: var(--red-97);
-  color: #8f2929;
+  color: var(--red-40);
 }
 
 .summary-message--success {
-  background: #eafbf6;
+  background: var(--green-94);
   color: var(--green-25);
 }
 
@@ -101,7 +101,7 @@
 }
 
 .summary-message--info .summary-message-icon {
-  color: #2477c5;
+  color: var(--blue-46);
 }
 
 .summary-message--warning .summary-message-icon {
@@ -146,12 +146,12 @@
 
 /* One hue, light to dark, so no level reads as "safe". Badges also go from tint to solid as the level rises. */
 .risk-badge--low {
-  background: #fdf0e8;
+  background: var(--orange-96);
   color: var(--orange-40);
 }
 
 .risk-badge--medium {
-  background: #f9d2bd;
+  background: var(--orange-83);
   color: var(--orange-29);
 }
 
@@ -205,8 +205,8 @@
 }
 
 .risk-score-level--low { color: var(--orange-40); }
-.risk-score-level--medium { color: #9a3a14; }
-.risk-score-level--high { color: #b3361c; }
+.risk-score-level--medium { color: var(--orange-34); }
+.risk-score-level--high { color: var(--red-43); }
 .risk-score-level--critical { color: var(--red-29); }
 
 .risk-gauge {
@@ -226,9 +226,9 @@
   opacity: 1;
 }
 
-.risk-gauge-band--low { background: #f6c9b0; }
-.risk-gauge-band--medium { background: #ec9673; }
-.risk-gauge-band--high { background: #d0543a; }
+.risk-gauge-band--low { background: var(--orange-83); }
+.risk-gauge-band--medium { background: var(--orange-69); }
+.risk-gauge-band--high { background: var(--red-47); }
 .risk-gauge-band--critical { background: var(--red-29); }
 
 .risk-gauge-marker {
@@ -390,7 +390,7 @@
   padding: 9px 10px;
   border-radius: 6px;
   background: var(--orange-91);
-  box-shadow: inset 3px 0 0 #e0632e;
+  box-shadow: inset 3px 0 0 var(--orange-53);
 }
 
 .risk-finding-locate {
@@ -432,17 +432,17 @@
 
 .risk-severity--low {
   background: var(--orange-91);
-  color: #8a3f20;
+  color: var(--orange-33);
 }
 
 .risk-severity--medium {
   background: var(--orange-74);
-  color: #4d1a07;
+  color: var(--orange-16);
 }
 
 /* Darker than the gauge's band so the white label stays readable. */
 .risk-severity--high {
-  background: #b83c22;
+  background: var(--red-43);
   color: var(--white);
 }
 
@@ -752,12 +752,12 @@
 }
 
 .group-review-status--unsaved {
-  background: #fdf0d8;
-  color: #8a5a00;
+  background: var(--orange-92);
+  color: var(--orange-27);
 }
 
 .group-review-status--not_reviewed {
-  background: #eef0f3;
+  background: var(--slate-94);
   color: var(--ink-soft);
 }
 
@@ -766,7 +766,7 @@
   border: 1px solid var(--steel);
   border-radius: 6px;
   background: var(--steel);
-  color: #ffffff;
+  color: var(--white);
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -775,7 +775,7 @@
 
 .group-review-save:disabled {
   border-color: var(--line);
-  background: #ffffff;
+  background: var(--white);
   color: var(--ink-soft);
   cursor: default;
 }
@@ -861,8 +861,8 @@
   flex: 0 0 58px;
   padding: 2px 0;
   border-radius: 4px;
-  background: #fdf0d8;
-  color: #8a5a00;
+  background: var(--orange-92);
+  color: var(--orange-27);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 700;
@@ -882,7 +882,7 @@
 }
 
 .missed-issue-remove:hover {
-  background: #f1eee6;
+  background: var(--sand-92);
   color: var(--ink);
 }
 
@@ -908,7 +908,7 @@
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #faf8f3;
+  background: var(--orange-97);
 }
 
 .missed-issue-form label {
@@ -925,7 +925,7 @@
   padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--white);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -942,7 +942,7 @@
   padding: 5px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--white);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -953,7 +953,7 @@
 .missed-issue-save {
   border-color: var(--steel);
   background: var(--steel);
-  color: #ffffff;
+  color: var(--white);
 }
 
 .missed-issue-save:disabled {
@@ -1249,8 +1249,8 @@
 }
 
 .risk-review-tag--unsaved {
-  background: #fdf0d8;
-  color: #8a5a00;
+  background: var(--orange-92);
+  color: var(--orange-27);
 }
 
 /* Reviewed documents, and ones with nothing to review, folded away under the ones still to do. */

@@ -3,14 +3,13 @@ import { formatDocumentType } from '../../services/uploadService';
 import { Rate } from '../../components/Rate';
 import { RATE_MEANING, belowTargetNote, formatCheck } from '../../utils/checkLabels';
 import { InfoLabel } from '../../components/InfoTip';
-import { isEligibleForApproval } from './uploadHelpers';
+import { compareFindings, isEligibleForApproval } from './uploadHelpers';
 import { findingScope, useFindingReviews } from './useFindingReviews';
 import type { CaseSection } from './caseSections';
 import { formatUsd, processingTimes } from './processingTimes';
 import { useCaseCost } from './useCaseCost';
 import { CaseOverviewSkeleton } from '../../components/Skeletons';
 
-const SEVERITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2, info: 3 };
 const SHOWN_SEVERITIES = ['high', 'medium', 'low'] as const;
 const FLAGGED_DOCUMENTS_SHOWN = 5;
 
@@ -21,10 +20,6 @@ interface FlaggedDocument {
   // Most severe first, then most points.
   findings: CaseRiskFinding[];
   points: number;
-}
-
-function compareFindings(a: CaseRiskFinding, b: CaseRiskFinding): number {
-  return (SEVERITY_RANK[a.severity] ?? 4) - (SEVERITY_RANK[b.severity] ?? 4) || b.points - a.points;
 }
 
 // The case's findings by document (cross-document ones as a group of their own), worst document first: by its

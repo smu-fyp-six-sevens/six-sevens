@@ -454,6 +454,13 @@ button {
   color: var(--ink-soft);
 }
 
+.section-label {
+  margin: 22px 0 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .eyebrow {
   margin: 0 0 6px;
 }

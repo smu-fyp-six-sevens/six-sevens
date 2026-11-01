@@ -1,6 +1,7 @@
 import { assertOk } from './request';
 import { authFetch } from '../../lib/api';
 import type {
+  BulkApproveResponse,
   BulkDeleteResponse,
   BulkMoveResponse,
   BulkUploadResponse,
@@ -193,6 +194,19 @@ export async function bulkMoveDocuments(
   await assertOk(response, 'Failed to move documents');
 
   return (await response.json()) as BulkMoveResponse;
+}
+
+// Approves several documents in one request; each is checked as a single approval is, and refusals come back per document.
+export async function bulkApproveDocuments(documentIds: string[]): Promise<BulkApproveResponse> {
+  const response = await authFetch('/documents/bulk-approve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ document_ids: documentIds }),
+  });
+
+  await assertOk(response, 'Failed to approve documents');
+
+  return (await response.json()) as BulkApproveResponse;
 }
 
 export async function bulkDeleteDocuments(documentIds: string[]): Promise<BulkDeleteResponse> {

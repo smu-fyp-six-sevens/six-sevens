@@ -211,6 +211,10 @@ class FakeStore:
             "spans": [], "spans_dropped": 0,
         })
 
+    def get_document_for_detection(self, document_id):
+        document = self.documents.get(document_id)
+        return (document, self.get_guard_result(document_id)) if document else None
+
     def list_documents(self, case_id=None, **kwargs):
         return [d for d in self.documents.values() if d.case_id == case_id]
 

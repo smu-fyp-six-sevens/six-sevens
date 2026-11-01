@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:22.23.3-alpine AS build
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ COPY frontend/index.html ./index.html
 COPY frontend/src ./src
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM nginx:1.30.6-alpine
 # nginx's workers, which serve requests, already run as the nginx user; only the master is root, to bind port 80.
 # Going fully non-root means nginx-unprivileged on 8080 and a Terraform port change (PENDING_WORK.md).
 #checkov:skip=CKV_DOCKER_3:Workers run as nginx; the root master only binds port 80 (see above).

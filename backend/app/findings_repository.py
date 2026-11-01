@@ -17,7 +17,7 @@ their document or case.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, cast
 
 from .case_pipeline.categories import category_for_finding
@@ -140,8 +140,26 @@ def list_reviews_for_case(case_id: str) -> list[FindingReview]:
     return sorted((_review(row) for row in rows), key=lambda review: review.created_at)
 
 
-def list_all_reviews() -> list[FindingReview]:
-    return [_review(row) for row in fetch_all(_reviews_query, "id")]
+def list_reviews(since: date | None = None, stages: list[str] | None = None) -> list[FindingReview]:
+    """
+    Every review, or only those on cases created on or after `since` (UTC date) and at one of these stages: the
+    database joins each finding to its case and filters, so no case list is read.
+    """
+    if since is None and not stages:
+        return [_review(row) for row in fetch_all(_reviews_query, "id")]
+
+    def build():
+        query = (
+            service_supabase_client().table(TABLE).select(f"{_REVIEW_COLUMNS}, cases!inner(id)")
+            .not_.is_("reviewer", "null")
+        )
+        if since is not None:
+            query = query.gte("cases.created_at", since.isoformat())
+        if stages:
+            query = query.in_("cases.status", stages)
+        return query
+
+    return [_review(row) for row in fetch_all(build, "id")]
 
 
 def get_review(row_id: str) -> FindingReview | None:

@@ -275,6 +275,11 @@ class CaseRecord(BaseModel):
     reviews_required: bool = True
     # The list of documents to request, read from the recommended_additional_documents column (see the validator); only the case summary returns it.
     additional_documents: AdditionalDocuments | None = Field(default=None, exclude=True)
+    # Kept on the row so the case list doesn't read the audit trail; only the list returns them (CaseListItem).
+    # The officer who created the case, and the automated processing time, which audit-metrics rewrites after each
+    # timed run (audit.processing_ms_many).
+    created_by: str | None = Field(default=None, exclude=True)
+    processing_ms: int | None = Field(default=None, exclude=True)
     created_at: datetime
     updated_at: datetime
 
@@ -573,7 +578,7 @@ class CaseListItem(CaseRecord):
     documents_status: CaseDocumentsStatus
     # None when the documents' detection reports couldn't be loaded.
     risk: CaseRisk | None = None
-    # Automated processing time from the audit trail (audit.processing_ms_many); None until the case is analysed.
+    # Automated processing time (cases.processing_ms); None until the case is analysed.
     processing_ms: int | None = None
     # Titles of the documents its latest analysis recommends requesting; None until the case is analysed.
     recommended_documents: list[str] | None = None
@@ -581,7 +586,7 @@ class CaseListItem(CaseRecord):
     document_types: list[str] = Field(default_factory=list)
     # The findings specialists accepted (findings_repository.list_flags_for_cases), one entry per check, most first.
     flags: list[CaseFlagCount] = Field(default_factory=list)
-    # The username of the officer who created the case (its case.created event); None when the trail has no record.
+    # The username of the officer who created the case (cases.created_by); None for a case created by the system.
     created_by: str | None = None
 
 
@@ -931,6 +936,15 @@ class BulkDeleteRequest(BaseModel):
 
 class BulkDeleteResponse(BaseModel):
     deleted: list[str]
+    failed: list[BulkActionFailure]
+
+
+class BulkApproveRequest(BaseModel):
+    document_ids: list[str]
+
+
+class BulkApproveResponse(BaseModel):
+    approved: list[DocumentRecord]
     failed: list[BulkActionFailure]
 
 

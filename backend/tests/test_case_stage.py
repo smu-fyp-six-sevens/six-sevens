@@ -515,7 +515,7 @@ def test_startup_brings_every_case_up_to_date_and_skips_one_that_fails() -> None
         return case_id == "case-1"
 
     with (
-        patch("app.case_stage.case_repository.list_case_ids", return_value=["case-1", "case-2", "case-3"]),
+        patch("app.case_stage.case_repository.list_unfinalised_case_ids", return_value=["case-1", "case-2", "case-3"]),
         patch("app.case_stage.sync_case_stage", side_effect=sync) as synced,
     ):
         assert case_stage.sync_all_cases() == 1

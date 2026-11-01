@@ -90,8 +90,10 @@ def test_case_metrics_split_per_document_and_across_documents() -> None:
 
 def test_the_checks_are_the_specialists_tools_and_the_finding_categories() -> None:
     tools = {tool.name for spec in SPECIALISTS.values() for tool in spec.tools}
-    assert set(detection_metrics.document_checks()) == tools
+    assert set(detection_metrics.document_checks()) == tools | {"other"}
     assert "cross_document_variance" in detection_metrics.CASE_CHECKS
+    # The catch-all comes last in both lists.
+    assert detection_metrics.document_checks()[-1] == detection_metrics.CASE_CHECKS[-1] == "other"
 
 
 # --- endpoints -----------------------------------------------------------------------------------------------
@@ -215,6 +217,20 @@ def test_a_missed_issue_is_recorded_against_the_check_that_should_have_caught_it
     assert findings_repo.add_missed.call_count == 1
 
 
+@pytest.mark.parametrize("scope", ["document", "case"])
+def test_an_issue_no_check_covers_is_filed_under_other_with_its_description(repos, scope) -> None:
+    findings_repo, _ = repos
+    place = {"scope": scope, "check_name": "other", **({"document_id": DOCUMENT_ID} if scope == "document" else {})}
+
+    assert client.post(f"/cases/{CASE_ID}/finding-reviews/missed", json=place).status_code == 400
+    assert client.post(f"/cases/{CASE_ID}/finding-reviews/missed", json={**place, "note": "   "}).status_code == 400
+    response = client.post(f"/cases/{CASE_ID}/finding-reviews/missed", json={**place, "note": "Stamp looks scanned in"})
+
+    assert response.status_code == 201
+    assert findings_repo.add_missed.call_args.kwargs["check_name"] == "other"
+    assert findings_repo.add_missed.call_count == 1
+
+
 def test_a_missed_issue_can_be_corrected_but_a_verdict_cannot(repos) -> None:
     findings_repo, _ = repos
     findings_repo.get_review.return_value = _review(kind="missed", verdict=None, fingerprint=None)
@@ -250,7 +266,7 @@ def test_removing_a_missed_issue_deletes_it_and_removing_a_verdict_clears_it(rep
 
 def test_detection_metrics_cover_every_reviewed_case(repos) -> None:
     findings_repo, _ = repos
-    findings_repo.list_all_reviews.return_value = [
+    findings_repo.list_reviews.return_value = [
         _review(), _review(case_id=OTHER_CASE_ID, document_id=OTHER_DOCUMENT_ID, verdict="wrong"),
     ]
     body = client.get("/detection-metrics").json()

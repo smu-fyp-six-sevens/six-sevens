@@ -318,7 +318,7 @@ def test_get_document_download_url() -> None:
         patch("app.routers.documents.storage_service") as mock_storage,
     ):
         mock_dep_repo.get_document.return_value = _make_document("doc-1")
-        mock_storage.create_signed_url.return_value = "https://example.supabase.co/signed/doc-1"
+        mock_storage.signed_url.return_value = ("https://example.supabase.co/signed/doc-1", 1500)
 
         response = client.get("/documents/doc-1/download")
 
@@ -326,10 +326,10 @@ def test_get_document_download_url() -> None:
     body = response.json()
     assert body["document_id"] == "doc-1"
     assert body["signed_url"] == "https://example.supabase.co/signed/doc-1"
-    assert body["expires_in"] == settings.SIGNED_URL_EXPIRY_SECONDS
+    assert body["expires_in"] == 1500  # what the (possibly reused) URL has left
     # Plain downloads pass the filename through, which is what puts a
     # Content-Disposition: attachment header on Storage's response.
-    mock_storage.create_signed_url.assert_called_once_with(
+    mock_storage.signed_url.assert_called_once_with(
         "case-1/doc-1_statement.pdf",
         settings.SIGNED_URL_EXPIRY_SECONDS,
         "statement.pdf",
@@ -342,7 +342,7 @@ def test_get_document_download_url_inline_omits_the_filename() -> None:
         patch("app.routers.documents.storage_service") as mock_storage,
     ):
         mock_dep_repo.get_document.return_value = _make_document("doc-1")
-        mock_storage.create_signed_url.return_value = "https://example.supabase.co/signed/doc-1"
+        mock_storage.signed_url.return_value = ("https://example.supabase.co/signed/doc-1", 1800)
 
         response = client.get("/documents/doc-1/download?inline=true")
 
@@ -350,7 +350,7 @@ def test_get_document_download_url_inline_omits_the_filename() -> None:
     # No filename -> no `download` option -> Storage omits the
     # Content-Disposition: attachment header, so a browser renders it
     # in place instead of downloading it (the preview modal's use case).
-    mock_storage.create_signed_url.assert_called_once_with(
+    mock_storage.signed_url.assert_called_once_with(
         "case-1/doc-1_statement.pdf",
         settings.SIGNED_URL_EXPIRY_SECONDS,
         None,
@@ -712,7 +712,7 @@ def test_download_url_signed_url_failure() -> None:
         patch("app.routers.documents.storage_service") as mock_storage,
     ):
         mock_dep_repo.get_document.return_value = _make_document("doc-1")
-        mock_storage.create_signed_url.side_effect = RuntimeError("sign failed")
+        mock_storage.signed_url.side_effect = RuntimeError("sign failed")
         assert client.get("/documents/doc-1/download").status_code == 502
 
 

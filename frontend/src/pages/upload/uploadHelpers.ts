@@ -1,4 +1,5 @@
 import type {
+  CaseRiskFinding,
   DocumentCaseMatch,
   DocumentRecord,
 } from '../../services/uploadService';
@@ -14,11 +15,12 @@ import {
 
 const MAX_FILE_SIZE_MB = Math.floor(MAX_FILE_SIZE_BYTES / (1024 * 1024));
 
-// Fields that carry structured data (arrays/objects) rather than a single display-able value.
-export const NON_DISPLAYED_FIELD_KEYS = new Set(['transactions']);
+const SEVERITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2, info: 3 };
 
-export function displayableFieldEntries(fields: Record<string, unknown>): [string, unknown][] {
-  return Object.entries(fields).filter(([key]) => !NON_DISPLAYED_FIELD_KEYS.has(key));
+// Most severe first, then most points. Points alone would put a repeated high (scored at a quarter)
+// below a medium.
+export function compareFindings(a: CaseRiskFinding, b: CaseRiskFinding): number {
+  return (SEVERITY_RANK[a.severity] ?? 4) - (SEVERITY_RANK[b.severity] ?? 4) || b.points - a.points;
 }
 
 // The case snapshot wraps each extracted field as {value, confidence}.

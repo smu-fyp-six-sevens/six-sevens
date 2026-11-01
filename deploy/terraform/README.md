@@ -52,7 +52,7 @@ terraform apply
   - One case: `GET <Kong URL>/audit/cases/<case_id>/cost` (with your token): total, per document, case analysis, every run.
   - Across cases (Supabase SQL editor): `select case_id, round(sum((detail->>'llm_cost_usd')::numeric), 4) as usd, count(*) as runs from audit_events where detail ? 'llm_cost_usd' group by case_id order by usd desc;`
   - Claude isn't billed through Google: the dashboard's Claude figures are the app's own count at list prices (`backend/app/pricing.py`); the Anthropic console has the invoice.
-- **The sweeper** runs in audit-metrics on Cloud Scheduler's tick every 2 minutes. Pause with `gcloud scheduler jobs pause sweep --location asia-southeast1` (`resume` the same way). To see it work: the Pipeline dashboard's "Stuck work and recovery" row, or `GET <Kong URL>/audit/events?case_id=<id>`.
+- **The sweeper** runs in audit-metrics on Cloud Scheduler's tick every 5 minutes. Pause with `gcloud scheduler jobs pause sweep --location asia-southeast1` (`resume` the same way). To see it work: the Pipeline dashboard's "Stuck work and recovery" row, or `GET <Kong URL>/audit/events?case_id=<id>`.
 
 ## Deploying and checking a deploy
 

@@ -198,11 +198,10 @@ def _second_look_request(state: DetectionState) -> dict:
 
 async def load_context_node(state: DetectionState) -> dict:
     document_id = state["document_id"]
-    document = await asyncio.to_thread(
-        document_repository.get_document, document_id, include_fields=False
-    )
-    if document is None:
+    loaded = await asyncio.to_thread(document_repository.get_document_for_detection, document_id)
+    if loaded is None:
         raise DetectionError("Document not found")
+    document, guard_result = loaded
     if not document.storage_path:
         raise DetectionError("Document has no stored file")
     fields_loaded = True
@@ -212,7 +211,9 @@ async def load_context_node(state: DetectionState) -> dict:
         logger.exception("Failed to fetch extracted fields for document %s", document_id)
         fields, fields_loaded = [], False
     # The tools read these too; priming means they don't fetch them again.
-    detection_tools.prime(document_id, document=document, fields=fields if fields_loaded else None)
+    detection_tools.prime(
+        document_id, document=document, fields=fields if fields_loaded else None, guard_result=guard_result,
+    )
     context = {
         "today": today_in_singapore(),
         "document_type": document.document_type or "unknown",

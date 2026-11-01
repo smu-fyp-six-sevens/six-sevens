@@ -8,14 +8,18 @@ INSERT and SELECT only, so a row can't be edited or removed. A redelivered event
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
 
+from . import case_repository
 from .events import Event, types
 from .supabase_client import service_supabase_client
 from .supabase_rows import fetch_all, row as _row
+
+logger = logging.getLogger(__name__)
 
 _TABLE = "audit_events"
 
@@ -26,8 +30,21 @@ def store(event: Event) -> None:
     ).execute()
 
 
+def refresh_processing_time(case_id: str) -> None:
+    """Rewrites the case's stored processing time (cases.processing_ms, which the case list shows) from its trail.
+    Best-effort: the list shows the previous value until the next timed run."""
+    try:
+        total = processing_ms_many([case_id]).get(case_id)
+        if total is not None:
+            case_repository.set_processing_ms(case_id, total)
+    except Exception:
+        logger.exception("Failed to refresh the processing time of case %s", case_id)
+
+
 async def on_event(event: Event) -> None:
     await asyncio.to_thread(store, event)
+    if event.type in _TIMED and event.outcome == "success" and event.case_id is not None:
+        await asyncio.to_thread(refresh_processing_time, str(event.case_id))
 
 
 HANDLERS = {types.EVERY_TYPE: on_event}
@@ -93,22 +110,6 @@ def processing_ms_many(case_ids: list[str]) -> dict[str, int]:
             total += sum(durations) / len(durations)
         totals[case_id] = round(total)
     return totals
-
-
-def created_by_many(case_ids: list[str]) -> dict[str, str]:
-    """
-    The officer who created each case, from its case.created event. Cases created before the trail existed, or by
-    the system, are absent. Sync: run on a worker thread.
-    """
-    rows: list[dict] = []
-    for start in range(0, len(case_ids), _CASE_CHUNK):
-        chunk = case_ids[start : start + _CASE_CHUNK]
-        rows += fetch_all(
-            lambda chunk=chunk: service_supabase_client().table(_TABLE).select("id, case_id, actor")
-            .in_("case_id", chunk).eq("action", types.CASE_CREATED).eq("actor_type", "user"),
-            "id",
-        )
-    return {row["case_id"]: row["actor"] for row in rows if row.get("actor")}
 
 
 # End-of-run events that carry a run's Claude usage (detail.llm_cost_usd and the token counts): finished, failed,

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import time
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
+from typing import Iterator
 
 from postgrest import CountMethod
 
@@ -9,9 +13,33 @@ from .models import AdditionalDocuments, CaseRecord
 from .supabase_client import service_supabase_client, supabase_client
 from .supabase_rows import fetch_all, row as _row
 
+# A request reads its case once: the router's dependency, the readiness check, the stage sync and the snapshot all
+# ask for it. Kept for _REQUEST_CASE_SECONDS only (a push handler can run for minutes), and dropped on any write here.
+_REQUEST_CASE_SECONDS = 2.0
+_request_cases: ContextVar[dict[str, tuple[float, CaseRecord | None]] | None] = ContextVar(
+    "_request_cases", default=None,
+)
+
+
+@contextmanager
+def request_scope() -> Iterator[None]:
+    """Shares case reads within one request (main.py's middleware)."""
+    token = _request_cases.set({})
+    try:
+        yield
+    finally:
+        _request_cases.reset(token)
+
+
+def _forget(case_id: str) -> None:
+    cached = _request_cases.get()
+    if cached is not None:
+        cached.pop(case_id, None)
+
 
 def create_case(
     company_name: str | None = None, *, checklist_enforced: bool = False, reviews_required: bool = True,
+    created_by: str | None = None,
 ) -> CaseRecord:
     now = datetime.now(timezone.utc)
 
@@ -24,6 +52,7 @@ def create_case(
         "status": "open",
         "checklist_enforced": checklist_enforced,
         "reviews_required": reviews_required,
+        "created_by": created_by,
         "recommended_additional_documents": [],
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
@@ -35,10 +64,15 @@ def create_case(
 
 
 def get_case(case_id: str) -> CaseRecord | None:
+    cached = _request_cases.get()
+    hit = cached.get(case_id) if cached is not None else None
+    if hit is not None and time.monotonic() - hit[0] < _REQUEST_CASE_SECONDS:
+        return hit[1].model_copy(deep=True) if hit[1] is not None else None
     result = supabase_client.table("cases").select("*").eq("id", case_id).execute()
-    if not result.data:
-        return None
-    return CaseRecord(**_row(result.data[0]))
+    case = CaseRecord(**_row(result.data[0])) if result.data else None
+    if cached is not None:
+        cached[case_id] = (time.monotonic(), case.model_copy(deep=True) if case is not None else None)
+    return case
 
 
 def get_case_by_number(number: str) -> CaseRecord | None:
@@ -63,40 +97,38 @@ def _matching(pattern: str) -> str:
 
 def list_cases_page(
     q: str | None, *, newest: bool, limit: int, offset: int, statuses: list[str] | None = None,
+    risk_ranks: list[int] | None = None, highest_risk_first: bool | None = None,
 ) -> tuple[list[CaseRecord], int]:
     """
-    One page of cases by creation date, and how many cases match in all. `q` is a part of a number or name;
-    `statuses`, when given, the stages to keep.
+    One page of cases, and how many cases match in all. `q` is a part of a number or name; `statuses`, when given,
+    the stages to keep; `risk_ranks`, the saved risk ranks to keep (cases.risk_rank). Ordered by risk rank first
+    when `highest_risk_first` is set, then by creation date.
     """
     query = supabase_client.table("cases").select("*", count=CountMethod.exact)
     if q:
         query = query.or_(_matching(f"*{q}*"))
     if statuses:
         query = query.in_("status", statuses)
+    if risk_ranks:
+        query = query.in_("risk_rank", risk_ranks)
+    if highest_risk_first is not None:
+        query = query.order("risk_rank", desc=highest_risk_first)
     result = query.order("created_at", desc=newest).order("id").range(offset, offset + limit - 1).execute()
     return [CaseRecord(**_row(item)) for item in result.data], result.count or 0
 
 
-def list_matching_cases(q: str | None, statuses: list[str] | None = None) -> list[CaseRecord]:
-    """Every matching case, newest first. Only for what the database can't sort or filter itself (risk)."""
-
-    def build():
-        query = supabase_client.table("cases").select("*")
-        if statuses:
-            query = query.in_("status", statuses)
-        return query.or_(_matching(f"*{q}*")) if q else query
-
-    cases = [CaseRecord(**item) for item in fetch_all(build, "id")]
-    return sorted(cases, key=lambda case: case.created_at, reverse=True)
+def list_unfinalised_case_ids() -> list[str]:
+    """Every case whose stage can still move: a finalised case's never does."""
+    return [
+        item["id"]
+        for item in fetch_all(lambda: supabase_client.table("cases").select("id").neq("status", "finalised"), "id")
+    ]
 
 
-def list_case_ids() -> list[str]:
-    return [item["id"] for item in fetch_all(lambda: supabase_client.table("cases").select("id"), "id")]
-
-
-def list_case_statuses() -> list[str]:
-    """Every case's stage, for the queue's counts."""
-    return [str(item["status"]) for item in fetch_all(lambda: supabase_client.table("cases").select("id, status"), "id")]
+def count_cases_by_status() -> dict[str, int]:
+    """How many cases are at each stage, counted by the database (the case_stage_counts view)."""
+    rows = supabase_client.table("case_stage_counts").select("status, cases").execute().data or []
+    return {str(_row(item)["status"]): int(_row(item)["cases"]) for item in rows}
 
 
 def find_cases_starting_with(q: str, limit: int) -> list[CaseRecord]:
@@ -124,6 +156,7 @@ def update_case(case_id: str, company_name: str) -> CaseRecord | None:
         "company_name": company_name,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    _forget(case_id)
     result = (
         supabase_client.table("cases")
         .update(update)
@@ -145,6 +178,7 @@ def delete_case(case_id: str) -> None:
     no-op that still looks successful. An empty result means the row is
     still there.
     """
+    _forget(case_id)
     result = service_supabase_client().table("cases").delete().eq("id", case_id).execute()
     if not result.data:
         raise RuntimeError(f"Case {case_id} was not deleted")
@@ -153,7 +187,20 @@ def delete_case(case_id: str) -> None:
 def set_recommended_additional_documents(case_id: str, additional: AdditionalDocuments | None) -> None:
     """Stores the latest complete analysis's whole list of documents to request on the case (jsonb); [] clears it."""
     value = additional.model_dump(mode="json") if additional else []
+    _forget(case_id)
     supabase_client.table("cases").update({"recommended_additional_documents": value}).eq("id", case_id).execute()
+
+
+def set_risk_rank(case_id: str, risk_rank: int) -> None:
+    """The latest saved risk as a rank (risk/store.rank), kept on the row so the case list sorts and filters by it."""
+    _forget(case_id)
+    supabase_client.table("cases").update({"risk_rank": risk_rank}).eq("id", case_id).execute()
+
+
+def set_processing_ms(case_id: str, processing_ms: int) -> None:
+    """The case's automated processing time, kept on the row for the case list (audit.refresh_processing_time)."""
+    _forget(case_id)
+    supabase_client.table("cases").update({"processing_ms": processing_ms}).eq("id", case_id).execute()
 
 
 def set_status(case_id: str, expected: str, status: str) -> bool:
@@ -162,6 +209,7 @@ def set_status(case_id: str, expected: str, status: str) -> bool:
     compare-and-swap, so two processes syncing the same case can't both
     record the same change. Returns whether this call made the change.
     """
+    _forget(case_id)
     result = (
         supabase_client.table("cases")
         .update({"status": status})

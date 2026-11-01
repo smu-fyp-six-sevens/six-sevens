@@ -575,6 +575,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/bulk-approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Approve Documents
+         * @description Approves several analysed documents at once, each by the same rules as one; refusals are listed per document.
+         */
+        post: operations["bulk_approve_documents_documents_bulk_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/bulk-delete": {
         parameters: {
             query?: never;
@@ -1338,23 +1358,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/message": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Message */
-        get: operations["message_message_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/ws/tickets": {
         parameters: {
             query?: never;
@@ -1860,6 +1863,18 @@ export interface components {
             document_id: string;
             /** Reason */
             reason: string;
+        };
+        /** BulkApproveRequest */
+        BulkApproveRequest: {
+            /** Document Ids */
+            document_ids: string[];
+        };
+        /** BulkApproveResponse */
+        BulkApproveResponse: {
+            /** Approved */
+            approved: components["schemas"]["DocumentRecord"][];
+            /** Failed */
+            failed: components["schemas"]["BulkActionFailure"][];
         };
         /** BulkDeleteRequest */
         BulkDeleteRequest: {
@@ -5427,6 +5442,41 @@ export interface operations {
             };
         };
     };
+    bulk_approve_documents_documents_bulk_approve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkApproveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     bulk_delete_documents_documents_bulk_delete_post: {
         parameters: {
             query?: never;
@@ -6685,28 +6735,6 @@ export interface operations {
         };
     };
     health_check_healthz_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-        };
-    };
-    message_message_get: {
         parameters: {
             query?: never;
             header?: never;

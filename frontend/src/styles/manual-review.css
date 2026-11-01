@@ -3,7 +3,7 @@
    ========================================================= */
 
 .details-section-heading--warning {
-  color: #a33131;
+  color: var(--red-40);
 }
 
 .details-section-heading--warning .details-section-icon {
@@ -35,7 +35,7 @@
   overflow: hidden;
   border: 1px solid var(--red-86);
   border-radius: 9px;
-  background: #fffafa;
+  background: var(--red-99);
 }
 
 .manual-review-header,
@@ -53,8 +53,8 @@
 .manual-review-header {
   min-height: 42px;
   background: var(--red-97);
-  border-bottom: 1px solid #eddddd;
-  color: #7c6a6a;
+  border-bottom: 1px solid var(--red-bg);
+  color: var(--slate-45);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -89,7 +89,7 @@
   min-width: 0;
   box-sizing: border-box;
   padding: 10px 12px;
-  border: 1px solid #d9dee6;
+  border: 1px solid var(--slate-86);
   border-radius: 7px;
   background: var(--white);
   color: var(--slate-20);
@@ -104,12 +104,12 @@
 
 .manual-review-input:focus {
   outline: none;
-  border-color: #c94b4b;
+  border-color: var(--red-54);
   box-shadow: 0 0 0 3px var(--red-a10);
 }
 
 .manual-review-input:disabled {
-  background: #f5f5f5;
+  background: var(--slate-97);
   cursor: not-allowed;
 }
 
@@ -157,7 +157,7 @@
   gap: 12px;
   margin: 0 0 20px;
   padding: 14px 16px;
-  border: 1px solid #ead39a;
+  border: 1px solid var(--orange-76);
   border-radius: 8px;
   background: var(--orange-95);
   color: var(--orange-23);
@@ -168,7 +168,7 @@
   margin-top: 1px;
   font-size: 17px;
   line-height: 1.2;
-  color: #a87500;
+  color: var(--orange-33a);
 }
 
 .manual-review-warning-content {
@@ -188,7 +188,7 @@
   margin: 0;
   font-size: 12px;
   line-height: 1.55;
-  color: #6d5a2a;
+  color: var(--orange-30a);
 }
 
 .manual-review-warning p + p {

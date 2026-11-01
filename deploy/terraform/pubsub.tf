@@ -51,12 +51,12 @@ resource "google_pubsub_subscription" "push" {
   }
 }
 
-# The sweeper's clock (CLOUD_ARCHITECTURE_PLAN.md section 16): a sweep.requested event every 2 minutes, which
+# The sweeper's clock (CLOUD_ARCHITECTURE_PLAN.md section 16): a sweep.requested event every 5 minutes (the shortest stage limit), which
 # audit-metrics handles. Fields the envelope leaves out (event_id, occurred_at) are filled in when it is read.
 resource "google_cloud_scheduler_job" "sweep" {
   name      = "sweep"
   region    = var.region
-  schedule  = "*/2 * * * *"
+  schedule  = "*/5 * * * *"
   time_zone = "Etc/UTC"
 
   pubsub_target {

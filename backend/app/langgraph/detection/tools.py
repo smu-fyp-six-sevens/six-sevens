@@ -89,11 +89,14 @@ async def _once(document_id: str, key: str, load: Callable[[], Awaitable[Any]]) 
     return await asyncio.shield(future)
 
 
-def prime(document_id: str, *, document: Any = None, fields: list | None = None) -> None:
-    """Seeds the cache with what the run's first step already fetched."""
+def prime(document_id: str, *, document: Any = None, fields: list | None = None, guard_result: dict | None = None) -> None:
+    """Seeds the cache with what the run's first step already fetched. The document is read with its metadata, so
+    it serves the metadata tool too."""
     entry = _context.setdefault(document_id, {})
     loop = asyncio.get_running_loop()
-    for key, value in (("document", document), ("fields", fields)):
+    for key, value in (
+        ("document", document), ("document_metadata", document), ("fields", fields), ("saved_guard_result", guard_result),
+    ):
         if value is not None and key not in entry:
             future = loop.create_future()
             future.set_result(value)
@@ -579,9 +582,16 @@ def _injection_finding(span: dict) -> dict:
 
 
 async def _guard_result(document_id: str) -> dict | None:
-    """The guard_result saved at ingest; for a document whose one wasn't saved, the guard run now on the
-    stored file, so the check is never skipped."""
-    stored = await asyncio.to_thread(document_repository.get_guard_result, document_id)
+    """The guard_result saved at ingest, read once per run (both guard tools use it); for a document whose one
+    wasn't saved, the guard run now on the stored file, so the check is never skipped."""
+    return await _once(document_id, "guard_result", lambda: _load_guard_result(document_id))
+
+
+async def _load_guard_result(document_id: str) -> dict | None:
+    stored = await _once(
+        document_id, "saved_guard_result",
+        lambda: asyncio.to_thread(document_repository.get_guard_result, document_id),
+    )
     if stored and stored.get("checks_run"):
         return stored
     document = await _document_with_metadata(document_id)

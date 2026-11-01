@@ -134,7 +134,8 @@ async def test_detection_run_announces_detected(published_events) -> None:
     ):
         await detection_worker.on_requested(Event(type=types.DOCUMENT_APPROVED, document_id="d", case_id="c"))
 
-    push.assert_awaited_once_with("c")
+    # The document's status write reaches viewers through Realtime, where it runs in this process.
+    push.assert_awaited_once_with("c", realtime_covers=True)
     assert [(e.type, e.outcome) for e in published_events] == [(types.DOCUMENT_DETECTED, "success")]
     detail = published_events[0].detail
     assert (detail["verdict"], detail["findings"], detail["run"]) == ("clean", 0, "detection")

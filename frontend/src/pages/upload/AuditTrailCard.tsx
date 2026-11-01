@@ -10,6 +10,7 @@ import { formatCheck } from '../../utils/checkLabels';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
 import { describeFailureReason } from '../document-details/formatters';
 import { ErrorMessage } from '../../components/ErrorMessage';
+import { formatDuration } from './processingTimes';
 
 interface AuditDocument {
   id: string;
@@ -133,12 +134,6 @@ const LEGEND: { marker: string; label: string }[] = [
   { marker: 'failed', label: 'Failed' },
   { marker: 'cancelled', label: 'Cancelled' },
 ];
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms} ms`;
-  const seconds = Math.round(ms / 1000);
-  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-}
 
 function text(value: unknown): string | null {
   return typeof value === 'string' && value ? value : null;

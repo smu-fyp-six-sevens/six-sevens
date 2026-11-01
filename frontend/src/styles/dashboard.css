@@ -82,7 +82,6 @@
 .table-pagination button.active { border-color: var(--line); background: var(--white); color: var(--steel-dark); box-shadow: 0 1px 3px var(--ink-a08); }
 .table-pagination button:disabled { opacity: .35; cursor: default; }
 .table-pagination button:focus-visible { outline: 2px solid var(--steel); outline-offset: 1px; }
-.pagination-gap { padding: 0 3px; color: var(--slate-65); }
 .empty-insight { padding: 15px 0; color: var(--slate-62); font-size: 13px; }.table-empty { padding: 22px; }
 
 @media (max-width: 1120px) {

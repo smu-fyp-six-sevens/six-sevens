@@ -15,6 +15,8 @@ from ..config import settings
 from ..langgraph import trace as langgraph_trace
 from ..models import (
     AddExtractedFieldRequest,
+    BulkApproveRequest,
+    BulkApproveResponse,
     BulkDeleteRequest,
     BulkDeleteResponse,
     BulkMoveRequest,
@@ -181,6 +183,16 @@ async def approve_document(document_id: str, document: DocumentRecord = Depends(
         return await document_service.approve(document)
 
 
+@router.post("/bulk-approve", response_model=BulkApproveResponse)
+async def bulk_approve_documents(body: BulkApproveRequest) -> BulkApproveResponse:
+    """Approves several analysed documents at once, each by the same rules as one; refusals are listed per document."""
+    with _handled(
+        "Failed to approve the documents. Check Supabase table access.",
+        "Bulk approve failed for documents %s", body.document_ids,
+    ):
+        return await document_service.bulk_approve(body.document_ids)
+
+
 @router.post("/{document_id}/reject", response_model=DocumentRecord)
 async def reject_document(document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)) -> DocumentRecord:
     with _handled("Failed to reject document.", "Failed to reject document %s", document_id):
@@ -250,8 +262,8 @@ async def get_document_download_url(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document has no stored file"
         )
 
-    signed_url = await to_thread_or_502(
-        storage_service.create_signed_url,
+    signed_url, expires_in = await to_thread_or_502(
+        storage_service.signed_url,
         document.storage_path,
         settings.SIGNED_URL_EXPIRY_SECONDS,
         None if inline else document.filename,
@@ -259,11 +271,7 @@ async def get_document_download_url(
         log=("Failed to create signed URL for document %s", document_id),
     )
 
-    return DocumentDownloadResponse(
-        document_id=document.id,
-        signed_url=signed_url,
-        expires_in=settings.SIGNED_URL_EXPIRY_SECONDS,
-    )
+    return DocumentDownloadResponse(document_id=document.id, signed_url=signed_url, expires_in=expires_in)
 
 
 @router.get("/{document_id}/content-guard", response_model=ContentGuardResponse)

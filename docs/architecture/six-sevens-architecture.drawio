@@ -25,7 +25,7 @@
                 <mxCell id="1 s7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;b&gt;audit-metrics&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;stores every event in audit_events&lt;br&gt;/audit/events · /audit/cases/{id}/cost&lt;br&gt;runs the sweeper (stuck work)&lt;/font&gt;" vertex="1">
                     <mxGeometry height="110" width="250" x="1090" y="140" as="geometry"/>
                 </mxCell>
-                <mxCell id="1 s8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" value="&lt;b&gt;Cloud Scheduler&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;sweep.requested&lt;br&gt;every 2 minutes&lt;/font&gt;" vertex="1">
+                <mxCell id="1 s8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" value="&lt;b&gt;Cloud Scheduler&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;sweep.requested&lt;br&gt;every 5 minutes&lt;/font&gt;" vertex="1">
                     <mxGeometry height="90" width="190" x="1410" y="140" as="geometry"/>
                 </mxCell>
                 <mxCell id="1 s9" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="&lt;b&gt;Pub/Sub topic: domain-events&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;one topic · a filtered push subscription per role · at-least-once delivery · OIDC-signed pushes&lt;/font&gt;" vertex="1">
@@ -502,7 +502,7 @@
                 <mxCell id="4 s1" value="Recovering stuck work (no database changes; the audit trail is the memory)" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=top;" vertex="1" parent="1">
                     <mxGeometry x="40" y="20" width="1200" height="40" as="geometry"/>
                 </mxCell>
-                <mxCell id="4 s2" value="&lt;b&gt;Cloud Scheduler&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;every 2 minutes&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+                <mxCell id="4 s2" value="&lt;b&gt;Cloud Scheduler&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;every 5 minutes&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
                     <mxGeometry x="40" y="225" width="170" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="4 s3" value="&lt;b&gt;domain-events&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39;&gt;type = sweep.requested&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">

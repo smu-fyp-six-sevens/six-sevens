@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import audit, auth, case_stage, document_repository, events, health, metrics, query_stats, realtime_listener, sweeper, telemetry
+from . import audit, auth, case_repository, case_stage, document_repository, events, health, metrics, query_stats, realtime_listener, sweeper, telemetry
 from .config import settings
 from .events import bus, registry, types
 from .events import push as event_push
@@ -49,6 +49,8 @@ _HANDLERS = {
     "audit-metrics": {**audit.HANDLERS, types.SWEEP_REQUESTED: sweeper.on_sweep_requested},
 }
 _CALLS_CLAUDE = {"doc-worker", "detection-worker", "case-worker"}
+# The roles that verify officers' tokens, so they need the signing key.
+_CHECKS_TOKENS = {"api", "audit-metrics"}
 
 registry.clear()
 for _role, _handlers in _HANDLERS.items():
@@ -56,8 +58,15 @@ for _role, _handlers in _HANDLERS.items():
         registry.install(_role, _handlers)
 
 
+def check_signing_key() -> None:
+    """A deployed service must not sign tokens with an empty key, which anyone could reproduce."""
+    if ROLES & _CHECKS_TOKENS and not IN_PROCESS and not settings.AUTH_SECRET_KEY:
+        raise RuntimeError("AUTH_SECRET_KEY is empty; set it in Secret Manager")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    check_signing_key()
     logger.info("Starting roles %s with %s events", sorted(ROLES), settings.EVENT_TRANSPORT)
     metrics.set_info(ROLES)
     background_tasks: list[asyncio.Task[None]] = []
@@ -124,7 +133,10 @@ async def count_queries(request: Request, call_next):
     status_code = 500
     synced_cases = document_repository.track_request_syncs()
     try:
-        with query_stats.scope(f"{request.method} {query_stats.label_path(request.url.path)}"):
+        with (
+            query_stats.scope(f"{request.method} {query_stats.label_path(request.url.path)}"),
+            case_repository.request_scope(),
+        ):
             response = await call_next(request)
             # A push's work runs inside its request, so this also covers the workers.
             if synced_cases:
@@ -213,8 +225,3 @@ if "api" in ROLES:
             )
         await events.record(events.Event(type=types.AUTH_LOGIN, actor_type="user", actor=username))
         return LoginResponse(token=auth.create_token(username), username=username)
-
-
-@app.get("/message")
-def message() -> dict[str, str]:
-    return {"message": "Hello from FastAPI"}

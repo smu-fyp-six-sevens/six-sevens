@@ -13,6 +13,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, cast
 
+from ... import case_repository
 from ...models import CaseRisk, RiskLevel, RiskState
 from ...supabase_client import supabase_client
 
@@ -24,10 +25,19 @@ _CHUNK = 100
 # risk_level is NOT NULL text, so a case that has no score yet is stored under its state's label.
 _STATE_LABELS = {"pending": "Pending", "failed": "Failed", "no_documents": "No documents"}
 _STATE_BY_LABEL = {label: state for state, label in _STATE_LABELS.items()}
+# The case list's order and filter (cases.risk_rank); 0 is unscored, below Low.
+RISK_RANKS = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
+
+
+def rank(risk: CaseRisk | None) -> int:
+    return RISK_RANKS.get(risk.level or "", 0) if risk is not None and risk.state == "scored" else 0
 
 
 def save(case_id: str, risk: CaseRisk | None) -> None:
-    """Records an analysis run's score. Never raises: the run's own result is the source of truth."""
+    """
+    Records an analysis run's score, and its rank on the case row, which the case list sorts and filters by. Never
+    raises: the run's own result is the source of truth.
+    """
     if risk is None:
         return
     try:
@@ -38,6 +48,7 @@ def save(case_id: str, risk: CaseRisk | None) -> None:
             "reasoning": " ".join(risk.reasons) or None,
             "scored_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
+        case_repository.set_risk_rank(case_id, rank(risk))
     except Exception:
         logger.exception("Failed to save the risk score of case %s", case_id)
 

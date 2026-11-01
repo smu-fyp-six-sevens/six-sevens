@@ -6,16 +6,16 @@
 
 /* --tone fills dots and the card's edge; --tone-ink is for text, dark enough to read on the tint even for the
    lightest shade. A group's shades run light to deep in the order a case reaches them. */
-.tone-grey    { --tone: #8a93a6; --tone-ink: #4b5565; --tone-tint: #f2f4f7; --tone-border: #d5d9e0; }
-.tone-blue-1  { --tone: #6ea0e6; --tone-ink: #2f5fa8; --tone-tint: #edf3fc; --tone-border: #c4d8f5; }
-.tone-blue-2  { --tone: #1d4ed8; --tone-ink: #1d3f9e; --tone-tint: #e6edfc; --tone-border: #a9c0f2; }
-.tone-amber-1 { --tone: #f5c35c; --tone-ink: #8a5a00; --tone-tint: #fff8e8; --tone-border: #f6dc9e; }
-.tone-amber-2 { --tone: #f0a020; --tone-ink: #8a5300; --tone-tint: #fff3dd; --tone-border: #f5cf8a; }
-.tone-amber-3 { --tone: #d97706; --tone-ink: #8f4a05; --tone-tint: #fdeedb; --tone-border: #f0c48b; }
-.tone-amber-4 { --tone: #a85203; --tone-ink: #7a3a02; --tone-tint: #f9e6d6; --tone-border: #e2b08a; }
-.tone-green   { --tone: #1f7a4d; --tone-ink: #17603c; --tone-tint: #e8f5ee; --tone-border: #a7e3c5; }
-.tone-slate   { --tone: #1e3a5f; --tone-ink: #1e3a5f; --tone-tint: #e8edf3; --tone-border: #b7c4d4; }
-.tone-red     { --tone: #b33131; --tone-ink: #962626; --tone-tint: #fbeaea; --tone-border: #f0b8b8; }
+.tone-grey    { --tone: var(--slate-60); --tone-ink: var(--slate-34); --tone-tint: var(--slate-97a); --tone-border: var(--slate-86); }
+.tone-blue-1  { --tone: var(--blue-67); --tone-ink: var(--blue-42); --tone-tint: var(--blue-97); --tone-border: var(--blue-86); }
+.tone-blue-2  { --tone: var(--blue-48); --tone-ink: var(--blue-37); --tone-tint: var(--blue-95); --tone-border: var(--blue-81); }
+.tone-amber-1 { --tone: var(--orange-66); --tone-ink: var(--orange-27); --tone-tint: var(--orange-95); --tone-border: var(--orange-76); }
+.tone-amber-2 { --tone: var(--orange-53a); --tone-ink: var(--orange-27); --tone-tint: var(--amber-bg); --tone-border: var(--orange-75a); }
+.tone-amber-3 { --tone: var(--orange-44); --tone-ink: var(--orange-30b); --tone-tint: var(--amber-bg); --tone-border: var(--orange-74a); }
+.tone-amber-4 { --tone: var(--orange-37); --tone-ink: var(--orange-24); --tone-tint: var(--orange-91); --tone-border: var(--orange-71); }
+.tone-green   { --tone: var(--green-30); --tone-ink: var(--green-23); --tone-tint: var(--green-94); --tone-border: var(--green-77); }
+.tone-slate   { --tone: var(--blue-25); --tone-ink: var(--blue-25); --tone-tint: var(--slate-93a); --tone-border: var(--blue-77a); }
+.tone-red     { --tone: var(--red-45a); --tone-ink: var(--red-40); --tone-tint: var(--red-97); --tone-border: var(--red-83); }
 
 /* =========================================================
    Case Status: where the case stands, what to do next, and a
@@ -60,7 +60,7 @@
   font-size: 12px;
   font-weight: 600;
   border: 1px solid var(--tone-border, var(--line));
-  background: var(--tone-tint, #eef1f6);
+  background: var(--tone-tint, var(--slate-95));
   color: var(--tone-ink, var(--steel-dark));
 }
 
@@ -215,14 +215,14 @@
 }
 
 .case-status-finalise {
-  border: 1px solid #17603c;
-  background: linear-gradient(180deg, #23875a 0%, #1f7a4d 100%);
+  border: 1px solid var(--green-23);
+  background: linear-gradient(180deg, var(--green-30) 0%, var(--green-30) 100%);
   color: var(--white);
   box-shadow: 0 1px 2px rgba(23, 96, 60, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .case-status-finalise:hover:not(:disabled) {
-  background: linear-gradient(180deg, #1f7a4d 0%, #17603c 100%);
+  background: linear-gradient(180deg, var(--green-30) 0%, var(--green-23) 100%);
   box-shadow: 0 3px 8px rgba(23, 96, 60, 0.28);
 }
 
@@ -246,10 +246,10 @@
   gap: 10px;
   margin: 16px 0 0;
   padding: 11px 14px;
-  border: 1px solid var(--tone-border, #b7c4d4);
+  border: 1px solid var(--tone-border, var(--blue-77a));
   border-radius: 8px;
-  background: #e8edf3;
-  color: #1e3a5f;
+  background: var(--slate-93a);
+  color: var(--blue-25);
   font-size: 13px;
   line-height: 1.45;
 }

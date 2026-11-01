@@ -14,6 +14,7 @@ import { formatCheck as formatTool } from '../../utils/checkLabels';
 import type { GroupReviewStatus } from './FindingReviewControls';
 import { GroupReviewBar, MetricsLine, MissedIssues, ReviewSummary } from './FindingReviewControls';
 import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
+import { compareFindings } from './uploadHelpers';
 import DocumentReviewModal from './DocumentReviewModal';
 import type { ReviewLink } from './DocumentReviewModal';
 import { ErrorMessage } from '../../components/ErrorMessage';
@@ -23,17 +24,6 @@ const CASE_GROUP_ID = '__case__';
 
 type Severity = CaseRiskFinding['severity'];
 const SEVERITY_ORDER: Severity[] = ['high', 'medium', 'low'];
-
-function severityRank(severity: Severity): number {
-  const index = SEVERITY_ORDER.indexOf(severity);
-  return index === -1 ? SEVERITY_ORDER.length : index;
-}
-
-// Most severe first, then most points. Points alone would put a repeated high (scored at a quarter)
-// below a medium.
-function compareFindings(a: CaseRiskFinding, b: CaseRiskFinding): number {
-  return severityRank(a.severity) - severityRank(b.severity) || b.points - a.points;
-}
 
 // The score range of each level; mirrors SCORE_BANDS in backend/app/case_pipeline/risk/case_risk.py.
 const SCORE_BANDS = [

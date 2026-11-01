@@ -239,6 +239,19 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     expect(report.status).toBe('approved');
   });
 
+  test('approving the selected documents sends them in one request', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const report = fixture.document('Credit_Bureau_Report');
+    await page.goto(`${fixture.caseUrl}?section=documents`);
+
+    await page.getByRole('button', { name: 'Select all eligible for approval' }).click();
+    await page.getByRole('button', { name: 'Approve selected' }).click();
+
+    await expect.poll(() => report.status).toBe('approved');
+    expect(backend.requestsTo('POST', '/documents/bulk-approve')).toHaveLength(1);
+    expect(backend.requestsTo('POST', /^\/documents\/[^/]+\/approve$/)).toHaveLength(0);
+  });
+
   test('DI-025 a field that is legitimately empty does not block saving a correction @DI-025', async ({ page, backend }) => {
     // Harbor Light's real certificate has no former name, so extraction
     // correctly left Company Former Name empty (confidence 1.0). Fixing the

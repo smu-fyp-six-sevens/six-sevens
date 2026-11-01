@@ -5,7 +5,7 @@ that owns the stage to recover it, with a recovery.requested event. It writes no
 Pub/Sub redelivery already covers a worker that dies mid-push. This covers what redelivery can't: an event lost
 after its database write (a document left uploaded or queued), and a run that ended without a final status.
 
-Cloud Scheduler publishes sweep.requested every 2 minutes and audit-metrics runs this. Off unless SWEEPER_ENABLED,
+Cloud Scheduler publishes sweep.requested every 5 minutes and audit-metrics runs this. Off unless SWEEPER_ENABLED,
 because the database is shared and a local process must not sweep cloud work. To show it locally against one case:
     python -m app.sweeper --once --case <case_id>
 """
@@ -132,7 +132,7 @@ async def sweep(case_id: str | None = None) -> int:
 
 
 async def on_sweep_requested(event: Event) -> None:
-    """Cloud Scheduler's tick. Not stored in the audit trail: a tick every 2 minutes is noise."""
+    """Cloud Scheduler's tick. Not stored in the audit trail: a tick every 5 minutes is noise."""
     if not settings.SWEEPER_ENABLED:
         logger.info("Sweep requested but SWEEPER_ENABLED is off; ignoring")
         return

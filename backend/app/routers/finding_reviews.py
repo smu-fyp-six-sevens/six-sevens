@@ -18,7 +18,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from .. import (
-    case_service,
     case_stage,
     detection_metrics,
     document_repository,
@@ -73,9 +72,13 @@ async def _document_in_case(case_id: str, document_id: UUID | None) -> str | Non
     return str(document_id)
 
 
-def _check_fits(scope: str, check_name: str) -> None:
+def _check_fits(scope: str, check_name: str, note: str | None) -> None:
     if check_name not in detection_metrics.checks_by_scope()[scope]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"That check can't be reviewed on a {scope}.")
+    if check_name == detection_metrics.OTHER_CHECK and not note:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Describe what was missed when it fits none of the checks.",
+        )
 
 
 async def _review_in_case(case_id: str, review_id: UUID) -> FindingReview:
@@ -169,7 +172,7 @@ async def report_missed_issue(
     case_id: str, request: ReportMissedIssueRequest, user: CurrentUser, case: CaseRecord = Depends(_editable_reviewed_case),
 ) -> CaseFindingReviews:
     """Records an issue no finding raised, against the check that should have caught it: a false negative."""
-    _check_fits(request.scope, request.check_name)
+    _check_fits(request.scope, request.check_name, request.note)
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to save a missed issue on case %s", case_id):
         document_id = await _document_in_case(case_id, request.document_id)
         await asyncio.to_thread(
@@ -196,7 +199,7 @@ async def update_missed_issue(
         review = await _review_in_case(case_id, review_id)
         if review.kind != "missed":
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only a missed issue can be edited")
-        _check_fits(review.scope, request.check_name)
+        _check_fits(review.scope, request.check_name, request.note)
         await asyncio.to_thread(
             findings_repository.update_missed, str(review_id),
             check_name=request.check_name, note=request.note, reviewer=user,
@@ -246,15 +249,8 @@ async def get_detection_metrics(
     cases created on or after `since` and at these stages, as the dashboard's filters pick.
     """
     reviews = await to_thread_or_502(
-        findings_repository.list_all_reviews,
+        findings_repository.list_reviews, since, [stage.value for stage in status_filter],
         detail="Failed to load the finding reviews. Check Supabase table access.",
         log=("Failed to list finding reviews",),
     )
-    if since is not None or status_filter:
-        wanted = await to_thread_or_502(
-            case_service.case_ids_matching, since, status_filter,
-            detail="Failed to filter cases. Check Supabase table access.",
-            log=("Failed to filter cases for detection metrics",),
-        )
-        reviews = [review for review in reviews if review.case_id in wanted]
     return detection_metrics.overall_metrics(reviews)

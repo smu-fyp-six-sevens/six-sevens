@@ -68,7 +68,7 @@ Gotchas: Cloud Run routes by `Host`, so Kong must not preserve it and must use H
 
 Pub/Sub redelivery covers a worker that dies mid-request. The sweeper covers the rest: a publish lost after the database write, a dead-lettered message, a run that never reached a final status. No database changes were needed.
 
-- Cloud Scheduler publishes `sweep.requested` every 2 minutes; audit-metrics runs the sweeper (`backend/app/sweeper.py`, only where `SWEEPER_ENABLED`, which Terraform sets on audit-metrics). Locally it's off; `python -m app.sweeper --once --case <id>` runs it for one case.
+- Cloud Scheduler publishes `sweep.requested` every 5 minutes; audit-metrics runs the sweeper (`backend/app/sweeper.py`, only where `SWEEPER_ENABLED`, which Terraform sets on audit-metrics). Locally it's off; `python -m app.sweeper --once --case <id>` runs it for one case.
 - Limits: uploaded or queued 5 min (`STUCK_WAITING_SECONDS`); processing, extracting or detecting 15 min (`STUCK_RUNNING_SECONDS`; detecting is timed from the newest approval, retry or recovery event); a running case analysis 15 min (`CASE_ANALYSIS_TIMEOUT_SECONDS`).
 - The sweeper publishes `recovery.requested` with an `owner` attribute; only that worker's subscription matches. Attempts are counted from the audit trail (last 24 h), a full limit apart, at most 3 (`RECOVERY_MAX_ATTEMPTS`).
 - Owners: doc-worker resets to queued and reruns (gives up as `failed`, so Retry works); detection-worker resets to approved and reruns (gives up as approved with an error); case-worker marks the run failed with no rerun (Claude calls are the officer's call).

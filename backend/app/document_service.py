@@ -22,6 +22,7 @@ from .models import (
     APPROVED_STATUSES,
     IN_FLIGHT_STATUSES,
     BulkActionFailure,
+    BulkApproveResponse,
     BulkDeleteResponse,
     BulkMoveResponse,
     CaseStage,
@@ -522,6 +523,38 @@ async def approve(document: DocumentRecord) -> DocumentRecord:
         await asyncio.to_thread(document_repository.undo_approval, document.id, document.routing_status)
         raise
     return present(approved, extracted_fields)
+
+
+async def bulk_approve(document_ids: list[str]) -> BulkApproveResponse:
+    """
+    The single approval applied to a batch, side by side: one request instead of one per document, with the
+    documents read together, each case checked once, and the case stage synced once when the request ends.
+    """
+    documents_by_id = await _documents_by_id(document_ids)
+    finalised = await _finalised_cases({d.case_id for d in documents_by_id.values() if d.case_id is not None})
+
+    failed: list[BulkActionFailure] = []
+    eligible: list[DocumentRecord] = []
+    for document_id in document_ids:
+        document = documents_by_id.get(document_id)
+        if document is None:
+            failed.append(BulkActionFailure(document_id=document_id, reason="Document not found"))
+        elif document.case_id in finalised:
+            failed.append(BulkActionFailure(document_id=document_id, reason=case_service.FINALISED_DETAIL))
+        else:
+            eligible.append(document)
+
+    outcomes = await asyncio.gather(*(approve(document) for document in eligible), return_exceptions=True)
+    approved: list[DocumentRecord] = []
+    for document, outcome in zip(eligible, outcomes):
+        if isinstance(outcome, DocumentRecord):
+            approved.append(outcome)
+        elif isinstance(outcome, Refused):
+            failed.append(BulkActionFailure(document_id=document.id, reason=outcome.detail))
+        else:
+            logger.error("Failed to approve document %s", document.id, exc_info=outcome)
+            failed.append(BulkActionFailure(document_id=document.id, reason="Failed to approve document."))
+    return BulkApproveResponse(approved=approved, failed=failed)
 
 
 async def reject(document: DocumentRecord) -> DocumentRecord:

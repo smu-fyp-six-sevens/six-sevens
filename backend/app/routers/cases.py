@@ -40,7 +40,7 @@ async def create_case(
     reviews_required: bool = Body(True, embed=True),
 ) -> CaseRecord:
     case = await to_thread_or_502(
-        case_service.create_case, company_name, reviews_required=reviews_required,
+        case_service.create_case, company_name, reviews_required=reviews_required, created_by=current_actor(),
         detail="Failed to create the case. Check Supabase table access.",
         log=("Failed to create case",),
     )

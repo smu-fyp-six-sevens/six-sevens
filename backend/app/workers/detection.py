@@ -69,7 +69,8 @@ async def run(document_id: str, case_id: str | None, requested_by: str | None = 
         outcome, detail = "failed", {"error": f"{type(exc).__name__}: {exc}"[:300]}
     finally:
         if case_id:
-            await push_case_snapshot(case_id)
+            # Every ending writes the document's status last, which Realtime reports.
+            await push_case_snapshot(case_id, realtime_covers=True)
     await _record_end(document_id, case_id, requested_by, timer, outcome, detail, usage)
 
 
@@ -122,7 +123,7 @@ async def on_recovery_requested(event: Event) -> None:
         await asyncio.to_thread(end_unfinished_run, document_id)
         await recovery.report(event, _ACTOR, types.RECOVERY_EXHAUSTED, "failed")
         if event.case_id:
-            await push_case_snapshot(event.case_id)
+            await push_case_snapshot(event.case_id, realtime_covers=True)
         return
     await run(document_id, event.case_id)
     document = await asyncio.to_thread(document_repository.get_document, document_id, include_fields=False)

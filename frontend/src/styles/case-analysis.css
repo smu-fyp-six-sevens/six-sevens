@@ -141,9 +141,9 @@
   transform: translateY(-1px);
 }
 
-.analysis-brief-dot--high { background: #b83c22; }
+.analysis-brief-dot--high { background: var(--red-43); }
 .analysis-brief-dot--medium { background: var(--orange-74); }
-.analysis-brief-dot--low { background: var(--orange-91); border: 1px solid #e3b79e; }
+.analysis-brief-dot--low { background: var(--orange-91); border: 1px solid var(--orange-75); }
 
 .analysis-brief-link {
   padding: 0;
@@ -281,7 +281,7 @@
 
 .analysis-run-tag--stale {
   background: var(--amber-bg);
-  color: #7a5407;
+  color: var(--orange-25);
 }
 
 .analysis-run-viewing {

@@ -123,22 +123,54 @@ def test_a_search_matches_the_number_or_the_name_and_quotes_what_it_was_given() 
     query.or_.return_value.order.assert_called_once_with("created_at", desc=False)
 
 
-def test_every_matching_case_comes_back_newest_first() -> None:
-    rows = [
-        _row(id="case-1", created_at="2026-10-01T00:00:00Z"),
-        _row(id="case-2", created_at="2026-10-03T00:00:00Z"),
-        _row(id="case-3", created_at="2026-10-02T00:00:00Z"),
-    ]
-    with patch("app.case_repository.fetch_all", return_value=rows) as fetch:
-        cases = case_repository.list_matching_cases(None)
+def test_the_risk_filter_and_order_come_before_the_date_order() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        query = mock_client.table.return_value.select.return_value
+        ranked = query.in_.return_value
+        result = _execute_result([])
+        result.count = 0
+        ranked.order.return_value.order.return_value.order.return_value.range.return_value.execute.return_value = result
 
-    assert [c.id for c in cases] == ["case-2", "case-3", "case-1"]
-    assert fetch.call_args.args[1] == "id"  # paged by a unique key
+        case_repository.list_cases_page(None, newest=True, limit=25, offset=0, risk_ranks=[3, 4], highest_risk_first=True)
+
+    query.in_.assert_called_once_with("risk_rank", [3, 4])
+    ranked.order.assert_called_once_with("risk_rank", desc=True)
+    ranked.order.return_value.order.assert_called_once_with("created_at", desc=True)
 
 
-def test_case_ids_are_read_a_page_at_a_time() -> None:
-    with patch("app.case_repository.fetch_all", return_value=[{"id": "a"}, {"id": "b"}]):
-        assert case_repository.list_case_ids() == ["a", "b"]
+def test_stage_counts_come_from_the_database_view() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        mock_client.table.return_value.select.return_value.execute.return_value = _execute_result(
+            [{"status": "open", "cases": 2}, {"status": "finalised", "cases": 5}]
+        )
+
+        assert case_repository.count_cases_by_status() == {"open": 2, "finalised": 5}
+
+    mock_client.table.assert_called_once_with("case_stage_counts")
+
+
+def test_unfinalised_case_ids_are_read_a_page_at_a_time() -> None:
+    with (
+        patch("app.case_repository.supabase_client") as mock_client,
+        patch("app.case_repository.fetch_all", side_effect=lambda build, order: (build(), [{"id": "a"}, {"id": "b"}])[1]),
+    ):
+        assert case_repository.list_unfinalised_case_ids() == ["a", "b"]
+
+    mock_client.table.return_value.select.return_value.neq.assert_called_once_with("status", "finalised")
+
+
+def test_a_request_reads_its_case_once_and_again_after_a_write() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        select = mock_client.table.return_value.select.return_value.eq.return_value
+        select.execute.return_value = _execute_result([_row(id="case-1")])
+        with case_repository.request_scope():
+            case_repository.get_case("case-1")
+            case_repository.get_case("case-1")
+            case_repository.set_status("case-1", "open", "processing_documents")
+            case_repository.get_case("case-1")
+        case_repository.get_case("case-1")  # outside a request: always read
+
+    assert select.execute.call_count == 3
 
 
 def test_a_case_is_found_by_its_number_or_else_its_id() -> None:

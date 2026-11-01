@@ -39,7 +39,8 @@ async def test_debounced_publish_builds_and_broadcasts_snapshot_after_the_delay(
 
         await realtime_listener._debounced_publish("case-1")
 
-        mock_build.assert_called_once_with("case-1")
+        # No documents row changed: the build may reuse the case's last document reads.
+        mock_build.assert_called_once_with("case-1", documents_changed=False)
         mock_publish.assert_called_once_with("case-1", {"type": "snapshot"})
         # Always pops itself out of _pending once it actually runs.
         assert "case-1" not in realtime_listener._pending
@@ -100,7 +101,7 @@ def _open_cases(*case_ids: str):
     viewers = {case_id: live.subscribe(case_id) for case_id in case_ids}
     built: list[str] = []
 
-    def build(case_id: str) -> dict:
+    def build(case_id: str, documents_changed: bool = True) -> dict:
         built.append(case_id)
         return {"type": "snapshot", "case": case_id}
 
@@ -135,6 +136,23 @@ async def test_a_burst_of_changes_to_an_open_case_delivers_one_snapshot() -> Non
     assert built == ["case-1"]
     assert viewers["case-1"].qsize() == 1
     assert viewers["case-1"].get_nowait() == {"type": "snapshot", "case": "case-1"}
+
+
+@pytest.mark.asyncio
+async def test_only_a_documents_change_makes_the_build_read_the_documents_again() -> None:
+    live, _, _, _ = _open_cases("case-1")
+    calls: list[bool] = []
+
+    def build(case_id: str, documents_changed: bool = True) -> dict:
+        calls.append(documents_changed)
+        return {"type": "snapshot", "case": case_id}
+
+    run_change = {"data": {"table": "case_analysis_runs", "record": {"case_id": "case-1"}}}
+    document_change = {"data": {"table": "documents", "record": {"case_id": "case-1"}}}
+    await _deliver(live, build, run_change)
+    await _deliver(live, build, run_change, document_change)
+
+    assert calls == [False, True]
 
 
 @pytest.mark.asyncio

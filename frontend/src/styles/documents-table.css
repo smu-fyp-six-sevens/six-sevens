@@ -136,13 +136,13 @@
 }
 
 .bulk-icon-btn--approve {
-  color: #1f6f43;
+  color: var(--green-30);
 }
 
 .bulk-icon-btn--approve:hover:not(:disabled),
 .bulk-icon-btn--approve:focus-visible {
   background: rgba(31, 111, 67, 0.1);
-  color: #15502f;
+  color: var(--green-20);
 }
 
 .bulk-icon-btn--danger {
@@ -152,7 +152,7 @@
 .bulk-icon-btn--danger:hover:not(:disabled),
 .bulk-icon-btn--danger:focus-visible {
   background: rgba(178, 59, 59, 0.1);
-  color: #8a2b2b;
+  color: var(--red-35);
 }
 
 .bulk-icon-count {
@@ -166,7 +166,7 @@
   margin-left: 6px;
   border: none;
   background: transparent;
-  color: #5b6b85;
+  color: var(--slate-40);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;

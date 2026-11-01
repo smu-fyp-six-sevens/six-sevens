@@ -57,12 +57,14 @@ def test_find_stuck_uses_each_stage_limit_and_the_detection_start():
 
 
 def test_sweep_counts_attempts_and_waits_a_full_period_between_them():
-    item = sweeper.Stuck("processing", "doc-worker", NOW - timedelta(minutes=40), 900, "case-1", document_id="doc-1")
-    recent = sweeper.Stuck("queued", "doc-worker", NOW - timedelta(minutes=40), 300, "case-1", document_id="doc-2")
+    # Its own clock, not the module's NOW: sweep() reads the real time, and a long test run ages NOW past the limit.
+    now = datetime.now(timezone.utc)
+    item = sweeper.Stuck("processing", "doc-worker", now - timedelta(minutes=40), 900, "case-1", document_id="doc-1")
+    recent = sweeper.Stuck("queued", "doc-worker", now - timedelta(minutes=40), 300, "case-1", document_id="doc-2")
     earlier = {
-        "doc-1": [Event(type=types.RECOVERY_REQUESTED, occurred_at=NOW - timedelta(minutes=20)),
-                  Event(type=types.RECOVERY_REQUESTED, occurred_at=NOW - timedelta(minutes=38))],
-        "doc-2": [Event(type=types.RECOVERY_REQUESTED, occurred_at=NOW - timedelta(minutes=1))],
+        "doc-1": [Event(type=types.RECOVERY_REQUESTED, occurred_at=now - timedelta(minutes=20)),
+                  Event(type=types.RECOVERY_REQUESTED, occurred_at=now - timedelta(minutes=38))],
+        "doc-2": [Event(type=types.RECOVERY_REQUESTED, occurred_at=now - timedelta(minutes=1))],
     }
     publish = AsyncMock()
     with (

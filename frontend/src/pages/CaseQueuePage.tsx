@@ -375,7 +375,7 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
                     <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--id" /></span>
                     <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--name" /></span>
                     <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--status" /></span>
-                    <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--pill" /></span>
+                    <span className="skeleton-cell"><span className="skeleton-bar skeleton-bar--badge" /></span>
                     <span className="skeleton-cell skeleton-cell--center"><span className="skeleton-bar skeleton-bar--date" /></span>
                   </div>
                   <span className="case-row-menu-space" />

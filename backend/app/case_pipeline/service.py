@@ -219,7 +219,8 @@ async def _execute(
         except Exception:
             logger.exception("Failed to store the case analysis result for case %s", case_id)
         await sync_stage(case_id)
-        await push_case_snapshot(case_id)
+        # The run row's update reaches viewers through Realtime.
+        await push_case_snapshot(case_id, realtime_covers=True)
 
 
 async def sync_stage(case_id: str) -> None:

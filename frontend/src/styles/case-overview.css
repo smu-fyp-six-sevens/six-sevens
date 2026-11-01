@@ -43,7 +43,7 @@
 }
 .case-overview-risk--critical { border-left-color: var(--red-30); }
 .case-overview-risk--high { border-left-color: var(--red-45); }
-.case-overview-risk--medium { border-left-color: #d68b16; }
+.case-overview-risk--medium { border-left-color: var(--amber); }
 .case-overview-risk--low { border-left-color: var(--green-40); }
 .case-overview-risk-copy { display: grid; gap: 4px; min-width: 0; }
 .case-overview-stat-label { color: var(--ink-soft); font-size: 12px; font-weight: 650; }
@@ -89,9 +89,9 @@
 .case-overview-flagged-more { margin: 8px 0 0; color: var(--ink-soft); font-size: 11px; }
 .case-overview-severity { flex: none; min-width: 57px; padding: 3px 7px; border-radius: 5px; text-align: center; text-transform: uppercase; font-size: 9px; font-weight: 800; letter-spacing: .04em; }
 /* The Risk Summary's severity colours (case-summary.css .risk-severity), so a level reads the same on both. */
-.case-overview-severity--high { color: var(--white); background: #b83c22; }
-.case-overview-severity--medium { color: #4d1a07; background: var(--orange-74); }
-.case-overview-severity--low { color: #8a3f20; background: var(--orange-91); }
+.case-overview-severity--high { color: var(--white); background: var(--red-43); }
+.case-overview-severity--medium { color: var(--orange-16); background: var(--orange-74); }
+.case-overview-severity--low { color: var(--orange-33); background: var(--orange-91); }
 .case-overview-document-copy { display: grid; min-width: 0; gap: 3px; }
 .case-overview-empty { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border-radius: 9px; background: var(--slate-97); color: var(--ink-soft); }
 .case-overview-empty > span { color: var(--teal); font-size: 17px; font-weight: 700; }
@@ -109,7 +109,7 @@
 .case-overview-document-copy small { color: var(--ink-soft); font-size: 11px; }
 .case-overview-document-status { flex: none; padding: 4px 9px; border-radius: 99px; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .case-overview-document-status--done { color: var(--teal); background: var(--teal-bg); }
-.case-overview-document-status--action { color: #8e4f0b; background: var(--amber-bg); }
+.case-overview-document-status--action { color: var(--orange-30b); background: var(--amber-bg); }
 .case-overview-document-status--progress { color: var(--steel); background: var(--slate-94a); }
 .case-overview-document-status--muted { color: var(--ink-soft); background: var(--slate-94); }
 .case-overview-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.3fr); gap: 14px; align-items: stretch; }

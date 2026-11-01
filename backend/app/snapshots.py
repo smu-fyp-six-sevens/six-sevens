@@ -9,11 +9,17 @@ from .case_broadcaster import broadcaster
 logger = logging.getLogger(__name__)
 
 
-async def push_case_snapshot(case_id: str) -> None:
-    """Best-effort live refresh for a case's WebSocket viewers in this process. Never raises."""
-    from . import case_service
+async def push_case_snapshot(case_id: str, *, realtime_covers: bool = False) -> None:
+    """
+    Best-effort live refresh for a case's WebSocket viewers in this process. Never raises. realtime_covers: the
+    change is a documents, cases or case_analysis_runs write, which this process's Realtime listener (when it runs
+    here, as locally) already turns into a build, so this one would be a repeat.
+    """
+    from . import case_service, realtime_listener
 
     if not broadcaster.has_subscribers(case_id):
+        return
+    if realtime_covers and realtime_listener.listening():
         return
     try:
         with query_stats.scope("pushed snapshot"):

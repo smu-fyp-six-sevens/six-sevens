@@ -102,7 +102,7 @@
   height: 14px;
   border: 3px solid var(--steel);
   border-radius: 50%;
-  background: #fff;
+  background: var(--white);
 }
 
 .audit-marker--user {
@@ -128,12 +128,12 @@
   padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #fff;
+  background: var(--white);
 }
 
 .audit-entry--failed .audit-entry-card {
   border-color: var(--red-bg);
-  background: #fffafa;
+  background: var(--red-99);
 }
 
 .audit-entry-main {

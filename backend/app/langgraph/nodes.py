@@ -113,12 +113,6 @@ async def ingest_document_text(document_id: str, document) -> tuple[str, dict]:
         logger.error("Metadata extraction failed for %s: %s", document.filename, metadata)
         metadata = {EXTRACTION_ERROR_KEY: f"metadata could not be read ({type(metadata).__name__})"}
 
-    # Persisted regardless of whether the text turns out usable — file
-    # metadata (author, creation date, software, ...) is independent of text
-    # extraction quality.
-    if metadata:
-        await asyncio.to_thread(document_repository.update_metadata, document_id, metadata)
-
     if ingestion_result["needs_review"]:
         logger.warning(
             "Document %s: extraction flagged needs_review (method=%s)",
@@ -155,11 +149,15 @@ async def _guard_document(
         guard_spans=result["spans"], guard_spans_dropped=result["spans_dropped"],
         guard_hidden_spans_removed=len(removals), guard_error=result.get("error"),
     )
+    # The file's metadata goes in the same write. Saved whether or not the text turns out usable: it doesn't
+    # depend on the text.
     try:
-        await asyncio.to_thread(document_repository.update_guard_result, document_id, result)
+        await asyncio.to_thread(
+            document_repository.update_ingest_results, document_id, guard_result=result, metadata=metadata,
+        )
     except Exception as exc:
-        # Until the documents.guard_result column exists the write fails; the ingest carries on regardless.
-        logger.warning("Document %s: guard_result not saved: %s", document_id, exc)
+        # Detection then reruns the guard on the file, and reports the metadata as not recorded.
+        logger.warning("Document %s: guard_result and metadata not saved: %s", document_id, exc)
     return content_guard.clean_text(raw_text, removals), result
 
 

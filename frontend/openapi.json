@@ -1076,6 +1076,46 @@
         "title": "BulkActionFailure",
         "type": "object"
       },
+      "BulkApproveRequest": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Document Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_ids"
+        ],
+        "title": "BulkApproveRequest",
+        "type": "object"
+      },
+      "BulkApproveResponse": {
+        "properties": {
+          "approved": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentRecord"
+            },
+            "title": "Approved",
+            "type": "array"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/BulkActionFailure"
+            },
+            "title": "Failed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "approved",
+          "failed"
+        ],
+        "title": "BulkApproveResponse",
+        "type": "object"
+      },
       "BulkDeleteRequest": {
         "properties": {
           "document_ids": {
@@ -2049,15 +2089,15 @@
           "status",
           "checklist_enforced",
           "reviews_required",
+          "created_by",
+          "processing_ms",
           "created_at",
           "updated_at",
           "documents_status",
           "risk",
-          "processing_ms",
           "recommended_documents",
           "document_types",
-          "flags",
-          "created_by"
+          "flags"
         ],
         "title": "CaseListItem",
         "type": "object"
@@ -9698,6 +9738,66 @@
         ]
       }
     },
+    "/documents/bulk-approve": {
+      "post": {
+        "description": "Approves several analysed documents at once, each by the same rules as one; refusals are listed per document.",
+        "operationId": "bulk_approve_documents_documents_bulk_approve_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkApproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkApproveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Approve Documents",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
     "/documents/bulk-delete": {
       "post": {
         "description": "The single delete applied to a batch, with each affected case resynced once.",
@@ -11933,28 +12033,6 @@
         "tags": [
           "health"
         ]
-      }
-    },
-    "/message": {
-      "get": {
-        "operationId": "message_message_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Message Message Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Message"
       }
     },
     "/ws/tickets": {

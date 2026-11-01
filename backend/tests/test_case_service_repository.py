@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from app import case_service
 from app.models import CaseDocumentsStatus, CaseRecord, CaseRisk, CaseStage, DocumentRecord, DocumentStatus
 
@@ -89,9 +91,10 @@ def test_the_default_page_reads_only_its_own_cases_and_their_documents() -> None
         ("case-1", CaseDocumentsStatus.ANALYZED), ("case-2", CaseDocumentsStatus.FAILED),
     ]
     assert (page.total, page.limit, page.offset) == (40, 25, 25)
-    case_repo.list_cases_page.assert_called_once_with("acme", newest=True, limit=25, offset=25, statuses=[])
+    case_repo.list_cases_page.assert_called_once_with(
+        "acme", newest=True, limit=25, offset=25, statuses=[], risk_ranks=None, highest_risk_first=None,
+    )
     doc_repo.list_document_statuses.assert_called_once_with(["case-1", "case-2"])
-    case_repo.list_matching_cases.assert_not_called()
 
 
 def test_a_blank_search_is_no_search_and_oldest_first_reaches_the_database() -> None:
@@ -107,17 +110,10 @@ def test_a_blank_search_is_no_search_and_oldest_first_reaches_the_database() -> 
         page = _page(sort="oldest", q="   ")
 
     assert page.items == [] and page.total == 0
-    case_repo.list_cases_page.assert_called_once_with(None, newest=False, limit=25, offset=0, statuses=[])
+    case_repo.list_cases_page.assert_called_once_with(
+        None, newest=False, limit=25, offset=0, statuses=[], risk_ranks=None, highest_risk_first=None,
+    )
     doc_repo.list_document_statuses.assert_not_called()
-
-
-def _three_cases() -> list[CaseRecord]:
-    """Newest first, as list_matching_cases returns them."""
-    return [
-        _case_at("case-1", "2026-10-03T00:00:00Z"),
-        _case_at("case-2", "2026-10-02T00:00:00Z"),
-        _case_at("case-3", "2026-10-01T00:00:00Z"),
-    ]
 
 
 def test_a_stage_filter_pages_in_the_database() -> None:
@@ -135,124 +131,38 @@ def test_a_stage_filter_pages_in_the_database() -> None:
     assert [i.id for i in page.items] == ["case-2"] and page.total == 3
     case_repo.list_cases_page.assert_called_once_with(
         None, newest=False, limit=1, offset=1, statuses=["failed", "pending_review"],
+        risk_ranks=None, highest_risk_first=None,
     )
-    case_repo.list_matching_cases.assert_not_called()
 
 
-def test_highest_risk_first_puts_unscored_last_and_the_newest_first_among_equals() -> None:
-    cases = [*_three_cases(), _case_at("case-4", "2026-09-01T00:00:00Z")]
-    risks = {
-        "case-2": CaseRisk(state="scored", level="High", score=70),
-        "case-4": CaseRisk(state="scored", level="High", score=75),
-        "case-3": CaseRisk(state="scored", level="Low", score=10),
-        "case-1": CaseRisk(state="pending"),
-    }
+@pytest.mark.parametrize(("overrides", "expected"), [
+    # Unscored ranks 0, below Low; among equal ranks the newest come first.
+    ({"sort": "risk"}, {"newest": True, "risk_ranks": None, "highest_risk_first": True}),
+    ({"sort": "lowest_risk"}, {"newest": True, "risk_ranks": None, "highest_risk_first": False}),
+    ({"risks": ["High", "unscored", "Low"]}, {"newest": True, "risk_ranks": [0, 1, 3], "highest_risk_first": None}),
+    ({"sort": "oldest", "risks": ["Critical"]}, {"newest": False, "risk_ranks": [4], "highest_risk_first": None}),
+])
+def test_the_risk_order_and_filter_page_in_the_database(overrides, expected) -> None:
     with (
         patch("app.case_service.case_repository") as case_repo,
         patch("app.case_service.document_repository") as doc_repo,
         patch("app.case_service.risk_store") as store,
     ):
-        case_repo.list_matching_cases.return_value = cases
+        case_repo.list_cases_page.return_value = ([_make_case("case-2")], 7)
         doc_repo.list_document_statuses.return_value = []
-        store.latest_many.return_value = risks
+        store.latest_many.return_value = {"case-2": CaseRisk(state="scored", level="High", score=70)}
 
-        page = _page(sort="risk")
+        page = _page(**overrides, statuses=[CaseStage.CASE_ANALYSED], q="gldb", offset=1, limit=1)
 
-    assert [i.id for i in page.items] == ["case-2", "case-4", "case-3", "case-1"]
-    assert page.total == 4
-
-
-def _risk_cases():
-    cases = [*_three_cases(), _case_at("case-4", "2026-09-01T00:00:00Z")]
-    risks = {
-        "case-1": CaseRisk(state="pending"),
-        "case-2": CaseRisk(state="scored", level="High", score=70),
-        "case-3": CaseRisk(state="scored", level="Low", score=10),
-        "case-4": CaseRisk(state="scored", level="High", score=75),
-    }
-    return cases, risks
-
-
-def test_lowest_risk_first_puts_unscored_first_and_the_newest_first_among_equals() -> None:
-    cases, risks = _risk_cases()
-    with (
-        patch("app.case_service.case_repository") as case_repo,
-        patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.risk_store") as store,
-    ):
-        case_repo.list_matching_cases.return_value = cases
-        doc_repo.list_document_statuses.return_value = []
-        store.latest_many.return_value = risks
-
-        page = _page(sort="lowest_risk")
-
-    assert [i.id for i in page.items] == ["case-1", "case-3", "case-2", "case-4"]
-
-
-def test_a_risk_filter_keeps_only_those_levels_and_pages_the_matches() -> None:
-    cases, risks = _risk_cases()
-    with (
-        patch("app.case_service.case_repository") as case_repo,
-        patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.risk_store") as store,
-    ):
-        case_repo.list_matching_cases.return_value = cases
-        doc_repo.list_document_statuses.return_value = []
-        store.latest_many.return_value = risks
-
-        high = _page(risks=["High"])
-        high_or_low = _page(risks=["High", "Low"])
-        second = _page(risks=["High", "Low"], offset=2, limit=2)
-        unscored = _page(risks=["unscored"])
-
-    assert [i.id for i in high.items] == ["case-2", "case-4"] and high.total == 2
-    assert [i.id for i in high_or_low.items] == ["case-2", "case-3", "case-4"] and high_or_low.total == 3
-    assert [i.id for i in second.items] == ["case-4"] and second.total == 3
-    assert [i.id for i in unscored.items] == ["case-1"]
-    case_repo.list_cases_page.assert_not_called()
-
-
-def test_stage_risk_and_search_filters_combine_and_share_one_total() -> None:
-    cases, risks = _risk_cases()
-    # The database has already kept only the analysed cases: case-2 is not one.
-    analysed = [case for case in cases if case.id != "case-2"]
-    with (
-        patch("app.case_service.case_repository") as case_repo,
-        patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.risk_store") as store,
-    ):
-        case_repo.list_matching_cases.return_value = analysed
-        doc_repo.list_document_statuses.return_value = []
-        store.latest_many.return_value = risks
-
-        page = _page(statuses=[CaseStage.CASE_ANALYSED], risks=["High", "Low"], q="gldb", sort="risk")
-        second = _page(statuses=[CaseStage.CASE_ANALYSED], risks=["High", "Low"], q="gldb", sort="risk", offset=1, limit=1)
-
-    # High before Low.
-    assert [i.id for i in page.items] == ["case-4", "case-3"] and page.total == 2
-    assert [i.id for i in second.items] == ["case-3"] and second.total == 2
-    case_repo.list_matching_cases.assert_called_with("gldb", statuses=["case_analysed"])
-
-
-def test_oldest_first_with_a_risk_filter_reverses_the_newest_first_list() -> None:
-    cases, risks = _risk_cases()
-    with (
-        patch("app.case_service.case_repository") as case_repo,
-        patch("app.case_service.document_repository") as doc_repo,
-        patch("app.case_service.risk_store") as store,
-    ):
-        case_repo.list_matching_cases.return_value = cases
-        doc_repo.list_document_statuses.return_value = []
-        store.latest_many.return_value = risks
-
-        page = _page(sort="oldest", risks=["High", "Low"])
-
-    assert [i.id for i in page.items] == ["case-4", "case-3", "case-2"]
+    assert [i.id for i in page.items] == ["case-2"] and page.items[0].risk is not None and page.total == 7
+    case_repo.list_cases_page.assert_called_once_with(
+        "gldb", limit=1, offset=1, statuses=["case_analysed"], **expected,
+    )
 
 
 def test_counts_roll_up_every_case_by_stage() -> None:
     with patch("app.case_service.case_repository") as case_repo:
-        case_repo.list_case_statuses.return_value = ["case_analysed", "failed", "case_analysed"]
+        case_repo.count_cases_by_status.return_value = {"case_analysed": 2, "failed": 1}
 
         counts = case_service.case_counts()
 
@@ -334,11 +244,11 @@ def test_create_case_fixes_the_checklist_rule_and_reviews_at_creation() -> None:
     ):
         mock_case_repo.create_case.return_value = _make_case("case-1")
 
-        result = case_service.create_case("Acme Pte Ltd", reviews_required=False)
+        result = case_service.create_case("Acme Pte Ltd", reviews_required=False, created_by="greenlink-tester")
 
         assert result == _make_case("case-1")
         mock_case_repo.create_case.assert_called_once_with(
-            "Acme Pte Ltd", checklist_enforced=True, reviews_required=False,
+            "Acme Pte Ltd", checklist_enforced=True, reviews_required=False, created_by="greenlink-tester",
         )
 
 
