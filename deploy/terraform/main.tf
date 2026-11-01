@@ -111,8 +111,8 @@ resource "google_artifact_registry_repository" "app" {
   format        = "DOCKER"
   description   = "One image per role"
 
-  # Logs what the policies would delete without deleting; set false once the dry run looks right (PENDING_WORK.md).
-  cleanup_policy_dry_run = true
+  # Checked 2026-11-01 by applying the policies to the image list: no serving image would be deleted.
+  cleanup_policy_dry_run = false
 
   # KEEP beats DELETE: the 10 newest versions of each image (rollback targets) are never deleted.
   cleanup_policies {

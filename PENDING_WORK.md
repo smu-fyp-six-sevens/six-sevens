@@ -1,25 +1,20 @@
 # Pending work
 
-Open product and platform work only: remove an item once it's done. Elsewhere: code smells and optimisations in `REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, case dashboard, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10; backwards-compatibility fallbacks in `REFACTORING_AUDIT.md` §5. Updated 2026-11-01.
-
-## Database
-
-- **Keep prod unused until `integration` is deployed:** the database no longer has the tables and columns `main`'s code writes (`flags`, `finding_reviews`, `case_status_history`, `app_settings`, `cases.submission_finalized`).
+Open product and platform work only: remove an item once it's done. Elsewhere: code smells and optimisations in `REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, case dashboard, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10; backwards-compatibility fallbacks in `REFACTORING_AUDIT.md` §5; stability findings and database load in `STABILITY_AUDIT.md`. Updated 2026-11-01.
 
 ## Product
 
 - **Automatic case analysis** (this sprint). The officer clicks it today. Not built: the gate on every document completion, supersede with a run-id fence, debounce and a re-run cap (`CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0).
-- **Guard against repeated runs.** Each "Run again" spends about 12k tokens even when nothing changed; skipping a run whose fingerprint matches the last complete one would stop that, but changes what the button does.
+- **Skip repeated runs** (decided 2026-11-01): "Run again" on a case whose fingerprint matches the last complete run shows that run instead of starting another (each spends about 12k tokens).
 - **Agent-raised findings.** A specialist can only assess findings a tool returns; something it notices itself (a "modified copy" subject) appears in its summary but never scores. Needs a way to raise a finding that cites the field it read.
 
 ## Claude models
 
-- **Live check of the switch to Sonnet 5.5 and Haiku 5.5** (effort `low` everywhere except the detection lead and the cross-document planner and judge at `medium`). Run a few known cases end to end and compare against earlier runs: types, fields, findings, the case analysis, cost per case and time per stage. `backend/.env` may still name the old models; remove those lines. Watch for: replies cut off at the raised token caps; the specialists' first turn, which starts with a code-made tool call that has no thinking block (accepted in principle, unconfirmed live); and how often the cross-document planner or judge needs its one retry (`attempt` on the span).
 - **Billed cost per role.** Per-call cost is exact (token counts × list price, `pricing.py`). To reconcile with the bill, give each worker role its own Claude workspace and API key; the Cost API (`/v1/organizations/cost_report`, Admin API key, daily) then reports billed USD per workspace. Per-request tags don't exist.
 
 ## Deployment note (report and commercialisation document)
 
-- **Data residency asterisk.** Put this wherever the report describes the model calls, and carry it into the commercialisation document the supervisor asked for (server, model, RAM, storage requirements): *"This prototype calls the public Claude API. In production, GLDB would reach Claude through an enterprise agreement or its cloud provider (for example Vertex AI), with regional processing and zero data retention, subject to its outsourcing and MAS requirements."* Before relying on it: check whether Vertex AI serves Claude in Singapore (`asia-southeast1`); the Claude API's own residency option is global or US only. Don't name banks that have signed such contracts without a source.
+- **Data residency asterisk.** Put this wherever the report describes the model calls, and carry it into the commercialisation document the supervisor asked for (server, model, RAM, storage requirements): *"This prototype calls the public Claude API. In production, GLDB would reach Claude through an enterprise agreement or its cloud provider (for example Vertex AI), with regional processing and zero data retention, subject to its outsourcing and MAS requirements."* Google's data-residency page lists Singapore (`asia-southeast1`) for some Claude models, but which ones varies, so the sentence names no model or region; the Claude API's own residency option is global or US only. Don't name banks that have signed such contracts without a source.
 
 ## Extraction agent
 
@@ -52,7 +47,7 @@ Extraction is one Sonnet call over the page text (`langgraph/extract.py`). The t
 
 Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 - **Plan-then-judge has no follow-up round;** add one optional round if the evals show low recall.
-- **The run trace lists dropped hypotheses,** while the design says unproven ones are never shown. Decide before exposing it beyond developers.
+- **Clean up the run trace** (later). It lists dropped hypotheses, which the design says are never shown; that goes with the clean-up.
 - **Guardrails still open:** a dismissal flow for cross-document findings, audit retention, the three sponsor questions in the plan.
 - **The evidence requests (`risk/outlook.py`) are one Haiku call, not an agent, and need more ideation.** A document can only lower the score, so "ask for all of them" always looks best. Ideas so far: the smallest set that reaches a target level (code, not a model); scoring a document that goes against the client too, since one that can swing either way tells the officer more; an agent that checks the case's existing documents before asking, and tries sets with a re-scoring tool. The score stays deterministic either way.
 
@@ -63,39 +58,17 @@ Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 
 ## Performance
 
-Budgets are in `HOW_IT_WORKS.md` §8; query-level fixes are in `REFACTORING_AUDIT.md` §3.
+Budgets are in `HOW_IT_WORKS.md` §8; database load is in `STABILITY_AUDIT.md` §3.
 - A burst of changes can chain snapshot builds, and the first requester waits for the follow-up.
 - **Opening a case still waits in sequence on a direct link or refresh:** the case lookup, then the WebSocket ticket, connection and first snapshot. (From the queue the case is handed over and the page code is prefetched.) Not done yet: fetching the first snapshot over a plain request alongside the socket, and putting the case's own details in the snapshot so a direct load needs one request.
 
 ## Cloud operations
 
-- **Artifact Registry clean-up is in dry-run mode** (applied 2026-10-24; `app` held 11.8 GB). The DELETE policies in `main.tf` (older than 14 days; untagged older than 7) only log what they'd delete; KEEP protects the 10 newest versions of each image.
-  1. After a day, check Logs Explorer with `protoPayload.methodName="Dry run : Vulnerability or cleanup policy delete"`: no image a serving revision uses should be listed. Images pushed before 2026-10-24 are indexes with untagged children; newer ones are single manifests (`--provenance=false`).
-  2. Set `cleanup_policy_dry_run = false` and apply.
-- **Billed cost in Grafana:** set `billing_export_table` once the export table appears (`deploy/terraform/README.md`, "Open").
-- **Snyk's npm scan has never completed a run.** The security job blocks the deploy: if it finds a high-severity frontend issue, fix or upgrade rather than making the job optional again.
-- **Branch protection on `main` is off on purpose** (small changes are pushed directly). Turning it on (require Backend CI, Frontend CI, Security) would stop a failing change from landing at all.
+- **Apply the Artifact Registry clean-up:** `main.tf` now sets `cleanup_policy_dry_run = false`; `terraform apply` it. Checked 2026-11-01: the policies would delete 144 of 440 versions, none of them serving.
 - **Frontend fully non-root:** nginx's workers already run as `nginx`; going all the way means `nginx-unprivileged` on 8080 (change `nginx.conf`, the frontend's `container_port` in `run.tf` and the compose port together, apply before deploying).
 - **Dead-lettered messages** stay in `domain-events-dead-letter-pull` until someone reads them (the sweeper rescues the document behind them).
 - **WebSocket ticket replay** within 10 s on a different api instance would be accepted; not worth a shared store.
 
 ## Frontend
 
-- **Raw error messages are shown on the page.** Move the raw text to `console.error` and show an informative, user-friendly message instead (what failed, and what the officer can do: try again, cancel first, refresh, sign in again).
-  - **The root:** `services/uploadService/assertOk` (`request.ts`) throws `"<message> (<status>): <response body>"`, so the UI shows the status code and FastAPI's JSON, e.g. `Failed to save case (502): {"detail":"Failed to save the case. Check Supabase table access."}`. Every service function uses it (`cases.ts`, `documents.ts`, `detection.ts`, `notes.ts`, `caseMatch.ts`, `audit.ts`, about 35 calls), and about 30 places print `err.message` as is: `useCaseQueue`, `CaseQueuePage` (delete), `CaseRow`, `useCaseSettings`, `useCaseByNumber` → `App.tsx` `LoadError`, `useDocumentRowActions`, `useDocumentSelection` (delete, move), `useUploadSelection`, `useDocumentActions`, `useDocumentRecord`, `useDocumentTypeEditing`, `useFieldEditing`, `ExtractedInformationCard`, `useDetection` (five errors), `CaseAnalysisCard` (start), `NotesCard`, `AuditTrailCard`, `useCaseCost`, `Breadcrumbs`, `useDocumentPreviewUrl`, `DocumentPreviewModal`.
-  - **The fix:** one error class in `request.ts` that keeps the status and the parsed `detail`, logs the raw body to the console, and picks the message:
-    - 409 and 400: the backend's `detail` (already written for officers, e.g. "cancel it first");
-    - 401: "Your session has expired. Sign in again.";
-    - 404: "This case or document no longer exists.";
-    - 5xx or no response: "<what failed>. Something went wrong on our side; try again, and tell the team if it keeps happening."
-  - **Same pattern outside it:** `CreateCasePage.tsx` builds its own `(<status>): <body>` message; `detection.ts` `runIndividualDetectionCheck` shows a 409's raw body.
-  - **Backend errors stored and shown as is:**
-    - `CaseAnalysisCard` prints `analysis.error`, which `case_pipeline/service.py` stores as `"<ExceptionType>: <message>"`;
-    - `DocumentSummaryCard` shows `failure_reason` under a friendly title (`formatters.describeFailureReason`) but also prints the raw reason (e.g. `Unhandled processing error: ...`);
-    - `AuditTrailCard` shows `failure_reason` and stringifies object values in field changes;
-    - a crashed detection report comes back as a 502 `"Detection failed: <ExceptionType>: ..."`.
-
-    Show a plain sentence, and keep the raw text in the console (or behind a "Details" toggle).
-  - **Leave alone:** the developer panels that print JSON on purpose (`LangGraphTracePanel`, `CaseAnalysisTracePanel`, the individual check results in `DetectionPanel`, all `debug-*`).
-  - The mock backend (`e2e/support/mockBackend.ts`) and any spec that matches error text change with it.
 - **Dev StrictMode** fires some document-page requests twice.

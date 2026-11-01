@@ -61,16 +61,18 @@ resource "google_cloud_run_v2_service" "role" {
       content {
         name  = "collector"
         image = var.gmp_sidecar_image
+        # Cloud Run turns the boost on for the roles' sidecar; set here so plans stop reporting it.
         resources {
-          limits   = { cpu = "500m", memory = "256Mi" }
-          cpu_idle = true
+          limits            = { cpu = "500m", memory = "256Mi" }
+          cpu_idle          = true
+          startup_cpu_boost = true
         }
       }
     }
   }
 
   lifecycle {
-    ignore_changes = [template[0].containers[0].image, client, client_version]
+    ignore_changes = [template[0].containers[0].image, client, client_version, scaling]
   }
 
   depends_on = [google_secret_manager_secret_iam_member.access]
@@ -159,7 +161,7 @@ resource "google_cloud_run_v2_service" "kong" {
   }
 
   lifecycle {
-    ignore_changes = [template[0].containers[0].image, client, client_version]
+    ignore_changes = [template[0].containers[0].image, client, client_version, scaling]
   }
 
   depends_on = [google_secret_manager_secret_version.kong_gmp_config, google_secret_manager_secret_iam_member.kong_gmp_config]
@@ -195,7 +197,7 @@ resource "google_cloud_run_v2_service" "frontend" {
   }
 
   lifecycle {
-    ignore_changes = [template[0].containers[0].image, client, client_version]
+    ignore_changes = [template[0].containers[0].image, client, client_version, scaling]
   }
 }
 

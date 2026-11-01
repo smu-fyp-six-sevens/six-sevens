@@ -98,14 +98,15 @@ resource "google_cloud_run_v2_service" "grafana" {
       image = var.grafana_proxy_image
       args  = ["--web.listen-address=:9090", "--query.project-id=${var.project_id}"]
       resources {
-        limits   = { cpu = "500m", memory = "256Mi" }
-        cpu_idle = true
+        limits            = { cpu = "500m", memory = "256Mi" }
+        cpu_idle          = true
+        startup_cpu_boost = true
       }
     }
   }
 
   lifecycle {
-    ignore_changes = [template[0].containers[0].image, client, client_version]
+    ignore_changes = [template[0].containers[0].image, client, client_version, scaling]
   }
 
   depends_on = [google_secret_manager_secret_version.grafana_admin, google_secret_manager_secret_iam_member.grafana_admin]

@@ -4,7 +4,7 @@ Creates everything the services need on GCP (design: `CLOUD_ARCHITECTURE_PLAN.md
 
 | File | What |
 |---|---|
-| `main.tf` | APIs, Artifact Registry (with cleanup policies, in dry-run mode), the role table (size, scaling, secrets, environment per backend role) |
+| `main.tf` | APIs, Artifact Registry (with cleanup policies), the role table (size, scaling, secrets, environment per backend role) |
 | `iam.tf` | a service account per service, Secret Manager secrets and who may read each, publish rights, metric writing, Pub/Sub's service agent |
 | `pubsub.tf` | `domain-events`, its dead-letter topic, one filtered push subscription per role (filters from `subscriptions.json`, exported by `python -m app.events.types`), the Cloud Scheduler job for the sweeper |
 | `run.tf` | Cloud Run: the five backend roles and Kong (each with the Managed Prometheus sidecar), the frontend |
@@ -19,8 +19,7 @@ Services are created on a placeholder image (Cloud Run's "Congratulations" page)
 
 ## Open
 
-- **Billed cost in Grafana.** The Cloud Billing export to `billing_export` is on (the dataset lists `billing-export-bigquery@system.gserviceaccount.com` as an owner). Once `bq ls fyp-six-sevens:billing_export` shows a `gcp_billing_export_v1_...` table, set `billing_export_table = "<that name>"` in `terraform.tfvars` and `terraform apply`. The Cost dashboard's "Billed by Google" row then fills in (it needs the Grafana 12 image, deployed by the next push).
-- **Artifact Registry cleanup** is in dry-run mode: see `PENDING_WORK.md`.
+- **Artifact Registry cleanup:** turned on in `main.tf`, waiting for `terraform apply` (checked as in "Problems met").
 
 ## One-time setup (already done for this project; for a new one)
 
@@ -94,4 +93,6 @@ A changed secret reaches a service on its next revision (the next deploy, or `gc
 | `terraform apply` wants to destroy and recreate a subscription | Its filter changed (filters are immutable) | Expected after an event-type change; apply when nothing is processing |
 | Grafana panels say "No data" for Cloud Run or Pub/Sub only | The query proxy can't read Cloud Monitoring | Check the `grafana` service's `prometheus` container logs; its account needs `roles/monitoring.viewer` |
 | Grafana: "BigQuery plugin failed … 404 loading react/jsx-runtime" | The plugin was newer than Grafana supported (`grafana cli` doesn't enforce plugin requirements) | Grafana 12.4.10 with the plugin pinned to 3.4.6 (`deploy/grafana/Dockerfile`); bump them together |
+| A plan updates every Cloud Run service though nothing changed: drops a service-level `scaling` block (min 0) and turns off a sidecar's `startup_cpu_boost` | Cloud Run reports a service-wide scaling block the config doesn't set, and turns the boost on for the roles' and Grafana's sidecars | `scaling` is in each service's `ignore_changes`, and the boost is set on those sidecars |
+| Artifact Registry's cleanup dry run logs nothing | Its results didn't appear in Cloud Logging | Apply the policies to `gcloud artifacts docker images list ... --include-tags` and compare with each serving revision's `spec.containers[].image` digests |
 | `'terraform' is not recognized` | The terminal started before winget put Terraform on the PATH | Restart VS Code fully, or use a new Command Prompt |
