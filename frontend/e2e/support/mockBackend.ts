@@ -69,6 +69,7 @@ function missingRequiredFields(document: { document_type: string | null; extract
  *   detection-report-{c028,clean,inconclusive}.json  test_regression_detection.py
  *   case-risk-sprint4.json          test_regression_case_risk.py
  *   case-views.json                 test_regression_case_views.py (a case's risk and additional documents)
+ *   detection-metrics-sprint5.json  test_regression_detection_metrics.py (the Accuracy tab's figures)
  * The simpler rules are mirrored here, each marked with the backend function
  * it copies (analysis readiness, the documents status, which documents can be
  * approved, rejected, edited, re-typed, deleted, moved, retried or cancelled,
@@ -341,8 +342,12 @@ export class MockBackend {
   uploadOutcomes: Record<string, UploadOutcome> = {};
   /** When set, upload-batch waits for this before answering (to observe "Uploading"). */
   uploadGate: Promise<void> | null = null;
+  /** When set, a detection cancel is recorded at once but answered only after this (to have the worker's snapshot arrive first). */
+  cancelGate: Promise<void> | null = null;
   /** Backend-computed checklists for exact document sets (see ChecklistVariant); loadFixture registers them. */
   checklists: ChecklistVariant[] = [];
+  /** GET /detection-metrics as the backend computed it (detection-metrics-sprint5.json); null: no reviews yet. */
+  detectionMetrics: unknown = null;
   /** Credentials /auth/login accepts. */
   credentials = { username: 'officer', password: 'correct-password' };
   /** When true the session has expired: like require_auth, every call but /auth/login answers 401. */
@@ -605,9 +610,26 @@ export class MockBackend {
       return reviews([{ ...(body as object), reviewer: 'officer', updated_at: '2026-10-31T00:00:00Z' }]);
     }
     if (method === 'GET' && path === '/detection-metrics') {
-      return json({
+      return json(this.detectionMetrics ?? {
         overall: emptyMetrics(), cases_reviewed: 0, documents_reviewed: 0,
         target_precision: 0.8, target_recall: 0.8, min_reviews: 5,
+      });
+    }
+    // Like routers/cases.py download_case_report: the PDF, named by case_report.filename_for. The report's content
+    // is covered by the backend's test_regression_case_report.py.
+    const reportMatch = path.match(/^\/cases\/([^/]+)\/report\.pdf$/);
+    if (reportMatch && method === 'GET') {
+      const found = this.cases.find((c) => c.id === reportMatch[1]);
+      if (!found) return json({ detail: 'Case not found' }, 404);
+      return route.fulfill({
+        status: 200,
+        headers: {
+          ...corsHeaders(),
+          'access-control-expose-headers': 'Content-Disposition',
+          'content-disposition': `attachment; filename="${found.greenlink_case_id} Case Report.pdf"`,
+        },
+        contentType: 'application/pdf',
+        body: MINIMAL_PDF,
       });
     }
 
@@ -682,6 +704,12 @@ export class MockBackend {
       if (found.status !== 'case_analysed') {
         return json({ detail: 'Only an analysed case, with its findings evaluated, can be finalised.' }, 409);
       }
+      // Like routers/cases.py finalise_case: the change is recorded in the audit trail as the officer's.
+      this.auditEvents.push({
+        event_id: `case.finalised-${found.id}`, type: 'case.finalised', occurred_at: new Date().toISOString(),
+        actor_type: 'user', actor: this.credentials.username, case_id: found.id, document_id: null,
+        outcome: 'success', started_at: null, duration_ms: null, detail: { from: found.status },
+      });
       found.status = 'finalised';
       return json(found);
     }
@@ -937,6 +965,7 @@ export class MockBackend {
         this.detectionErrors[documentId] = 'Cancelled by loan officer';
         document.status = this.detectionReports[documentId] ? 'detected' : 'approved';
         document.has_detection_error = true;
+        if (this.cancelGate) await this.cancelGate;
         return json({ status: queued ? 'cancelled' : 'cancelling' });
       }
       // Same rules as routers/detection.py retry_document_detection: on an approved or detected document, after a
@@ -1008,6 +1037,11 @@ export class MockBackend {
 function emptyMetrics() {
   return { correct: 0, wrong: 0, missed: 0, precision: null, recall: null, by_check: [] };
 }
+
+/** A one-page blank PDF: what the browser saves when the officer downloads a case report. */
+const MINIMAL_PDF =
+  '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
+  '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n';
 
 function corsHeaders(): Record<string, string> {
   return {

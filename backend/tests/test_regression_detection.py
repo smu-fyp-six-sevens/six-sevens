@@ -75,6 +75,8 @@ class Specialist:
     # finding ids or tool names it dismisses as false positives
     dismiss: set[str] = field(default_factory=set)
     summary: str = "Reviewed within my expertise."
+    # The specialist's confidence in its review and in each assessment (0: it gave none).
+    confidence: float = 0.0
 
 
 @dataclass
@@ -129,12 +131,13 @@ def _assess(script: Specialist, messages: list[BaseMessage]) -> dict:
             keys = (finding["id"], result["tool"])
             if any(key in script.dismiss for key in keys):
                 assessments.append({"finding_id": finding["id"], "dismiss": True, "severity": None,
-                                    "rationale": "False positive for this document."})
+                                    "rationale": "False positive for this document.", "confidence": script.confidence})
                 continue
             severity = next((script.rate[key] for key in keys if key in script.rate), script.severity)
             assessments.append({"finding_id": finding["id"], "dismiss": False, "severity": severity,
-                                "rationale": f"Rated {severity}."})
-    return {"summary": script.summary, "assessments": assessments, "uncertain": False, "uncertainty_reason": None}
+                                "rationale": f"Rated {severity}.", "confidence": script.confidence})
+    return {"summary": script.summary, "confidence": script.confidence, "assessments": assessments,
+            "uncertain": False, "uncertainty_reason": None}
 
 
 def _text(content) -> str:
@@ -266,20 +269,16 @@ def ai(monkeypatch) -> DetectionAI:
     return script
 
 
-@pytest.fixture
-def store(monkeypatch) -> FakeStore:
-    fake = FakeStore()
+def wire_store(monkeypatch, fake: FakeStore) -> None:
+    """Puts the in-memory store in place of the database and storage the detection graph and its tools use."""
     for module in ("app.langgraph.detection.graph", "app.langgraph.detection.tools"):
         monkeypatch.setattr(f"{module}.document_repository", fake)
         monkeypatch.setattr(f"{module}.extracted_fields_repository", fake)
     monkeypatch.setattr("app.langgraph.detection.tools.storage_service", fake)
     monkeypatch.setattr("app.langgraph.detection.graph.detection_results", fake)
-    # These fraud-tool regressions test each document in isolation. Identity
-    # matching is covered separately by test_detection_case_match.py.
-    monkeypatch.setattr(
-        "app.case_service.get_case_match_for_document",
-        lambda _document_id, **_kwargs: None,
-    )
+    # Detection ends by comparing the document with its case's identity; that has its own regression file
+    # (test_regression_case_match), so here each document is tested in isolation and the case is taken to match.
+    monkeypatch.setattr("app.case_service.get_case_match_for_document", lambda document_id, **_kwargs: None)
 
     async def bundled_holidays():
         return BUNDLED_HOLIDAYS
@@ -288,13 +287,13 @@ def store(monkeypatch) -> FakeStore:
     monkeypatch.setattr("app.fraud_detection.external_validation.runner.public_holidays", bundled_holidays)
     monkeypatch.setattr(trace, "_persist", lambda document_id: None)
     monkeypatch.setattr(trace, "get_persisted", lambda document_id: None)
-    # Detection ends by comparing the document with its case's identity; that has its own
-    # regression file (test_regression_case_match), so here the case is taken to match.
-    monkeypatch.setattr(
-        "app.case_service.get_case_match_for_document",
-        lambda document_id, **_kwargs: None,
-    )
     monkeypatch.setattr(findings_repository, "sync_document", lambda document_id, case_id, report: 0)
+
+
+@pytest.fixture
+def store(monkeypatch) -> FakeStore:
+    fake = FakeStore()
+    wire_store(monkeypatch, fake)
     return fake
 
 

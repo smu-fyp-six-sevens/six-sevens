@@ -1,5 +1,7 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
-import { loadFixture } from '../support/fixtures';
+import type { MockBackend } from '../support/mockBackend';
+import { loadFixture, readRegressionFixture } from '../support/fixtures';
 import type { AuditEvent } from '../../src/services/uploadService/types';
 
 /**
@@ -318,5 +320,102 @@ test.describe('Case audit trail', () => {
     await page.goto(`${fixture.caseUrl}?section=audit`);
 
     await expect(page.getByText('No audit events available yet.')).toBeVisible();
+  });
+});
+
+/**
+ * Sprint 5 regression (SCRUM-323), "Test Cases - Sprint 5.xlsx" Case Management sheet, Audit Trail (SCRUM-298):
+ * CM-064 – CM-074. The trail is the one the real endpoints and doc-worker record for an officer's work on the
+ * Anchorpoint case (audit-trail-sprint5.json, from test_regression_audit_trail.py): two utility bills uploaded, the
+ * first classified, its type confirmed, a field added and one edited, the second cancelled while extracting, the
+ * first approved and noted. The backend suite's officer is "test-user".
+ */
+test.describe('Case audit trail @sprint5 @SCRUM-298', () => {
+  const TRAIL = readRegressionFixture<AuditEvent[]>('audit-trail-sprint5.json');
+  const entry = (page: Page, action: string) => page.getByTestId('audit-entry').filter({ has: page.locator('.audit-action', { hasText: new RegExp(`^${action}$`) }) });
+
+  async function openTrail(page: Page, backend: MockBackend) {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    backend.auditEvents = structuredClone(TRAIL);
+    await page.goto(`${fixture.caseUrl}?section=audit`);
+    return fixture;
+  }
+
+  test('CM-064 / CM-074 the trail is this case\'s, every action oldest first @CM-064 @CM-074', async ({ page, backend }) => {
+    const fixture = await openTrail(page, backend);
+
+    await expect(page.getByTestId('audit-entry').locator('.audit-action')).toHaveText([
+      'Uploaded document',
+      'Uploaded document',
+      'Classified and extracted document',
+      'Confirmed document type',
+      'Added extracted field',
+      'Edited extracted fields',
+      'Cancelled document processing',
+      'Approved document',
+      'Added note',
+    ]);
+    expect(backend.requestsTo('GET', /^\/audit\/events\?/)[0].path).toContain(`case_id=${fixture.case.id}`);
+  });
+
+  test('CM-065 an upload shows the document, its time and the officer @CM-065', async ({ page, backend }) => {
+    const fixture = await openTrail(page, backend);
+
+    const upload = entry(page, 'Uploaded document').first();
+    await expect(upload.locator('.audit-document')).toHaveText(fixture.document('POR_UtilityBill').filename);
+    await expect(upload.locator('time')).toHaveAttribute('datetime', TRAIL[0].occurred_at);
+    await expect(upload.locator('time')).not.toBeEmpty();
+    await expect(upload.locator('.audit-officer')).toHaveText('By test-user');
+  });
+
+  test('CM-066 classification is the system\'s, started by the officer who uploaded @CM-066', async ({ page, backend }) => {
+    await openTrail(page, backend);
+
+    await expect(entry(page, 'Classified and extracted document').locator('.audit-officer')).toHaveText('System · started by test-user');
+  });
+
+  test('CM-067 confirming the document type is an entry by the officer @CM-067', async ({ page, backend }) => {
+    const fixture = await openTrail(page, backend);
+
+    const confirmed = entry(page, 'Confirmed document type');
+    await expect(confirmed.locator('.audit-document')).toHaveText(fixture.document('POR_UtilityBill').filename);
+    await expect(confirmed.locator('.audit-officer')).toHaveText('By test-user');
+  });
+
+  test('CM-068 / CM-069 adding and editing a field show the field and its values @CM-068 @CM-069', async ({ page, backend }) => {
+    await openTrail(page, backend);
+
+    await expect(entry(page, 'Added extracted field').getByTestId('audit-change')).toHaveText(['Customer Reference:(none)→KE-8801-2234']);
+    // Only the field that changed, though every field was saved.
+    await expect(entry(page, 'Edited extracted fields').getByTestId('audit-change')).toHaveText([
+      'Individual Address:10 Serangoon Avenue #10-40 Singapore 466208→21 Anchorvale Link #08-12 Singapore 545021',
+    ]);
+  });
+
+  test('CM-070 cancelling processing is an entry on that document, marked cancelled @CM-070', async ({ page, backend }) => {
+    const fixture = await openTrail(page, backend);
+
+    const cancelled = entry(page, 'Cancelled document processing');
+    await expect(cancelled.locator('.audit-document')).toHaveText(fixture.document('Company_UtilityBill').filename);
+    await expect(cancelled.locator('.audit-marker')).toHaveClass(/audit-marker--cancelled/);
+    await expect(cancelled.locator('.audit-officer')).toHaveText('By test-user');
+  });
+
+  test('CM-071 / CM-072 a note and an approval name the officer who made them @CM-071 @CM-072', async ({ page, backend }) => {
+    const fixture = await openTrail(page, backend);
+
+    for (const action of ['Added note', 'Approved document']) {
+      await expect(entry(page, action).locator('.audit-officer')).toHaveText('By test-user');
+      await expect(entry(page, action).locator('.audit-document')).toHaveText(fixture.document('POR_UtilityBill').filename);
+    }
+  });
+
+  test('CM-073 edits sit in time order among the other actions @CM-073', async ({ page, backend }) => {
+    await openTrail(page, backend);
+    await expect(page.getByTestId('audit-entry')).toHaveCount(TRAIL.length);
+
+    const times = await page.getByTestId('audit-entry').locator('time').evaluateAll((nodes) => nodes.map((n) => n.getAttribute('datetime')!));
+    expect(times).toEqual(TRAIL.map((e) => e.occurred_at));
+    expect([...times].sort()).toEqual(times);
   });
 });

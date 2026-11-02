@@ -1185,3 +1185,170 @@ test.describe('Case page: document actions, live updates and cost', () => {
     await expect(card.locator('details tbody tr').last()).toContainText('Case analysis');
   });
 });
+
+/**
+ * Sprint 5 regression (SCRUM-323), "Test Cases - Sprint 5.xlsx" Case Management sheet, View Case Overview
+ * (SCRUM-299): CM-037 – CM-049, on the captured Anchorpoint case (GLDB-02, 20 extracted documents). The app keeps a
+ * case's documents in two sections, Documents and Approved Documents; documents for manual review and rejected ones
+ * are cards within Documents, shown while there are any (see the Sprint 5 report on CM-041 / CM-046 / CM-048).
+ */
+test.describe('View case overview @sprint5 @SCRUM-299', () => {
+  const sectionNav = (page: Page) => page.getByRole('navigation', { name: 'Case sections' });
+  const openSection = (page: Page, name: RegExp) => sectionNav(page).getByRole('button', { name }).click();
+  const documentRow = (page: Page, filename: string) => page.getByRole('button', { name: `View ${filename}` });
+  const card = (page: Page, title: string) => page.locator('.documents-card', { has: page.locator('.documents-card-title', { hasText: title }) });
+
+  test('CM-037 the company name is shown when the case opens @CM-037', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+
+    await page.goto(fixture.caseUrl);
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(fixture.case.company_name!);
+  });
+
+  test('CM-038 a scored case shows its overall risk and score @CM-038', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const { risk } = CASE_VIEWS.scored;
+    Object.assign(fixture.case, { status: 'case_analysed', risk });
+
+    await page.goto(fixture.caseUrl);
+
+    const severity = page.locator('.case-overview-risk');
+    await expect(severity.locator('strong').first()).toHaveText(`${risk.level} risk`);
+    await expect(severity.getByLabel(`Risk score ${risk.score} out of 100`)).toBeVisible();
+  });
+
+  test('CM-039 before it is scored the case says so, with no score @CM-039', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+
+    await page.goto(fixture.caseUrl);
+
+    const severity = page.locator('.case-overview-risk');
+    await expect(severity.locator('strong').first()).toHaveText('Not scored yet');
+    await expect(severity).toContainText('Run case analysis after documents are approved and scanned');
+    await expect(severity.getByLabel(/^Risk score/)).toHaveCount(0);
+  });
+
+  test('CM-040 a long company name is cut with an ellipsis, in full on hover, without widening the page @CM-040', async ({ page, backend }) => {
+    const name = 'Brightwave Analytics and Data Consultancy Services Holdings International (Asia Pacific) Pte Ltd';
+    backend.cases.push(makeCase({ id: 'case-long', greenlink_case_id: 'GLDB-3040', company_name: name }));
+
+    await page.goto('/cases/GLDB-3040');
+
+    const title = page.getByRole('heading', { level: 1 });
+    await expect(title).toHaveText(name);
+    await expect(title).toHaveAttribute('title', name);
+    await expect(title).toHaveCSS('text-overflow', 'ellipsis');
+    await expect(page.getByRole('button', { name: 'Case actions' })).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('CM-041 / CM-042 a document moves from Documents to Approved Documents, or to Rejected, as its status changes @CM-041 @CM-042', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const noa = fixture.document('IRAS_NOA');
+    const fatca = fixture.document('FATCA');
+    await page.goto(`${fixture.caseUrl}?section=documents`);
+    await expect(documentRow(page, noa.filename)).toBeVisible();
+
+    noa.status = 'approved';
+    fatca.status = 'rejected';
+    backend.push(fixture.case.id);
+
+    await expect(documentRow(page, noa.filename)).toHaveCount(0);
+    await expect(card(page, 'Rejected Documents').getByRole('button', { name: `View ${fatca.filename}` })).toBeVisible();
+    await openSection(page, /^Approved Documents/);
+    await expect(card(page, 'Approved Documents').getByRole('button', { name: `View ${noa.filename}` })).toBeVisible();
+    await expect(card(page, 'Approved Documents').getByRole('button', { name: `View ${fatca.filename}` })).toHaveCount(0);
+  });
+
+  test('CM-043 each document shows its name, type and status @CM-043', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const noa = fixture.document('IRAS_NOA');
+
+    await page.goto(`${fixture.caseUrl}?section=documents`);
+
+    const row = documentRow(page, noa.filename);
+    await expect(row.locator('.document-filename')).toHaveText(noa.filename);
+    await expect(row.locator('.document-type-cell')).toHaveText('Notice of Assessment');
+    await expect(row.locator('.document-status-cell')).toContainText('Extracted');
+  });
+
+  test('CM-044 a document still being processed shows its in-progress status @CM-044', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const noa = fixture.document('IRAS_NOA');
+    noa.status = 'extracting';
+
+    await page.goto(`${fixture.caseUrl}?section=documents`);
+
+    await expect(documentRow(page, noa.filename).locator('.document-status-cell')).toContainText('Extracting…');
+  });
+
+  test('CM-045 selecting a document opens its details @CM-045', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const noa = fixture.document('IRAS_NOA');
+    await page.goto(`${fixture.caseUrl}?section=documents`);
+
+    await documentRow(page, noa.filename).click();
+
+    await expect(page).toHaveURL(new RegExp(`${fixture.documentUrl(noa)}$`));
+    await expect(page.getByText(noa.filename).first()).toBeVisible();
+  });
+
+  test('CM-046 / CM-047 a section with no documents says so: Approved Documents before any approval @CM-046 @CM-047', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+
+    await page.goto(`${fixture.caseUrl}?section=approved`);
+
+    await expect(page.getByText('No approved documents yet.')).toBeVisible();
+    await expect(page.getByText('Documents appear here once an officer approves them from the Documents tab.')).toBeVisible();
+    // Nothing rejected: Documents shows no Rejected Documents card at all, rather than an empty one.
+    await openSection(page, /^Documents/);
+    await expect(documentRow(page, fixture.document('IRAS_NOA').filename)).toBeVisible();
+    await expect(card(page, 'Rejected Documents')).toHaveCount(0);
+  });
+
+  test('CM-048 a case with no documents shows the upload area and empty Approved Documents @CM-048', async ({ page, backend }) => {
+    backend.cases.push(makeCase({ id: 'case-empty', greenlink_case_id: 'GLDB-3048', company_name: 'Empty Case Pte Ltd' }));
+
+    await page.goto('/cases/GLDB-3048?section=documents');
+
+    await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^View / })).toHaveCount(0);
+    await openSection(page, /^Approved Documents/);
+    await expect(page.getByText('No approved documents yet.')).toBeVisible();
+  });
+
+  test('CM-049 the open section is kept after a reload @CM-049', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    await page.goto(fixture.caseUrl);
+    await openSection(page, /^Approved Documents/);
+    await expect(page).toHaveURL(/section=approved/);
+
+    await page.reload();
+
+    await expect(sectionNav(page).getByRole('button', { name: /^Approved Documents/ })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByText('No approved documents yet.')).toBeVisible();
+  });
+});
+
+/**
+ * Sprint 5 regression (SCRUM-323), "Test Cases - Sprint 5.xlsx" Case Management sheet, Export Case Report
+ * (SCRUM-82): the download itself. What the PDF holds (CM-075 – CM-085) is the backend's
+ * test_regression_case_report.py, on the real report.
+ */
+test.describe('Export case report @sprint5 @SCRUM-82', () => {
+  test('CM-075 / CM-079 the case menu downloads the report as a PDF named by the case, before any analysis @CM-075 @CM-079', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    await page.goto(fixture.caseUrl);
+
+    await page.getByRole('button', { name: 'Case actions' }).click();
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('menuitem', { name: 'Download report' }).click(),
+    ]);
+
+    expect(download.suggestedFilename()).toBe('GLDB-02 Case Report.pdf');
+    expect(backend.requestsTo('GET', `/cases/${fixture.case.id}/report.pdf`)).toHaveLength(1);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
+});

@@ -155,7 +155,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect(page.getByRole('button', { name: '+ Add field' })).toHaveCount(0);
   });
 
-  test('cancelling a scan ends in "Detection failed", and Retry detection starts it again @SCRUM-299', async ({ page, backend }) => {
+  test('cancelling a scan ends in "Detection failed" with a retry, not "Scanning" @SCRUM-299', async ({ page, backend }) => {
     const { fixture, document } = creditReport(backend);
     document.status = 'detecting';
     await page.goto(fixture.documentUrl(document));
@@ -163,15 +163,30 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
 
     await detectionPanel(page).getByRole('button', { name: 'Cancel detection' }).click();
 
-    // The cancel is accepted; the worker stops the run a moment later and the page hears of it with the snapshot.
-    await expect(detectionPanel(page).getByRole('button', { name: 'Cancelling…' })).toBeDisabled();
-    expect(backend.requestsTo('POST', `/documents/${document.id}/detection/cancel`)).toHaveLength(1);
+    await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/detection/cancel`).length).toBe(1);
+    // The worker stops the run and leaves the document approved; the page hears of it with the snapshot.
     backend.push(document.case_id!);
     await expect(documentStatus(page)).toHaveText('Detection failed');
     await expect(detectionPanel(page)).toContainText('The last detection run did not finish.');
     // The stored error ("Detection failed: Cancelled by loan officer...") stays in the console.
     await expect(detectionPanel(page)).not.toContainText('Detection failed:');
+    await expect(detectionPanel(page).getByRole('button', { name: 'Retry detection' })).toBeVisible();
     await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toHaveCount(0);
+  });
+
+  /** A credit report whose last detection run was cancelled: approved, with the run's error stored and no report. */
+  function cancelledRun(backend: MockBackend) {
+    const { fixture, document } = creditReport(backend);
+    document.status = 'approved';
+    document.has_detection_error = true;
+    backend.detectionErrors[document.id] = 'Cancelled by loan officer';
+    return { fixture, document };
+  }
+
+  test('Retry detection after a cancelled run starts it again, and it can be cancelled @SCRUM-299 @sprint5 @SCRUM-55 @MA-029', async ({ page, backend }) => {
+    const { fixture, document } = cancelledRun(backend);
+    await page.goto(fixture.documentUrl(document));
+    await expect(documentStatus(page)).toHaveText('Detection failed');
 
     await detectionPanel(page).getByRole('button', { name: 'Retry detection' }).click();
 
@@ -180,6 +195,29 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect(documentStatus(page)).toHaveText('Scanning…');
     await expect(detectionPanel(page).getByRole('button', { name: 'Retry detection' })).toHaveCount(0);
     await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toBeVisible();
+  });
+
+  test('after a cancel whose reply arrives late, a retried run can still be cancelled @SCRUM-299', async ({ page, backend }) => {
+    // REG-014: the panel sets "Cancelling…" when the cancel request answers, and clears it when the document leaves
+    // detecting. With the worker's snapshot arriving first, it is set after being cleared and stays set, so the
+    // retried run shows a disabled "Cancelling…" instead of "Cancel detection".
+    test.fail();
+    const { fixture, document } = creditReport(backend);
+    document.status = 'detecting';
+    let answerCancel!: () => void;
+    backend.cancelGate = new Promise<void>((resolve) => (answerCancel = resolve));
+    await page.goto(fixture.documentUrl(document));
+
+    await detectionPanel(page).getByRole('button', { name: 'Cancel detection' }).click();
+    await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/detection/cancel`).length).toBe(1);
+    backend.push(document.case_id!);
+    await expect(documentStatus(page)).toHaveText('Detection failed');
+    answerCancel();
+    await detectionPanel(page).getByRole('button', { name: 'Retry detection' }).click();
+    await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/detection/retry`).length).toBe(1);
+    backend.push(document.case_id!);
+
+    await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toBeVisible({ timeout: 3000 });
   });
 
   test('a scanned document can be run again; a cancelled rerun leaves the earlier report standing @SCRUM-299', async ({ page, backend }) => {

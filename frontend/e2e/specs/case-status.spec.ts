@@ -26,7 +26,7 @@ const progressCard = (page: Page) => page.getByRole('region', { name: 'Case Stat
 const stageBadge = (page: Page) => progressCard(page).locator('.case-stage-badge');
 
 test.describe('Track case status @SCRUM-80', () => {
-  test('AC1 the case queue shows each case at its stage @SCRUM-80', async ({ page, backend }) => {
+  test('AC1 the case queue shows each case at its stage @SCRUM-80 @sprint5 @CM-089', async ({ page, backend }) => {
     seedCase(backend);
     backend.cases.push(makeCase({ id: 'case-new', greenlink_case_id: 'GLDB-1201', company_name: 'Newco Pte Ltd', status: 'fraud_detection' }));
     await page.goto('/cases');
@@ -35,7 +35,7 @@ test.describe('Track case status @SCRUM-80', () => {
     await expect(page.locator('.case-row').filter({ hasText: 'Newco' }).locator('.case-row-status')).toHaveText('Fraud Detection');
   });
 
-  test('AC1 the case page shows the current stage @SCRUM-80', async ({ page, backend }) => {
+  test('AC1 the case page shows the current stage @SCRUM-80 @sprint5 @CM-086', async ({ page, backend }) => {
     seedCase(backend);
     await page.goto('/cases/GLDB-1200');
 
@@ -43,7 +43,7 @@ test.describe('Track case status @SCRUM-80', () => {
     await expect(progressCard(page).locator('[aria-current="step"]')).toHaveText('Case Analysed');
   });
 
-  test('AC1 finalising moves the case to Finalised and locks it @SCRUM-80', async ({ page, backend }) => {
+  test('AC1 finalising moves the case to Finalised and locks it @SCRUM-80 @sprint5 @CM-087 @CM-090', async ({ page, backend }) => {
     seedCase(backend);
     await page.goto('/cases/GLDB-1200');
 
@@ -107,7 +107,7 @@ test.describe('Track case status @SCRUM-80', () => {
     await expect(page.getByRole('textbox', { name: 'New note' })).toBeVisible();
   });
 
-  test('a case that is not analysed cannot be finalised @SCRUM-80', async ({ page, backend }) => {
+  test('a case that is not analysed cannot be finalised @SCRUM-80 @sprint5 @CM-091', async ({ page, backend }) => {
     seedCase(backend, { status: 'pending_review' });
     await page.goto('/cases/GLDB-1200');
 
@@ -176,5 +176,40 @@ test.describe('Track case status @SCRUM-80', () => {
     await expect(progressCard(page).locator('[aria-current="step"]')).toHaveText(/Fraud Detection/);
     await progressCard(page).getByRole('button', { name: /View approved documents/ }).click();
     await expect(page).toHaveURL(/section=approved/);
+  });
+});
+
+/**
+ * Sprint 5 regression (SCRUM-323), "Test Cases - Sprint 5.xlsx" Case Management sheet, Track Case Status (SCRUM-80):
+ * CM-086 – CM-092. CM-086, CM-087, CM-089, CM-090 and CM-091 are the tests above, tagged @sprint5; these cover
+ * the change being recorded, and the stage reading the same wherever the case is shown.
+ */
+test.describe('Track case status @sprint5 @SCRUM-80', () => {
+  test('CM-088 finalising is recorded in the audit trail, by the officer @CM-088', async ({ page, backend }) => {
+    seedCase(backend);
+    await page.goto('/cases/GLDB-1200');
+    await progressCard(page).getByRole('button', { name: 'Finalise Case' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Finalise Case' }).click();
+    await expect(stageBadge(page)).toHaveText('Finalised');
+
+    await page.goto('/cases/GLDB-1200?section=audit');
+
+    const entry = page.getByTestId('audit-entry').filter({ hasText: 'Finalised case' });
+    await expect(entry.locator('.audit-officer')).toHaveText('By officer');
+  });
+
+  test('CM-089 / CM-092 after a change the case reads the same stage on its page, the queue and the dashboard @CM-089 @CM-092', async ({ page, backend }) => {
+    seedCase(backend);
+    await page.goto('/cases/GLDB-1200');
+    await progressCard(page).getByRole('button', { name: 'Finalise Case' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Finalise Case' }).click();
+    await expect(stageBadge(page)).toHaveText('Finalised');
+
+    await page.goto('/cases');
+    await expect(page.locator('.case-row').filter({ hasText: 'Acme Trading' }).locator('.case-row-status')).toHaveText('Finalised');
+
+    await page.goto('/dashboard?tab=cases');
+    await page.getByLabel('Date range').selectOption('All time');
+    await expect(page.getByRole('link', { name: 'Open case GLDB-1200' }).locator('[data-label="Status"]')).toHaveText('Finalised');
   });
 });
