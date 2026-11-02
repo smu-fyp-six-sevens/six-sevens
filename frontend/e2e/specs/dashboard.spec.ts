@@ -153,8 +153,7 @@ test.describe('Overall case dashboard @sprint5 @SCRUM-297', () => {
 
   test('CM-054 a case not yet scored shows a dash that says why, not a risk @CM-054', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
-    await openDashboard(page);
-    await casesTab(page).click();
+    await openCases(page);
 
     const unscored = page.getByRole('link', { name: 'Open case GLDB-8005' });
     await expect(unscored.locator('[data-label="Risk"] .processing-pending')).toHaveAttribute('title', 'Shown once the case has been analysed');
@@ -164,8 +163,7 @@ test.describe('Overall case dashboard @sprint5 @SCRUM-297', () => {
 
   test('CM-055 clicking a case opens its details @CM-055', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
-    await openDashboard(page);
-    await casesTab(page).click();
+    await openCases(page);
 
     await page.getByRole('link', { name: 'Open case GLDB-8001' }).click();
 
@@ -208,8 +206,7 @@ test.describe('Overall case dashboard @sprint5 @SCRUM-297', () => {
 
   test('CM-059 when no case matches the filters the list says so @CM-059', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
-    await openDashboard(page);
-    await casesTab(page).click();
+    await openCases(page);
 
     await showOnlyStatus(page, 'Finalised');
 

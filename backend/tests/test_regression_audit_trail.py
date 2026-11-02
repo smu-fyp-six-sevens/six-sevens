@@ -61,17 +61,12 @@ class TrailStore:
         return self.documents[row["id"]]
 
     def get_document(self, document_id, **kwargs):
-        document = self.documents.get(document_id)
-        if document is None:
-            return None
+        document = self.documents[document_id]
         values = {name: f.field_value for name, f in self.fields.get(document_id, {}).items()}
         return document.model_copy(update={"extracted_fields": values or None})
 
-    def update_status(self, document_id, status, *, expected_current_statuses=None, **kwargs):
-        document = self.documents[document_id]
-        if expected_current_statuses and document.status not in expected_current_statuses:
-            return False
-        self.documents[document_id] = document.model_copy(update={"status": status})
+    def update_status(self, document_id, status, **kwargs):
+        self.documents[document_id] = self.documents[document_id].model_copy(update={"status": status})
         return True
 
     def finish_extraction(self, document_id) -> None:

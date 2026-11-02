@@ -53,7 +53,7 @@ class ReportCase:
         self.analysis: CaseAnalysis | None = None
         self.notes: list[CaseNote] = []
 
-    def summary(self, case_id: str):
+    def summary(self):
         documents = [d.model_copy(update={"extracted_fields": {f.field_name: f.field_value for f in self.fields.get(d.id, [])}})
                      for d in self.documents]
         return case_service.build_summary(self.case, documents)
@@ -71,7 +71,7 @@ class ReportCase:
 
 def wire(monkeypatch, case: ReportCase) -> ReportCase:
     """Puts the case in place of the database reads gather() makes."""
-    monkeypatch.setattr(case_report.case_service, "get_case_summary", lambda case_id: case.summary(case_id))
+    monkeypatch.setattr(case_report.case_service, "get_case_summary", lambda case_id: case.summary())
     monkeypatch.setattr(case_report.document_repository, "list_documents", case.list_documents)
     monkeypatch.setattr(case_report.extracted_fields_repository, "get_extracted_fields_for_documents", case.fields_for)
     monkeypatch.setattr(case_report.analysis_service, "get_current", lambda case_id: case.analysis)
@@ -137,7 +137,8 @@ def test_a_report_exported_after_the_case_progresses_shows_the_latest_stage(repo
 
     after = flat(export(report_case))
 
-    assert "No case analysis has been run yet." in before and "Risk Assessment" not in before
+    assert "No case analysis has been run yet." in before
+    assert "Risk Assessment" not in before
     assert "No case analysis has been run yet." not in after
     assert "Risk Assessment" in after
     assert f"{SCORED_RISK.level} Risk" in after

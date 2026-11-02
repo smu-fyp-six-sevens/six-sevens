@@ -185,12 +185,17 @@ test.describe('Track case status @SCRUM-80', () => {
  * the change being recorded, and the stage reading the same wherever the case is shown.
  */
 test.describe('Track case status @sprint5 @SCRUM-80', () => {
-  test('CM-088 finalising is recorded in the audit trail, by the officer @CM-088', async ({ page, backend }) => {
+  /** The seeded analysed case, finalised from its Case Status card. */
+  async function finalised(page: Page, backend: MockBackend) {
     seedCase(backend);
     await page.goto('/cases/GLDB-1200');
     await progressCard(page).getByRole('button', { name: 'Finalise Case' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Finalise Case' }).click();
     await expect(stageBadge(page)).toHaveText('Finalised');
+  }
+
+  test('CM-088 finalising is recorded in the audit trail, by the officer @CM-088', async ({ page, backend }) => {
+    await finalised(page, backend);
 
     await page.goto('/cases/GLDB-1200?section=audit');
 
@@ -199,11 +204,7 @@ test.describe('Track case status @sprint5 @SCRUM-80', () => {
   });
 
   test('CM-089 / CM-092 after a change the case reads the same stage on its page, the queue and the dashboard @CM-089 @CM-092', async ({ page, backend }) => {
-    seedCase(backend);
-    await page.goto('/cases/GLDB-1200');
-    await progressCard(page).getByRole('button', { name: 'Finalise Case' }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Finalise Case' }).click();
-    await expect(stageBadge(page)).toHaveText('Finalised');
+    await finalised(page, backend);
 
     await page.goto('/cases');
     await expect(page.locator('.case-row').filter({ hasText: 'Acme Trading' }).locator('.case-row-status')).toHaveText('Finalised');

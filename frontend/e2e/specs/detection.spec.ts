@@ -217,6 +217,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/detection/retry`).length).toBe(1);
     backend.push(document.case_id!);
 
+    // A short wait: the expected failure needn't hold the run for the default timeout.
     await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toBeVisible({ timeout: 3000 });
   });
 

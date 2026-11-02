@@ -163,7 +163,7 @@ async def test_the_trace_is_read_back_from_storage_after_a_restart(ai, store, mo
     table: dict[str, dict] = {}
     monkeypatch.setattr(trace, "_persist", REAL_PERSIST)
     monkeypatch.setattr(trace, "_write_row", lambda snapshot: table.__setitem__(snapshot["document_id"], snapshot))
-    monkeypatch.setattr(trace, "get_persisted", lambda document_id: table.get(document_id))
+    monkeypatch.setattr(trace, "get_persisted", table.get)
     document_id = _credit_report_with_font_and_metadata_tampering(store)
     script_layout_and_digital(ai)
     await run_detection(document_id)
@@ -186,7 +186,8 @@ async def test_confidence_scores_and_findings_are_saved_with_the_completed_run(a
     report = await run_detection(document_id)
 
     saved = store.reports[document_id]
-    assert saved == report and saved["findings"]
+    assert saved == report
+    assert saved["findings"]
     confidences = {c["specialist"]: c["decision_confidences"][0]["confidence"] for c in saved["consulted"]}
     assert (confidences[LAYOUT], confidences[DIGITAL]) == (0.8, 0.9)
     font = next(f for f in saved["findings"] if f["tool"] == "font_consistency_tool")

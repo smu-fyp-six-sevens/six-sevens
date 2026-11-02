@@ -180,8 +180,7 @@ async def test_a_printed_total_that_differs_from_the_page_count_is_flagged(ai, s
     [finding] = page_findings(await check(ai, store, pdf, _fields(statement)))
 
     assert finding["check_code"] == "PAGE.NUMBERING"
-    assert "missing at the end" in finding["summary"]
-    assert "4" in finding["summary"]
+    assert finding["summary"] == "The document says 4 pages, but the last numbered page is 3: page 4 missing at the end"
 
 
 # --- Identifiers and carried balances --------------------------------------------------------------------
@@ -212,7 +211,8 @@ async def test_a_carried_and_brought_forward_balance_mismatch_is_flagged(ai, sto
     assert finding["check_code"] == "PAGE.CARRY_FORWARD"
     assert finding["pages"] == [1, 2]
     text = " ".join([finding["summary"], *finding["evidence"]])
-    assert "5,000.00" in text and "4,500.00" in text
+    assert "5,000.00" in text
+    assert "4,500.00" in text
 
 
 # --- Where pages came from ---------------------------------------------------------------------------------

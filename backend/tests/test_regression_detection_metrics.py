@@ -67,14 +67,15 @@ def dashboard_metrics(reviews: list[FindingReview]) -> dict:
     return response.json()
 
 
-def by_check(metrics: dict) -> dict[str, dict]:
-    return {c["check_name"]: c for c in metrics["overall"]["by_check"]}
+def by_check(summary: dict) -> dict[str, dict]:
+    """A summary's checks (a MetricsSummary: the dashboard's overall, or one document's), by name."""
+    return {c["check_name"]: c for c in summary["by_check"]}
 
 
 @pytest.mark.sprint5
 @pytest.mark.story("SCRUM-297", "CM-060")
 def test_each_check_shows_its_counts_and_its_false_positive_rate():
-    spelling = by_check(dashboard_metrics(brightwave_reviews()))["spelling_tool"]
+    spelling = by_check(dashboard_metrics(brightwave_reviews())["overall"])["spelling_tool"]
 
     assert (spelling["correct"], spelling["wrong"], spelling["missed"]) == (6, 4, 0)
     assert spelling["precision"] == 0.6  # 4 wrong of 10: a 40% false-positive rate
@@ -84,7 +85,7 @@ def test_each_check_shows_its_counts_and_its_false_positive_rate():
 @pytest.mark.story("SCRUM-297", "CM-061 / AE-015")
 def test_a_check_under_its_target_is_flagged_and_one_meeting_both_is_not():
     metrics = dashboard_metrics(brightwave_reviews())
-    checks = by_check(metrics)
+    checks = by_check(metrics["overall"])
 
     assert (metrics["target_precision"], metrics["target_recall"]) == (0.8, 0.8)
     assert checks["spelling_tool"]["flags"] == ["Precision below target"]
@@ -111,7 +112,7 @@ def test_a_check_that_misses_too_many_real_issues_is_flagged_on_recall():
 @pytest.mark.story("SCRUM-297", "CM-062")
 def test_a_check_with_fewer_than_five_reviews_is_marked_as_not_yet_reliable():
     metrics = dashboard_metrics(brightwave_reviews())
-    font = by_check(metrics)["font_consistency_tool"]
+    font = by_check(metrics["overall"])["font_consistency_tool"]
 
     assert metrics["min_reviews"] == 5
     assert (font["correct"], font["wrong"], font["missed"]) == (2, 0, 0)
@@ -134,7 +135,7 @@ def test_the_case_page_shows_each_documents_own_results_for_a_check():
     assert response.status_code == 200
     documents = response.json()["documents"]
 
-    spelling_on = {d: by_check({"overall": documents[d]}).get("spelling_tool") for d in documents}
+    spelling_on = {d: by_check(documents[d]).get("spelling_tool") for d in documents}
     assert (spelling_on[BANK_STATEMENT]["wrong"], spelling_on[BANK_STATEMENT]["precision"]) == (4, 0.0)
     assert (spelling_on[PAYSLIP]["correct"], spelling_on[PAYSLIP]["precision"]) == (6, 1.0)
     assert spelling_on[NOA] is None
@@ -147,7 +148,7 @@ def test_precision_and_recall_are_given_for_each_check_and_the_whole_system():
     metrics = dashboard_metrics(brightwave_reviews())
     overall = metrics["overall"]
 
-    assert set(by_check(metrics)) == {"spelling_tool", "font_consistency_tool", "numerical_checks_tool", "metadata_tool"}
+    assert set(by_check(overall)) == {"spelling_tool", "font_consistency_tool", "numerical_checks_tool", "metadata_tool"}
     # 13 correct of 22 reviewed findings; 13 caught of 14 real issues.
     assert (overall["correct"], overall["wrong"], overall["missed"]) == (13, 9, 1)
     assert (overall["precision"], overall["recall"]) == (0.5909, 0.9286)
@@ -157,7 +158,7 @@ def test_precision_and_recall_are_given_for_each_check_and_the_whole_system():
 @pytest.mark.sprint5
 @pytest.mark.story("SCRUM-297", "AE-014")
 def test_a_check_with_no_real_issues_has_no_recall_rather_than_zero_or_one_hundred():
-    metadata = by_check(dashboard_metrics(brightwave_reviews()))["metadata_tool"]
+    metadata = by_check(dashboard_metrics(brightwave_reviews())["overall"])["metadata_tool"]
 
     assert (metadata["correct"], metadata["missed"]) == (0, 0)
     assert metadata["recall"] is None  # shown as "Not measured"
