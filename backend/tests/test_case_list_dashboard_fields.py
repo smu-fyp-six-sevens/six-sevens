@@ -144,3 +144,18 @@ def test_the_accuracy_filters_join_each_review_to_its_case_in_the_database() -> 
     reviewed.gte.assert_called_once_with("cases.created_at", "2026-10-01")
     reviewed.gte.return_value.in_.assert_called_once_with("cases.status", ["case_analysed"])
 
+
+
+def test_a_case_cost_adds_up_every_costed_run_filed_under_it() -> None:
+    rows = [
+        {"id": "e1", "case_id": "case-1", "detail": {"llm_cost_usd": 0.12}},
+        # A failed run still cost something.
+        {"id": "e2", "case_id": "case-1", "detail": {"llm_cost_usd": 0.03}},
+        {"id": "e3", "case_id": "case-2", "detail": {"llm_cost_usd": 0.5}},
+        # A run recorded before costs were: not counted, and no case is listed for it alone.
+        {"id": "e4", "case_id": "case-3", "detail": {}},
+    ]
+    with patch("app.audit.fetch_all", return_value=rows), patch("app.audit.service_supabase_client"):
+        totals = audit.cost_usd_many(["case-1", "case-2", "case-3"])
+
+    assert totals == {"case-1": 0.15, "case-2": 0.5}

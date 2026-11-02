@@ -19,6 +19,8 @@ import { CaseCostCard } from './upload/CaseCostCard';
 import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
 import { CaseRiskCard } from './upload/CaseRiskCard';
 import { CaseOverview } from './upload/CaseOverview';
+import { SeverityCard } from './upload/SeverityGauge';
+import { SeverityCardSkeleton } from '../components/Skeletons';
 import { CaseSectionNav } from './upload/CaseSectionNav';
 import { useCaseReportDownload } from './upload/useCaseReportDownload';
 import { CharacterCount } from '../components/CharacterCount';
@@ -299,22 +301,27 @@ export default function UploadPage({
         />
 
         <div className="case-content">
+          {/* The case's severity and where it stands, side by side; the overview under them. */}
           {activeSection === 'summary' && (
-            <CaseStageCard
-              caseId={selectedCase.id}
-              stage={currentStage}
-              failure={stageFailure}
-              onChanged={(summary) => {
-                setStage(summary.status);
-                setStageFailure(summary.failure ?? null);
-                setFindingsToReview(summary.findings_to_review ?? null);
-              }}
-              onSelectSection={selectSection}
-              analysisRunning={analysisOverview?.status === 'running'}
-              caseLabel={selectedCase.caseNumber ?? undefined}
-              findingsToReview={findingsToReview}
-              missingRequirements={missingRequirements}
-            />
+            <div className="case-summary-top">
+              {snapshotLoaded ? <SeverityCard risk={risk} /> : <SeverityCardSkeleton />}
+
+              <CaseStageCard
+                caseId={selectedCase.id}
+                stage={currentStage}
+                failure={stageFailure}
+                onChanged={(summary) => {
+                  setStage(summary.status);
+                  setStageFailure(summary.failure ?? null);
+                  setFindingsToReview(summary.findings_to_review ?? null);
+                }}
+                onSelectSection={selectSection}
+                analysisRunning={analysisOverview?.status === 'running'}
+                caseLabel={selectedCase.caseNumber ?? undefined}
+                findingsToReview={findingsToReview}
+                missingRequirements={missingRequirements}
+              />
+            </div>
           )}
 
           {activeSection === 'summary' && (

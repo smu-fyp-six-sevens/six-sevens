@@ -82,6 +82,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/audit/costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Case Costs
+         * @description Claude spend at list price for each of these cases (repeat case_id), from the audit trail: the dashboard's
+         *     totals. A case with no costed run is absent. Runs a document had before being moved into a case are counted
+         *     with its old case; GET /audit/cases/{case_id}/cost has a case's exact breakdown.
+         */
+        get: operations["get_case_costs_audit_costs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/audit/events": {
         parameters: {
             query?: never;
@@ -4433,6 +4455,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseCost"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_case_costs_audit_costs_get: {
+        parameters: {
+            query?: {
+                case_id?: string[];
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
                 };
             };
             /** @description Validation Error */

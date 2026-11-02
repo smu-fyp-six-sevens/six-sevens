@@ -49,7 +49,8 @@ function isBBox(bbox: unknown): bbox is BBox {
   return Array.isArray(bbox) && bbox.length === 4 && bbox[2] > bbox[0] && bbox[3] > bbox[1];
 }
 
-function readingOrder(a: HighlightArea, b: HighlightArea): number {
+// Page, then top to bottom, then left to right.
+export function readingOrder(a: HighlightArea, b: HighlightArea): number {
   return a.page - b.page || a.bbox[1] - b.bbox[1] || a.bbox[0] - b.bbox[0];
 }
 

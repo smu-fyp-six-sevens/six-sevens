@@ -7,6 +7,8 @@ import { RefreshButton } from '../components/RefreshButton';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { InfoIcon, InfoLabel } from '../components/InfoTip';
 import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
+import { CoverageRings, FlagPills, RiskOverview } from './DashboardInsights';
+import { CasesOverTime, MostRequestedDocuments, NeedsAttention, ProcessingAndCost, type AttentionCase } from './DashboardCasePanels';
 import { CASE_STAGES, caseStageLabel, caseStageTone } from '../utils/caseStages';
 import { formatDuration } from './upload/processingTimes';
 import { formatDocumentType, type DetectionMetricsFilters } from '../services/uploadService';
@@ -25,6 +27,10 @@ const DASHBOARD_TABS: DashboardTab[] = ['Overview', 'Cases', 'Flags', 'Accuracy'
 interface MockCase {
   id: string;
   routeId?: string;
+  // A live case's id, for what the audit trail holds about it (its cost); absent for preview rows.
+  caseId?: string;
+  // A document held up past its time limit.
+  stuck?: boolean;
   applicant: string;
   submitted: string;
   status: Status;
@@ -92,6 +98,8 @@ const FLAG_SEVERITY: Record<string, FlagSummary['severity']> = {
 const CASES_PER_PAGE = 10;
 // Rows in each Overview insight panel, so the side-by-side panels stay the same height.
 const INSIGHT_ROWS = 6;
+// Document types are rings, four to a row: two rows before "Show all".
+const DOCUMENT_TYPE_ROWS = 8;
 
 // Page buttons to show: always the first and last, the current one and its neighbours, with gaps as null.
 function pageNumbers(current: number, count: number): Array<number | null> {
@@ -235,6 +243,8 @@ export default function DashboardPage({
         ...example,
         id: record.caseNumber || record.id,
         routeId: record.caseNumber || record.id,
+        caseId: record.id,
+        stuck: record.stuck ?? false,
         applicant: record.applicant,
         submitted: record.created_at?.slice(0, 10) || example.submitted,
         status: dashboardStatus(record.status),
@@ -284,12 +294,6 @@ export default function DashboardPage({
     count: casesInRange.filter((item) => item.status === status).length,
     label: <><span className={`case-status-dot tone-${statusTone(status)}`} aria-hidden="true" />{status}</>,
   }));
-
-  const commonFlags = useMemo(() => {
-    const counts = new Map<string, number>();
-    visibleCases.forEach((item) => item.flags.forEach((flag) => counts.set(flag, (counts.get(flag) ?? 0) + 1)));
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, INSIGHT_ROWS);
-  }, [visibleCases]);
 
   const byDocumentType = useMemo(() => {
     const counts = new Map<string, number>();
@@ -347,10 +351,21 @@ export default function DashboardPage({
     );
   };
 
-  const maxFlagCount = Math.max(1, ...commonFlags.map(([, count]) => count));
-  const maxDocCount = Math.max(1, ...byDocumentType.map(([, count]) => count));
+  // The commonest flags, most cases first, for the Overview.
+  const commonFlags = [...flagRows].sort((a, b) => b.cases.length - a.cases.length).slice(0, INSIGHT_ROWS);
   const flaggedCaseCount = visibleCases.filter((item) => item.flags.length > 0).length;
   const highFlagCount = flagRows.filter((item) => item.severity === 'High').length;
+  // Each case as Needs attention shows it: why it waits, its most serious flag, and what to request.
+  const attentionCases = useMemo<AttentionCase[]>(() => visibleCases.map((item) => {
+    const topFlag = item.flags
+      .map((name) => ({ name, severity: item.flagInfo?.[name]?.severity ?? FLAG_SEVERITY[name] ?? 'Medium' }))
+      .sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity])[0] ?? null;
+    return {
+      id: item.id, routeId: item.routeId, applicant: item.applicant, status: item.status, tone: statusTone(item.status),
+      stuck: item.stuck ?? false, submitted: item.submitted, risk: item.risk, score: item.score, topFlag,
+      toRequest: item.recommendedDocs ?? [],
+    };
+  }), [visibleCases]);
   const openCase = (item: MockCase) => navigate(`/cases/${encodeURIComponent(item.routeId || item.id)}`);
   const sortedCaseRows = useMemo(() => [...visibleCases].sort((a, b) => {
     // Unscored cases rank below Low, so they sit last for "Critical first" and first for "Low first".
@@ -400,7 +415,7 @@ export default function DashboardPage({
           {/* First load: placeholders in the dashboard's own layout, not the sample cases. The Accuracy tab loads its own figures. */}
           {isLoading && tab !== 'Accuracy' ? <DashboardSkeleton /> : <>
           {tab !== 'Flags' && tab !== 'Accuracy' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
-            <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-icon">▤</span><span className="stat-period">{range}</span></div><span className="stat-number">{visibleCases.length}</span><span className="stat-caption">Cases in view</span></article>
+            <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-period">{range}</span></div><span className="stat-number">{visibleCases.length}</span><span className="stat-caption">Cases in view</span></article>
             {STATUSES.map((status) => <article key={status} className="dashboard-stat-card"><div className="stat-top"><span className="stat-caption">{status}</span><span className={`case-status-dot tone-${statusTone(status)}`} /></div><span className="stat-number">{statusCounts[status]}</span><span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span></article>)}
           </section>}
           {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
@@ -408,25 +423,32 @@ export default function DashboardPage({
 
           {tab === 'Overview' && <>
           <section className="dashboard-insight-grid">
-            <article className="dashboard-panel">
+            <article className="dashboard-panel flag-insight-panel">
               <div className="panel-heading"><div><h2>Most common flags</h2><p>Issues raised across the cases in view</p></div><button className="text-button" onClick={() => setTab('Flags')}>View flags <span>→</span></button></div>
-              {commonFlags.length ? <div className="bar-list">{commonFlags.map(([flag, count], index) => <div className="bar-row" key={flag}><span className="bar-rank">{String(index + 1).padStart(2, '0')}</span><span className="bar-label">{flag}</span><span className="bar-track"><i style={{ width: `${count / maxFlagCount * 100}%` }} /></span><strong>{count}</strong></div>)}</div> : <p className="empty-insight">No flags in this date and status selection.</p>}
+              {commonFlags.length ? <FlagPills flags={commonFlags.map((flag) => ({ name: flag.name, severity: flag.severity, caseIds: flag.cases.map((item) => item.id) }))} caseCount={visibleCases.length} onOpen={() => setTab('Flags')} /> : <p className="empty-insight">No flags in this date and status selection.</p>}
             </article>
             <article className="dashboard-panel">
-              <div className="panel-heading"><div><h2>Documents by type</h2><p>Number of cases containing each document type</p></div>{byDocumentType.length > INSIGHT_ROWS && <button className="text-button" onClick={() => setShowAllDocTypes((value) => !value)}>{showAllDocTypes ? 'Show fewer' : `Show all ${byDocumentType.length}`}</button>}</div>
-              {byDocumentType.length ? <div className="bar-list">{(showAllDocTypes ? byDocumentType : byDocumentType.slice(0, INSIGHT_ROWS)).map(([type, count], index) => <div className="bar-row" key={type}><span className="bar-rank">{String(index + 1).padStart(2, '0')}</span><span className="bar-label">{type}</span><span className="bar-track"><i style={{ width: `${count / maxDocCount * 100}%` }} /></span><strong>{count}</strong></div>)}</div> : <p className="empty-insight">No documents in this date and status selection.</p>}
+              <div className="panel-heading"><div><h2>Documents by type</h2><p>Share of the cases in view that include each document type</p></div>{byDocumentType.length > DOCUMENT_TYPE_ROWS && <button className="text-button" onClick={() => setShowAllDocTypes((value) => !value)}>{showAllDocTypes ? 'Show fewer' : `Show all ${byDocumentType.length}`}</button>}</div>
+              {byDocumentType.length ? <CoverageRings types={showAllDocTypes ? byDocumentType : byDocumentType.slice(0, DOCUMENT_TYPE_ROWS)} caseCount={visibleCases.length} /> : <p className="empty-insight">No documents in this date and status selection.</p>}
             </article>
           </section>
 
           <section className="dashboard-lower-grid">
             <article className="dashboard-panel risk-snapshot-panel">
               <div className="panel-heading"><div><h2>Risk overview</h2><p>Current cases grouped by assessed risk level</p></div></div>
-              <div className="risk-snapshot">{(['Critical', 'High', 'Medium', 'Low'] as Risk[]).map((risk) => { const count = visibleCases.filter((item) => item.risk === risk).length; return <div key={risk} className={`risk-snapshot-row risk-${risk.toLowerCase()}`}><span className="risk-marker" /><span>{risk} risk</span><div className="risk-snapshot-track"><i style={{ width: `${visibleCases.length ? count / visibleCases.length * 100 : 0}%` }} /></div><strong>{count}</strong></div>; })}</div>
+              <RiskOverview cases={visibleCases} />
               <p className="snapshot-note"><InfoIcon /> Consider document findings, case status and review context alongside the risk score.</p>
             </article>
           </section>
+          <section className="dashboard-pair-grid">
+            <NeedsAttention cases={attentionCases} onOpen={(item) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`)} />
+            <MostRequestedDocuments cases={attentionCases} />
+          </section>
+          <section className="dashboard-pair-grid">
+            <CasesOverTime cases={visibleCases} since={dateLimit(range)} />
+            <ProcessingAndCost cases={visibleCases} isPreview={!caseRecords.length} />
+          </section>
           <DetectionAccuracySummary filters={accuracyFilters} onViewAll={() => setTab('Accuracy')} />
-          <CaseTable cases={visibleCases.slice(0, 5)} heading="Recent cases" onOpenCase={openCase} showRiskAnalysis />
           </>}
 
           {tab === 'Cases' && <>

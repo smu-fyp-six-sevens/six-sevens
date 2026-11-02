@@ -7778,6 +7778,74 @@
         ]
       }
     },
+    "/audit/costs": {
+      "get": {
+        "description": "Claude spend at list price for each of these cases (repeat case_id), from the audit trail: the dashboard's\ntotals. A case with no costed run is absent. Runs a document had before being moved into a case are counted\nwith its old case; GET /audit/cases/{case_id}/cost has a case's exact breakdown.",
+        "operationId": "get_case_costs_audit_costs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "case_id",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 500,
+              "title": "Case Id",
+              "type": "array"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "title": "Response Get Case Costs Audit Costs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Case Costs",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
     "/audit/events": {
       "get": {
         "description": "The audit trail, newest first, optionally for one case or document.",

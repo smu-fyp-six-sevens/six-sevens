@@ -579,6 +579,11 @@ export class MockBackend {
       this.cases.push(created);
       return json(created, 201);
     }
+    // Same as audit.cost_usd_many: each case's total, absent when nothing was costed.
+    if (method === 'GET' && path === '/audit/costs') {
+      const totals = url.searchParams.getAll('case_id').map((id) => [id, this.caseCost(id).total_usd] as const);
+      return json(Object.fromEntries(totals.filter(([, usd]) => usd > 0)));
+    }
     const costMatch = path.match(/^\/audit\/cases\/([^/]+)\/cost$/);
     if (costMatch && method === 'GET') {
       return json(this.caseCost(costMatch[1]));

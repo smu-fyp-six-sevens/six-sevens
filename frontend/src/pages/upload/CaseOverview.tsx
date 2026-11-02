@@ -43,10 +43,6 @@ function documentsByWorstFinding(findings: CaseRiskFinding[]): FlaggedDocument[]
   return [...groups.values()].sort((a, b) => compareFindings(a.findings[0], b.findings[0]) || b.points - a.points);
 }
 
-function riskTone(level: string | null | undefined): string {
-  return level ? level.toLowerCase() : 'unknown';
-}
-
 function documentStatus(document: DocumentRecord): { label: string; tone: string } {
   if (document.status === 'detected') return { label: 'Detection complete', tone: 'done' };
   if (document.status === 'detecting' || document.status === 'approved') return { label: 'Detection in progress', tone: 'progress' };
@@ -105,7 +101,6 @@ export function CaseOverview({
   caseId: string;
   onSelectSection: (section: CaseSection) => void;
 }) {
-  const scored = risk?.state === 'scored' && risk.level;
   // The officer's reviews of this case's findings (Risk Summary), as precision and recall. A case created without
   // reviews has no Detection Accuracy panel and no Review Findings step.
   const reviewsOn = reviewsRequired;
@@ -130,19 +125,7 @@ export function CaseOverview({
         <CaseOverviewSkeleton />
       ) : (
         <>
-          <section className="case-overview-topline" aria-label="Case risk and document counts">
-            <article className={`case-overview-risk case-overview-risk--${riskTone(risk?.level)}`}>
-              <div className="case-overview-risk-copy">
-                <span className="case-overview-stat-label">Overall Case Severity</span>
-                <strong>{scored ? `${risk.level} risk` : risk?.state === 'pending' ? 'Assessment in progress' : 'Not scored yet'}</strong>
-                <span>{scored ? 'Based on completed document checks' : risk?.state === 'failed' ? 'A document check failed to complete' : 'Run case analysis after documents are approved and scanned'}</span>
-              </div>
-              {scored && risk.score != null && (
-                <div className="case-overview-score" aria-label={`Risk score ${risk.score} out of 100`}>
-                  <strong>{risk.score}</strong><span>/100</span>
-                </div>
-              )}
-            </article>
+          <section className="case-overview-topline" aria-label="Document counts">
             <div className="case-overview-stats">
               <Stat label="Documents" value={approvedDocuments.length} detail={`of ${documents.length} approved`} />
               <Stat label="Awaiting Approval" value={awaitingApprovalCount} detail="Eligible to approve" tone="blue" onClick={() => onSelectSection('documents')} />
