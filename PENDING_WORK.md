@@ -64,11 +64,6 @@ Budgets are in `HOW_IT_WORKS.md` ยง8; database load is in `STABILITY_AUDIT.md` ย
 
 ## Cloud operations
 
-- **On 2026-11-03, check the Artifact Registry clean-up ran** (turned on 2026-11-02; tightened the same day to keep 5 versions per image, delete after 7 days, untagged after 1). On 2026-11-02 `app` held 17,590 MB in 444 versions; the policies should delete about 300 of them.
-  - Size: `gcloud artifacts repositories describe app --location asia-southeast1 --project fyp-six-sevens`, the "Repository Size" line. It should be well under 17,590 MB.
-  - Versions: `gcloud artifacts docker images list asia-southeast1-docker.pkg.dev/fyp-six-sevens/app --include-tags --format="value(version)" | find /c /v ""` (cmd) should be about 150.
-  - The site still loads, and each service's serving revision is unchanged.
-  - If nothing changed, give it another day. The JSON (`--format=json`) leaves out `cleanupPolicyDryRun` when it's off, which it was on 2026-11-02.
 - **Frontend fully non-root:** nginx's workers already run as `nginx`; going all the way means `nginx-unprivileged` on 8080 (change `nginx.conf`, the frontend's `container_port` in `run.tf` and the compose port together, apply before deploying).
 - **Dead-lettered messages** stay in `domain-events-dead-letter-pull` until someone reads them (the sweeper rescues the document behind them).
 - **WebSocket ticket replay** within 10 s on a different api instance would be accepted; not worth a shared store.
