@@ -16,6 +16,16 @@ function Card({ tall = false }: { tall?: boolean }) {
   );
 }
 
+// The Case Summary's severity card (pages/upload/SeverityGauge.tsx) while the first snapshot arrives.
+export function SeverityCardSkeleton() {
+  return (
+    <div role="status" aria-busy="true">
+      <span className="sr-only">Loading the case's severity…</span>
+      <Card tall />
+    </div>
+  );
+}
+
 // The summary dashboard while the case's first snapshot arrives.
 export function CaseOverviewSkeleton() {
   return (

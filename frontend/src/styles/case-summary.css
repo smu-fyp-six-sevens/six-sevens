@@ -226,10 +226,11 @@
   opacity: 1;
 }
 
-.risk-gauge-band--low { background: var(--orange-83); }
-.risk-gauge-band--medium { background: var(--orange-69); }
-.risk-gauge-band--high { background: var(--red-47); }
-.risk-gauge-band--critical { background: var(--red-29); }
+/* --band is each level's colour, for the bar here and the Case Summary's dial (an SVG stroke). */
+.risk-gauge-band--low { --band: var(--orange-83); background: var(--band); }
+.risk-gauge-band--medium { --band: var(--orange-69); background: var(--band); }
+.risk-gauge-band--high { --band: var(--red-47); background: var(--band); }
+.risk-gauge-band--critical { --band: var(--red-29); background: var(--band); }
 
 .risk-gauge-marker {
   position: absolute;
@@ -410,6 +411,46 @@
 .risk-finding-locate:hover {
   border-color: var(--blue-77);
   background: var(--blue-97);
+}
+
+/* A row's places on the document, stepped through while the row is the one shown. */
+.risk-finding-places {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 1px;
+  border: 1px solid var(--blue-77);
+  border-radius: 5px;
+  background: var(--blue-97);
+  color: var(--blue-43);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.risk-finding-places button {
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.risk-finding-places button:hover {
+  background: var(--white);
+}
+
+.risk-finding-places button:focus-visible {
+  outline: 2px solid var(--blue-45);
+  outline-offset: 1px;
 }
 
 .risk-finding-unplaced {

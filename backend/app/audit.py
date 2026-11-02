@@ -165,6 +165,29 @@ class CaseCost(BaseModel):
     timings: list[CaseCostTiming]
 
 
+def cost_usd_many(case_ids: list[str]) -> dict[str, float]:
+    """
+    Each case's Claude spend at list price, for the dashboard: every costed run filed under the case (finished,
+    failed, cancelled, retried and rerun alike). Unlike case_cost, a document's runs from before it was moved into
+    the case stay with its old case: close enough for totals across many cases, in one query per 100 cases rather
+    than several per case. Cases with no costed run are absent. Sync: run on a worker thread.
+    """
+    rows: list[dict] = []
+    for start in range(0, len(case_ids), _CASE_CHUNK):
+        chunk = case_ids[start : start + _CASE_CHUNK]
+        rows += fetch_all(
+            lambda chunk=chunk: service_supabase_client().table(_TABLE)
+            .select("id, case_id, detail").in_("case_id", chunk).in_("action", _COSTED),
+            "id",
+        )
+    totals: dict[str, float] = {}
+    for row in rows:
+        cost = (row.get("detail") or {}).get("llm_cost_usd")
+        if cost is not None:
+            totals[row["case_id"]] = totals.get(row["case_id"], 0.0) + float(cost)
+    return {case_id: round(total, 6) for case_id, total in totals.items()}
+
+
 def _events(build) -> list[Event]:
     return [Event.from_audit_row(row) for row in fetch_all(build, "id")]
 

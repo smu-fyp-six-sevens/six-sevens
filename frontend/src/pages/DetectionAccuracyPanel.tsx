@@ -45,7 +45,8 @@ function checkStatus(check: CheckMetrics): CheckStatus {
 
 const asPercent = (rate: number) => `${Math.round(rate * 100)}%`;
 
-// A rate as a bar against its target line. With nothing to measure yet, only the reason (Rate explains it on hover).
+// A rate as a bar against its target line, green at or above it and red below. With nothing to measure yet, only
+// the reason (Rate explains it on hover).
 function RateMeter({ rate, kind, target, large = false }: { rate: number | null; kind: RateKind; target: number; large?: boolean }) {
   if (rate === null) {
     return <div className="rate-meter rate-meter--empty"><Rate rate={null} kind={kind} className="rate-meter-value" /></div>;
@@ -54,10 +55,46 @@ function RateMeter({ rate, kind, target, large = false }: { rate: number | null;
     <div className={`rate-meter${large ? ' rate-meter--large' : ''}`}>
       <Rate rate={rate} kind={kind} className="rate-meter-value" />
       <span className="rate-meter-track" aria-hidden="true">
-        <i style={{ width: `${Math.max(rate * 100, 2)}%` }} />
+        <i className={rate >= target ? 'rate-fill--met' : 'rate-fill--below'} style={{ width: `${Math.max(rate * 100, 2)}%` }} />
         <span className="rate-meter-target" style={{ left: `${target * 100}%` }}>
           {large && <span className="rate-meter-target-label">Target {asPercent(target)}</span>}
         </span>
+      </span>
+    </div>
+  );
+}
+
+// A rate as a ring filled to it, green at or above its target and red below, with a tick at the target and the
+// rate (red below target) in the middle. With
+// nothing to measure yet, an empty ring and Rate's "Not measured".
+function RateRing({ rate, kind, target, label }: { rate: number | null; kind: RateKind; target: number; label: string }) {
+  // The target's tick across the ring. The ring is drawn from 3 o'clock and turned a quarter back (CSS) so it
+  // starts at the top; the tick is placed the same way.
+  const angle = target * 2 * Math.PI;
+  const at = (radius: number) => [50 + radius * Math.cos(angle), 50 + radius * Math.sin(angle)];
+  const [[x1, y1], [x2, y2]] = [at(31), at(49)];
+  return (
+    <div className="rate-ring">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle className="rate-ring-track" cx="50" cy="50" r="40" />
+        {rate !== null && (
+          <circle
+            className={`rate-ring-fill ${rate >= target ? 'rate-fill--met' : 'rate-fill--below'}`}
+            cx="50"
+            cy="50"
+            r="40"
+            pathLength={100}
+            strokeDasharray={`${Math.max(rate * 100, 1)} 100`}
+          />
+        )}
+        <line className="rate-ring-target" x1={x1} y1={y1} x2={x2} y2={y2} />
+      </svg>
+      <span className="rate-ring-value">
+        <Rate rate={rate} kind={kind} target={target} />
+      </span>
+      <span className="rate-ring-label">
+        <InfoLabel label={label} tip={RATE_MEANING[kind]} />
+        <small>Target {asPercent(target)}</small>
       </span>
     </div>
   );
@@ -199,8 +236,9 @@ export function DetectionAccuracyPanel({ filters }: { filters: DetectionMetricsF
   );
 }
 
-// The dashboard Overview's panel: overall precision and recall, and the checks most in need of attention
-// (flagged first, then the most reviewed). The Accuracy tab has the full table.
+// The dashboard Overview's panel: overall precision and recall as rings against their targets with the reviews'
+// mix beside them, and the checks most in need of attention (flagged first, then the most reviewed), each rate a
+// bar against its target. The Accuracy tab has the full table.
 export function DetectionAccuracySummary({ filters, onViewAll }: { filters: DetectionMetricsFilters; onViewAll: () => void }) {
   const { metrics, error } = useDetectionMetrics(filters);
 
@@ -220,18 +258,21 @@ export function DetectionAccuracySummary({ filters, onViewAll }: { filters: Dete
         <p className="empty-insight" role="alert">{error}</p>
       ) : (
         <>
-          <div className="classification-overall">
-            <span><InfoLabel label="Precision" tip={RATE_MEANING.precision} /> <strong><Rate rate={overall?.precision ?? null} kind="precision" /></strong></span>
-            <span><InfoLabel label="Recall" tip={RATE_MEANING.recall} /> <strong><Rate rate={overall?.recall ?? null} kind="recall" /></strong></span>
+          <div className="accuracy-rings">
+            <RateRing rate={overall?.precision ?? null} kind="precision" target={metrics?.target_precision ?? 0.8} label="Precision" />
+            <RateRing rate={overall?.recall ?? null} kind="recall" target={metrics?.target_recall ?? 0.8} label="Recall" />
+            {overall && reviewed > 0 && <ReviewMix check={overall} />}
           </div>
-          {attention.length > 0 && (
+          {attention.length > 0 && metrics && (
             <div className="classification-grid">
               {attention.map((check) => (
                 <article key={`${check.scope}-${check.check_name}`} className="classification-class class-check">
                   <div className="classification-risk"><i />{formatCheck(check.check_name)}</div>
-                  <div className="classification-values">
-                    <span>Precision <b><Rate rate={check.precision} kind="precision" /></b></span>
-                    <span>Recall <b><Rate rate={check.recall} kind="recall" /></b></span>
+                  <div className="accuracy-check-meters">
+                    <span>Precision</span>
+                    <RateMeter rate={check.precision} kind="precision" target={metrics.target_precision} />
+                    <span>Recall</span>
+                    <RateMeter rate={check.recall} kind="recall" target={metrics.target_recall} />
                   </div>
                 </article>
               ))}
@@ -242,7 +283,7 @@ export function DetectionAccuracySummary({ filters, onViewAll }: { filters: Dete
               ? 'Loading…'
               : reviewed === 0
                 ? 'No findings reviewed yet. Officers review findings in each case’s Risk Summary.'
-                : `${metrics.cases_reviewed} ${metrics.cases_reviewed === 1 ? 'case' : 'cases'} reviewed · ${overall!.correct} correct · ${overall!.wrong} wrong · ${overall!.missed} missed`}
+                : `From ${metrics.cases_reviewed} reviewed ${metrics.cases_reviewed === 1 ? 'case' : 'cases'}`}
           </p>
         </>
       )}

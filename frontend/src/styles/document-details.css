@@ -941,6 +941,217 @@
   .finding-highlight.is-active { animation: none; }
 }
 
+/* X-ray (components/XrayView.tsx), the document in the Risk Summary's review: the page under a navy wash with
+   the flagged areas cut out of it, their boxes glowing in their severity's colour, a scan line sweeping the
+   pane once, and a bar at the foot to step through them. */
+.xray-stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.xray-stage > .preview-modal-body {
+  background: var(--slate-20);
+}
+
+.finding-highlight-shade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Nothing over the page until it has drawn; then the shade and glow fade in together. */
+.xray-stage .finding-highlight-layer {
+  opacity: 0;
+  transition: opacity 0.5s ease-out;
+}
+
+.xray-stage--ready .finding-highlight-layer {
+  opacity: 1;
+}
+
+.xray-stage:not(.xray-stage--ready) .finding-highlight {
+  pointer-events: none;
+}
+
+.finding-highlight-shade > rect {
+  fill: rgba(18, 32, 61, 0.62);
+}
+
+/* The flagged areas glow, breathing gently, so the eye finds them on a shaded page. */
+.finding-highlight-layer--shaded .finding-highlight {
+  background: transparent;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--highlight) 60%, transparent), 0 0 14px 2px color-mix(in srgb, var(--highlight) 55%, transparent);
+  animation: xray-glow 2.4s ease-in-out infinite;
+}
+
+.finding-highlight-layer--shaded .finding-highlight.is-active {
+  z-index: 2;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--highlight) 45%, transparent), 0 0 22px 6px color-mix(in srgb, var(--highlight) 60%, transparent);
+  animation: none;
+}
+
+@keyframes xray-glow {
+  50% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--highlight) 60%, transparent), 0 0 22px 5px color-mix(in srgb, var(--highlight) 40%, transparent); }
+}
+
+/* The selected finding's card, beside its box. */
+.finding-card {
+  --highlight: var(--slate-60);
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  gap: 3px;
+  width: min(260px, 90%);
+  padding: 10px 12px 11px;
+  border: 1px solid color-mix(in srgb, var(--highlight) 45%, var(--slate-20));
+  border-top: 3px solid var(--highlight);
+  border-radius: 8px;
+  background: rgba(23, 41, 77, 0.94);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 18px color-mix(in srgb, var(--highlight) 30%, transparent);
+  color: var(--slate-90);
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+  animation: xray-card-in 0.2s ease-out;
+}
+
+.finding-card--low { --highlight: var(--orange-58); }
+.finding-card--medium { --highlight: var(--orange-53); }
+.finding-card--high { --highlight: var(--red-43); }
+
+.finding-card-severity {
+  color: var(--highlight);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.finding-card-label {
+  color: var(--white);
+  font-size: 13.5px;
+}
+
+.finding-card-summary {
+  margin: 0;
+}
+
+.finding-card-places {
+  color: var(--slate-70);
+  font-size: 11px;
+}
+
+@keyframes xray-card-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+/* One pass of a glowing line down the pane when X-ray opens. */
+.xray-scan {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 70px;
+  background: linear-gradient(180deg, transparent, rgba(110, 160, 230, 0.16) 70%, rgba(140, 181, 255, 0.85) 98%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  animation: xray-scan 1.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes xray-scan {
+  0% { opacity: 1; transform: translateY(-70px); }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(calc(100vh - 220px)); }
+}
+
+.xray-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--slate-24);
+  background: var(--slate-20);
+  color: var(--slate-90);
+  font-size: 12.5px;
+}
+
+.xray-bar-status {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.xray-bar-label {
+  overflow: hidden;
+  color: var(--white);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xray-step {
+  border: 1px solid var(--slate-29);
+  border-radius: 6px;
+  background: var(--slate-24);
+  color: var(--white);
+  font: inherit;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.xray-step:hover {
+  border-color: var(--slate-60);
+  background: var(--slate-29);
+}
+
+.xray-step:focus-visible {
+  outline: 2px solid var(--blue-77);
+  outline-offset: 1px;
+}
+
+.xray-severity {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The Risk Summary's severity colours (case-summary.css .risk-severity). */
+.xray-severity--high { background: var(--red-43); color: var(--white); }
+.xray-severity--medium { background: var(--orange-74); color: var(--orange-16); }
+.xray-severity--low { background: var(--orange-91); color: var(--orange-33); }
+
+@media (prefers-reduced-motion: reduce) {
+  .xray-stage .finding-highlight-layer {
+    transition: none;
+  }
+
+  .finding-highlight-layer--shaded .finding-highlight,
+  .finding-card {
+    animation: none;
+  }
+
+  .xray-scan {
+    display: none;
+  }
+}
+
 /* Reviewing a document's findings in the Risk Summary: the document with its boxes on the left, the findings
    with their ticks and Save on the right, each scrolling on its own. */
 .review-modal {

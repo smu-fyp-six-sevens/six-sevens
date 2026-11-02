@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PDFPageProxy } from 'pdfjs-dist';
 import HighlightLayer from './HighlightLayer';
+import type { ActivePlace } from './HighlightLayer';
 import type { FindingHighlight } from './findingHighlights';
+import type { HighlightOptions } from './HighlightedDocument';
 
 // pdf.js is large and only this view needs it, so it loads with the first PDF shown. Its worker is
 // bundled by Vite as a .js file (nginx's mime.types has no .mjs, and a worker needs a script type),
@@ -19,17 +21,30 @@ function loadPdfjs() {
   return pdfjsLoading;
 }
 
-interface PdfPagesViewProps {
+interface PdfPagesViewProps extends HighlightOptions {
   url: string;
   filename: string;
   highlights: FindingHighlight[];
   activeId: string | null;
-  onSelect: (id: string) => void;
+  activePlace?: ActivePlace;
+  onSelect: (id: string, area: number) => void;
+  // Once the first page has drawn, so what goes over it can wait for the document.
+  onReady?: () => void;
 }
 
 // The PDF drawn page by page at the pane's width, so findings can be boxed on top of it (the browser's
 // own viewer, in an iframe, can't be drawn over).
-export default function PdfPagesView({ url, filename, highlights, activeId, onSelect }: PdfPagesViewProps) {
+export default function PdfPagesView({
+  url,
+  filename,
+  highlights,
+  activeId,
+  activePlace,
+  onSelect,
+  onReady,
+  shade,
+  detail,
+}: PdfPagesViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState<PDFPageProxy[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +100,11 @@ export default function PdfPagesView({ url, filename, highlights, activeId, onSe
             width={width}
             highlights={highlights.filter((h) => h.areas.some((area) => area.page === page.pageNumber))}
             activeId={activeId}
+            activePlace={activePlace}
             onSelect={onSelect}
+            onRendered={page.pageNumber === 1 ? onReady : undefined}
+            shade={shade}
+            detail={detail}
           />
         ))}
     </div>
@@ -97,15 +116,24 @@ function PdfPage({
   width,
   highlights,
   activeId,
+  activePlace,
   onSelect,
-}: {
+  onRendered,
+  shade,
+  detail,
+}: HighlightOptions & {
   page: PDFPageProxy;
   width: number;
   highlights: FindingHighlight[];
   activeId: string | null;
-  onSelect: (id: string) => void;
+  activePlace?: ActivePlace;
+  onSelect: (id: string, area: number) => void;
+  onRendered?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Read when a render finishes, so a new callback doesn't redraw the page.
+  const onRenderedRef = useRef(onRendered);
+  onRenderedRef.current = onRendered;
   // At scale 1 a viewport is the page's size in points, the units the checks measure PDFs in.
   const base = page.getViewport({ scale: 1 });
   const scale = width / base.width;
@@ -118,9 +146,12 @@ function PdfPage({
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);
     const task = page.render({ canvas, viewport });
-    task.promise.catch(() => {
-      // Cancelled by a resize or unmount; the next render replaces it.
-    });
+    task.promise.then(
+      () => onRenderedRef.current?.(),
+      () => {
+        // Cancelled by a resize or unmount; the next render replaces it.
+      },
+    );
     return () => task.cancel();
   }, [page, scale]);
 
@@ -134,7 +165,10 @@ function PdfPage({
         pageHeight={base.height}
         units="pt"
         activeId={activeId}
+        activePlace={activePlace}
         onSelect={onSelect}
+        shade={shade}
+        detail={detail}
       />
     </div>
   );

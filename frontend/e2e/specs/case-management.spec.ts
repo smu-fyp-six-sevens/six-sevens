@@ -1185,3 +1185,100 @@ test.describe('Case page: document actions, live updates and cost', () => {
     await expect(card.locator('details tbody tr').last()).toContainText('Case analysis');
   });
 });
+
+/**
+ * Reviewing a document's findings in the Risk Summary shows the document in X-ray: once the page has drawn,
+ * shaded but for the areas detection flagged, numbered and stepped through place by place in the order of the
+ * list beside it (from a bar at its foot, or the arrow keys), with the finding being looked at picked out there.
+ */
+test.describe('X-ray in the findings review', () => {
+  // One blank A4 page: pdf.js rebuilds the missing cross-reference table.
+  const BLANK_PDF = [
+    '%PDF-1.4',
+    '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj',
+    '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj',
+    '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj',
+    'trailer<</Root 1 0 R>>',
+    '%%EOF',
+  ].join('\n');
+
+  test('steps through every place in the list\'s order with the list following, and Esc closes the card before the review', async ({ page, backend }) => {
+    const harbor = makeCase({ greenlink_case_id: 'GLDB-2002', risk: CASE_VIEWS.scored.risk });
+    backend.cases.push(harbor);
+    const payslipId = CASE_VIEWS.scored.risk!.contributing_findings.find((f) => f.filename === 'C011_Payslip.pdf')!.document_id;
+    backend.documents.push(
+      makeDocument({ id: payslipId, case_id: harbor.id, filename: 'C011_Payslip.pdf', document_type: 'payslip', status: 'detected' }),
+    );
+    const report = readRegressionFixture<{ findings: object[] }>('detection-report-c028.json');
+    const placedAt = (id: string, severity: string, ...bboxes: number[][]) => ({
+      ...report.findings[0], id, severity, summary: `${id} summary`, locations: bboxes.map((bbox) => ({ page: 1, bbox })),
+    });
+    backend.detectionReports[payslipId] = {
+      ...report,
+      document_id: payslipId,
+      // Higher up the page, the layout finding comes first in reading order, but after the font one in the list.
+      findings: [
+        placedAt('font_consistency_tool-1', 'high', [400, 400, 460, 412], [400, 600, 460, 612]),
+        placedAt('layout_anomalies_tool-1', 'medium', [400, 100, 460, 112]),
+      ],
+    };
+    // A real page to draw, so X-ray starts: the mock's own preview is empty.
+    await page.route('**/documents/*/download*', (route) =>
+      route.fulfill({ json: { document_id: payslipId, signed_url: 'http://files.test/payslip.pdf', expires_in: 3600 } }),
+    );
+    await page.route('http://files.test/**', (route) =>
+      route.fulfill({ body: BLANK_PDF, contentType: 'application/pdf', headers: { 'access-control-allow-origin': '*' } }),
+    );
+
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=risk`);
+    const review = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
+    await review.locator('.risk-document').first().getByRole('button').click();
+    const dialog = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
+    const status = dialog.locator('.xray-bar-status');
+    const activeRow = dialog.locator('.risk-findings li.risk-finding--active');
+    const card = dialog.locator('.finding-card');
+
+    // Numbered and stepped through in the list's order: its rows are the two font findings (high) then the
+    // layout one (medium). Once the page has drawn and the scan has passed, the first placed row is picked, at
+    // its first place, on the document and in the list.
+    await expect(dialog.locator('.xray-stage--ready')).toHaveCount(1);
+    await expect(status).toContainText('Finding 1 of 3 · place 1 of 2');
+    await expect(activeRow).toContainText('Net pay');
+    await expect(card).toContainText('Place 1 of 2');
+
+    // The row steps through its own places too, without walking every button (a word can recur dozens of times).
+    const rowPlaces = activeRow.getByRole('group', { name: 'Places on the document' });
+    await expect(rowPlaces).toContainText('Place 1 of 2 (Page 1)');
+    await rowPlaces.getByRole('button', { name: 'Next place' }).click();
+    await expect(status).toContainText('Finding 1 of 3 · place 2 of 2');
+    await rowPlaces.getByRole('button', { name: 'Previous place' }).click();
+    await expect(status).toContainText('Finding 1 of 3 · place 1 of 2');
+
+    // → goes to the row's other place, its card beside that place, then skips the second row (nothing placed).
+    await page.keyboard.press('ArrowRight');
+    await expect(status).toContainText('Finding 1 of 3 · place 2 of 2');
+    await expect(card).toContainText('Place 2 of 2');
+    await page.keyboard.press('ArrowRight');
+    await expect(status).toContainText('Finding 3 of 3');
+    await expect(activeRow).toContainText('vertically offset');
+    await expect(card).toContainText('layout_anomalies_tool-1 summary');
+
+    // Clicking a place opens the card there; a row's "Show on page" opens its finding at its first place.
+    await dialog.locator('[data-highlight-id="font_consistency_tool-1"][data-highlight-area="1"]').click();
+    await expect(card).toContainText('Place 2 of 2');
+    await dialog.locator('.risk-findings li', { hasText: 'vertically offset' }).getByRole('button', { name: /Show on page 1/ }).click();
+    await expect(status).toContainText('Finding 3 of 3');
+    // Not the row shown, a finding in several places offers one button to its first.
+    const netPay = dialog.locator('.risk-findings li', { hasText: 'Net pay' });
+    await netPay.getByRole('button', { name: 'Show on document · 2 places' }).click();
+    await expect(status).toContainText('Finding 1 of 3 · place 1 of 2');
+    await dialog.locator('.risk-findings li', { hasText: 'vertically offset' }).getByRole('button', { name: /Show on page 1/ }).click();
+
+    await page.keyboard.press('Escape');
+    await expect(status).toHaveText('2 findings on the page');
+    await expect(card).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  });
+});

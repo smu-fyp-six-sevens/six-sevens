@@ -31,27 +31,20 @@
   background: var(--white);
   box-shadow: 0 1px 2px rgb(18 32 61 / 5%);
 }
-.case-overview-topline { display: grid; grid-template-columns: minmax(230px, .9fr) minmax(0, 1.5fr); gap: 12px; }
+.case-overview-topline { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .case-overview-risk {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  flex-direction: column;
+  gap: 10px;
   min-width: 0;
-  padding: 19px 20px;
-  border-left: 4px solid var(--line);
+  padding: 16px 20px 18px;
 }
-.case-overview-risk--critical { border-left-color: var(--red-30); }
-.case-overview-risk--high { border-left-color: var(--red-45); }
-.case-overview-risk--medium { border-left-color: var(--amber); }
-.case-overview-risk--low { border-left-color: var(--green-40); }
-.case-overview-risk-copy { display: grid; gap: 4px; min-width: 0; }
+.case-overview-risk-title { margin: 0; font-size: 15px; font-weight: 700; }
+.case-overview-risk-body { display: flex; align-items: center; gap: 20px; }
+.case-overview-risk-copy { display: grid; gap: 2px; min-width: 0; }
 .case-overview-stat-label { color: var(--ink-soft); font-size: 12px; font-weight: 650; }
-.case-overview-risk-copy > strong { font-size: 20px; line-height: 1.25; }
-.case-overview-risk-copy > span:last-child { color: var(--ink-soft); font-size: 12px; }
-.case-overview-score { display: flex; align-items: baseline; flex: none; color: var(--ink-soft); }
-.case-overview-score strong { color: var(--ink); font-size: 38px; line-height: 1; }
-.case-overview-score span { font-size: 13px; }
+.case-overview-risk-copy > strong { font-size: 18px; line-height: 1.25; }
+.case-overview-risk-copy > span { color: var(--ink-soft); font-size: 12px; }
 .case-overview-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .case-overview-stat { display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: 14px 15px; }
 .case-overview-stat--interactive { border: 1px solid var(--line); color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -112,7 +105,9 @@
 .case-overview-document-status--action { color: var(--orange-30b); background: var(--amber-bg); }
 .case-overview-document-status--progress { color: var(--steel); background: var(--slate-94a); }
 .case-overview-document-status--muted { color: var(--ink-soft); background: var(--slate-94); }
-.case-overview-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.3fr); gap: 14px; align-items: stretch; }
+/* Time and cost side by side; Detection Accuracy takes the row under them. */
+.case-overview-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+.case-overview-classification { grid-column: 1 / -1; }
 /* With finding reviews off (Settings) there is no Detection Accuracy panel: the other two share the row. */
 .case-overview-metrics--no-accuracy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .case-overview-timing,
@@ -137,13 +132,8 @@
 .case-overview-classification-table td .rate { font-weight: 650; }
 .case-overview-metric-note { margin: auto 0 0; padding-top: 12px; color: var(--slate-59); font-size: 11px; }
 
-@media (max-width: 1050px) {
-  .case-overview-topline { grid-template-columns: 1fr; }
+@media (max-width: 1600px) {
   .case-overview-grid { grid-template-columns: 1fr; }
-}
-@media (max-width: 1280px) {
-  .case-overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .case-overview-classification { grid-column: 1 / -1; }
 }
 @media (max-width: 760px) {
   .case-overview-metrics { grid-template-columns: 1fr; }
@@ -160,6 +150,44 @@
   .case-overview-panel-heading { align-items: flex-start; gap: 12px; }
   .case-overview-document-list li { flex-wrap: wrap; }
   .case-overview-document-status { margin-left: 45px; }
+}
+
+/* The severity dial (pages/upload/SeverityGauge.tsx): the levels' bands, faint, then filled up to the score,
+   which a pointer marks. Same colours and faint-then-solid treatment as the Risk Summary's bar (.risk-gauge). */
+.severity-gauge { flex: none; width: 170px; height: auto; overflow: visible; }
+.severity-gauge path { fill: none; }
+.severity-gauge-track,
+.severity-gauge-fill { stroke: var(--band); stroke-width: 16; }
+.severity-gauge-track { opacity: .3; }
+.severity-gauge--empty .severity-gauge-track { stroke: var(--slate-90); opacity: 1; }
+.severity-gauge-sweep { stroke: var(--white); stroke-width: 20; animation: severity-gauge-sweep .9s cubic-bezier(.2, .8, .2, 1); }
+.severity-gauge-pointer { transform-box: view-box; transform-origin: 110px 112px; animation: severity-gauge-turn .9s cubic-bezier(.2, .8, .2, 1); }
+.severity-gauge-pointer line { stroke: var(--ink); stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 0 1.5px var(--white)) drop-shadow(0 0 1px var(--white)); }
+.severity-gauge-pointer path { fill: var(--ink); stroke: var(--white); stroke-width: 1.5; stroke-linejoin: round; }
+.severity-gauge-value { fill: var(--ink); font-size: 46px; font-weight: 700; letter-spacing: -.03em; }
+.severity-gauge--empty .severity-gauge-value { fill: var(--slate-70); }
+.severity-gauge-unit { fill: var(--ink-soft); font-size: 12px; }
+.severity-gauge-end { fill: var(--slate-59); font-size: 10.5px; }
+@keyframes severity-gauge-sweep { from { stroke-dashoffset: 100; } }
+@keyframes severity-gauge-turn { from { transform: rotate(-90deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .severity-gauge-sweep, .severity-gauge-pointer { animation: none; }
+}
+.severity-legend { display: grid; grid-template-columns: repeat(2, auto); justify-content: start; gap: 6px 18px; margin: 10px 0 0; padding: 10px 0 0; border-top: 1px solid var(--sand-92); list-style: none; color: var(--ink-soft); font-size: 12px; }
+.severity-legend li { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.severity-legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
+.severity-legend-range { color: var(--slate-59); font-variant-numeric: tabular-nums; }
+.severity-legend-current { color: var(--ink); font-weight: 700; }
+.severity-legend-current .severity-legend-range { color: var(--ink-soft); }
+
+/* Case Summary page: the severity card and Case Status side by side on top; stacked when there's no room. */
+.case-summary-top { display: grid; grid-template-columns: minmax(460px, 2fr) minmax(0, 3fr); gap: 14px; align-items: stretch; margin-bottom: 18px; }
+.case-summary-top > .case-status-card { display: flex; flex-direction: column; margin: 0; }
+/* As tall as the severity card beside it: the steps sit in the middle of the room under the text. */
+.case-summary-top > .case-status-card .case-status-track { margin-block: auto; padding-top: 14px; }
+
+@media (max-width: 1400px) {
+  .case-summary-top { grid-template-columns: 1fr; }
 }
 
 /* Detection Accuracy: precision and recall side by side, then one card per reviewed check. */
