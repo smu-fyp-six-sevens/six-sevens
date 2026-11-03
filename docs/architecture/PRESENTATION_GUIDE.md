@@ -84,8 +84,7 @@ sequenceDiagram
     A->>P: document.approved
     P->>T: push
     T->>P: document.detected
-    O->>A: run case analysis
-    A->>P: case.analysis.requested
+    T->>P: case.analysis.requested (the last document scanned)
     P->>C: push
     C->>P: case.analysis.completed
     P-->>M: every event is stored (audit trail)
