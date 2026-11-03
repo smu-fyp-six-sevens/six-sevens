@@ -11,7 +11,6 @@
 .tone-blue-2  { --tone: var(--blue-48); --tone-ink: var(--blue-37); --tone-tint: var(--blue-95); --tone-border: var(--blue-81); }
 .tone-amber-1 { --tone: var(--orange-66); --tone-ink: var(--orange-27); --tone-tint: var(--orange-95); --tone-border: var(--orange-76); }
 .tone-amber-2 { --tone: var(--orange-53a); --tone-ink: var(--orange-27); --tone-tint: var(--amber-bg); --tone-border: var(--orange-75a); }
-.tone-amber-3 { --tone: var(--orange-44); --tone-ink: var(--orange-30b); --tone-tint: var(--amber-bg); --tone-border: var(--orange-74a); }
 .tone-amber-4 { --tone: var(--orange-37); --tone-ink: var(--orange-24); --tone-tint: var(--orange-91); --tone-border: var(--orange-71); }
 .tone-green   { --tone: var(--green-30); --tone-ink: var(--green-23); --tone-tint: var(--green-94); --tone-border: var(--green-77); }
 .tone-slate   { --tone: var(--blue-25); --tone-ink: var(--blue-25); --tone-tint: var(--slate-93a); --tone-border: var(--blue-77a); }

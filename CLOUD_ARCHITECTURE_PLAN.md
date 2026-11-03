@@ -2,7 +2,7 @@
 
 How the backend is split into services on Google Cloud, the decisions behind it, and what's left to do. Updated 2026-10-24. Deadline: mid-November 2026.
 
-**Where it stands:** Stage 1 runs on Cloud Run in project `fyp-six-sevens` (`asia-southeast1`). It was first deployed on 2026-10-22, and since 2026-10-24 every push to `main` deploys automatically once CI passes. There is one GCP project and one Supabase project, shared by local runs and the cloud; a staging environment is planned (section 9). Stage 2 moves the same services to GKE Autopilot with Argo CD, as configuration rather than a rewrite.
+**Where it stands:** Stage 1 runs on Cloud Run in project `fyp-six-sevens` (`asia-southeast1`). It was first deployed on 2026-10-22, and since 2026-10-24 every push to `main` deploys automatically once CI passes. There is one GCP project and one Supabase project, shared by local runs and the cloud; a staging environment is planned (section 9). Stage 2 (section 10) adds staging, load and failure tests, and a Helm chart that lets the same services run on a bank's own Kubernetes platform.
 
 Operations (setup, secrets, the checks after a deploy, every problem met and its fix) are in `deploy/terraform/README.md`. Adding a service: `docs/ADDING_A_SERVICE.md`. Presenting it: `docs/architecture/` (guide and draw.io diagrams).
 
@@ -109,7 +109,7 @@ Terraform owns everything else about a service (`deploy/terraform`); `apply` is 
 **Settled:** push delivery for Stage 1 (detection takes 1-2 min, inside the 600 s ack deadline; revisit if a stage's p95 passes 8 minutes); ingestion inside api; Grafana as our own Cloud Run service; `uvicorn` + `npm run dev` stays the default for everyone, compose is opt-in; tests stub Anthropic and Supabase; the injection tool only in uvicorn mode; case match stays in api; no Redis until a measured need; Snyk scans `requirements.txt`.
 
 **Open:**
-1. **Award check:** the supervisor accepted the Cloud Run architecture (2026-10-26, section 10); confirm the Cloud Native award assessment is fine with Kubernetes designed but deliberately not built.
+1. **Award check:** the supervisor accepted the Cloud Run architecture (2026-10-26, section 10); confirm the Cloud Native award assessment is fine with Kubernetes as a tested Helm chart rather than a running cluster.
 2. **Automatic case analysis** before November (the case-worker gate, `CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0).
 3. **Login:** keep `AUTH_USERS` as a documented limitation, or move to Supabase Auth (touches login, token checks, WebSocket tickets, tests).
 4. **Staging** (section 9): approval before production or fully automatic; Grafana in staging; who approves; a smoke test per merge or nightly only.
@@ -145,7 +145,7 @@ Cost: about $0 idle and cents per merge or night (Cloud Run and Supabase only; n
 
 | Original Stage 2 | Now |
 |---|---|
-| GKE Autopilot, Helm chart per role | Documented option, with the triggers below; not built |
+| GKE Autopilot, Helm chart per role | Helm chart as a handover kit, tested on `kind` in CI (below); running on GKE stays behind the triggers |
 | Pull subscribers, KEDA on Pub/Sub backlog | Documented option; Cloud Run push stays |
 | Kong as ingress controller, Managed Prometheus on pods | Documented option; Kong on Cloud Run stays |
 | Argo CD instead of the deploy workflow | Staging and promotion in the existing GitHub Actions pipeline (step 1) |
@@ -166,7 +166,14 @@ Cost: about $0 idle and cents per merge or night (Cloud Run and Supabase only; n
 
 **Not doing:** a nightly evaluation job or a model-comparison run (they spend tokens for little return). The evaluation framework (`PENDING_WORK.md`, "Evals and verification") is run on demand when a prompt or model changes, not on a schedule.
 
-**Triggers for Kubernetes** (any one, measured, not expected): sustained load above what step 2 shows Cloud Run handles; a stage's p95 near the 600 s push deadline, which would need pull workers; Cloud Run cost above what the same load would cost on GKE Autopilot; a sponsor requirement to run on their own cluster.
+**Triggers for running on Kubernetes** (any one, measured, not expected): sustained load above what step 2 shows Cloud Run handles; a stage's p95 near the 600 s push deadline, which would need pull workers; Cloud Run cost above what the same load would cost on GKE Autopilot; a sponsor requirement to run on their own cluster.
+- **Measured 2026-11-02** (`audit_events.duration_ms` since the 2026-10-31 wipe): detection p95 92 s (max 120 s, 22 runs), extraction p95 36 s, case analysis p95 26 s. Far under the deadline; re-measure once a large scanned statement has run.
+
+**Kubernetes as a handover kit** (decided 2026-11-02, not started). Production stays on Cloud Run and no GKE cluster runs; the chart is what GLDB's platform team would take.
+- **Why:** portability (Cloud Run is Google-only; a bank runs its own Kubernetes platform: GKE, EKS, AKS or OpenShift), and east-west segmentation Cloud Run can't express (NetworkPolicies: only Kong reaches api and audit-metrics; workers accept only Pub/Sub push).
+- **First:** ask GLDB what its platform team deploys to; the answer is the sponsor trigger above, cited in the report.
+- **Build:** a Helm chart with a values file per role (the sizes feed the deployment document's server, RAM and storage table), NetworkPolicies, Checkov on the chart; CI installs it on a `kind` cluster with the Pub/Sub emulator (as compose does) and runs a smoke check, including one call the policies must block.
+- **Open:** how the pods reach Supabase and secrets on `kind` (CI has neither); a CNI that enforces NetworkPolicies.
 
 ## 11. Risks
 
@@ -175,7 +182,7 @@ Cost: about $0 idle and cents per merge or night (Cloud Run and Supabase only; n
 - **Kong** is a single entry point: a wrong `Host` or CORS rule breaks the whole frontend; test with compose first.
 - **One environment** until staging exists: the post-deploy check and automatic rollback are the safety net.
 - **Shared Supabase:** local runs and the cloud see each other's cases and stuck documents. Anything that scans the whole database runs only in the cloud (the sweeper; a local run must name a case).
-- **Scope:** staging, load testing and failure tests (section 10) all need time before November; Kubernetes stays out of scope unless a trigger in section 10 fires.
+- **Scope:** staging, load testing and failure tests (section 10) all need time before November; the Helm chart (section 10) competes with them; running on GKE stays out of scope unless a trigger fires.
 
 ## 12. Running it
 

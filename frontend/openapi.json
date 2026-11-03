@@ -2447,7 +2447,6 @@
           "pending_review",
           "documents_incomplete",
           "fraud_detection",
-          "ready_for_analysis",
           "pending_evaluation",
           "case_analysed",
           "finalised",

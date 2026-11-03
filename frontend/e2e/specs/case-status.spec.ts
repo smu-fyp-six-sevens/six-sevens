@@ -120,8 +120,8 @@ test.describe('Track case status @SCRUM-80', () => {
     await page.goto('/cases/GLDB-1200');
 
     await expect(progressCard(page).locator('.case-status-step-label')).toHaveText([
-      'Open', 'Processing Documents', 'Pending Review', 'Fraud Detection', 'Ready for Analysis', 'Pending Evaluation',
-      'Case Analysed', 'Finalised',
+      'Open', 'Processing Documents', 'Pending Review', 'Fraud Detection', 'Pending Evaluation', 'Case Analysed',
+      'Finalised',
     ]);
   });
 

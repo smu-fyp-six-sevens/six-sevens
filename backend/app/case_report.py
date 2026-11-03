@@ -134,7 +134,6 @@ CASE_STAGE_LABELS = {
     "pending_review": "Pending Review",
     "documents_incomplete": "Documents Incomplete",
     "fraud_detection": "Fraud Detection",
-    "ready_for_analysis": "Ready for Analysis",
     "pending_evaluation": "Pending Evaluation",
     "case_analysed": "Case Analysed",
     "finalised": "Finalised",
@@ -143,13 +142,13 @@ CASE_STAGE_LABELS = {
 # The badge's colour for each stage (caseStages.ts tones, case-stage.css --tone-tint and --tone-ink): (fill, ink).
 _TONES = {
     "grey": ("#f2f4f7", "#4b5565"), "blue-1": ("#edf3fc", "#2f5fa8"), "blue-2": ("#e6edfc", "#1d3f9e"),
-    "amber-1": ("#fff8e8", "#8a5a00"), "amber-2": ("#fff3dd", "#8a5300"), "amber-3": ("#fdeedb", "#8f4a05"),
+    "amber-1": ("#fff8e8", "#8a5a00"), "amber-2": ("#fff3dd", "#8a5300"),
     "amber-4": ("#f9e6d6", "#7a3a02"), "green": ("#e8f5ee", "#17603c"), "slate": ("#e8edf3", "#1e3a5f"),
     "red": ("#fbeaea", "#962626"),
 }
 _STAGE_TONES = {
     "open": "grey", "processing_documents": "blue-1", "fraud_detection": "blue-2", "pending_review": "amber-1",
-    "documents_incomplete": "amber-2", "ready_for_analysis": "amber-3", "pending_evaluation": "amber-4",
+    "documents_incomplete": "amber-2", "pending_evaluation": "amber-4",
     "case_analysed": "green", "finalised": "slate", "failed": "red",
 }
 CASE_STAGE_COLOURS: dict[str, tuple[colors.Color, colors.Color]] = {

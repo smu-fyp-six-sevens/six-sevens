@@ -7,7 +7,6 @@ export const CASE_STAGES: CaseStage[] = [
   'pending_review',
   'documents_incomplete',
   'fraud_detection',
-  'ready_for_analysis',
   'pending_evaluation',
   'case_analysed',
   'finalised',
@@ -23,7 +22,6 @@ const CASE_STAGE_LABELS: Record<CaseStage, string> = {
   pending_review: 'Pending Review',
   documents_incomplete: 'Documents Incomplete',
   fraud_detection: 'Fraud Detection',
-  ready_for_analysis: 'Ready for Analysis',
   case_analysed: 'Case Analysed',
   pending_evaluation: 'Pending Evaluation',
   finalised: 'Finalised',
@@ -34,7 +32,7 @@ const CASE_STAGE_LABELS: Record<CaseStage, string> = {
 // page's Case Status badge: grey nothing yet, blue the system is working, amber the officer has something to do,
 // green analysed, slate closed, red something failed. Within a group the shade deepens as the case moves on.
 export type StatusTone =
-  | 'grey' | 'blue-1' | 'blue-2' | 'amber-1' | 'amber-2' | 'amber-3' | 'amber-4' | 'green' | 'slate' | 'red';
+  | 'grey' | 'blue-1' | 'blue-2' | 'amber-1' | 'amber-2' | 'amber-4' | 'green' | 'slate' | 'red';
 
 const CASE_STAGE_TONES: Record<CaseStage, StatusTone> = {
   open: 'grey',
@@ -42,7 +40,6 @@ const CASE_STAGE_TONES: Record<CaseStage, StatusTone> = {
   fraud_detection: 'blue-2',
   pending_review: 'amber-1',
   documents_incomplete: 'amber-2',
-  ready_for_analysis: 'amber-3',
   pending_evaluation: 'amber-4',
   case_analysed: 'green',
   finalised: 'slate',

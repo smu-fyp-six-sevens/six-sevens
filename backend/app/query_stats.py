@@ -26,6 +26,7 @@ import httpx
 from langchain_core.callbacks import AsyncCallbackHandler
 
 from . import metrics, pricing, telemetry
+from .llm_io import thinking_summaries
 
 logger = logging.getLogger("perf")
 
@@ -181,7 +182,8 @@ class _LLMUsage(AsyncCallbackHandler):
         seconds = time.perf_counter() - started if started is not None else None
         for generations in response.generations:
             for generation in generations:
-                used = pricing.usage(getattr(generation, "message", None))
+                message = getattr(generation, "message", None)
+                used = pricing.usage(message)
                 if used is None:
                     continue
                 cost = metrics.record_llm(
@@ -191,10 +193,21 @@ class _LLMUsage(AsyncCallbackHandler):
                 _active().add_llm(
                     used.total_input, used.output, used.cache_read, used.cache_write + used.cache_write_1h, cost,
                 )
+                telemetry.add_llm_call({
+                    "model": used.model, "input_tokens": used.uncached_input, "output_tokens": used.output,
+                    "cache_read_tokens": used.cache_read, "cache_write_tokens": used.cache_write + used.cache_write_1h,
+                    "cost_usd": round(cost, 6), "seconds": round(seconds, 3) if seconds is not None else None,
+                    "stop_reason": (getattr(message, "response_metadata", None) or {}).get("stop_reason"),
+                    "thinking": thinking_summaries(message),
+                })
 
     async def on_llm_error(self, error: BaseException, *, run_id: Any = None, **kwargs: Any) -> None:
-        _, agent = self._started.pop(run_id, (None, telemetry.current_agent()))
+        started, agent = self._started.pop(run_id, (None, telemetry.current_agent()))
         metrics.llm_calls.labels(agent, "unknown", "error").inc()
+        telemetry.add_llm_call({
+            "error": f"{type(error).__name__}: {error}"[:300],
+            "seconds": round(time.perf_counter() - started, 3) if started is not None else None,
+        })
 
 
 llm_callback = _LLMUsage()

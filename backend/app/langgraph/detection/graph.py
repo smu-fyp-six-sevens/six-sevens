@@ -41,7 +41,7 @@ from . import tools as detection_tools
 from ...guardrails.envelope import fence
 from ...llm_contracts import LeadPlan, LeadReview
 from ... import run_context
-from ...llm_io import message_text, parse_json_object, thinking_summaries, validate
+from ...llm_io import message_text, parse_json_object, validate
 from ...run_context import spend_model_call
 from ..detection_report import SCHEMA_VERSION
 from .specialists import SEVERITIES, SPECIALISTS, document_side, run_specialist, today_in_singapore
@@ -142,7 +142,7 @@ _REVIEW_SYSTEM_PROMPT = _REVIEW_PROMPT.format(catalogue=_catalogue())
 
 
 async def _ask_lead(
-    system_prompt: str, user_payload: dict, contract: type[T], *, span_name: str, cache_key: str, document_id: str,
+    system_prompt: str, user_payload: dict, contract: type[T], *, span_name: str, cache_key: str,
 ) -> T | None:
     """
     The lead's reply as `contract`, or None when the call fails or the reply is unusable. The lead only
@@ -166,8 +166,6 @@ async def _ask_lead(
     except Exception as exc:
         logger.warning("%s call failed: %s", span_name, exc)
         return None
-    if thinking := thinking_summaries(response):
-        trace.record(document_id, "lead_thinking", call=span_name, thinking=thinking)
     text = message_text(response.content)
     return validate(contract, parse_json_object(text), site=span_name, raw=text).value
 
@@ -241,7 +239,7 @@ def _normalise_plan(raw: LeadPlan | None) -> dict:
 async def lead_plan_node(state: DetectionState) -> dict:
     plan = _normalise_plan(await _ask_lead(
         _PLAN_SYSTEM_PROMPT, {"document": _context(state)}, LeadPlan,
-        span_name="detection.lead_plan", cache_key="detection_lead_plan", document_id=state["document_id"],
+        span_name="detection.lead_plan", cache_key="detection_lead_plan",
     ))
     logger.info("Document %s: lead plan — briefs written for all specialists", state["document_id"])
     trace.record(
@@ -275,20 +273,27 @@ async def specialist_node(state: SpecialistInput) -> dict:
         "Document %s: %s specialist starting%s",
         state["document_id"], state["name"], " (second look)" if state.get("second_look") else "",
     )
-    report = await run_specialist(state["name"], state["document_id"], state["document_type"], state["brief"])
-    if state.get("second_look"):
-        report = {**report, "second_look": True}
-    logger.info(
-        "Document %s: %s specialist done — %d finding(s), tools called: %s",
-        state["document_id"], state["name"], len(report["findings"]), report["tools_called"] or "none",
-    )
-    trace.record(
-        state["document_id"], "detection_specialist",
-        specialist=state["name"], tools_called=report["tools_called"],
-        finding_count=len(report["findings"]), dismissed=report["dismissed"], uncertain=report["uncertain"],
-        output_status=report.get("output_status"),
-        tool_calls=report["tool_calls"],
-    )
+    # The whole review (model turns and tool calls) is one span; each model turn inside is its own.
+    with telemetry.get_tracer().start_as_current_span(f"detection.review.{state['name']}"):
+        telemetry.annotate(kind="agent", brief=state["brief"], second_look=bool(state.get("second_look")))
+        report = await run_specialist(state["name"], state["document_id"], state["document_type"], state["brief"])
+        if state.get("second_look"):
+            report = {**report, "second_look": True}
+        logger.info(
+            "Document %s: %s specialist done — %d finding(s), tools called: %s",
+            state["document_id"], state["name"], len(report["findings"]), report["tools_called"] or "none",
+        )
+        trace.record(
+            state["document_id"], "detection_specialist",
+            specialist=state["name"], tools_called=report["tools_called"],
+            finding_count=len(report["findings"]), dismissed=report["dismissed"], uncertain=report["uncertain"],
+            output_status=report.get("output_status"),
+            tool_calls=report["tool_calls"],
+        )
+        telemetry.annotate(
+            tool_calls=report["tool_calls"], summary=report.get("summary"), output_status=report.get("output_status"),
+            finding_count=len(report["findings"]), uncertain=report["uncertain"],
+        )
     return {"reports": [report]}
 
 
@@ -347,8 +352,7 @@ async def lead_review_node(state: DetectionState) -> dict:
         "document": _context(state),
         "reports": _compact_reports(state["reports"]),
         "second_look_already_used": used,
-    }, LeadReview, span_name="detection.lead_review", cache_key="detection_lead_review",
-        document_id=state["document_id"])
+    }, LeadReview, span_name="detection.lead_review", cache_key="detection_lead_review")
     summary = review.summary if review is not None else ""
     request = None if used or review is None else _validated_second_look(review.second_look, state["reports"])
     logger.info(
@@ -625,9 +629,11 @@ async def _run_detection(document_id: str) -> dict:
     # Live in the documents table too, not just the trace, so "Scanning" is a real DB-backed status
     # rather than inferred from the absence of a report (which looked identical to a lost/crashed run).
     await asyncio.to_thread(document_repository.mark_detecting, document_id)
-    with telemetry.get_tracer().start_as_current_span("detection.run") as span:
-        span.set_attribute("document_id", document_id)
-        try:
+    try:
+        # The root span closes before the trace is saved, so its own step is saved too.
+        with trace.steps_into(document_id), telemetry.get_tracer().start_as_current_span("detection.run") as span:
+            span.set_attribute("document_id", document_id)
+            telemetry.annotate(kind="run", run="Fraud detection")
             try:
                 final = await get_detection_graph().ainvoke(
                     {"document_id": document_id, "reports": [], "agent_decisions": [], "second_look_used": False},
@@ -635,25 +641,26 @@ async def _run_detection(document_id: str) -> dict:
                 )
             finally:
                 detection_tools.clear_context(document_id)
-        except Exception as exc:
-            # Recorded so GET .../detection/report (and the frontend) can tell
-            # "crashed" apart from "never run" instead of both looking like a
-            # silent 404 forever — see routers/detection.py.
-            logger.exception("Detection graph run failed for document %s", document_id)
-            error = f"{type(exc).__name__}: {exc}"
-            trace.record(document_id, "detection_error", error=error)
-            _record_run_audit(document_id)
-            # Saved before the status changes, so the case's stage (case_stage.py) sees the failure.
-            await asyncio.to_thread(detection_results.save_error, document_id, error)
-            await asyncio.to_thread(trace.flush, document_id)
-            await asyncio.to_thread(end_unfinished_run, document_id)
-            raise
-        result = final["result"]
-        span.set_attribute("verdict", result["verdict"])
-        span.set_attribute("finding_count", len(result["findings"]))
-        # The report must be saved before the status says "detected", or a snapshot can show detected with no report.
-        await asyncio.to_thread(detection_results.save_report, document_id, result)
+            result = final["result"]
+            span.set_attribute("verdict", result["verdict"])
+            span.set_attribute("finding_count", len(result["findings"]))
+            telemetry.annotate(verdict=result["verdict"], finding_count=len(result["findings"]))
+    except Exception as exc:
+        # Recorded so GET .../detection/report (and the frontend) can tell
+        # "crashed" apart from "never run" instead of both looking like a
+        # silent 404 forever — see routers/detection.py.
+        logger.exception("Detection graph run failed for document %s", document_id)
+        error = f"{type(exc).__name__}: {exc}"
+        trace.record(document_id, "detection_error", error=error)
+        _record_run_audit(document_id)
+        # Saved before the status changes, so the case's stage (case_stage.py) sees the failure.
+        await asyncio.to_thread(detection_results.save_error, document_id, error)
         await asyncio.to_thread(trace.flush, document_id)
-        await _store_findings(document_id, final.get("case_id"), result)
-        await asyncio.to_thread(document_repository.mark_detected, document_id)
-        return result
+        await asyncio.to_thread(end_unfinished_run, document_id)
+        raise
+    # The report must be saved before the status says "detected", or a snapshot can show detected with no report.
+    await asyncio.to_thread(detection_results.save_report, document_id, result)
+    await _store_findings(document_id, final.get("case_id"), result)
+    await asyncio.to_thread(trace.flush, document_id)
+    await asyncio.to_thread(document_repository.mark_detected, document_id)
+    return result

@@ -311,6 +311,7 @@ export default function UploadPage({
               }}
               onSelectSection={selectSection}
               analysisRunning={analysisOverview?.status === 'running'}
+              analysisReady={analysisReady}
               caseLabel={selectedCase.caseNumber ?? undefined}
               findingsToReview={findingsToReview}
               missingRequirements={missingRequirements}

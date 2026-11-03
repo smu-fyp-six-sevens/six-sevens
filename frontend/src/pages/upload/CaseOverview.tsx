@@ -135,7 +135,7 @@ export function CaseOverview({
               <div className="case-overview-risk-copy">
                 <span className="case-overview-stat-label">Overall Case Severity</span>
                 <strong>{scored ? `${risk.level} risk` : risk?.state === 'pending' ? 'Assessment in progress' : 'Not scored yet'}</strong>
-                <span>{scored ? 'Based on completed document checks' : risk?.state === 'failed' ? 'A document check failed to complete' : 'Run case analysis after documents are approved and scanned'}</span>
+                <span>{scored ? 'Based on completed document checks' : risk?.state === 'failed' ? 'A document check failed to complete' : 'Scored once documents are approved and scanned'}</span>
               </div>
               {scored && risk.score != null && (
                 <div className="case-overview-score" aria-label={`Risk score ${risk.score} out of 100`}>

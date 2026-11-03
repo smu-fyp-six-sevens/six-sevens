@@ -2390,7 +2390,7 @@ export interface components {
          *     is analysed, and is permanent: the case is view-only.
          * @enum {string}
          */
-        CaseStage: "open" | "processing_documents" | "pending_review" | "documents_incomplete" | "fraud_detection" | "ready_for_analysis" | "pending_evaluation" | "case_analysed" | "finalised" | "failed";
+        CaseStage: "open" | "processing_documents" | "pending_review" | "documents_incomplete" | "fraud_detection" | "pending_evaluation" | "case_analysed" | "finalised" | "failed";
         /**
          * CaseSummary
          * @description documents_status, fulfilled_requirements and missing_requirements are all

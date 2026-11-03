@@ -43,12 +43,12 @@ import { humanizeFieldKey } from '../utils/fieldLabels';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { LoadErrorState } from '../components/LoadErrorState';
 
-// Developer-only panels, so they load on demand.
+// Developer-facing panels, so they load on demand.
 const DetectionPanel = lazy(() =>
   import('./document-details/DetectionPanel').then((m) => ({ default: m.DetectionPanel })),
 );
-const LangGraphTracePanel = lazy(() =>
-  import('./document-details/LangGraphTracePanel').then((m) => ({ default: m.LangGraphTracePanel })),
+const AgentTraceView = lazy(() =>
+  import('../components/agentTrace/AgentTraceView').then((m) => ({ default: m.AgentTraceView })),
 );
 
 // Whether the side-by-side preview is shown, remembered per browser. Storage can throw (private mode,
@@ -488,13 +488,15 @@ export default function DocumentDetailsPage({
           />
         )}
 
-        {/* LangGraph trace (debug) */}
+        {/* Agent trace: every run on this document (classification, extraction, detection) */}
 
         <Suspense fallback={null}>
-          <LangGraphTracePanel
-            langGraphTrace={langGraphTrace}
-            isRefreshingTrace={isRefreshingTrace}
-            refreshLangGraphTrace={refreshLangGraphTrace}
+          <AgentTraceView
+            title="Agent trace"
+            steps={langGraphTrace?.steps ?? null}
+            emptyText="No trace yet: this document hasn't been processed."
+            isRefreshing={isRefreshingTrace}
+            onRefresh={refreshLangGraphTrace}
           />
         </Suspense>
 
