@@ -31,16 +31,16 @@ test.describe('Track case status @SCRUM-80', () => {
     backend.cases.push(makeCase({ id: 'case-new', greenlink_case_id: 'GLDB-1201', company_name: 'Newco Pte Ltd', status: 'fraud_detection' }));
     await page.goto('/cases');
 
-    await expect(page.locator('.case-row').filter({ hasText: 'Acme Trading' }).locator('.case-row-status')).toHaveText('Case Analysed');
-    await expect(page.locator('.case-row').filter({ hasText: 'Newco' }).locator('.case-row-status')).toHaveText('Fraud Detection');
+    await expect(page.locator('.case-row').filter({ hasText: 'Acme Trading' }).locator('.case-row-status')).toHaveText('Ready to Finalise');
+    await expect(page.locator('.case-row').filter({ hasText: 'Newco' }).locator('.case-row-status')).toHaveText('Detecting Fraud');
   });
 
   test('AC1 the case page shows the current stage @SCRUM-80', async ({ page, backend }) => {
     seedCase(backend);
     await page.goto('/cases/GLDB-1200');
 
-    await expect(stageBadge(page)).toHaveText('Case Analysed');
-    await expect(progressCard(page).locator('[aria-current="step"]')).toHaveText('Case Analysed');
+    await expect(stageBadge(page)).toHaveText('Ready to Finalise');
+    await expect(progressCard(page).locator('[aria-current="step"]')).toHaveText('Ready to Finalise');
   });
 
   test('AC1 finalising moves the case to Finalised and locks it @SCRUM-80', async ({ page, backend }) => {
@@ -73,7 +73,7 @@ test.describe('Track case status @SCRUM-80', () => {
     await progressCard(page).getByRole('button', { name: 'Finalise Case' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
 
-    await expect(stageBadge(page)).toHaveText('Case Analysed');
+    await expect(stageBadge(page)).toHaveText('Ready to Finalise');
     expect(backend.requestsTo('POST', /^\/cases\/case-acme\/finalise$/)).toHaveLength(0);
   });
 
@@ -120,8 +120,8 @@ test.describe('Track case status @SCRUM-80', () => {
     await page.goto('/cases/GLDB-1200');
 
     await expect(progressCard(page).locator('.case-status-step-label')).toHaveText([
-      'Open', 'Processing Documents', 'Pending Review', 'Fraud Detection', 'Ready for Analysis', 'Pending Evaluation',
-      'Case Analysed', 'Finalised',
+      'Awaiting Documents', 'Processing Documents', 'Pending Review', 'Detecting Fraud', 'Ready to Analyse', 'Pending Evaluation',
+      'Ready to Finalise', 'Finalised',
     ]);
   });
 
@@ -145,7 +145,7 @@ test.describe('Track case status @SCRUM-80', () => {
 
     // Pending Evaluation is a finished step behind the current one.
     await expect(progressCard(page).locator('.case-status-step--done .case-status-step-label').last()).toHaveText('Pending Evaluation');
-    await expect(progressCard(page).locator('[aria-current="step"]')).toHaveText('Case Analysed');
+    await expect(progressCard(page).locator('[aria-current="step"]')).toHaveText('Ready to Finalise');
     await expect(progressCard(page).getByRole('button', { name: 'Finalise Case' })).toBeEnabled();
   });
 
@@ -158,7 +158,7 @@ test.describe('Track case status @SCRUM-80', () => {
     });
     await page.goto('/cases/GLDB-1200');
 
-    await expect(stageBadge(page)).toHaveText('Documents Incomplete');
+    await expect(stageBadge(page)).toHaveText('Missing Documents');
     const next = progressCard(page).locator('.case-status-next');
     await expect(next).toContainText('Every required document must be approved: 11 out of 11 not yet approved.');
 
@@ -173,8 +173,8 @@ test.describe('Track case status @SCRUM-80', () => {
     await expect(stageBadge(page)).toHaveText('Failed');
     await expect(progressCard(page).locator('.case-status-next')).toContainText('Fraud detection failed');
     // The failure sits on the step where it happened, and the link goes where it can be fixed.
-    await expect(progressCard(page).locator('[aria-current="step"]')).toHaveText(/Fraud Detection/);
+    await expect(progressCard(page).locator('[aria-current="step"]')).toHaveText(/Detecting Fraud/);
     await progressCard(page).getByRole('button', { name: /View approved documents/ }).click();
-    await expect(page).toHaveURL(/section=approved/);
+    await expect(page).toHaveURL(/section=documents/);
   });
 });

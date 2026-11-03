@@ -1,0 +1,420 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-02T00:00:00Z",
+  "title": "Design System: GLDB Fraud Review",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#12203d",
+        "tonalRamp": [
+          "#111827",
+          "#12203d",
+          "#263753",
+          "#43536b",
+          "#5b6478",
+          "#8a93a6",
+          "#d4dae3",
+          "#f7f8fa"
+        ]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Ink Soft",
+        "canonical": "#5b6478"
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#f9f9f8",
+        "tonalRamp": [
+          "#5f5e59",
+          "#b3b2ad",
+          "#e3e2de",
+          "#e7e6e2",
+          "#efefed",
+          "#f9f9f8",
+          "#fafaf9",
+          "#fefefd"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "canonical": "#ffffff"
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Line",
+        "canonical": "#e3e2de"
+      },
+      "steel": {
+        "role": "primary",
+        "displayName": "Steel",
+        "canonical": "#355f96",
+        "tonalRamp": [
+          "#17294d",
+          "#284a78",
+          "#355f96",
+          "#5278ac",
+          "#8796ac",
+          "#b0b9c6",
+          "#d9e2ef",
+          "#e8f0fa"
+        ]
+      },
+      "steel-dark": {
+        "role": "primary",
+        "displayName": "Steel Dark",
+        "canonical": "#284a78"
+      },
+      "amber": {
+        "role": "status",
+        "displayName": "Amber",
+        "canonical": "#c6820a",
+        "tonalRamp": [
+          "#5f4a16",
+          "#7a5407",
+          "#9a6507",
+          "#c6820a",
+          "#f0a020",
+          "#f5c35c",
+          "#fbf0da",
+          "#fff8e8"
+        ]
+      },
+      "amber-bg": {
+        "role": "status",
+        "displayName": "Amber Background",
+        "canonical": "#fbf0da"
+      },
+      "teal": {
+        "role": "status",
+        "displayName": "Teal",
+        "canonical": "#166d5f",
+        "tonalRamp": [
+          "#15502f",
+          "#17603c",
+          "#176858",
+          "#166d5f",
+          "#428b72",
+          "#a7e3c5",
+          "#bfe1d6",
+          "#eaf7f3"
+        ]
+      },
+      "teal-bg": {
+        "role": "status",
+        "displayName": "Teal Background",
+        "canonical": "#e1f1ec"
+      },
+      "red": {
+        "role": "status",
+        "displayName": "Red",
+        "canonical": "#b3402a",
+        "tonalRamp": [
+          "#7f1414",
+          "#9b3030",
+          "#b3402a",
+          "#c94b4b",
+          "#e4a3a3",
+          "#f0b8b8",
+          "#fbe8e2",
+          "#fff5f5"
+        ]
+      },
+      "red-bg": {
+        "role": "status",
+        "displayName": "Red Background",
+        "canonical": "#fbe8e2"
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Text Muted",
+        "canonical": "#667085"
+      },
+      "stage-idle": {
+        "role": "stage",
+        "displayName": "Stage Idle (Awaiting Documents)",
+        "canonical": "#6b778c"
+      },
+      "stage-system": {
+        "role": "stage",
+        "displayName": "Stage System (Processing Documents, Detecting Fraud)",
+        "canonical": "#2563b8"
+      },
+      "stage-officer": {
+        "role": "stage",
+        "displayName": "Stage Officer (Pending Review, Missing Documents, Ready to Analyse, Pending Evaluation)",
+        "canonical": "#c6820a"
+      },
+      "stage-done": {
+        "role": "stage",
+        "displayName": "Stage Done (Ready to Finalise)",
+        "canonical": "#1f7a4d"
+      },
+      "stage-closed": {
+        "role": "stage",
+        "displayName": "Stage Closed (Finalised)",
+        "canonical": "#34455f"
+      },
+      "stage-failed": {
+        "role": "stage",
+        "displayName": "Stage Failed (Failed)",
+        "canonical": "#b3402a"
+      },
+      "risk-low": {
+        "role": "risk",
+        "displayName": "Risk Low",
+        "canonical": "#e3a6b2"
+      },
+      "risk-medium": {
+        "role": "risk",
+        "displayName": "Risk Medium",
+        "canonical": "#d9667f"
+      },
+      "risk-medium-tint": {
+        "role": "risk",
+        "displayName": "Risk Medium Tint",
+        "canonical": "#f8d7de"
+      },
+      "risk-medium-ink": {
+        "role": "risk",
+        "displayName": "Risk Medium Ink",
+        "canonical": "#7a1530"
+      },
+      "risk-high": {
+        "role": "risk",
+        "displayName": "Risk High",
+        "canonical": "#b4233c"
+      },
+      "risk-critical": {
+        "role": "risk",
+        "displayName": "Risk Critical",
+        "canonical": "#6b1024"
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The one page title."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card and panel headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text and table cells."
+      },
+      "body-sm": {
+        "displayName": "Body Small",
+        "purpose": "Captions, subtitles, error text and hints."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase mono eyebrows and section labels."
+      },
+      "identifier": {
+        "displayName": "Identifier",
+        "purpose": "Case IDs, counts and filter tallies: the sans with tabular figures."
+      }
+    },
+    "shadows": [
+      {
+        "name": "sheet",
+        "value": "0 1px 3px rgba(18, 32, 61, 0.05)",
+        "purpose": "Summary cards at rest; barely visible."
+      },
+      {
+        "name": "popover",
+        "value": "0 12px 32px rgba(18, 32, 61, 0.16)",
+        "purpose": "Menus, filter lists and search results."
+      },
+      {
+        "name": "dialog",
+        "value": "0 16px 48px rgba(23, 41, 77, 0.32)",
+        "purpose": "Confirmation dialogs and the document viewer."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 3px rgba(53, 95, 150, 0.2)",
+        "purpose": "Keyboard focus on any control, in place of an outline."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-quick",
+        "value": "0.12s",
+        "purpose": "Hover colour, opacity and background changes on links and buttons."
+      },
+      {
+        "name": "field-focus",
+        "value": "0.15s ease",
+        "purpose": "Input border and focus ring transitions."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "620px"
+      },
+      {
+        "name": "narrow",
+        "value": "760px"
+      },
+      {
+        "name": "tablet",
+        "value": "860px"
+      },
+      {
+        "name": "desktop",
+        "value": "1240px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Steel action button for the main action in a card, such as running the case analysis.",
+      "html": "<button class=\"ds-btn-primary\">Run case analysis</button>",
+      "css": ".ds-btn-primary { padding: 7px 14px; border: none; border-radius: 7px; background: var(--steel, #355f96); color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background 0.12s; } .ds-btn-primary:hover { background: var(--steel-dark, #284a78); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(53, 95, 150, 0.3); }"
+    },
+    {
+      "name": "Strong Button",
+      "kind": "button",
+      "refersTo": "button-strong",
+      "description": "Ink button for the one decisive action on a screen, such as signing in.",
+      "html": "<button class=\"ds-btn-strong\">Sign in <span aria-hidden=\"true\">→</span></button>",
+      "css": ".ds-btn-strong { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-width: 220px; min-height: 52px; padding: 0 20px; border: none; border-radius: 8px; background: var(--ink, #12203d); color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 15.5px; font-weight: 600; cursor: pointer; transition: opacity 0.15s ease; } .ds-btn-strong:hover { opacity: 0.88; } .ds-btn-strong:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(53, 95, 150, 0.3); }"
+    },
+    {
+      "name": "Text Button",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Boxless steel link-button for secondary moves like 'View flags'.",
+      "html": "<button class=\"ds-btn-text\">View flags <span aria-hidden=\"true\">→</span></button>",
+      "css": ".ds-btn-text { display: inline-flex; align-items: center; gap: 7px; padding: 0; border: 0; background: transparent; color: #5278ac; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; font-weight: 650; cursor: pointer; } .ds-btn-text:hover { color: var(--steel-dark, #284a78); } .ds-btn-text:focus-visible { outline: none; border-radius: 4px; box-shadow: 0 0 0 3px rgba(53, 95, 150, 0.2); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Roomy white field with a hairline border that turns steel on focus.",
+      "html": "<label class=\"ds-field\"><span>Company name</span><input class=\"ds-input\" placeholder=\"Enter the company name\" /></label>",
+      "css": ".ds-field { display: grid; gap: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; font-weight: 600; color: var(--ink, #12203d); } .ds-input { width: 100%; padding: 15px 16px; border: 1px solid var(--line, #e3e2de); border-radius: 8px; background: #fff; color: var(--ink, #12203d); font: inherit; font-size: 15px; font-weight: 400; outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; } .ds-input:focus { border-color: var(--steel, #355f96); box-shadow: 0 0 0 3px rgba(53, 95, 150, 0.15); }"
+    },
+    {
+      "name": "Top Navigation",
+      "kind": "nav",
+      "description": "Top bar links with a steel underline under the current page.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-link ds-nav-link--active\" href=\"#\">Cases</a><a class=\"ds-nav-link\" href=\"#\">Dashboard</a><a class=\"ds-nav-link\" href=\"#\">Audit</a></nav>",
+      "css": ".ds-nav { display: flex; gap: 4px; padding: 12px 16px; background: var(--paper, #f9f9f8); border-bottom: 1px solid var(--line, #e3e2de); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; } .ds-nav-link { position: relative; padding: 7px 12px; border-radius: 6px; color: var(--ink-soft, #5b6478); font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.12s; } .ds-nav-link::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 1px; height: 2px; border-radius: 2px; background: var(--steel, #355f96); opacity: 0; transition: opacity 0.12s; } .ds-nav-link:hover { color: var(--ink, #12203d); } .ds-nav-link:hover::after { opacity: 0.3; } .ds-nav-link--active { color: var(--ink, #12203d); } .ds-nav-link--active::after { opacity: 1; } .ds-nav-link:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(53, 95, 150, 0.2); }"
+    },
+    {
+      "name": "Stage Badge",
+      "kind": "chip",
+      "refersTo": "stage-badge",
+      "description": "A case's stage as a pill in its group's tone, led by the group's shape: ink on tint with the tone border.",
+      "html": "<div class=\"ds-badges\"><span class=\"ds-stage\" style=\"--t-ink:#2f5fa8;--t-tint:#e8f0fb;--t-border:#c4d8f5;--t:#2563b8\"><svg viewBox=\"0 0 14 14\"><circle cx=\"7\" cy=\"7\" r=\"5.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"/><path d=\"M7 1.8 A5.2 5.2 0 0 1 7 12.2 Z\" fill=\"currentColor\"/></svg>Detecting Fraud</span><span class=\"ds-stage\" style=\"--t-ink:#8a5a00;--t-tint:#fff8e8;--t-border:#ead39a;--t:#c6820a\"><svg viewBox=\"0 0 14 14\"><circle cx=\"7\" cy=\"7\" r=\"6\" fill=\"currentColor\"/></svg>Pending Review</span><span class=\"ds-stage\" style=\"--t-ink:#17603c;--t-tint:#eaf7f3;--t-border:#a7e3c5;--t:#1f7a4d\"><svg viewBox=\"0 0 14 14\"><circle cx=\"7\" cy=\"7\" r=\"6\" fill=\"currentColor\"/><path d=\"M4.2 7.2 6.2 9.1 9.9 5.1\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>Ready to Finalise</span><span class=\"ds-stage\" style=\"--t-ink:#9a3522;--t-tint:#fbe8e2;--t-border:#f0b8b8;--t:#b3402a\"><svg viewBox=\"0 0 14 14\"><circle cx=\"7\" cy=\"7\" r=\"6\" fill=\"currentColor\"/><path d=\"M4.8 4.8 9.2 9.2M9.2 4.8 4.8 9.2\" stroke=\"#fff\" stroke-width=\"1.7\" stroke-linecap=\"round\"/></svg>Failed</span></div>",
+      "css": ".ds-badges { display: flex; flex-wrap: wrap; gap: 8px; } .ds-stage { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--t-border); background: var(--t-tint); color: var(--t-ink); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 600; } .ds-stage svg { width: 12px; height: 12px; color: var(--t); }"
+    },
+    {
+      "name": "Severity Tag",
+      "kind": "chip",
+      "refersTo": "severity-tag",
+      "description": "Fixed-width uppercase mono tag on the crimson scale: Low outlined with a grey word; set-aside findings get no colour.",
+      "html": "<div class=\"ds-sev-row\"><span class=\"ds-sev ds-sev--high\">High</span><span class=\"ds-sev ds-sev--medium\">Medium</span><span class=\"ds-sev ds-sev--low\">Low</span><span class=\"ds-sev ds-sev--dismissed\">Dismissed</span></div>",
+      "css": ".ds-sev-row { display: flex; gap: 8px; } .ds-sev { flex: 0 0 58px; width: 58px; padding: 1px 0; border: 1px solid transparent; border-radius: 4px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; text-align: center; text-transform: uppercase; } .ds-sev--high { background: #b4233c; color: #fff; } .ds-sev--medium { background: #f8d7de; border-color: #eeb3c0; color: #7a1530; } .ds-sev--low { background: #fff; border-color: #e3a6b2; color: #5b6478; } .ds-sev--dismissed { width: auto; padding: 1px 6px; border-color: var(--line, #e3e2de); background: var(--paper, #f9f9f8); color: var(--ink-soft, #5b6478); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "White sheet on paper: hairline border, 10px corners, a title and subtitle.",
+      "html": "<section class=\"ds-card\"><h2>Most common flags</h2><p>Issues raised across the cases in view</p><div class=\"ds-card-id\">GLDB-1042</div></section>",
+      "css": ".ds-card { max-width: 360px; padding: 18px 20px; border: 1px solid var(--line, #e3e2de); border-radius: 10px; background: #fff; box-shadow: 0 1px 3px rgba(18, 32, 61, 0.05); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; } .ds-card h2 { margin: 0; color: #1c2e49; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; } .ds-card p { margin: 4px 0 12px; color: #8792a2; font-size: 13px; } .ds-card-id { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12.5px; font-weight: 600; color: var(--steel-dark, #284a78); }"
+    },
+    {
+      "name": "Error Message",
+      "kind": "custom",
+      "description": "An actionable error: what failed in bold, what to do under it, with a red left edge.",
+      "html": "<div class=\"ds-error\" role=\"alert\"><span class=\"ds-error-icon\" aria-hidden=\"true\">!</span><div><strong>The document couldn't be approved.</strong><span>Check your connection and try again.</span></div></div>",
+      "css": ".ds-error { display: flex; gap: 10px; max-width: 420px; padding: 11px 14px; border: 1px solid #edcaca; border-left: 3px solid #c33131; border-radius: 8px; background: #fff5f5; color: var(--ink, #12203d); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; line-height: 1.45; } .ds-error-icon { display: grid; place-items: center; flex: 0 0 18px; height: 18px; border-radius: 50%; background: #c33131; color: #fff; font-size: 11px; font-weight: 700; } .ds-error div { display: grid; gap: 2px; } .ds-error strong { color: #b52d2d; font-weight: 600; } .ds-error span:last-child { color: var(--ink-soft, #5b6478); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Case File",
+    "overview": "The app is a well-kept dossier. The page is bright, near-neutral paper, the content sits on white sheets with hairline edges, and the writing is dark navy ink. The documents, findings and verdicts are the content, and the interface is the folder that holds them in order. Nothing competes with the evidence: colour appears where it carries meaning (a case's stage, a finding's severity, an error) and nowhere else.\n\nIt is calm and approachable rather than stern. Corners are softly rounded, tints are gentle, and fields are roomy, so a long review session doesn't feel like work against the tool. One typeface, the system sans, carries everything; case IDs, counts and figures use its tabular digits so columns line up. Dense information is ruled into tables and lists rather than boxed into tiles.\n\nThe system is light only. There is no dark theme.",
+    "keyCharacteristics": [
+      "Bright near-neutral paper, white cards, hairline stone-grey borders.",
+      "One accent, steel blue, for actions, links, focus and the current place.",
+      "Stage tones grouped by who acts next, each with its own shape, reserved for a case's stage.",
+      "One crimson scale for risk and severity, separate from the stage tones.",
+      "One typeface, the system sans, with tabular figures for IDs and counts.",
+      "Flat surfaces. Shadows only on things that float."
+    ],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "Steel is the only accent colour. Any other colour on screen must mean a stage, a severity or a status.",
+        "section": "colors"
+      },
+      {
+        "name": "The Token Only Rule",
+        "body": "Every colour comes from tokens.css or base.css. To add one, pick the nearest family and lightness rather than writing a new hex into a stylesheet.",
+        "section": "colors"
+      },
+      {
+        "name": "The Lift Only What Floats Rule",
+        "body": "A shadow means \"this is above the page\". Cards, tables and banners stay flat.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Tone Means Stage Rule",
+        "body": "The stage tones are only ever used for a case's stage: badges, marks, the stepper, the pipeline and the case card's edge. Never use them for decoration or for unrelated categories.",
+        "section": "colors"
+      },
+      {
+        "name": "The Shape Carries the Stage Rule",
+        "body": "Every stage mark draws its group's shape, so the stage reads without its colour, for colour-blind officers too.",
+        "section": "colors"
+      },
+      {
+        "name": "The Low Is Never Green Rule",
+        "body": "Risk and severity use only the crimson scale. Green never marks a level, because no level is safe.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ink on Tint Rule",
+        "body": "Text on a tone uses that tone's ink on its tint. Never put white text on a light tone. Amber as text is orange-27, never the amber fill.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Typeface Rule",
+        "body": "Everything is set in the system sans. Figures that line up in columns (IDs, counts, amounts) use tabular-nums, not a second font.",
+        "section": "typography"
+      }
+    ],
+    "dos": [
+      "Do put content on white cards with a 1px line border and 10px corners, on the paper page.",
+      "Do use steel for every action, link and focus state, and the 3px steel focus ring for keyboard focus.",
+      "Do colour a case's stage only with its stage tone: tone ink on tone tint, with the tone border.",
+      "Do set case IDs, counts and amounts with tabular figures in the system sans.",
+      "Do say a missed target or a failure in red text with a plain sentence.",
+      "Do take every colour from tokens.css or base.css."
+    ],
+    "donts": [
+      "Don't use stage tones or severity colours for anything else.",
+      "Don't put white text on a light tone.",
+      "Don't give dismissed findings or missed issues a severity colour, because they were never scored.",
+      "Don't add shadows to resting cards, tables or banners.",
+      "Don't add a second accent colour.",
+      "Don't mark hover tips with dotted underlines or decorate figures with arrows.",
+      "Don't write new hex values into page stylesheets."
+    ]
+  }
+}

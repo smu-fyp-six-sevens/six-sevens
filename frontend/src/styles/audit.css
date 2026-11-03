@@ -50,7 +50,7 @@
 .audit-day-heading {
   margin: 0 0 8px;
   color: var(--ink-soft);
-  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -145,7 +145,7 @@
 
 .audit-time {
   color: var(--ink-soft);
-  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
 }
 
@@ -177,7 +177,7 @@
 
 .audit-outcome--cancelled {
   background: var(--amber-bg);
-  color: var(--amber);
+  color: var(--orange-27);
 }
 
 .audit-summary {
@@ -263,3 +263,24 @@
   display: inline-block;
   text-decoration: none;
 }
+
+/* Claude Cost (pages/upload/CaseCostCard.tsx): the total and its parts, then the documents, then the runs. */
+.cost-body { padding: 0 20px 20px; font-size: 13px; }
+.cost-figures { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 36px; margin: 0; }
+.cost-figure { display: grid; gap: 2px; margin: 0; }
+.cost-figure dt { color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+.cost-figure dd { margin: 0; color: var(--ink); font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.cost-figure--total dd { font-size: 30px; font-weight: 720; letter-spacing: -.02em; line-height: 1.1; }
+.cost-included { margin: 10px 0 0; color: var(--ink-soft); font-size: 12.5px; }
+.cost-subhead { margin: 22px 0 6px; font-size: 14px; }
+.cost-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.cost-table th, .cost-table td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.cost-table th { color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+.cost-table th:last-child, .cost-table td:last-child { padding-right: 0; text-align: right; white-space: nowrap; }
+.cost-table td { color: var(--ink); overflow-wrap: anywhere; }
+.cost-runs { margin-top: 14px; }
+.cost-runs > summary { width: fit-content; color: var(--steel); font-size: 13px; font-weight: 600; cursor: pointer; }
+.cost-runs > summary:focus-visible { outline: none; border-radius: 4px; box-shadow: 0 0 0 3px var(--steel-a20); }
+.cost-runs .cost-table { margin-top: 8px; font-size: 12.5px; }
+.cost-runs .cost-table th:nth-last-child(2), .cost-runs .cost-table td:nth-last-child(2) { padding-right: 12px; text-align: right; }
+.cost-note { margin: 16px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; max-width: 70ch; }

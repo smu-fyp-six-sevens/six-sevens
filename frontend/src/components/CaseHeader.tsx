@@ -7,15 +7,20 @@ interface CaseHeaderProps {
   crumbs: Breadcrumb[];
   // The title row's contents: usually <CaseTitle /> plus any actions.
   children: ReactNode;
+  // Beside the title, e.g. that the case is view-only.
+  notice?: ReactNode;
 }
 
 // Shared by the case and document pages so the case title stays put when moving between them.
-export default function CaseHeader({ crumbs, children }: CaseHeaderProps) {
+export default function CaseHeader({ crumbs, children, notice }: CaseHeaderProps) {
   return (
     <div className="case-header">
       <Breadcrumbs crumbs={crumbs} />
 
-      <div className="case-title-row">{children}</div>
+      <div className="case-title-row">
+        {children}
+        {notice}
+      </div>
     </div>
   );
 }

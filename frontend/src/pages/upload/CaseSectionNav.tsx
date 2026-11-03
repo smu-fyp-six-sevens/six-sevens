@@ -1,4 +1,5 @@
 import { CASE_SECTIONS, SECTIONS_WITH_STATUS, type CaseSection, type SectionStatus } from './caseSections';
+import { Icon } from '../../components/Icon';
 
 export function CaseSectionNav({
   activeSection,
@@ -8,31 +9,35 @@ export function CaseSectionNav({
   onToggleCollapsed,
   onSelect,
 }: {
-  activeSection: CaseSection;
+  // None on a document page, which belongs to the case rather than to one section.
+  activeSection: CaseSection | null;
   // The snapshot hasn't arrived, so the status lines show a placeholder instead of a wrong "None Uploaded".
   statusesLoading: boolean;
   // Where each section stands; a section without one shows just its label.
   statuses: Partial<Record<CaseSection, SectionStatus>>;
   // Collapsed, only the icons show (the status becomes a dot on the icon).
   collapsed: boolean;
-  onToggleCollapsed: () => void;
+  // Without it the menu has no toggle (a document page keeps it collapsed).
+  onToggleCollapsed?: () => void;
   onSelect: (section: CaseSection) => void;
 }) {
   return (
     <nav className="case-nav" aria-label="Case sections">
-      <button
-        type="button"
-        className="case-nav-toggle"
-        aria-expanded={!collapsed}
-        aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
-        title={collapsed ? 'Expand menu' : 'Collapse menu'}
-        onClick={onToggleCollapsed}
-      >
-        <svg viewBox="0 0 14 14" aria-hidden="true">
-          <path d="M2 3.5h10M2 7h10M2 10.5h10" />
-        </svg>
-        <span className="case-nav-toggle-label">Menu</span>
-      </button>
+      {onToggleCollapsed && (
+        <button
+          type="button"
+          className="case-nav-toggle"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
+          title={collapsed ? 'Expand menu' : 'Collapse menu'}
+          onClick={onToggleCollapsed}
+        >
+          <svg viewBox="0 0 14 14" aria-hidden="true">
+            <path d="M2 3.5h10M2 7h10M2 10.5h10" />
+          </svg>
+          <span className="case-nav-toggle-label">Menu</span>
+        </button>
+      )}
 
       <ul>
         {CASE_SECTIONS.map((section) => {
@@ -51,7 +56,7 @@ export function CaseSectionNav({
                 onClick={() => onSelect(section.id)}
               >
                 <span className="case-nav-icon" aria-hidden="true">
-                  {section.icon}
+                  <Icon name={section.icon} size={16} />
                   {collapsed && status && (
                     <span className={`case-nav-dot case-nav-dot--${status.tone} case-nav-badge`} />
                   )}

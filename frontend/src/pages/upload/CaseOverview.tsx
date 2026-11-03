@@ -9,6 +9,7 @@ import type { CaseSection } from './caseSections';
 import { formatUsd, processingTimes } from './processingTimes';
 import { useCaseCost } from './useCaseCost';
 import { CaseOverviewSkeleton } from '../../components/Skeletons';
+import { Icon } from '../../components/Icon';
 
 const SHOWN_SEVERITIES = ['high', 'medium', 'low'] as const;
 const FLAGGED_DOCUMENTS_SHOWN = 5;
@@ -134,90 +135,6 @@ export function CaseOverview({
             </div>
           </section>
 
-          <section
-            className={`case-overview-metrics${reviewsOn ? '' : ' case-overview-metrics--no-accuracy'}`}
-            aria-label="Processing and classification metrics"
-          >
-            <article className="case-overview-panel case-overview-timing">
-              <div className="case-overview-panel-heading">
-                <div><h2>Processing Time</h2><p>How long each stage took on this case</p></div>
-              </div>
-              <div className="case-overview-timing-values">
-                {timings.map((metric) => (
-                  <div key={metric.label}>
-                    <span>{metric.label}<small>{metric.detail}</small></span>
-                    <strong>{timingLoading ? '…' : metric.value}</strong>
-                  </div>
-                ))}
-              </div>
-              <p className="case-overview-metric-note">
-                {timingError ? "Couldn't load the timings." : 'Time the work took, from the audit trail; waiting in the queue is not counted.'}
-              </p>
-            </article>
-
-            <article className="case-overview-panel case-overview-cost">
-              <div className="case-overview-panel-heading">
-                <div><h2>Claude Cost</h2><p>What this case's runs cost at list prices</p></div>
-              </div>
-              <div className="case-overview-timing-values">
-                <div><span>Total</span><strong>{cost ? formatUsd(cost.total_usd) : '…'}</strong></div>
-                <div><span>Documents</span><strong>{cost ? formatUsd(cost.total_usd - cost.case_analysis_usd) : '…'}</strong></div>
-                <div><span>Case analysis</span><strong>{cost ? formatUsd(cost.case_analysis_usd) : '…'}</strong></div>
-              </div>
-              <p className="case-overview-metric-note">
-                {timingError ? "Couldn't load the cost." : "From each run's record in the audit trail."}
-              </p>
-            </article>
-
-            {reviewsOn && (
-            <article className="case-overview-panel case-overview-classification">
-              <div className="case-overview-panel-heading">
-                <div>
-                  <h2>Detection Accuracy</h2>
-                  <p>Based on the officer's latest reviews of this case's findings</p>
-                  {/* The reviews are of the last run's findings; a rerun over the newer documents may change them. */}
-                  {reviewed > 0 && analysisStale && <p className="case-overview-accuracy-stale">From before the latest documents · rerun the analysis to update</p>}
-                </div>
-                {reviewed > 0 && <button type="button" className="case-overview-text-button" onClick={() => onSelectSection('risk')}>Review findings →</button>}
-              </div>
-              {reviewed === 0 && (
-                <div className="case-overview-accuracy-empty">
-                  <span className="case-overview-accuracy-empty-icon" aria-hidden="true">✓</span>
-                  <strong>No findings reviewed yet</strong>
-                </div>
-              )}
-              {reviewed > 0 && (
-                <table className="case-overview-classification-table">
-                  <thead><tr><th scope="col">Check</th><th scope="col"><InfoLabel label="Precision" tip={RATE_MEANING.precision} /></th><th scope="col"><InfoLabel label="Recall" tip={RATE_MEANING.recall} /></th></tr></thead>
-                  <tbody>
-                    {checksByReviews.map((check) => (
-                      <tr key={`${check.scope}-${check.check_name}`}>
-                        <th scope="row">{formatCheck(check.check_name)}</th>
-                        <td><Rate rate={check.precision} kind="precision" target={accuracy?.target_precision} /></td>
-                        <td><Rate rate={check.recall} kind="recall" target={accuracy?.target_recall} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <th scope="row">All checks</th>
-                      <td><Rate rate={accuracy?.case.precision ?? null} kind="precision" target={accuracy?.target_precision} /></td>
-                      <td><Rate rate={accuracy?.case.recall ?? null} kind="recall" target={accuracy?.target_recall} /></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              )}
-              {reviewed > 0 && (
-                <p className="case-overview-metric-note">
-                  {accuracy!.case.correct} correct · {accuracy!.case.wrong} wrong · {accuracy!.case.missed} missed
-                  <br />
-                  {belowTargetNote(accuracy!.target_precision, accuracy!.target_recall)}
-                </p>
-              )}
-            </article>
-            )}
-          </section>
-
           <section className="case-overview-grid">
             <article className="case-overview-panel case-overview-documents">
               <div className="case-overview-panel-heading">
@@ -271,9 +188,94 @@ export function CaseOverview({
                   )}
                 </>
               ) : (
-                <div className="case-overview-empty"><span aria-hidden="true">✓</span><div><strong>{risk?.state === 'scored' ? 'No findings in completed checks' : 'No findings available yet'}</strong><p>{risk?.state === 'scored' ? 'Completed checks did not return findings for this case.' : 'Findings appear here after document detection and case analysis.'}</p></div></div>
+                <div className="case-overview-empty"><span aria-hidden="true"><Icon name="check" size={18} /></span><div><strong>{risk?.state === 'scored' ? 'No findings in completed checks' : 'No findings available yet'}</strong><p>{risk?.state === 'scored' ? 'Completed checks did not return findings for this case.' : 'Findings appear here after document detection and case analysis.'}</p></div></div>
               )}
             </article>
+          </section>
+
+          {/* How the case was run (time, cost, accuracy): after what the officer acts on. */}
+          <section
+            className={`case-overview-metrics${reviewsOn ? '' : ' case-overview-metrics--no-accuracy'}`}
+            aria-label="Processing and classification metrics"
+          >
+            <article className="case-overview-panel case-overview-timing">
+              <div className="case-overview-panel-heading">
+                <div><h2>Processing Time</h2><p>How long each stage took on this case</p></div>
+              </div>
+              <div className="case-overview-timing-values">
+                {timings.map((metric) => (
+                  <div key={metric.label}>
+                    <span>{metric.label}<small>{metric.detail}</small></span>
+                    <strong>{timingLoading ? '…' : metric.value}</strong>
+                  </div>
+                ))}
+              </div>
+              <p className="case-overview-metric-note">
+                {timingError ? "Couldn't load the timings." : 'Time the work took, from the audit trail; waiting in the queue is not counted.'}
+              </p>
+            </article>
+
+            <article className="case-overview-panel case-overview-cost">
+              <div className="case-overview-panel-heading">
+                <div><h2>Claude Cost</h2><p>What this case's runs cost at list prices</p></div>
+              </div>
+              <div className="case-overview-timing-values">
+                <div><span>Total</span><strong>{cost ? formatUsd(cost.total_usd) : '…'}</strong></div>
+                <div><span>Documents</span><strong>{cost ? formatUsd(cost.total_usd - cost.case_analysis_usd) : '…'}</strong></div>
+                <div><span>Case analysis</span><strong>{cost ? formatUsd(cost.case_analysis_usd) : '…'}</strong></div>
+              </div>
+              <p className="case-overview-metric-note">
+                {timingError ? "Couldn't load the cost." : "From each run's record in the audit trail."}
+              </p>
+            </article>
+
+            {reviewsOn && (
+            <article className="case-overview-panel case-overview-classification">
+              <div className="case-overview-panel-heading">
+                <div>
+                  <h2>Detection Accuracy</h2>
+                  <p>Based on the officer's latest reviews of this case's findings</p>
+                  {/* The reviews are of the last run's findings; a rerun over the newer documents may change them. */}
+                  {reviewed > 0 && analysisStale && <p className="case-overview-accuracy-stale">From before the latest documents · rerun the analysis to update</p>}
+                </div>
+                {reviewed > 0 && <button type="button" className="case-overview-text-button" onClick={() => onSelectSection('risk')}>Review findings →</button>}
+              </div>
+              {reviewed === 0 && (
+                <div className="case-overview-accuracy-empty">
+                  <span className="case-overview-accuracy-empty-icon" aria-hidden="true"><Icon name="check" size={18} /></span>
+                  <strong>No findings reviewed yet</strong>
+                </div>
+              )}
+              {reviewed > 0 && (
+                <table className="case-overview-classification-table">
+                  <thead><tr><th scope="col">Check</th><th scope="col"><InfoLabel label="Precision" tip={RATE_MEANING.precision} /></th><th scope="col"><InfoLabel label="Recall" tip={RATE_MEANING.recall} /></th></tr></thead>
+                  <tbody>
+                    {checksByReviews.map((check) => (
+                      <tr key={`${check.scope}-${check.check_name}`}>
+                        <th scope="row">{formatCheck(check.check_name)}</th>
+                        <td><Rate rate={check.precision} kind="precision" target={accuracy?.target_precision} /></td>
+                        <td><Rate rate={check.recall} kind="recall" target={accuracy?.target_recall} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row">All checks</th>
+                      <td><Rate rate={accuracy?.case.precision ?? null} kind="precision" target={accuracy?.target_precision} /></td>
+                      <td><Rate rate={accuracy?.case.recall ?? null} kind="recall" target={accuracy?.target_recall} /></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+              {reviewed > 0 && (
+                <p className="case-overview-metric-note">
+                  {accuracy!.case.correct} correct · {accuracy!.case.wrong} wrong · {accuracy!.case.missed} missed
+                  <br />
+                  {belowTargetNote(accuracy!.target_precision, accuracy!.target_recall)}
+                </p>
+              )}
+            </article>
+            )}
           </section>
         </>
       )}

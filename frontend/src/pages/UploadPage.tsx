@@ -11,9 +11,7 @@ import { useDocumentSelection } from './upload/useDocumentSelection';
 import { useUploadSelection } from './upload/useUploadSelection';
 import { DocumentListPanel } from './upload/DocumentListPanel';
 import { MoveDocumentsDialog } from './upload/MoveDocumentsDialog';
-import { RequirementsSidebar } from './upload/RequirementsSidebar';
 import { AdditionalDocumentsCard } from './upload/AdditionalDocumentsCard';
-import { ApprovedDocumentsCard } from './upload/ApprovedDocumentsCard';
 import { AuditTrailCard } from './upload/AuditTrailCard';
 import { CaseCostCard } from './upload/CaseCostCard';
 import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
@@ -26,11 +24,12 @@ import { useCaseReportDownload } from './upload/useCaseReportDownload';
 import { CharacterCount } from '../components/CharacterCount';
 import { CaseStageCard } from './upload/CaseStageCard';
 import { caseSectionStatuses, isCaseSection, type CaseSection } from './upload/caseSections';
-import { FlaggedItemsCard } from './upload/FlaggedItemsCard';
-import { RejectedDocumentsCard } from './upload/RejectedDocumentsCard';
+import { reviewReason } from './upload/reviewReason';
+import { missingRequirements as missingChecklist } from './upload/documentChecklist';
 import { NotesCard } from '../components/NotesCard';
 import AppHeader from '../components/AppHeader';
 import CaseHeader, { CaseTitle } from '../components/CaseHeader';
+import CaseFrame from '../components/CaseFrame';
 import { caseCrumb, caseQueueCrumb } from '../components/caseCrumbs';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FinalisedBanner from '../components/FinalisedBanner';
@@ -42,6 +41,7 @@ import {
 } from '../utils/caseValidation';
 import { TERMINAL_DOCUMENT_STATUSES } from '../services/uploadService';
 import { ErrorMessage } from '../components/ErrorMessage';
+import { Icon } from '../components/Icon';
 
 
 const NAV_COLLAPSED_KEY = 'caseNav.collapsed';
@@ -97,13 +97,14 @@ export default function UploadPage({
     approvedDocuments,
     rejectedDocuments,
     flaggedDocuments,
-    identityNames,
     caseMatchNeedsReview,
   } = useCaseSnapshot(selectedCase.id);
 
   // Kept in the URL so a refresh or a trip to a document and back lands on the same section.
   const [searchParams, setSearchParams] = useSearchParams();
-  const sectionParam = searchParams.get('section');
+  // Approved documents live in the Documents tab now; an old link to the Approved tab lands there.
+  const rawSection = searchParams.get('section');
+  const sectionParam = rawSection === 'approved' ? 'documents' : rawSection;
   const activeSection: CaseSection = isCaseSection(sectionParam) ? sectionParam : 'summary';
   const selectSection = (section: CaseSection) => {
     setSearchParams(section === 'summary' ? {} : { section }, { replace: true });
@@ -126,6 +127,8 @@ export default function UploadPage({
 
   // For a case that enforces the checklist, the stage and the analysis wait for these to be approved.
   const missingRequirements = unapprovedRequirements.length;
+  // The required documents the Documents tab lists as missing, for its menu subtitle.
+  const missingRequirementsList = missingChecklist(fulfilledRequirements, { idDocument: idDocumentCoverage, proofOfAddress: proofOfAddressCoverage });
 
   const liveDocumentIds = useMemo(
     () => (snapshotLoaded ? new Set(documents.map((document) => document.id)) : null),
@@ -193,6 +196,12 @@ export default function UploadPage({
     confirmMoveSelected,
   } = selection;
 
+  // What each flagged document waits on, shown under its name in the document list.
+  const reviewReasons = useMemo(
+    () => new Map(flaggedDocuments.map((document) => [document.id, reviewReason(document, caseMatches.get(document.id), caseMatchNeedsReview)])),
+    [flaggedDocuments, caseMatches, caseMatchNeedsReview],
+  );
+
   const rowActions = useDocumentRowActions({
     setDocumentDetails,
     isMountedRef,
@@ -206,7 +215,38 @@ export default function UploadPage({
     <main className="shell shell--upload">
       <AppHeader />
 
-      <CaseHeader crumbs={[caseQueueCrumb, caseCrumb(selectedCase, { current: true })]}>
+      <CaseFrame
+        collapsed={navCollapsed}
+        nav={
+          <CaseSectionNav
+            collapsed={navCollapsed}
+            statusesLoading={!snapshotLoaded}
+            onToggleCollapsed={() => setNavCollapsed((collapsed) => !collapsed)}
+            activeSection={activeSection}
+            statuses={caseSectionStatuses({
+              documentCount: documents.length,
+              approvedCount: approvedDocuments.length,
+              detectedCount: approvedDocuments.filter((document) => document.status === 'detected').length,
+            missingCount: missingRequirementsList.length,
+              // Not yet approved or rejected, so still uploading or extracting (detection comes after approval).
+              processingCount: extractedDocuments.filter((document) => !TERMINAL_DOCUMENT_STATUSES.has(document.status)).length,
+              flaggedCount: flaggedDocuments.length,
+              toApproveCount: extractedDocuments.filter(
+                (document) => document.status === 'analyzed' && !flaggedDocuments.includes(document),
+              ).length,
+              analysisReady,
+              analysisOverview,
+              risk,
+              additionalDocumentCount: additionalDocuments?.items.length ?? 0,
+            })}
+            onSelect={selectSection}
+          />
+        }
+      >
+      <CaseHeader
+        crumbs={[caseQueueCrumb, caseCrumb(selectedCase, { current: true })]}
+        notice={isFinalised ? <FinalisedBanner /> : undefined}
+      >
         {isEditingCase ? (
           <div className="case-title-editing">
             <label htmlFor="case-company-name" className="sr-only">Company name</label>
@@ -274,31 +314,6 @@ export default function UploadPage({
       {deleteError && <ErrorMessage className="toast-error" message={deleteError} />}
       {reportError && <ErrorMessage className="toast-error" message={reportError} />}
 
-      {isFinalised && <FinalisedBanner />}
-
-      <div className={`case-layout${navCollapsed ? ' case-layout--collapsed' : ''}`}>
-        <CaseSectionNav
-          collapsed={navCollapsed}
-          statusesLoading={!snapshotLoaded}
-          onToggleCollapsed={() => setNavCollapsed((collapsed) => !collapsed)}
-          activeSection={activeSection}
-          statuses={caseSectionStatuses({
-            documentCount: documents.length,
-            approvedCount: approvedDocuments.length,
-            detectedCount: approvedDocuments.filter((document) => document.status === 'detected').length,
-            // Not yet approved or rejected, so still uploading or extracting (detection comes after approval).
-            processingCount: extractedDocuments.filter((document) => !TERMINAL_DOCUMENT_STATUSES.has(document.status)).length,
-            flaggedCount: flaggedDocuments.length,
-            toApproveCount: extractedDocuments.filter(
-              (document) => document.status === 'analyzed' && !flaggedDocuments.includes(document),
-            ).length,
-            analysisReady,
-            analysisOverview,
-            risk,
-            additionalDocumentCount: additionalDocuments?.items.length ?? 0,
-          })}
-          onSelect={selectSection}
-        />
 
         <div className="case-content">
           {/* The case's severity and where it stands, side by side; the overview under them. */}
@@ -351,156 +366,98 @@ export default function UploadPage({
                   investigation record.
                 </p>
 
-                <DropZone onFiles={handleFiles} disabled={isSubmitting} />
+                {/* The drop target and what was chosen share one box: the prompt on top, the files under it, and
+                    the upload (or its outcome) at the foot. */}
+                <div className={`upload-box${selectedFiles.length > 0 ? ' upload-box--filled' : ''}`}>
+                  <DropZone onFiles={handleFiles} disabled={isSubmitting} />
 
-                {selectedFiles.length > 0 && (
-                  <>
-                    <div className="section-label">
-                      <span>Selected files</span>
-                      <span>{selectedFiles.length} selected</span>
-                    </div>
+                  {selectedFiles.length > 0 && (
+                    <>
+                      <div className="file-list">
+                        {selectedFiles.map((file, index) => {
+                          const rejection = rejections.find(
+                            (item) => item.file === file,
+                          );
 
-                    <div className="file-list">
-                      {selectedFiles.map((file, index) => {
-                        const rejection = rejections.find(
-                          (item) => item.file === file,
-                        );
+                          return (
+                            <FileRow
+                              key={`${file.name}-${index}`}
+                              file={file}
+                              result={resultByFilename.get(file.name)}
+                              rejected={
+                                rejection
+                                  ? describeIssue(rejection.issue)
+                                  : undefined
+                              }
+                              isUploading={isSubmitting}
+                              onRemove={() => removeFile(index)}
+                            />
+                          );
+                        })}
+                      </div>
 
-                        return (
-                          <FileRow
-                            key={`${file.name}-${index}`}
-                            file={file}
-                            result={resultByFilename.get(file.name)}
-                            rejected={
-                              rejection
-                                ? describeIssue(rejection.issue)
-                                : undefined
-                            }
-                            isUploading={isSubmitting}
-                            onRemove={() => removeFile(index)}
-                          />
-                        );
-                      })}
-                    </div>
+                      <div className="action-bar">
+                        {justSubmitted && hasOutcome && !error && !isSubmitting ? (
+                          <span className={`toast show ${failedCount > 0 ? 'mixed' : 'all-ok'}`}>
+                            <Icon name={failedCount > 0 ? 'alert' : 'check'} size={16} />
+                            <span>
+                              <b>
+                                {successfulCount} of {selectedFiles.length} documents uploaded.
+                              </b>{' '}
+                              {failedCount > 0
+                                ? `${failedCount} need attention.`
+                                : 'All documents uploaded successfully.'}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="count">
+                            {hasOutcome
+                              ? `${completedCount} / ${selectedFiles.length} processed`
+                              : `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected`}
+                          </span>
+                        )}
 
-                    <div className="action-bar">
-                      <span className="count">
-                        {hasOutcome
-                          ? `${completedCount} / ${selectedFiles.length} processed`
-                          : `${selectedFiles.length} file${
-                              selectedFiles.length > 1 ? 's' : ''
-                            } selected`}
-                      </span>
-
-                      <button
-                        type="button"
-                        className="upload-btn"
-                        disabled={isSubmitting || selectedFiles.length === 0}
-                        onClick={() => {
-                          void handleSubmit();
-                        }}
-                      >
-                        {isSubmitting
-                          ? 'Uploading…'
-                          : hasOutcome
-                            ? 'Upload again'
-                            : `Upload ${selectedFiles.length} file${
-                                selectedFiles.length > 1 ? 's' : ''
-                              }`}
-                      </button>
-                    </div>
-                  </>
-                )}
-
-                {selectedFiles.length === 0 && !isSubmitting && (
-                  <div className="empty">
-                    No files selected yet — drag files above or click browse
-                  </div>
-                )}
+                        <button
+                          type="button"
+                          className="upload-btn"
+                          disabled={isSubmitting || selectedFiles.length === 0}
+                          onClick={() => {
+                            void handleSubmit();
+                          }}
+                        >
+                          {isSubmitting
+                            ? 'Uploading…'
+                            : hasOutcome
+                              ? 'Upload again'
+                              : `Upload ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}`}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 {countError && <ErrorMessage className="toast-error" message={countError} />}
 
                 {error && <ErrorMessage className="toast-error" message={error} />}
-
-                {justSubmitted && hasOutcome && !error && !isSubmitting && (
-                  <div
-                    className={`toast show ${
-                      failedCount > 0 ? 'mixed' : 'all-ok'
-                    }`}
-                  >
-                    <span>{failedCount > 0 ? '⚠' : '✓'}</span>
-
-                    <span>
-                      <b>
-                        {successfulCount} of {selectedFiles.length} documents
-                        uploaded.
-                      </b>{' '}
-                      {failedCount > 0
-                        ? `${failedCount} need attention above.`
-                        : 'All documents uploaded successfully.'}
-                    </span>
-                  </div>
-                )}
                 </>
                 )}
 
                 <DocumentListPanel
-                  documents={documents}
                   extractedDocuments={extractedDocuments}
-                  caseMatches={caseMatches}
+                  reviewReasons={reviewReasons}
+                  fulfilledRequirements={fulfilledRequirements}
+                  coverage={{ idDocument: idDocumentCoverage, proofOfAddress: proofOfAddressCoverage }}
+                  approvedDocuments={approvedDocuments}
+                  rejectedDocuments={rejectedDocuments}
                   wsConnected={wsConnected}
                   onOpenDocument={onOpenDocument}
                   selection={selection}
                   rowActions={rowActions}
                   readOnly={isFinalised}
                 />
-
-                {flaggedDocuments.length > 0 && (
-                  <FlaggedItemsCard
-                    caseMatchNeedsReview={caseMatchNeedsReview}
-                    caseMatches={caseMatches}
-                    flaggedDocuments={flaggedDocuments}
-                    onOpenDocument={onOpenDocument}
-                  />
-                )}
-
-                {rejectedDocuments.length > 0 && (
-                  <RejectedDocumentsCard
-                    rejectedDocuments={rejectedDocuments}
-                    wsConnected={wsConnected}
-                    onOpenDocument={onOpenDocument}
-                  />
-                )}
               </section>
 
-              <RequirementsSidebar
-                fulfilledRequirements={fulfilledRequirements}
-                idDocumentCoverage={idDocumentCoverage}
-                identityNames={identityNames}
-                proofOfAddressCoverage={proofOfAddressCoverage}
-              />
             </div>
-          )}
-
-          {activeSection === 'approved' && (
-            approvedDocuments.length > 0 ? (
-              <ApprovedDocumentsCard approvedDocuments={approvedDocuments} wsConnected={wsConnected} onOpenDocument={onOpenDocument} />
-            ) : (
-              <section className="summary-card">
-                <div className="summary-card-header">
-                  <div className="summary-card-title">
-                    <span className="summary-icon">✓</span>
-                    <h2>Approved Documents</h2>
-                  </div>
-                </div>
-                <div className="summary-message">
-                  <div>
-                    <strong>No approved documents yet.</strong>
-                    <p>Documents appear here once an officer approves them from the Documents tab.</p>
-                  </div>
-                </div>
-              </section>
-            )
           )}
 
           {activeSection === 'risk' && (
@@ -536,7 +493,7 @@ export default function UploadPage({
 
           {activeSection === 'cost' && <CaseCostCard caseId={selectedCase.id} documents={documents} />}
         </div>
-      </div>
+      </CaseFrame>
 
       {caseDeleteOpen && (
         <ConfirmDialog

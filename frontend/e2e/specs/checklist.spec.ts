@@ -35,38 +35,45 @@ const REQUIRED = [
   'Notice of Assessment',
 ];
 const ADDITIONAL = ['Company Proof of Address', 'List of Loans', 'Source of Personal Wealth'];
+const REQUIRED_VALUES = [
+  'id_document', 'bank_statement', 'proof_of_address', 'fatca_crs_declaration', 'certificate_of_incorporation',
+  'certificate_of_incumbency', 'company_constitution', 'credit_report', 'payslip', 'source_of_wealth', 'notice_of_assessment',
+];
 
-const sidebar = (page: Page) => page.locator('.upload-sidebar');
-const requiredList = (page: Page) => sidebar(page).locator('.requirements-list').first();
-const additionalList = (page: Page) => sidebar(page).locator('.requirements-list').nth(1);
-const requirement = (list: ReturnType<typeof requiredList>, label: string) =>
-  list.locator('.requirement-row').filter({ hasText: new RegExp(`^${label.replace(/[()/]/g, '\\$&')}`) });
+// The Documents card is the checklist: what the case still lacks is listed in its Missing group, one row per
+// required document, and everything the case has is a file row under the other groups.
+const card = (page: Page) => page.locator('.documents-card');
+const progress = (page: Page) => card(page).locator('.checklist-progress');
+const missingRow = (page: Page, label: string) =>
+  page.locator('.checklist-missing-row:not(.checklist-optional-row)').filter({
+    has: page.locator('.document-type-cell', { hasText: new RegExp(`^${label.replace(/[()/]/g, '\\$&')}$`) }),
+  });
+// The optional documents the case has none of yet, listed in their own group.
+const additionalNote = (page: Page) => page.locator('.checklist-additional');
 
 test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
-  test('DI-031 required and optional documents are shown as separate requirement types @DI-031', async ({ page, backend }) => {
-    const fixture = loadFixture(backend, 'anchorpoint');
+  test('DI-031 the required documents the case lacks are listed as missing, the optional ones in a note of their own @DI-031', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'harbor-light');
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
-    await expect(sidebar(page).getByText('Required documents')).toBeVisible();
-    await expect(sidebar(page).getByText('Present in every case')).toBeVisible();
-    await expect(sidebar(page).getByText('Additional Documents')).toBeVisible();
-    await expect(sidebar(page).getByText('May be required depending on the case')).toBeVisible();
-
-    await expect(requiredList(page).locator(':scope > li')).toHaveCount(REQUIRED.length);
-    await expect(additionalList(page).locator(':scope > li')).toHaveCount(ADDITIONAL.length);
+    const fulfilled = new Set(fixture.case.fulfilled_requirements);
+    await expect(page.locator('.checklist-missing-row:not(.checklist-optional-row)')).toHaveCount(REQUIRED.length - [...fulfilled].filter((value) => REQUIRED_VALUES.includes(value)).length);
+    await expect(progress(page)).toContainText(`of ${REQUIRED.length} required`);
+    // The optional documents are not part of the count, and only the ones still lacking are named.
     for (const label of ADDITIONAL) {
-      await expect(requirement(additionalList(page), label)).toBeVisible();
-      await expect(requirement(requiredList(page), label)).toHaveCount(0);
+      await expect(page.locator('.checklist-missing-row:not(.checklist-optional-row)').filter({ hasText: label })).toHaveCount(0);
     }
+    await expect(additionalNote(page)).toContainText('only if the case needs them');
+    await expect(additionalNote(page)).toContainText('Company Proof of Address');
+    await expect(additionalNote(page)).not.toContainText('List of Loans');
   });
 
   test('DI-033 uploaded optional documents are mapped to their optional requirement @DI-033', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
-    for (const label of ADDITIONAL) {
-      await expect(requirement(additionalList(page), label)).toHaveClass(/fulfilled/);
-    }
+    // All three optional documents are in, so none is named as still lacking.
+    await expect(additionalNote(page)).toHaveCount(0);
     const table = page.locator('.documents-table');
     for (const filename of ['FacilityLetter_AIB_2026-03-09_1.pdf', 'Company_UtilityBill_45040.pdf', 'SimS_SourceOfWealth.pdf']) {
       await expect(table.getByText(filename)).toBeVisible();
@@ -85,19 +92,18 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
 
     // DI-034: every required document, and only some of the optional ones.
     removeDocuments('Company_UtilityBill');
-    await expect(requirement(additionalList(page), 'Company Proof of Address')).not.toHaveClass(/fulfilled/);
-    await expect(requirement(additionalList(page), 'List of Loans')).toHaveClass(/fulfilled/);
-    await expect(sidebar(page).locator('.section-label').first()).toContainText(`${REQUIRED.length} / ${REQUIRED.length}`);
-    for (const label of REQUIRED) {
-      await expect(requirement(requiredList(page), label)).toHaveClass(/fulfilled/);
-    }
+    await expect(additionalNote(page)).toContainText('Company Proof of Address');
+    await expect(additionalNote(page)).not.toContainText('List of Loans');
+    await expect(progress(page)).toContainText(`${REQUIRED.length} of ${REQUIRED.length} required`);
+    await expect(page.locator('.checklist-missing-row:not(.checklist-optional-row)')).toHaveCount(0);
 
     // DI-032: none of the optional documents at all.
     removeDocuments('LoanFacility', 'LoanOffer', 'FacilityLetter', 'SimS_SourceOfWealth', 'Wealth_Statement_scan');
     for (const label of ADDITIONAL) {
-      await expect(requirement(additionalList(page), label)).not.toHaveClass(/fulfilled/);
+      await expect(additionalNote(page)).toContainText(label);
     }
-    await expect(sidebar(page).locator('.section-label').first()).toContainText(`${REQUIRED.length} / ${REQUIRED.length}`);
+    await expect(progress(page)).toContainText(`${REQUIRED.length} of ${REQUIRED.length} required`);
+    await expect(page.locator('.checklist-missing-row:not(.checklist-optional-row)')).toHaveCount(0);
     await page.goto('/cases');
     await expect(page.locator('.case-row').filter({ hasText: 'Anchorpoint' })).toContainText('Pending Review');
   });
@@ -117,23 +123,19 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
     for (const [filename, type, label] of expected) {
       const row = page.locator('.documents-table-row').filter({ hasText: filename });
       await expect(row.locator('.document-type-cell')).toHaveText(new RegExp(type, 'i'));
-      await expect(requirement(requiredList(page), label)).toHaveClass(/fulfilled/);
+      await expect(missingRow(page, label)).toHaveCount(0);
     }
     const loans = page.locator('.documents-table-row').filter({ hasText: 'C014_ListLoans' });
     await expect(loans.locator('.document-type-cell')).toHaveText(/list of loans/i);
-    await expect(requirement(additionalList(page), 'List of Loans')).toHaveClass(/fulfilled/);
+    await expect(additionalNote(page)).not.toContainText('List of Loans');
   });
 
   test('DI-036 an NRIC (front + back) fulfils both identity document and proof of address @DI-036', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
-    const identity = requirement(requiredList(page), 'Identity Document (NRIC/Passport)');
-    await expect(identity).toHaveClass(/fulfilled/);
-    await expect(identity.locator('.requirement-progress')).toHaveText('(2/2)');
-    const address = requirement(requiredList(page), 'Personal Proof of Address');
-    await expect(address).toHaveClass(/fulfilled/);
-    await expect(address.locator('.requirement-progress')).toHaveText('(2/2)');
+    await expect(missingRow(page, 'Identity Document (NRIC/Passport)')).toHaveCount(0);
+    await expect(missingRow(page, 'Personal Proof of Address')).toHaveCount(0);
 
     for (const side of ['MuhammadD_NRIC_front.jpg', 'MuhammadD_NRIC_back.jpg']) {
       await expect(page.locator('.documents-table-row').filter({ hasText: side }).locator('.document-type-cell')).toHaveText(/nric/i);
@@ -172,14 +174,11 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
       notice_of_assessment: 'Notice of Assessment',
     };
     for (const [value, label] of Object.entries(labelByValue)) {
-      const row = requirement(requiredList(page), label);
-      if (fulfilled.has(value)) {
-        await expect(row, `${label} is fulfilled`).toHaveClass(/fulfilled/);
-      } else {
-        await expect(row, `${label} is still missing`).not.toHaveClass(/fulfilled/);
-      }
+      await expect(missingRow(page, label), `${label} ${fulfilled.has(value) ? 'is fulfilled' : 'is still missing'}`).toHaveCount(
+        fulfilled.has(value) ? 0 : 1,
+      );
     }
-    await expect(sidebar(page).locator('.section-label').first()).toContainText(`4 / ${REQUIRED.length}`);
+    await expect(progress(page)).toContainText(`4 of ${REQUIRED.length} required`);
   });
 
   test('DI-others-05 an NRIC with only one side uploaded says which side is missing @DI-others', async ({ page, backend }) => {
@@ -189,7 +188,7 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
     const keepAllBut = (...parts: string[]) => {
       backend.documents = all.filter((d) => !parts.some((part) => d.filename.includes(part)));
     };
-    const missingSide = requiredList(page).locator('li', { hasText: 'Identity Document (NRIC/Passport)' }).locator('.requirement-unmatched');
+    const missingSide = missingRow(page, 'Identity Document (NRIC/Passport)').locator('.checklist-hint');
 
     keepAllBut('Passport_6086', 'MuhammadD_NRIC_back');
     await page.goto(`${fixture.caseUrl}?section=documents`);
@@ -206,7 +205,7 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
     backend.documents = backend.documents.filter((d) => !d.filename.includes('Passport_6086'));
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
-    const address = requiredList(page).locator('li', { hasText: 'Personal Proof of Address' }).locator('.requirement-unmatched');
+    const address = missingRow(page, 'Personal Proof of Address').locator('.checklist-hint');
     await expect(address).toHaveText('Address on file but no matching ID uploaded: Sim Shu Ting');
   });
 });

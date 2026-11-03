@@ -8,7 +8,7 @@ export function LoadErrorState({ message, onRetry }: { message: string; onRetry?
   return (
     <section className="not-found not-found--error" role="alert" aria-labelledby="load-error-title">
       <div className="not-found__icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="9" />
           <path d="M12 7.5v5.5" />
           <path d="M12 16.5h.01" />

@@ -96,6 +96,20 @@ export function SeverityGauge({ score, level }: { score: number | null; level: s
   );
 }
 
+// What each part of the dial means, the case's own level marked, so the level never rests on colour alone.
+export function SeverityLegend({ level }: { level: string | null }) {
+  return (
+    <ul className="severity-legend" aria-label="Score bands">
+      {SCORE_BANDS.map((band) => (
+        <li key={band.level} className={band.level === level ? 'severity-legend-current' : undefined}>
+          <span className={`severity-legend-swatch risk-gauge-band--${band.level.toLowerCase()}`} aria-hidden="true" />
+          {band.level} <span className="severity-legend-range">{band.min}–{band.max}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 // The Case Summary's Overall Case Severity card: its title, then the dial with the level, why, and what each band
 // means beside it.
 export function SeverityCard({ risk }: { risk: CaseRisk | null }) {
@@ -106,17 +120,9 @@ export function SeverityCard({ risk }: { risk: CaseRisk | null }) {
       <div className="case-overview-risk-body">
         <SeverityGauge score={scored && risk.score != null ? risk.score : null} level={scored ? risk.level : null} />
         <div className="case-overview-risk-copy">
-          <strong>{scored ? `${risk.level} risk` : risk?.state === 'pending' ? 'Assessment in progress' : 'Not scored yet'}</strong>
+          <strong>{scored ? `${risk.level} Risk` : risk?.state === 'pending' ? 'Assessment in progress' : 'Not scored yet'}</strong>
           <span>{scored ? 'Based on completed document checks' : risk?.state === 'failed' ? 'A document check failed to complete' : 'Run case analysis after documents are approved and scanned'}</span>
-          {/* What each part of the dial means, the case's own level marked, so the level never rests on colour alone. */}
-          <ul className="severity-legend" aria-label="Score bands">
-            {SCORE_BANDS.map((band) => (
-              <li key={band.level} className={scored && band.level === risk.level ? 'severity-legend-current' : undefined}>
-                <span className={`severity-legend-swatch risk-gauge-band--${band.level.toLowerCase()}`} aria-hidden="true" />
-                {band.level} <span className="severity-legend-range">{band.min}–{band.max}</span>
-              </li>
-            ))}
-          </ul>
+          <SeverityLegend level={scored ? risk.level : null} />
         </div>
       </div>
     </article>

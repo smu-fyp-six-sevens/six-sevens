@@ -62,8 +62,8 @@ SGT = timezone(timedelta(hours=8), "SGT")
 # The app's palette (frontend/src/styles/base.css, tokens.css).
 INK = colors.HexColor("#12203d")
 INK_SOFT = colors.HexColor("#5b6478")
-STEEL = colors.HexColor("#3d5a80")
-LINE = colors.HexColor("#dad5c9")
+STEEL = colors.HexColor("#355f96")
+LINE = colors.HexColor("#e3e2de")
 PANEL = colors.HexColor("#f7f8fa")
 PANEL_LINE = colors.HexColor("#e0e5eb")
 TEAL = colors.HexColor("#166d5f")
@@ -83,20 +83,30 @@ def _hex(colour: colors.Color) -> str:
 
 SOFT = _hex(INK_SOFT)
 
-# One hue, light to dark, so no level reads as "safe" (case-summary.css): (badge fill, badge text, gauge band).
+# The crimson risk scale, light to dark, so no level reads as "safe" (tokens.css --risk-*): (badge fill, badge
+# text, gauge band). Low's word is ink-soft, as on the case page.
+_RISK_LOW_TINT = colors.HexColor("#fdf3f5")
+_RISK_MEDIUM_TINT = colors.HexColor("#f8d7de")
+_RISK_MEDIUM_INK = colors.HexColor("#7a1530")
+_RISK_HIGH = colors.HexColor("#b4233c")
 RISK_COLOURS: dict[str, tuple[colors.Color, colors.Color, colors.Color]] = {
-    "Low": (colors.HexColor("#fdf0e8"), colors.HexColor("#a0502e"), colors.HexColor("#f6c9b0")),
-    "Medium": (colors.HexColor("#f9d2bd"), colors.HexColor("#8a3412"), colors.HexColor("#ec9673")),
-    "High": (colors.HexColor("#c2412a"), colors.white, colors.HexColor("#d0543a")),
-    "Critical": (colors.HexColor("#7f1414"), colors.white, colors.HexColor("#7f1414")),
+    "Low": (_RISK_LOW_TINT, INK_SOFT, colors.HexColor("#e3a6b2")),
+    "Medium": (_RISK_MEDIUM_TINT, _RISK_MEDIUM_INK, colors.HexColor("#d9667f")),
+    "High": (_RISK_HIGH, colors.white, _RISK_HIGH),
+    "Critical": (colors.HexColor("#6b1024"), colors.white, colors.HexColor("#6b1024")),
 }
 # The 0-100 score's bands (case_risk.SCORE_BANDS).
 RISK_BANDS = [("Low", 0, 24), ("Medium", 25, 49), ("High", 50, 79), ("Critical", 80, 100)]
 
+# A finding's severity on the same crimson scale: (fill, text).
 SEVERITY_COLOURS: dict[str, tuple[colors.Color, colors.Color]] = {
-    "high": (RED_BG, RED),
-    "medium": (AMBER_BG, colors.HexColor("#8a5a06")),
-    "low": (PANEL, INK_SOFT),
+    "high": (_RISK_HIGH, colors.white),
+    "medium": (_RISK_MEDIUM_TINT, _RISK_MEDIUM_INK),
+    "low": (_RISK_LOW_TINT, INK_SOFT),
+}
+# A severity's mark on white (a list's dot), the scale's colour for that level.
+SEVERITY_MARKS: dict[str, colors.Color] = {
+    "high": _RISK_HIGH, "medium": colors.HexColor("#d9667f"), "low": colors.HexColor("#e3a6b2"),
 }
 _SEVERITY_RANK = {"high": 3, "medium": 2, "low": 1}
 
@@ -129,28 +139,27 @@ STATUS_LABELS = {
 }
 # The case's stage as the case page's badge names it (frontend utils/caseStages.ts).
 CASE_STAGE_LABELS = {
-    "open": "Open",
+    "open": "Awaiting Documents",
     "processing_documents": "Processing Documents",
     "pending_review": "Pending Review",
-    "documents_incomplete": "Documents Incomplete",
-    "fraud_detection": "Fraud Detection",
-    "ready_for_analysis": "Ready for Analysis",
+    "documents_incomplete": "Missing Documents",
+    "fraud_detection": "Detecting Fraud",
+    "ready_for_analysis": "Ready to Analyse",
     "pending_evaluation": "Pending Evaluation",
-    "case_analysed": "Case Analysed",
+    "case_analysed": "Ready to Finalise",
     "finalised": "Finalised",
     "failed": "Failed",
 }
-# The badge's colour for each stage (caseStages.ts tones, case-stage.css --tone-tint and --tone-ink): (fill, ink).
+# The badge's colour for each stage, by who acts next (caseStages.ts tones, case-stage.css --tone-tint and
+# --tone-ink): (fill, ink).
 _TONES = {
-    "grey": ("#f2f4f7", "#4b5565"), "blue-1": ("#edf3fc", "#2f5fa8"), "blue-2": ("#e6edfc", "#1d3f9e"),
-    "amber-1": ("#fff8e8", "#8a5a00"), "amber-2": ("#fff3dd", "#8a5300"), "amber-3": ("#fdeedb", "#8f4a05"),
-    "amber-4": ("#f9e6d6", "#7a3a02"), "green": ("#e8f5ee", "#17603c"), "slate": ("#e8edf3", "#1e3a5f"),
-    "red": ("#fbeaea", "#962626"),
+    "idle": ("#f3f6fa", "#43536b"), "system": ("#e8f0fb", "#2f5fa8"), "officer": ("#fff8e8", "#8a5a00"),
+    "done": ("#eaf7f3", "#17603c"), "closed": ("#e8edf3", "#34455f"), "failed": ("#fbe8e2", "#9a3522"),
 }
 _STAGE_TONES = {
-    "open": "grey", "processing_documents": "blue-1", "fraud_detection": "blue-2", "pending_review": "amber-1",
-    "documents_incomplete": "amber-2", "ready_for_analysis": "amber-3", "pending_evaluation": "amber-4",
-    "case_analysed": "green", "finalised": "slate", "failed": "red",
+    "open": "idle", "processing_documents": "system", "fraud_detection": "system", "pending_review": "officer",
+    "documents_incomplete": "officer", "ready_for_analysis": "officer", "pending_evaluation": "officer",
+    "case_analysed": "done", "finalised": "closed", "failed": "failed",
 }
 CASE_STAGE_COLOURS: dict[str, tuple[colors.Color, colors.Color]] = {
     stage: (colors.HexColor(_TONES[tone][0]), colors.HexColor(_TONES[tone][1])) for stage, tone in _STAGE_TONES.items()
@@ -862,7 +871,7 @@ def _summary_section(completed: CaseAnalysis) -> list[Flowable]:
                 None,
             )
             severity = finding.severity if finding else "low"
-            dot = _Mark("dot", SEVERITY_COLOURS.get(severity, SEVERITY_COLOURS["low"])[1])
+            dot = _Mark("dot", SEVERITY_MARKS.get(severity, SEVERITY_MARKS["low"]))
             where = f"<br/><font size='7.5' color='{SOFT}'>{_text(finding.filename)}</font>" if finding and finding.source == "document" else ""
             rows.append([dot, Paragraph(_text(reason.text) + where, STYLES["body"])])
         table = Table(rows, colWidths=[6 * mm, CONTENT_WIDTH - 6 * mm])

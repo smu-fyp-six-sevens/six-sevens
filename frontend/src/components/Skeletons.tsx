@@ -1,4 +1,5 @@
 import AppHeader from './AppHeader';
+import CaseFrame from './CaseFrame';
 
 // Placeholders shaped like the pages they stand in for, so nothing moves when the real page arrives.
 // The pulsing bar itself (.skeleton-bar) is shared with the case queue.
@@ -67,19 +68,21 @@ export function CasePageSkeleton({ label = 'Loading case…' }: { label?: string
 
       <span className="sr-only" role="status">{label}</span>
 
-      <HeaderSkeleton />
-
-      <div className="case-layout">
-        <div className="skeleton-nav" aria-hidden="true">
-          {Array.from({ length: 9 }, (_, index) => (
-            <Bar key={index} size="pill" />
-          ))}
-        </div>
+      <CaseFrame
+        nav={
+          <div className="skeleton-nav" aria-hidden="true">
+            {Array.from({ length: 9 }, (_, index) => (
+              <Bar key={index} size="pill" />
+            ))}
+          </div>
+        }
+      >
+        <HeaderSkeleton />
 
         <div className="case-content" aria-hidden="true">
           <CaseOverviewSkeleton />
         </div>
-      </div>
+      </CaseFrame>
     </main>
   );
 }
@@ -109,9 +112,20 @@ export function DocumentPageSkeleton() {
     <div className="shell shell--upload document-details-page">
       <AppHeader />
 
-      <HeaderSkeleton />
+      <CaseFrame
+        collapsed
+        nav={
+          <div className="skeleton-nav" aria-hidden="true">
+            {Array.from({ length: 9 }, (_, index) => (
+              <Bar key={index} size="pill" />
+            ))}
+          </div>
+        }
+      >
+        <HeaderSkeleton />
 
-      <DocumentBodySkeleton />
+        <DocumentBodySkeleton />
+      </CaseFrame>
     </div>
   );
 }
@@ -138,14 +152,16 @@ export function DashboardSkeleton() {
     <div className="dashboard-skeleton" role="status" aria-busy="true">
       <span className="sr-only">Loading cases…</span>
 
-      <div className="dashboard-stat-grid" aria-hidden="true">
-        {Array.from({ length: 6 }, (_, index) => (
-          <div key={index} className="dashboard-stat-card dashboard-skeleton-stat">
-            <Bar size="short" />
-            <Bar size="title" />
-            <Bar size="medium" />
-          </div>
-        ))}
+      <div className="dashboard-panel case-pipeline" aria-hidden="true">
+        <Bar size="short" />
+        <ol className="case-pipeline-track">
+          {Array.from({ length: 10 }, (_, index) => (
+            <li key={index} className="case-pipeline-step">
+              <span className="case-pipeline-count" />
+              <Bar size="short" />
+            </li>
+          ))}
+        </ol>
       </div>
 
       <div className="dashboard-insight-grid" aria-hidden="true">

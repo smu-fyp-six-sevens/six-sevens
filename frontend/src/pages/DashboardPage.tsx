@@ -6,13 +6,16 @@ import HeaderFilter, { type FilterOption } from '../components/HeaderFilter';
 import { RefreshButton } from '../components/RefreshButton';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { InfoIcon, InfoLabel } from '../components/InfoTip';
+import { CasePipeline } from './CasePipeline';
 import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
 import { CoverageRings, FlagPills, RiskOverview } from './DashboardInsights';
 import { CasesOverTime, MostRequestedDocuments, NeedsAttention, ProcessingAndCost, type AttentionCase } from './DashboardCasePanels';
 import { CASE_STAGES, caseStageLabel, caseStageTone } from '../utils/caseStages';
+import { StageMark } from '../components/StageMark';
 import { formatDuration } from './upload/processingTimes';
-import { formatDocumentType, type DetectionMetricsFilters } from '../services/uploadService';
+import { formatDocumentType, type CaseStage, type DetectionMetricsFilters } from '../services/uploadService';
 import { formatCheck } from '../utils/checkLabels';
+import { Icon } from '../components/Icon';
 
 // A case stage's label (utils/caseStages.ts), so the dashboard and the case queue name and colour cases the same way.
 type Status = string;
@@ -57,15 +60,15 @@ interface FlagSummary {
 }
 
 const MOCK_CASES: MockCase[] = [
-  { id: 'GLDB-02481', applicant: 'Meridian Consulting Group', submitted: '2026-10-18', status: 'Case Analysed', risk: 'High', score: 82, analyst: 'J. Tan', documentTypes: ['Bank statement', 'Payslip'], flags: ['Identity mismatch', 'Balance inconsistency', 'Unverified address'] },
+  { id: 'GLDB-02481', applicant: 'Meridian Consulting Group', submitted: '2026-10-18', status: 'Ready to Finalise', risk: 'High', score: 82, analyst: 'J. Tan', documentTypes: ['Bank statement', 'Payslip'], flags: ['Identity mismatch', 'Balance inconsistency', 'Unverified address'] },
   { id: 'GLDB-02480', applicant: 'Northstar Trading Pte Ltd', submitted: '2026-10-17', status: 'Processing Documents', risk: 'Medium', score: 58, analyst: 'A. Lim', documentTypes: ['Certificate', 'Bank statement'], flags: ['Company detail mismatch', 'Unusual transaction'] },
-  { id: 'GLDB-02479', applicant: 'Harbourlight Foods', submitted: '2026-10-16', status: 'Open', risk: 'High', score: 77, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Certificate'], flags: ['Invalid postal code', 'Identity mismatch'] },
+  { id: 'GLDB-02479', applicant: 'Harbourlight Foods', submitted: '2026-10-16', status: 'Awaiting Documents', risk: 'High', score: 77, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Certificate'], flags: ['Invalid postal code', 'Identity mismatch'] },
   { id: 'GLDB-02478', applicant: 'Cedar & Stone Pte Ltd', submitted: '2026-10-15', status: 'Failed', risk: 'Low', score: 18, analyst: 'M. Goh', documentTypes: ['Bank statement', 'Payslip'], flags: [] },
-  { id: 'GLDB-02477', applicant: 'Orchid Systems', submitted: '2026-10-13', status: 'Case Analysed', risk: 'High', score: 91, analyst: 'A. Lim', documentTypes: ['Certificate', 'Proof of address'], flags: ['Invalid registration number', 'Identity mismatch', 'Font anomaly'] },
+  { id: 'GLDB-02477', applicant: 'Orchid Systems', submitted: '2026-10-13', status: 'Ready to Finalise', risk: 'High', score: 91, analyst: 'A. Lim', documentTypes: ['Certificate', 'Proof of address'], flags: ['Invalid registration number', 'Identity mismatch', 'Font anomaly'] },
   { id: 'GLDB-02476', applicant: 'Brightpath Logistics', submitted: '2026-10-12', status: 'Processing Documents', risk: 'Medium', score: 49, analyst: 'J. Tan', documentTypes: ['Bank statement', 'Certificate'], flags: ['Balance inconsistency'] },
   { id: 'GLDB-02475', applicant: 'Evergreen Medical Supplies', submitted: '2026-10-10', status: 'Processing Documents', risk: 'Low', score: 22, analyst: 'M. Goh', documentTypes: ['Payslip', 'Proof of address'], flags: [] },
-  { id: 'GLDB-02474', applicant: 'Silverline Manufacturing', submitted: '2026-10-08', status: 'Open', risk: 'Medium', score: 64, analyst: 'A. Lim', documentTypes: ['Certificate', 'Bank statement'], flags: ['Company detail mismatch', 'Unusual transaction'] },
-  { id: 'GLDB-02473', applicant: 'Bluepeak Design Studio', submitted: '2026-09-29', status: 'Case Analysed', risk: 'Medium', score: 61, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Bank statement'], flags: ['Invalid postal code', 'Identity mismatch'] },
+  { id: 'GLDB-02474', applicant: 'Silverline Manufacturing', submitted: '2026-10-08', status: 'Awaiting Documents', risk: 'Medium', score: 64, analyst: 'A. Lim', documentTypes: ['Certificate', 'Bank statement'], flags: ['Company detail mismatch', 'Unusual transaction'] },
+  { id: 'GLDB-02473', applicant: 'Bluepeak Design Studio', submitted: '2026-09-29', status: 'Ready to Finalise', risk: 'Medium', score: 61, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Bank statement'], flags: ['Invalid postal code', 'Identity mismatch'] },
   { id: 'GLDB-02472', applicant: 'Pioneer Green Energy', submitted: '2026-09-22', status: 'Processing Documents', risk: 'Low', score: 31, analyst: 'M. Goh', documentTypes: ['Certificate', 'Payslip'], flags: ['Company detail mismatch'] },
 ];
 // Preview rows only: live cases carry their real time from the case list.
@@ -78,6 +81,10 @@ const STAGE_BY_LABEL = new Map(CASE_STAGES.map((stage) => [caseStageLabel(stage)
 
 function statusTone(status: Status): string {
   return caseStageTone(STAGE_BY_LABEL.get(status));
+}
+
+function statusStage(status: Status): string | undefined {
+  return STAGE_BY_LABEL.get(status);
 }
 const SEVERITY_RANK: Record<FlagSummary['severity'], number> = { High: 3, Medium: 2, Low: 1 };
 function flagSeverity(value: string): FlagSummary['severity'] {
@@ -144,7 +151,7 @@ function CaseTable({ cases, heading, onOpenCase, showRiskAnalysis = false, showP
               >
                 <td data-label="Case / applicant"><strong>{item.id}</strong><span>{item.applicant}</span></td>
                 <td className="center-col" data-label="Submitted">{new Date(`${item.submitted}T12:00:00`).toLocaleDateString('en-SG', { day: '2-digit', month: 'short' })}</td>
-                <td className="center-col" data-label="Status"><span className={`case-stage-badge tone-${statusTone(item.status)}`}>{item.status}</span></td>
+                <td className="center-col" data-label="Status"><span className={`case-stage-badge tone-${statusTone(item.status)}`}><StageMark stage={statusStage(item.status)} />{item.status}</span></td>
                 <td className="center-col" data-label="Risk">
                   <div className="risk-cell">
                     {item.risk
@@ -288,11 +295,15 @@ export default function DashboardPage({
     STATUSES.map((status) => [status, visibleCases.filter((item) => item.status === status).length]),
   ) as Record<Status, number>, [visibleCases]);
   // The filter's counts ignore the status filter itself, like the case queue's.
+  const stageCounts = useMemo(
+    () => Object.fromEntries(CASE_STAGES.map((stage) => [stage, statusCounts[caseStageLabel(stage)]])) as Record<CaseStage, number>,
+    [statusCounts],
+  );
   const statusOptions: FilterOption[] = STATUSES.map((status) => ({
     value: status,
     text: status,
     count: casesInRange.filter((item) => item.status === status).length,
-    label: <><span className={`case-status-dot tone-${statusTone(status)}`} aria-hidden="true" />{status}</>,
+    label: <><StageMark stage={statusStage(status)} />{status}</>,
   }));
 
   const byDocumentType = useMemo(() => {
@@ -388,7 +399,7 @@ export default function DashboardPage({
                 const count = isLoading ? null : item === 'Cases' ? visibleCases.length : item === 'Flags' ? flagRows.length : null;
                 return (
                   <button key={item} className={tab === item ? 'active' : ''} aria-current={tab === item ? 'page' : undefined} onClick={() => setTab(item)}>
-                    <span className="nav-icon" aria-hidden="true">{item === 'Overview' ? '▦' : item === 'Cases' ? '▤' : item === 'Flags' ? '⚑' : item === 'Accuracy' ? '✓' : '◎'}</span>{item}
+                    <span className="nav-icon" aria-hidden="true"><Icon name={item === 'Overview' ? 'overview' : item === 'Cases' ? 'documents' : item === 'Flags' ? 'flag' : 'approved'} size={15} /></span>{item}
                     {count !== null && <span className="nav-count">{count}</span>}
                   </button>
                 );
@@ -414,10 +425,7 @@ export default function DashboardPage({
         <div className="dashboard-content dashboard-body-content">
           {/* First load: placeholders in the dashboard's own layout, not the sample cases. The Accuracy tab loads its own figures. */}
           {isLoading && tab !== 'Accuracy' ? <DashboardSkeleton /> : <>
-          {tab !== 'Flags' && tab !== 'Accuracy' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
-            <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-period">{range}</span></div><span className="stat-number">{visibleCases.length}</span><span className="stat-caption">Cases in view</span></article>
-            {STATUSES.map((status) => <article key={status} className="dashboard-stat-card"><div className="stat-top"><span className="stat-caption">{status}</span><span className={`case-status-dot tone-${statusTone(status)}`} /></div><span className="stat-number">{statusCounts[status]}</span><span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span></article>)}
-          </section>}
+          {tab !== 'Flags' && tab !== 'Accuracy' && <CasePipeline counts={stageCounts} total={visibleCases.length} period={range} />}
           {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
           {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
 

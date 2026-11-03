@@ -19,8 +19,10 @@ import DocumentReviewModal from './DocumentReviewModal';
 import type { ReviewLink } from './DocumentReviewModal';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { SCORE_BANDS } from './scoreBands';
+import { SeverityGauge, SeverityLegend } from './SeverityGauge';
 import { readingOrder } from '../../components/findingHighlights';
 import type { HighlightArea } from '../../components/findingHighlights';
+import { Icon } from '../../components/Icon';
 
 // The group cross-document findings sit in: they belong to the case, not to one document.
 const CASE_GROUP_ID = '__case__';
@@ -46,36 +48,17 @@ function addedDetail(rationale: string, summary: string): string {
     .join(' ');
 }
 
+// The score on the same dial as the Case Summary's Overall Case Severity card, with what each band means beside it.
 function ScoreGauge({ score, level }: { score: number; level: string }) {
   const band = SCORE_BANDS.find((b) => b.level === level);
   return (
     <div className="risk-score">
-      <div className="risk-score-figure">
-        <span className="risk-score-value">{score}</span>
-        <span className="risk-score-scale">/100</span>
-      </div>
+      <SeverityGauge score={score} level={level} />
       <div className="risk-score-detail">
         <span className={`risk-score-level risk-score-level--${level.toLowerCase()}`}>
-          {level} risk{band ? ` · ${band.min}–${band.max}` : ''}
+          {level} Risk{band ? ` · ${band.min}–${band.max}` : ''}
         </span>
-        <div className="risk-gauge" role="img" aria-label={`Score ${score} out of 100, ${level} risk`}>
-          {SCORE_BANDS.map((b) => (
-            <span
-              key={b.level}
-              className={`risk-gauge-band risk-gauge-band--${b.level.toLowerCase()} ${b.level === level ? 'risk-gauge-band--current' : ''}`}
-              style={{ flexGrow: b.max - b.min + 1 }}
-              title={`${b.level}: ${b.min}–${b.max}`}
-            />
-          ))}
-          <span className="risk-gauge-marker" style={{ left: `${Math.min(100, Math.max(0, score))}%` }} />
-        </div>
-        <div className="risk-gauge-labels" aria-hidden="true">
-          {SCORE_BANDS.map((b) => (
-            <span key={b.level} style={{ flexGrow: b.max - b.min + 1 }}>
-              {b.level}
-            </span>
-          ))}
-        </div>
+        <SeverityLegend level={level} />
       </div>
     </div>
   );
@@ -230,7 +213,7 @@ function NotScoredMessage({ risk }: { risk: CaseRisk | null }) {
 
   return (
     <div className={`summary-message summary-message--${tone}`}>
-      <span className="summary-message-icon">{tone === 'warning' ? '⚠' : 'ⓘ'}</span>
+      <span className="summary-message-icon"><Icon name={tone === 'warning' ? 'alert' : 'info'} size={18} /></span>
       <div>
         <strong>{title}</strong>
         <p>{body}</p>
@@ -621,13 +604,13 @@ export function CaseRiskCard({
       <section className="summary-card">
         <div className="summary-card-header">
           <div className="summary-card-title">
-            <span className="summary-icon summary-icon--risk">▥</span>
+            <span className="summary-icon summary-icon--risk"><Icon name="risk" size={20} /></span>
             <h2>Customer Risk Summary</h2>
           </div>
 
           {scored && (
             <span className={`risk-badge risk-badge--${scored.level!.toLowerCase()}`}>
-              {scored.level} risk
+              {scored.level} Risk
             </span>
           )}
         </div>
@@ -639,7 +622,7 @@ export function CaseRiskCard({
             {scored.score !== null && scored.score !== undefined && (
               <ScoreGauge score={scored.score} level={scored.level!} />
             )}
-            <div className="risk-overview">
+            <div className="risk-facts">
               <span>
                 Based on {scored.documents_scanned}{' '}
                 {scored.documents_scanned === 1 ? 'document' : 'documents'}
@@ -660,7 +643,7 @@ export function CaseRiskCard({
 
             {findings.length === 0 && (
               <div className="summary-message summary-message--success">
-                <span className="summary-message-icon">✓</span>
+                <span className="summary-message-icon"><Icon name="check" size={18} /></span>
                 <div>
                   <strong>No contributing findings.</strong>
                   <p>Detection found nothing worth flagging across this case's documents.</p>
@@ -690,7 +673,7 @@ export function CaseRiskCard({
         <section className="summary-card">
           <div className="summary-card-header">
             <div className="summary-card-title">
-              <span className="summary-icon">▤</span>
+              <span className="summary-icon"><Icon name="documents" size={20} /></span>
               <h2>Findings by Document</h2>
             </div>
           </div>
@@ -704,7 +687,7 @@ export function CaseRiskCard({
         <section className="summary-card">
           <div className="summary-card-header">
             <div className="summary-card-title">
-              <span className="summary-icon">▤</span>
+              <span className="summary-icon"><Icon name="documents" size={20} /></span>
               <h2>Documents to Review</h2>
             </div>
             {reviews.data && (
@@ -725,7 +708,7 @@ export function CaseRiskCard({
             <div className="flagged-list">{toReview.map(renderGroup)}</div>
           ) : (
             <div className="summary-message summary-message--success">
-              <span className="summary-message-icon">✓</span>
+              <span className="summary-message-icon"><Icon name="check" size={18} /></span>
               <div>
                 <strong>No more documents to review.</strong>
                 <p>Every document's findings have been reviewed. Open one below to change a verdict or report a missed issue.</p>
@@ -786,7 +769,7 @@ function PlaceLocator({ places, shownAt, onShow }: { places: Place[]; shownAt: n
   if (places.length === 1) {
     return (
       <button type="button" className="risk-finding-locate" onClick={() => onShow(places[0])}>
-        ⌖ Show on page {places[0].place.page}
+        <Icon name="locate" size={14} /> Show on page {places[0].place.page}
       </button>
     );
   }
@@ -799,7 +782,7 @@ function PlaceLocator({ places, shownAt, onShow }: { places: Place[]; shownAt: n
         title={`On page${pages.length > 1 ? 's' : ''} ${pages.join(', ')}`}
         onClick={() => onShow(places[0])}
       >
-        ⌖ Show on document · {places.length} places
+        <Icon name="locate" size={14} /> Show on document · {places.length} places
       </button>
     );
   }

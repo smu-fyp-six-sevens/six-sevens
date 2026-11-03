@@ -31,17 +31,19 @@ const C028_REPORT = readRegressionFixture<Report>('detection-report-c028.json');
 const CLEAN_REPORT = readRegressionFixture<Report>('detection-report-clean.json');
 const INCONCLUSIVE_REPORT = readRegressionFixture<Report>('detection-report-inconclusive.json');
 
-const approveButton = (page: Page) => page.getByRole('button', { name: '✓ Approve Document' });
-const rejectButton = (page: Page) => page.getByRole('button', { name: '✕ Reject Document' });
+const approveButton = (page: Page) => page.getByRole('button', { name: 'Approve Document' });
+const rejectButton = (page: Page) => page.getByRole('button', { name: 'Reject Document' });
 // Rejecting is final, so the page asks first.
 async function rejectDocument(page: Page) {
   await rejectButton(page).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Reject' }).click();
 }
 const documentStatus = (page: Page) => page.locator('.document-status');
-const detectionPanel = (page: Page) => page.locator('section', { has: page.getByRole('heading', { name: 'Detection' }) });
+const detectionPanel = (page: Page) => page.getByRole('region', { name: 'Detection' });
+const verdict = (page: Page) => detectionPanel(page).locator('.detection-verdict');
 const extractedCard = (page: Page) => page.locator('.documents-card:not(.approved-documents-card, .rejected-documents-card)');
-const approvedCard = (page: Page) => page.locator('.approved-documents-card');
+// Approved documents are a folded group at the foot of the Documents card.
+const approvedGroup = (page: Page) => page.locator('.documents-table-group--toggle', { hasText: 'Approved' });
 
 /** A real credit report from GLDB-02 that is ready to approve (no flagged fields). */
 function creditReport(backend: MockBackend) {
@@ -90,15 +92,15 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     document.status = 'detected';
     backend.detectionReports[document.id] = { ...C028_REPORT, document_id: document.id };
     await page.getByRole('button', { name: 'Refresh detection' }).click();
-    await expect(detectionPanel(page)).toContainText('Verdict: FLAGGED');
+    await expect(verdict(page)).toContainText('Flagged');
     await page.reload();
     await expectLocked(page);
 
     // MA-005: it has left Uploaded Files for its own tab.
     await page.goto(`${fixture.caseUrl}?section=documents`);
     await expect(extractedCard(page)).not.toContainText(document.filename);
-    await page.goto(`${fixture.caseUrl}?section=approved`);
-    await expect(approvedCard(page)).toContainText(document.filename);
+    await approvedGroup(page).click();
+    await expect(page.locator('.documents-card')).toContainText(document.filename);
   });
 
   test('MA-006 a document not yet approved stays in Uploaded Files @MA-006', async ({ page, backend }) => {
@@ -108,10 +110,8 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
     await expect(extractedCard(page)).toContainText(constitution.filename);
-    // No document is approved yet, so the Approved Documents tab has nothing to list.
-    await page.goto(`${fixture.caseUrl}?section=approved`);
-    await expect(page.getByText('No approved documents yet.')).toBeVisible();
-    await expect(approvedCard(page)).toHaveCount(0);
+    // No document is approved yet, so there is no Approved group to open.
+    await expect(approvedGroup(page)).toHaveCount(0);
   });
 
   test('MA-008 a document with an unreviewed low-confidence field cannot be approved @MA-008', async ({ page, backend }) => {
@@ -187,7 +187,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     document.status = 'detected';
     backend.detectionReports[document.id] = { ...C028_REPORT, document_id: document.id };
     await page.goto(fixture.documentUrl(document));
-    await expect(detectionPanel(page)).toContainText('Verdict: FLAGGED');
+    await expect(verdict(page)).toContainText('Flagged');
     await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toHaveCount(0);
 
     // Running again asks first: it costs a full run and replaces the report and findings.
@@ -206,7 +206,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     // The rerun stopped: the document is back to scanned, on the earlier report, which says the last run didn't finish.
     backend.push(document.case_id!);
     await expect(detectionPanel(page)).toContainText('The last run did not finish (Cancelled by loan officer)');
-    await expect(detectionPanel(page)).toContainText('Verdict: FLAGGED');
+    await expect(verdict(page)).toContainText('Flagged');
     await expect(detectionPanel(page).getByRole('button', { name: 'Run detection again' })).toBeVisible();
   });
 
@@ -271,19 +271,23 @@ test.describe('Lead detection agent @sprint3 @SCRUM-119', () => {
     document.status = 'detected';
     backend.detectionReports[document.id] = { ...report, document_id: document.id };
     await page.goto(fixture.documentUrl(document));
-    await expect(detectionPanel(page)).toContainText('Verdict:');
+    await expect(verdict(page)).toBeVisible();
     return detectionPanel(page);
   }
 
   test('FD-015 one verdict, one summary and one findings list naming each finding\'s specialist @FD-015', async ({ page, backend }) => {
     const panel = await openReport(page, backend, C028_REPORT);
 
-    await expect(panel.getByText(/^Verdict:/)).toHaveCount(1);
-    await expect(panel).toContainText(`Verdict: FLAGGED — ${C028_REPORT.summary}`);
-    await expect(panel.getByText(/^Findings \(\d+\):$/)).toHaveText(`Findings (${C028_REPORT.findings.length}):`);
-    for (const finding of C028_REPORT.findings) {
-      await expect(panel).toContainText(`(${finding.specialists.join(', ')})`);
-      await expect(panel).toContainText(finding.summary);
+    const titles = new Map(C028_REPORT.consulted.map((c) => [c.specialist, c.title]));
+    await expect(panel.locator('.detection-verdict')).toHaveCount(1);
+    await expect(panel.locator('.detection-verdict-label')).toHaveText('Flagged');
+    await expect(panel.locator('.detection-verdict-summary')).toHaveText(C028_REPORT.summary);
+    await expect(panel.locator('.detection-count')).toHaveText(String(C028_REPORT.findings.length));
+    const rows = panel.locator('.detection-findings > li');
+    await expect(rows).toHaveCount(C028_REPORT.findings.length);
+    for (const [index, finding] of C028_REPORT.findings.entries()) {
+      await expect(rows.nth(index)).toContainText(finding.summary);
+      await expect(rows.nth(index)).toContainText(finding.specialists.map((id) => titles.get(id) ?? id).join(', '));
     }
     expect(C028_REPORT.consulted.length).toBeGreaterThanOrEqual(2);
   });
@@ -291,11 +295,15 @@ test.describe('Lead detection agent @sprint3 @SCRUM-119', () => {
   test('FD-016 each specialist is listed with its brief and the tools it ran @FD-016', async ({ page, backend }) => {
     const panel = await openReport(page, backend, C028_REPORT);
 
-    for (const specialist of C028_REPORT.consulted) {
-      const line = `${specialist.title}${specialist.second_look ? ' (second look)' : ''} — ${specialist.brief} [tools: ${specialist.tools_called.join(', ')}]`;
-      await expect(panel).toContainText(line);
+    await panel.getByText('How it was checked').click();
+    const specialists = panel.locator('.detection-specialists > li');
+    await expect(specialists).toHaveCount(C028_REPORT.consulted.length);
+    for (const [index, specialist] of C028_REPORT.consulted.entries()) {
+      await expect(specialists.nth(index)).toContainText(`${specialist.title}${specialist.second_look ? ' (second look)' : ''}`);
+      await expect(specialists.nth(index)).toContainText(specialist.brief);
+      await expect(specialists.nth(index)).toContainText(specialist.tools_called.length ? 'Ran ' : 'Ran no checks');
     }
-    await expect(panel).toContainText('Nothing to check (passed):');
+    await expect(panel).toContainText('Nothing to check (passed)');
     await expect(panel).toContainText(C028_REPORT.nothing_to_check[0].reason!);
   });
 
@@ -303,27 +311,30 @@ test.describe('Lead detection agent @sprint3 @SCRUM-119', () => {
     const panel = await openReport(page, backend, C028_REPORT);
 
     expect(C028_REPORT.findings.some((f) => ['low', 'medium', 'high'].includes(f.severity))).toBe(true);
-    await expect(panel).toContainText('Verdict: FLAGGED');
-    await expect(panel).toContainText('[low]');
-    await expect(panel).toContainText('[medium]');
+    await expect(panel.locator('.detection-verdict-label')).toHaveText('Flagged');
+    await expect(panel.locator('.detection-findings .risk-severity--low').first()).toHaveText('low');
+    await expect(panel.locator('.detection-findings .risk-severity--medium').first()).toHaveText('medium');
   });
 
   test('FD-018 a clean report reads CLEAN with no findings @FD-018', async ({ page, backend }) => {
     const panel = await openReport(page, backend, CLEAN_REPORT);
 
-    await expect(panel).toContainText('Verdict: CLEAN — Nothing worth flagging was found.');
-    await expect(panel).toContainText('Findings (0):');
-    await expect(panel).not.toContainText('Could not assess:');
+    await expect(panel.locator('.detection-verdict-label')).toHaveText('Clean');
+    await expect(panel.locator('.detection-verdict-summary')).toHaveText('Nothing worth flagging was found.');
+    // No findings needs no findings section: the verdict says it.
+    await expect(panel.locator('.detection-findings')).toHaveCount(0);
+    await expect(panel).not.toContainText('Could not be checked');
   });
 
   test('FD-019 no findings with a check that could not run reads INCONCLUSIVE and lists the check @FD-019', async ({ page, backend }) => {
     const panel = await openReport(page, backend, INCONCLUSIVE_REPORT);
     const [unassessed] = INCONCLUSIVE_REPORT.unable_to_assess;
 
-    await expect(panel).toContainText('Verdict: INCONCLUSIVE');
-    await expect(panel).toContainText('Findings (0):');
-    await expect(panel).toContainText('Could not assess:');
-    await expect(panel).toContainText(`layout_rendering / font_consistency_tool — ${unassessed.reason}`);
+    await expect(panel.locator('.detection-verdict-label')).toHaveText('Inconclusive');
+    await expect(panel.locator('.detection-findings')).toHaveCount(0);
+    // A check that couldn't run is in plain view, never folded away: it is why the verdict isn't clean.
+    await expect(panel.locator('.detection-unassessed')).toBeVisible();
+    await expect(panel.locator('.detection-unassessed')).toContainText(`Font consistency: ${unassessed.reason}`);
   });
 
   test('FD-020 a second look is shown once, to a different specialist, with the lead\'s question @FD-020', async ({ page, backend }) => {
@@ -331,8 +342,12 @@ test.describe('Lead detection agent @sprint3 @SCRUM-119', () => {
     const secondLook = C028_REPORT.second_look!;
 
     expect(secondLook.from).not.toBe(secondLook.to);
-    await expect(panel.getByText(/^Second look:/)).toHaveCount(1);
-    await expect(panel).toContainText(`Second look: ${secondLook.from} → ${secondLook.to} — ${secondLook.question}`);
+    const titles = new Map(C028_REPORT.consulted.map((c) => [c.specialist, c.title]));
+    await panel.getByText('How it was checked').click();
+    await expect(panel.locator('.detection-second-look')).toHaveCount(1);
+    await expect(panel.locator('.detection-second-look')).toContainText(
+      `${titles.get(secondLook.from) ?? secondLook.from} asked ${titles.get(secondLook.to) ?? secondLook.to}: “${secondLook.question}”`,
+    );
     await expect(panel).toContainText('Digital Authenticity Analyst (second look)');
   });
 });

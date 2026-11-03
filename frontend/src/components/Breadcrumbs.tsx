@@ -5,7 +5,7 @@ import { ErrorMessage } from './ErrorMessage';
 export interface BreadcrumbMenuItem {
   key: string;
   to: string;
-  // Shown in mono before the label (a case number).
+  // Shown before the label (a case number), in tabular figures.
   tag?: string;
   label: string;
   current?: boolean;
