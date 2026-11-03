@@ -32,7 +32,8 @@ export function FlagPills({ flags, caseCount, compareCaseCount, onOpen }: { flag
       <div className="flag-pill-list">
         {flags.map((flag, index) => {
           const count = flag.caseIds.length;
-          const filled = Math.max(1, Math.round(count / casesPerPill));
+          // At least one pill for a flag in view; none for one only in the comparison.
+          const filled = count ? Math.max(1, Math.round(count / casesPerPill)) : 0;
           return (
             <button
               key={flag.name}

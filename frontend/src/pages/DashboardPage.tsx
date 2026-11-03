@@ -281,8 +281,19 @@ export default function DashboardPage({
   const view = useMemo(() => deriveView(visibleCases, costs), [visibleCases, costs]);
   const before: DashboardView | null = useMemo(() => (compareCases ? deriveView(compareCases, costs) : null), [compareCases, costs]);
   const { statusCounts, byDocumentType, flagRows, flagCases, attentionCases, analyticsCases } = view;
-  // The commonest flags, most cases first, for the Overview.
-  const commonFlags = [...flagRows].sort((a, b) => b.cases.length - a.cases.length).slice(0, INSIGHT_ROWS);
+  // The commonest flags, most cases first, for the Overview. When comparing, a flag raised only in the comparison
+  // is listed at 0 after them, so a drop to none shows rather than the row disappearing.
+  const wasFlagged = new Map(before?.flagRows.map((row) => [row.name, row]));
+  const commonFlags = [
+    ...[...flagRows].sort((a, b) => b.cases.length - a.cases.length),
+    ...[...wasFlagged.values()].filter((row) => !flagRows.some((now) => now.name === row.name))
+      .sort((a, b) => b.cases.length - a.cases.length).map((row) => ({ ...row, cases: [] })),
+  ].slice(0, INSIGHT_ROWS);
+  // Each document type in view, then any only in the comparison at 0, for the same reason.
+  const documentTypes: [string, number][] = [
+    ...byDocumentType,
+    ...(before?.byDocumentType ?? []).filter(([type]) => !byDocumentType.some(([now]) => now === type)).map(([type]): [string, number] => [type, 0]),
+  ];
   const openAnalyticsCase = (item: AnalyticsCase) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`);
   const stages = useMemo(() => STATUSES.map((status) => ({ label: status, tone: statusTone(status) })), []);
 
@@ -328,9 +339,11 @@ export default function DashboardPage({
                   period={period}
                   compare={comparePeriod}
                   onCompare={(first, second) => {
-                    setCustomPeriod(first);
+                    // The later period is always "This period", so every change reads as now against before.
+                    const [later, earlier] = second.to > first.to ? [second, first] : [first, second];
+                    setCustomPeriod(later);
                     setRangeChoice(CUSTOM_RANGE);
-                    setComparePeriod(second);
+                    setComparePeriod(earlier);
                   }}
                   onStop={() => setComparePeriod(null)}
                 />
@@ -365,8 +378,17 @@ export default function DashboardPage({
                 In the charts, solid is this period and striped is the comparison. Each period's cases are those created
                 in it, counted by their status now.
               </span>
+              {/* How to read the figures, in the periods' own dates. The comparison is normally the earlier period; a
+                  date range changed afterwards can make it the later one, and the wording says so rather than "since". */}
+              <p className="compare-banner-note">
+                Big numbers are <strong>{formatPeriod(period)}</strong>.{' '}
+                {comparePeriod.to < (period.from ?? period.to)
+                  ? <>Pills show the change since <strong>{formatPeriod(comparePeriod)}</strong>: for example, "+1" means 1 more than in {formatPeriod(comparePeriod)}.</>
+                  : <>Pills show how it differs from <strong>{formatPeriod(comparePeriod)}</strong>: for example, "+1" means 1 more than in {formatPeriod(comparePeriod)}.</>}
+                {' '}Green is better, red is worse.
+              </p>
               {overlap(period, comparePeriod) && (
-                <p className="compare-banner-warning" role="alert">
+                <p className="compare-banner-warning compare-banner-overlap" role="alert">
                   The periods overlap ({formatPeriod(overlap(period, comparePeriod)!)}): cases created then count in both.
                 </p>
               )}
@@ -383,11 +405,11 @@ export default function DashboardPage({
           <section className="dashboard-insight-grid">
             <article className="dashboard-panel flag-insight-panel">
               <div className="panel-heading"><div><h2>Most common flags</h2><p>Issues raised across the cases in view</p></div><button className="text-button" onClick={() => setTab('Flags')}>View flags <span>→</span></button></div>
-              {commonFlags.length ? <FlagPills flags={commonFlags.map((flag) => ({ name: flag.name, severity: flag.severity, caseIds: flag.cases.map((item) => item.id), previous: before ? before.flagRows.find((row) => row.name === flag.name)?.cases.length ?? 0 : undefined }))} caseCount={visibleCases.length} compareCaseCount={before?.cases.length} onOpen={() => setTab('Flags')} /> : <p className="empty-insight">No flags in this date and status selection.</p>}
+              {commonFlags.length ? <FlagPills flags={commonFlags.map((flag) => ({ name: flag.name, severity: flag.severity, caseIds: flag.cases.map((item) => item.id), previous: before ? wasFlagged.get(flag.name)?.cases.length ?? 0 : undefined }))} caseCount={visibleCases.length} compareCaseCount={before?.cases.length} onOpen={() => setTab('Flags')} /> : <p className="empty-insight">No flags in this date and status selection.</p>}
             </article>
             <article className="dashboard-panel">
-              <div className="panel-heading"><div><h2>Documents by type</h2><p>Share of the cases in view that include each document type</p></div>{byDocumentType.length > DOCUMENT_TYPE_ROWS && <button className="text-button" onClick={() => setShowAllDocTypes((value) => !value)}>{showAllDocTypes ? 'Show fewer' : `Show all ${byDocumentType.length}`}</button>}</div>
-              {byDocumentType.length ? <CoverageRings types={showAllDocTypes ? byDocumentType : byDocumentType.slice(0, DOCUMENT_TYPE_ROWS)} caseCount={visibleCases.length} compare={before ? { types: new Map(before.byDocumentType), caseCount: before.cases.length } : undefined} /> : <p className="empty-insight">No documents in this date and status selection.</p>}
+              <div className="panel-heading"><div><h2>Documents by type</h2><p>Share of the cases in view that include each document type</p></div>{documentTypes.length > DOCUMENT_TYPE_ROWS && <button className="text-button" onClick={() => setShowAllDocTypes((value) => !value)}>{showAllDocTypes ? 'Show fewer' : `Show all ${documentTypes.length}`}</button>}</div>
+              {documentTypes.length ? <CoverageRings types={showAllDocTypes ? documentTypes : documentTypes.slice(0, DOCUMENT_TYPE_ROWS)} caseCount={visibleCases.length} compare={before ? { types: new Map(before.byDocumentType), caseCount: before.cases.length } : undefined} /> : <p className="empty-insight">No documents in this date and status selection.</p>}
             </article>
           </section>
 
@@ -426,7 +448,7 @@ export default function DashboardPage({
             <FlagKpis cases={flagCases} compare={before?.flagCases} />
             <CheckBreakdown cases={flagCases} compare={before?.flagCases} onOpen={(item) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`)} />
             <section className="dashboard-pair-grid">
-              <CheckDocumentMatrix cases={flagCases} />
+              <CheckDocumentMatrix cases={flagCases} compare={before?.flagCases} />
               <FlagsByRisk cases={flagCases} compare={before?.flagCases} />
             </section>
           </>}

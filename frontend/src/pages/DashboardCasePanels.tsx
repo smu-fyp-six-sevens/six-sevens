@@ -397,9 +397,14 @@ function requestGroups(cases: { id: string; toRequest: string[] }[]) {
 export function MostRequestedDocuments({ cases, compare }: { cases: { id: string; toRequest: string[] }[]; compare?: { id: string; toRequest: string[] }[] }) {
   const groups = requestGroups(cases);
   const before = compare ? requestGroups(compare) : null;
+  // A kind asked for only in the comparison is listed at 0 cases, so a drop to none shows rather than disappearing.
+  for (const [name, group] of before ?? []) {
+    if (!groups.has(name)) groups.set(name, { cases: new Set(), examples: group.examples });
+  }
+  const wasSize = (name: string) => before?.get(name)?.cases.size ?? 0;
   // Other last, whatever its size: it isn't one kind of document.
   const ranked = [...groups.entries()]
-    .sort(([a, x], [b, y]) => Number(a === 'Other') - Number(b === 'Other') || y.cases.size - x.cases.size)
+    .sort(([a, x], [b, y]) => Number(a === 'Other') - Number(b === 'Other') || y.cases.size - x.cases.size || wasSize(b) - wasSize(a))
     .slice(0, SHOWN_GROUPS);
   const asking = cases.filter((item) => item.toRequest.length > 0).length;
   const peak = Math.max(1, ...ranked.map(([, group]) => group.cases.size));
@@ -426,7 +431,7 @@ export function MostRequestedDocuments({ cases, compare }: { cases: { id: string
                 {group.cases.size}
                 <small> {group.cases.size === 1 ? 'case' : 'cases'}</small>
               </strong>
-              {before && <CompareDelta value={group.cases.size} previous={before.get(name)?.cases.size ?? 0} compact />}
+              {before && <CompareDelta value={group.cases.size} previous={wasSize(name)} compact />}
             </li>
           ))}
         </ul>

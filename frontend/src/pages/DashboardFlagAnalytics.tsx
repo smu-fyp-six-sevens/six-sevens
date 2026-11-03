@@ -127,6 +127,12 @@ export function CheckBreakdown({ cases, compare, onOpen }: { cases: FlagCase[]; 
     return byCases || bySeverity || byFlags;
   });
   const before = compare ? new Map(summarise(compare).map((check) => [check.name, check])) : null;
+  // A check that flagged cases only in the comparison is listed after them at 0, so a drop to none shows.
+  for (const was of before?.values() ?? []) {
+    if (!checks.some((check) => check.name === was.name)) {
+      checks.push({ name: was.name, severity: was.severity, flags: 0, cases: [], documentTypes: new Map() });
+    }
+  }
 
   return (
     <section className={`dashboard-panel check-panel${before ? ' check-panel--compare' : ''}`}>
@@ -161,7 +167,10 @@ export function CheckBreakdown({ cases, compare, onOpen }: { cases: FlagCase[]; 
                   <span className="check-figure"><strong>{check.cases.length}</strong> {check.cases.length === 1 ? 'case' : 'cases'}{before ? <CompareDelta value={check.cases.length} previous={was?.cases.length ?? 0} compact /> : <small>{Math.round(share * 100)}%</small>}</span>
                   <span className="check-figure"><strong>{check.flags}</strong> {check.flags === 1 ? 'flag' : 'flags'}{before && <CompareDelta value={check.flags} previous={was?.flags ?? 0} compact />}</span>
                 </button>
-                {isOpen && (
+                {isOpen && !check.cases.length && (
+                  <div className="check-detail"><p className="empty-insight">Not flagged on any case in this period; {plural(was?.cases.length ?? 0, 'case')} in the comparison.</p></div>
+                )}
+                {isOpen && check.cases.length > 0 && (
                   <div className="check-detail">
                     <div>
                       <span className="check-detail-label">Found on</span>
@@ -204,26 +213,34 @@ export function CheckBreakdown({ cases, compare, onOpen }: { cases: FlagCase[]; 
 const SHOWN_TYPES = 7;
 
 // How many cases each check flagged on each document type: darker is more. The busiest document types are columns.
-export function CheckDocumentMatrix({ cases }: { cases: FlagCase[] }) {
-  const checks = summarise(cases).sort((a, b) => b.cases.length - a.cases.length);
+// When comparing, each cell has its change, and a check or document type flagged only in the comparison still shows.
+export function CheckDocumentMatrix({ cases, compare }: { cases: FlagCase[]; compare?: FlagCase[] }) {
+  const now = summarise(cases);
+  const before = compare ? new Map(summarise(compare).map((check) => [check.name, check])) : null;
+  const names = [...new Set([...now.map((check) => check.name), ...(before?.keys() ?? [])])];
+  const byName = new Map(now.map((check) => [check.name, check]));
+  const countOf = (check: CheckSummary | undefined, type: string) => check?.documentTypes.get(type) ?? 0;
+  const checks = names
+    .map((name) => ({ name, now: byName.get(name), was: before?.get(name) }))
+    .sort((a, b) => (b.now?.cases.length ?? 0) - (a.now?.cases.length ?? 0) || (b.was?.cases.length ?? 0) - (a.was?.cases.length ?? 0));
   const totals = new Map<string, number>();
-  checks.forEach((check) => check.documentTypes.forEach((count, type) => totals.set(type, (totals.get(type) ?? 0) + count)));
+  checks.forEach((check) => [check.now, check.was].forEach((summary) => summary?.documentTypes.forEach((count, type) => totals.set(type, (totals.get(type) ?? 0) + count))));
   const types = [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, SHOWN_TYPES).map(([type]) => type);
-  const peak = Math.max(1, ...checks.flatMap((check) => types.map((type) => check.documentTypes.get(type) ?? 0)));
+  const peak = Math.max(1, ...checks.flatMap((check) => types.map((type) => countOf(check.now, type))));
 
   return (
     <section className="dashboard-panel">
       <div className="panel-heading">
         <div>
           <h2>Where each check flags</h2>
-          <p>Cases flagged per check and document type; darker is more</p>
+          <p>Cases flagged per check and document type; darker is more{before && ', with the change from the comparison'}</p>
         </div>
       </div>
       {checks.length === 0 ? (
         <p className="empty-insight">No flags in this date and status selection.</p>
       ) : (
         <div className="flag-matrix-wrap">
-          <table className="flag-matrix" style={{ '--columns': types.length } as CSSProperties}>
+          <table className={`flag-matrix${before ? ' flag-matrix--compare' : ''}`} style={{ '--columns': types.length } as CSSProperties}>
             <thead>
               <tr>
                 <th scope="col"><span className="sr-only">Check</span></th>
@@ -235,10 +252,16 @@ export function CheckDocumentMatrix({ cases }: { cases: FlagCase[] }) {
                 <tr key={check.name}>
                   <th scope="row">{check.name}</th>
                   {types.map((type) => {
-                    const count = check.documentTypes.get(type) ?? 0;
+                    const count = countOf(check.now, type);
+                    const was = countOf(check.was, type);
+                    const delta = before && count !== was ? <CompareDelta value={count} previous={was} compact /> : null;
                     return (
-                      <td key={type} title={`${check.name} on ${type}: ${plural(count, 'case')}`}>
-                        {count > 0 && <span className={count / peak > 0.55 ? 'dark' : undefined} style={{ '--level': `${Math.round(18 + (count / peak) * 72)}%` } as CSSProperties}>{count}</span>}
+                      <td key={type} title={`${check.name} on ${type}: ${plural(count, 'case')}${before ? ` (vs ${was})` : ''}`}>
+                        {count > 0 ? (
+                          <span className={count / peak > 0.55 ? 'dark' : undefined} style={{ '--level': `${Math.round(18 + (count / peak) * 72)}%` } as CSSProperties}>
+                            {count}{delta}
+                          </span>
+                        ) : delta && <span className="flag-matrix-gone">{delta}</span>}
                       </td>
                     );
                   })}

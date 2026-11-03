@@ -451,12 +451,17 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .flag-matrix-wrap { overflow-x: auto; }
 .flag-matrix { width: 100%; border-collapse: separate; border-spacing: 3px; table-layout: fixed; }
 .flag-matrix th { color: var(--slate-58); font-size: 11.5px; font-weight: 600; }
-.flag-matrix thead th { padding: 0 2px 6px; font-size: 11px; line-height: 1.3; text-align: center; overflow-wrap: anywhere; hyphens: auto; vertical-align: bottom; }
+/* Names wrap between words only ("Incorporation" never splits); the full name is the header's tooltip. */
+.flag-matrix thead th { padding: 0 2px 6px; font-size: 11px; line-height: 1.3; text-align: center; overflow-wrap: normal; vertical-align: bottom; }
 .flag-matrix thead th:first-child, .flag-matrix tbody th { width: 150px; }
 .flag-matrix tbody th { padding-right: 8px; color: var(--slate-34); font-size: 12.5px; text-align: left; }
 .flag-matrix td { height: 34px; padding: 0; border-radius: 5px; background: var(--slate-97); text-align: center; }
-.flag-matrix td span { display: grid; place-items: center; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--steel) var(--level), var(--white)); color: var(--ink); font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.flag-matrix td span.dark { color: var(--white); }
+.flag-matrix td > span { display: grid; place-items: center; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--steel) var(--level), var(--white)); color: var(--ink); font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.flag-matrix td > span.dark { color: var(--white); }
+/* Comparing: the count and its change side by side; a cell flagged only in the comparison shows the change alone. */
+.flag-matrix--compare td > span { display: flex; justify-content: center; align-items: center; gap: 5px; }
+.flag-matrix td > span.flag-matrix-gone { background: transparent; }
+.flag-matrix .compare-pill { padding: 0 5px; font-size: 10.5px; }
 
 /* Flags by risk level: a bar per level, the average flags a case of that level carries. */
 .flag-risk-list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
@@ -489,6 +494,7 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .compare-banner-period small { color: var(--slate-62); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
 .compare-banner strong { color: var(--ink); font-weight: 650; }
 .compare-banner-vs { color: var(--slate-62); font-size: 12px; font-weight: 600; }
+.compare-banner-note { flex-basis: 100%; margin: 2px 0 0; padding-top: 8px; border-top: 1px solid var(--slate-94); color: var(--ink-soft); font-size: 12.5px; }
 .compare-banner-warning { flex-basis: 100%; margin: 2px 0 0; padding: 7px 10px; border-radius: 7px; background: var(--amber-bg); color: var(--orange-27); font-size: 12.5px; }
 .compare-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 22px; color: var(--ink-soft); font-size: 12.5px; }
 .compare-was { font-variant-numeric: tabular-nums; }

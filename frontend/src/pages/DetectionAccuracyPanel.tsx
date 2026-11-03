@@ -211,6 +211,14 @@ export function DetectionAccuracyPanel({ filters, compareFilters }: { filters: D
   const onTarget = checks.filter((check) => checkStatus(check) === 'ok').length;
   const fewReviews = checks.filter((check) => checkStatus(check) === 'few').length;
   const earlier = checksBefore(before);
+  // The table's rows: a check reviewed only in the comparison is listed after them with no reviews now, so a drop
+  // to none shows. Not counted in the figures above, which are this period's.
+  const rows: CheckMetrics[] = [
+    ...checks,
+    ...[...(earlier?.values() ?? [])]
+      .filter((was) => !checks.some((check) => checkKey(check) === checkKey(was)))
+      .map((was) => ({ ...was, correct: 0, wrong: 0, missed: 0, precision: null, recall: null, flags: [FEW_REVIEWS] })),
+  ];
 
   return (
     <>
@@ -270,7 +278,7 @@ export function DetectionAccuracyPanel({ filters, compareFilters }: { filters: D
               </tr>
             </thead>
             <tbody>
-              {checks.map((check) => (
+              {rows.map((check) => (
                 <tr key={`${check.scope}-${check.check_name}`}>
                   <td data-label="Check">
                     <strong className="flag-name">{formatCheck(check.check_name)}</strong>

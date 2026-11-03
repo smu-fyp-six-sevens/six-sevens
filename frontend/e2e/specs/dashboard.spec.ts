@@ -113,10 +113,38 @@ test.describe('Dashboard', () => {
     await page.getByRole('button', { name: 'Compare', exact: true }).click();
 
     await expect(page.locator('.compare-banner')).toContainText('Comparison');
-    await expect(page.locator('.compare-banner-warning')).toHaveCount(0);
+    await expect(page.locator('.compare-banner-overlap')).toHaveCount(0);
+    // The banner says how to read the figures: this period's, against the earlier comparison.
+    await expect(page.locator('.compare-banner-note')).toContainText('Pills show the change since');
 
     await page.getByRole('button', { name: 'Stop comparing' }).click();
     await expect(page.locator('.compare-banner')).toHaveCount(0);
     await expect(compare).toHaveText(/^Compare/);
+  });
+
+  test('a comparison picked after the first period becomes this period, so changes read as now against before', async ({ page, backend }) => {
+    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: new Date().toISOString() }));
+    await page.goto('/dashboard');
+    const compare = page.getByRole('button', { name: 'Compare two periods' });
+
+    // First: two days a couple of months back. Then two days in the month the second step opens on, later than them.
+    await compare.click();
+    await page.getByRole('button', { name: 'Previous month' }).click();
+    await page.getByRole('button', { name: 'Previous month' }).click();
+    const first = page.locator('.range-calendar-month').first().locator('.range-calendar-day:not(:disabled)');
+    await first.nth(0).click();
+    await first.nth(1).click();
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    const second = page.locator('.range-calendar-month').first().locator('.range-calendar-day:not(:disabled)');
+    await second.nth(0).click();
+    await second.nth(1).click();
+    await page.getByRole('button', { name: 'Compare', exact: true }).click();
+
+    // The later pick is "This period"; the earlier one is the comparison the pills count from.
+    const [thisPeriod, comparison] = await page.locator('.compare-banner-period strong').allTextContents();
+    const note = page.locator('.compare-banner-note');
+    await expect(note).toContainText(`Big numbers are ${thisPeriod}`);
+    await expect(note).toContainText(`Pills show the change since ${comparison}`);
+    await expect(page.getByRole('button', { name: 'Date range' })).toHaveText(new RegExp(thisPeriod));
   });
 });
