@@ -1,7 +1,7 @@
 // Turns a stored trace (a document's langgraph trace, or a case analysis run's) into a tree of runs, agents, model
-// calls, tools and events. The backend records each span as a "span" step when it ends (telemetry.steps_into), and
+// turns, tools and steps. The backend records each span as a "span" step when it ends (telemetry.steps_into), and
 // every other step names the span it happened in (`in_span`). Traces from before spans were recorded have neither,
-// and show as a flat list of events.
+// and show as a flat list of steps.
 
 export interface TraceStep {
   step: string;
@@ -9,7 +9,16 @@ export interface TraceStep {
   [key: string]: unknown;
 }
 
-export type TraceNodeKind = 'run' | 'agent' | 'llm' | 'tool' | 'chain' | 'call' | 'event';
+export type TraceNodeKind = 'run' | 'agent' | 'llm' | 'tool' | 'chain' | 'event';
+
+export const KIND_LABELS: Record<TraceNodeKind, string> = {
+  run: 'Run',
+  agent: 'Agent',
+  llm: 'LLM',
+  tool: 'Tool',
+  chain: 'Step',
+  event: 'Step',
+};
 
 export interface LlmCall {
   model?: string;
@@ -40,6 +49,7 @@ export interface TraceTotals {
   outputTokens: number;
   cost: number;
   failures: number;
+  errors: number;
 }
 
 export interface TraceNode {
@@ -54,7 +64,8 @@ export interface TraceNode {
   end: number;
   error?: string;
   step: TraceStep;
-  call?: LlmCall;
+  calls: LlmCall[];
+  failures: ValidationFailure[];
   children: TraceNode[];
   totals: TraceTotals;
 }
@@ -64,6 +75,7 @@ export interface BuiltTrace {
   totals: TraceTotals;
   start: number;
   end: number;
+  hasSpans: boolean;
 }
 
 const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
@@ -80,7 +92,7 @@ const SPAN_LABELS: Record<string, string> = {
   'langgraph.rerun_extraction': 'Extraction rerun',
   'detection.run': 'Fraud detection',
   'case_pipeline.run': 'Case analysis',
-  'classify.agent_call': 'Classifier · model turn',
+  'classify.agent_call': 'Classifier',
   'extract.run_extraction': 'Extraction',
   'detection.lead_plan': 'Lead investigator · plan',
   'detection.lead_review': 'Lead investigator · review',
@@ -93,7 +105,7 @@ function spanLabel(step: TraceStep, name: string): string {
   if (SPAN_LABELS[name]) return SPAN_LABELS[name];
   if (name.startsWith('tool.')) return name.slice(5);
   if (name.startsWith('detection.review.')) return `${humanize(name.slice(17))} specialist`;
-  if (name.startsWith('detection.specialist.')) return `${humanize(name.slice(21))} · model turn`;
+  if (name.startsWith('detection.specialist.')) return `${humanize(name.slice(21))} specialist · turn`;
   return str(step.run) ?? humanize(name.replace(/^case_pipeline\.|^cross_document\./, ''));
 }
 
@@ -150,7 +162,7 @@ export function describeStep(step: TraceStep): string | undefined {
 }
 
 function emptyTotals(): TraceTotals {
-  return { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0, failures: 0 };
+  return { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0, failures: 0, errors: 0 };
 }
 
 function addTotals(into: TraceTotals, from: TraceTotals): void {
@@ -159,38 +171,15 @@ function addTotals(into: TraceTotals, from: TraceTotals): void {
   into.outputTokens += from.outputTokens;
   into.cost += from.cost;
   into.failures += from.failures;
+  into.errors += from.errors;
 }
 
-// Model calls are recorded on their span with a duration but no start, so they are laid end to end from its start.
-function callNodes(span: TraceNode): TraceNode[] {
-  let cursor = span.start;
-  return list(span.step.llm_calls).map((raw, index) => {
-    const call = (raw ?? {}) as LlmCall;
-    const start = cursor;
-    const end = Math.min(span.end, start + num(call.seconds));
-    cursor = end;
-    const totals = {
-      calls: 1,
-      inputTokens: num(call.input_tokens) + num(call.cache_read_tokens) + num(call.cache_write_tokens),
-      outputTokens: num(call.output_tokens),
-      cost: num(call.cost_usd),
-      failures: 0,
-    };
-    return {
-      key: `${span.key}:call:${index}`,
-      kind: 'call',
-      label: call.model ?? 'Claude call',
-      name: 'llm.call',
-      subtitle: call.error ? 'failed' : call.stop_reason ?? undefined,
-      start,
-      end,
-      error: call.error,
-      step: span.step,
-      call,
-      children: [],
-      totals,
-    };
-  });
+function toolOutcome(step: TraceStep): string | undefined {
+  if (step.error) return 'failed';
+  if (step.unable_to_assess) return str(step.reason) ?? 'unable to assess';
+  if (step.nothing_to_check) return 'nothing to check';
+  if (typeof step.findings === 'number') return `${step.findings} finding(s)`;
+  return undefined;
 }
 
 export function buildTrace(steps: TraceStep[]): BuiltTrace {
@@ -199,56 +188,66 @@ export function buildTrace(steps: TraceStep[]): BuiltTrace {
     if (step.step !== 'span') return;
     const name = str(step.name) ?? 'span';
     const end = num(step.at);
-    const node: TraceNode = {
+    const kind = spanKind(step, name);
+    spans.set(str(step.id) ?? `span-${index}`, {
       key: str(step.id) ?? `span-${index}`,
-      kind: spanKind(step, name),
+      kind,
       label: spanLabel(step, name),
       name,
+      subtitle: kind === 'tool' ? toolOutcome(step) : undefined,
       start: Math.max(0, end - num(step.duration_s)),
       end,
       error: str(step.error),
       step,
+      calls: list(step.llm_calls) as LlmCall[],
+      failures: list(step.validation_failures) as ValidationFailure[],
       children: [],
       totals: emptyTotals(),
-    };
-    node.subtitle = node.kind === 'tool' ? toolOutcome(step) : str(step.summary);
-    spans.set(node.key, node);
+    });
   });
 
   const top: TraceNode[] = [];
   for (const node of spans.values()) {
-    const parent = str(node.step.parent);
-    const owner = parent ? spans.get(parent) : undefined;
+    const owner = spans.get(str(node.step.parent) ?? '');
     (owner ? owner.children : top).push(node);
   }
 
   steps.forEach((step, index) => {
     if (step.step === 'span') return;
     const at = num(step.at);
+    const error = step.step.endsWith('error') ? str(step.error) ?? str(step.findings_error) : undefined;
     const node: TraceNode = {
-      key: `event-${index}`,
+      key: `step-${index}`,
       kind: 'event',
       label: humanize(step.step),
       name: step.step,
       subtitle: describeStep(step),
       start: at,
       end: at,
-      error: step.step.endsWith('error') ? str(step.error) ?? str(step.findings_error) : undefined,
+      error,
       step,
+      calls: [],
+      failures: list(step.output_repairs) as ValidationFailure[],
       children: [],
-      totals: { ...emptyTotals(), failures: list(step.output_repairs).length },
+      // Failed validations count once, from the run's audit step; each also sits on the span it happened in.
+      totals: { ...emptyTotals(), failures: list(step.output_repairs).length, errors: error ? 1 : 0 },
     };
     const owner = spans.get(str(step.in_span) ?? '')
-      // An event recorded just outside a run (its start, or an error after it) is shown with that run.
+      // A step recorded just outside a run (its start, or an error after it) is shown with that run.
       ?? top.find((root) => root.kind === 'run' && at >= root.start - 1 && at <= root.end + 1);
     (owner ? owner.children : top).push(node);
   });
 
   const finish = (node: TraceNode): void => {
     node.children.forEach(finish);
-    const calls = node.kind === 'event' || node.kind === 'call' ? [] : callNodes(node);
-    node.children = [...calls, ...node.children].sort((a, b) => a.start - b.start || a.end - b.end);
-    // Failed validations count once, from the run's audit step; each also sits on the span it happened in.
+    node.children.sort((a, b) => a.start - b.start || a.end - b.end);
+    for (const call of node.calls) {
+      node.totals.calls += 1;
+      node.totals.inputTokens += num(call.input_tokens) + num(call.cache_read_tokens) + num(call.cache_write_tokens);
+      node.totals.outputTokens += num(call.output_tokens);
+      node.totals.cost += num(call.cost_usd);
+    }
+    if (node.kind !== 'event' && node.error) node.totals.errors += 1;
     for (const child of node.children) addTotals(node.totals, child.totals);
   };
   top.forEach(finish);
@@ -261,21 +260,45 @@ export function buildTrace(steps: TraceStep[]): BuiltTrace {
     totals,
     start: top.length ? Math.min(...top.map((n) => n.start)) : 0,
     end: top.length ? Math.max(...top.map((n) => n.end)) : 0,
+    hasSpans: spans.size > 0,
   };
 }
 
-function toolOutcome(step: TraceStep): string | undefined {
-  if (step.error) return 'failed';
-  if (step.unable_to_assess) return str(step.reason) ?? 'unable to assess';
-  if (step.nothing_to_check) return 'nothing to check';
-  if (typeof step.findings === 'number') return `${step.findings} finding(s)`;
-  return undefined;
+export interface TraceRow {
+  node: TraceNode;
+  depth: number;
+  // Whether each ancestor level still has siblings below, for the tree's guide lines.
+  guides: boolean[];
+  last: boolean;
 }
 
-// Every node under `node`, depth first, with its depth: the rows the tree shows.
-export function flatten(nodes: TraceNode[], collapsed: Set<string>, depth = 0): Array<{ node: TraceNode; depth: number }> {
-  return nodes.flatMap((node) => [
-    { node, depth },
-    ...(collapsed.has(node.key) ? [] : flatten(node.children, collapsed, depth + 1)),
-  ]);
+// The rows the tree shows, depth first. Steps are left out unless asked for; a search keeps matching rows and
+// their ancestors.
+export function visibleRows(
+  roots: TraceNode[],
+  { collapsed, showSteps, search }: { collapsed: Set<string>; showSteps: boolean; search: string },
+): TraceRow[] {
+  const query = search.trim().toLowerCase();
+  const matches = (node: TraceNode): boolean =>
+    !query || `${node.label} ${node.name}`.toLowerCase().includes(query) || node.children.some(matches);
+  const rows: TraceRow[] = [];
+  const walk = (nodes: TraceNode[], depth: number, guides: boolean[]) => {
+    const shown = nodes.filter((node) => (showSteps || node.kind !== 'event') && matches(node));
+    shown.forEach((node, index) => {
+      const last = index === shown.length - 1;
+      rows.push({ node, depth, guides, last });
+      if (!collapsed.has(node.key) || query) walk(node.children, depth + 1, [...guides, !last]);
+    });
+  };
+  walk(roots, 0, []);
+  return rows;
+}
+
+export function hasVisibleChildren(node: TraceNode, showSteps: boolean): boolean {
+  return node.children.some((child) => showSteps || child.kind !== 'event');
+}
+
+export function rootOf(node: TraceNode, roots: TraceNode[]): TraceNode {
+  const contains = (candidate: TraceNode): boolean => candidate === node || candidate.children.some(contains);
+  return roots.find(contains) ?? node;
 }

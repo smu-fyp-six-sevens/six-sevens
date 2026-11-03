@@ -33,12 +33,20 @@ const runButton = (page: Page) => page.getByRole('button', { name: /^(Run case a
 const analysisCard = (page: Page) =>
   page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Case Analysis' }) });
 const tracePanel = (page: Page) => page.getByRole('region', { name: 'Case analysis trace' });
+// The trace opens from its card in a panel of its own.
+async function openTracePanel(page: Page) {
+  await tracePanel(page).getByRole('button', { name: 'Open trace' }).click();
+  return page.getByRole('dialog', { name: 'Case analysis trace' });
+}
 const traceRow = (page: Page, label: string) =>
-  tracePanel(page).locator('.agent-trace-select', { has: page.locator('.agent-trace-label', { hasText: label }) });
+  page.getByRole('dialog', { name: 'Case analysis trace' }).locator('.trace-row-main', {
+    has: page.locator('.trace-row-label', { hasText: label }),
+  });
 // The scored findings, in the details of the trace's Scoring step.
 async function scoredFindings(page: Page) {
+  const trace = await openTracePanel(page);
   await traceRow(page, 'Scoring').click();
-  return tracePanel(page).locator('.agent-trace-table tbody tr');
+  return trace.locator('.trace-table tbody tr');
 }
 const riskCard = (page: Page) =>
   page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
@@ -215,7 +223,7 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
 
     await tracePanel(page).getByRole('button', { name: 'Refresh case analysis trace' }).click();
 
-    await expect(tracePanel(page).getByRole('treeitem')).toHaveCount(3);
+    await expect((await openTracePanel(page)).getByRole('treeitem')).toHaveCount(3);
     await expect(traceRow(page, 'Deterministic')).toBeVisible();
     await expect(traceRow(page, 'Scoring')).toHaveCount(0);
   });
@@ -228,14 +236,15 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
 
     finishRun(backend, theCase, { risk: CASE_RISK['RS-003'].risk, trace: scoringTrace('RS-003') });
 
-    const trace = tracePanel(page);
     // The live run's figures (RS-003): the cross-document finding is scored with the rest, marked "(case)".
-    await expect(trace).toContainText('Critical · score 89/100 · 60 points from 7 finding(s) on 5/5 documents');
     const caseRow = (await scoredFindings(page)).filter({ hasText: '(case)' });
-    await expect(trace).toContainText('"score_without_cross_document": 87');
+    const trace = page.getByRole('dialog', { name: 'Case analysis trace' });
+    await expect(trace).toContainText('Critical · score 89/100 · 60 points from 7 finding(s) on 5/5 documents');
     await expect(caseRow).toHaveCount(1);
     await expect(caseRow.locator('td').nth(2)).toHaveText('cross_document_variance');
     await expect(caseRow.locator('td').nth(3)).toHaveText('cross_document_analysis');
+    await trace.getByRole('tab', { name: 'Attributes' }).click();
+    await expect(trace).toContainText('"score_without_cross_document": 87');
   });
 
   test('MA-023 a failed cross-document check is shown, and the case is not scored @MA-023', async ({ page, backend }) => {
@@ -254,6 +263,8 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
     await expect(analysisCard(page)).toContainText('The analysis did not finish.');
     await expect(analysisCard(page)).not.toContainText('RuntimeError');
     await expect.poll(() => errors.join('\n')).toContain('RuntimeError: cross-document check failed');
+    await openTracePanel(page);
+    await expect(traceRow(page, 'Error')).toContainText('RuntimeError: cross-document check failed');
     await expect(traceRow(page, 'Scoring')).toHaveCount(0);
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
     await expect(riskCard(page)).toContainText('Not scored yet.');

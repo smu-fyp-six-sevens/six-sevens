@@ -110,9 +110,8 @@ Terraform owns everything else about a service (`deploy/terraform`); `apply` is 
 
 **Open:**
 1. **Award check:** the supervisor accepted the Cloud Run architecture (2026-10-26, section 10); confirm the Cloud Native award assessment is fine with Kubernetes as a tested Helm chart rather than a running cluster.
-2. **Automatic case analysis** before November (the case-worker gate, `CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0).
-3. **Login:** keep `AUTH_USERS` as a documented limitation, or move to Supabase Auth (touches login, token checks, WebSocket tickets, tests).
-4. **Staging** (section 9): approval before production or fully automatic; Grafana in staging; who approves; a smoke test per merge or nightly only.
+2. **Login:** keep `AUTH_USERS` as a documented limitation, or move to Supabase Auth (touches login, token checks, WebSocket tickets, tests).
+3. **Staging** (section 9): approval before production or fully automatic; Grafana in staging; who approves; a smoke test per merge or nightly only.
 
 ## 9. To do
 

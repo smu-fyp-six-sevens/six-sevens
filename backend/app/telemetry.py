@@ -75,7 +75,8 @@ def setup(app=None) -> None:
         return
     _initialised = True
     if not settings.OTEL_ENABLED:
-        logger.info("OpenTelemetry disabled (OTEL_ENABLED=false); spans are no-ops")
+        # Spans still reach the runs' own traces (steps_into); only the export is off.
+        logger.debug("OpenTelemetry export off (OTEL_ENABLED=false)")
         return
 
     resource = Resource.create({

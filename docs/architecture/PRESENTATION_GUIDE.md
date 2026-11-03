@@ -122,7 +122,7 @@ The UI updates live: Supabase Realtime tells api a row changed, and api pushes a
 | What if an event is processed twice? | Status changes are compare-and-swap, so the second attempt finds the status already moved and does nothing. The audit trail ignores a repeated event id. |
 | Why not Kubernetes now? | Cloud Run gives the same separation for less operating effort, and measured load doesn't need more (detection p95 92 s against a 600 s deadline). For the bank, Stage 2 adds a Helm chart tested in CI, so its platform team can run the same services, with NetworkPolicies walling them off from each other. |
 | How do you know what it costs? | Every Claude call is priced per agent and recorded per run; the Cost dashboard shows estimates live and Google's billed amount from the billing export. |
-| What's not done? | Automatic case analysis (this sprint), a shared Anthropic rate limit across instances, the Stage 2 move, and the items in `PENDING_WORK.md`. |
+| What's not done? | A shared Anthropic rate limit across instances, the Stage 2 move, and the items in `PENDING_WORK.md`. |
 
 ## 8. Limits to be upfront about
 

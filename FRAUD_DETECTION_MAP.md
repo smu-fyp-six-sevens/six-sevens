@@ -53,13 +53,13 @@ Zoning comes from a local index (`land_use.py`, about 12 MB) built from a 175 MB
 
 ## 1B. Case pipeline: `backend/app/case_pipeline/`
 
-Runs per case, on an officer's request, once every approved document has been scanned.
+Runs per case, on its own once every document is decided and every approved one scanned (`service.start_if_due`), or on an officer's request.
 
 | File / folder | What it does |
 |---|---|
 | `readiness.py` | `is_ready_for_analysis`: at least one approved document and all approved documents detected |
 | `service.py`, `repository.py`, `state.py` | Starts a run in the background, stores it in `case_analysis_runs` with its risk and additional documents, writes the `risk_scores` row, and reports whether a run is stale or interrupted. Tells the summary which checks were clean and which could not run |
-| `trace.py` | `RunTrace`: the run's step log, saved to the run row's `trace` column after planning, after judging and at the end; shown as "Case analysis trace (debug)" |
+| `trace.py` | `RunTrace`: the run's step log, saved to the run row's `trace` column after planning, after judging and at the end, with the run's spans (`telemetry.steps_into`); shown as "Case analysis trace" |
 | `models.py`, `categories.py` | `CrossDocFinding`, `RiskOutlook`, `CaseAnalysis`; `FindingCategory` assigned by code from a static tool-to-category map |
 | `cross_document/deterministic.py`, `identity_pairs.py` | The comparisons that always run first (company name, address, UEN, a person's ID, name and details across documents). One finding per difference (`xd-det-N`), merged by value, written as a plain sentence; also given to the agent grouped by value. `restates_a_code_finding` drops an agent finding that only repeats one |
 | `cross_document/evidence.py` | The case as the analysis sees it: dossier (protected fields removed), masked identifiers, the ledger of every ref id issued in a run, the model-call counter |
@@ -157,7 +157,7 @@ The specialist catalogue (names, titles, expertise, tools) is generated from `SP
 | `findings_error` | storing the findings failed (the run still completes) |
 | `run_audit` | every repaired model reply and the call count |
 
-Trace writes are coalesced: at most one write per document is queued and it saves the latest state. Spans (OpenTelemetry): `detection.run`, `detection.lead_plan`, `detection.lead_review`, `detection.specialist.<name>`.
+Trace writes are coalesced: at most one write per document is queued and it saves the latest state. Spans (OpenTelemetry, also kept on the trace for the app's trace view): `detection.run`, `detection.lead_plan`, `detection.lead_review`, `detection.review.<name>` (a specialist's whole review, with its ordered tool calls), `detection.specialist.<name>` (each of its model turns), `tool.<name>` (each tool call).
 
 `cache_gate.run(key, call)`: the first call for a key runs alone and writes the cache; concurrent callers wait for it; afterwards the key never blocks. In practice the specialists' prompts are shorter than Haiku's minimum cacheable prompt, so their markers do nothing (`cache read 0` on the `perf` line); caching pays off for classification, extraction and the case analysis.
 
@@ -184,7 +184,7 @@ There is no `POST /detection/run`: the first run starts only on approval (`appro
 ## 4. Frontend
 
 - **`DetectionPanel.tsx`**: the verdict and summary, each specialist with its brief and tools, dismissed findings and why, the second look, findings, and anything that could not be assessed. Buttons: "Cancel detection" while scanning or waiting for a worker; "Run detection again" after a cancelled or failed run or over a finished report (confirmed first, since it replaces the findings and their verdicts). "Run an individual check" buttons stay disabled until a report exists.
-- **`CaseAnalysisCard.tsx`**: "Run case analysis" once `analysis_ready`, then the summary, findings (each difference its own row), "Checked and consistent", and the what-if list, with an "Out of date" notice when documents changed.
+- **`CaseAnalysisCard.tsx`**: the run's progress (it starts on its own), "Run again" for a failed or missing run, then the summary, findings (each difference its own row), "Checked and consistent", and the what-if list, with an "Out of date" notice when documents changed.
 
 ## 5. Tests
 

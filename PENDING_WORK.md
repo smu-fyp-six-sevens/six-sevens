@@ -4,7 +4,6 @@ Open product and platform work only: remove an item once it's done. Elsewhere: c
 
 ## Product
 
-- **Automatic case analysis** (this sprint). The officer clicks it today. Not built: the gate on every document completion, supersede with a run-id fence, debounce and a re-run cap (`CROSS_DOCUMENT_AND_RISK_PLAN.md` Step 0).
 - **Skip repeated runs** (decided 2026-11-01): "Run again" on a case whose fingerprint matches the last complete run shows that run instead of starting another (each spends about 12k tokens).
 - **Agent-raised findings.** A specialist can only assess findings a tool returns; something it notices itself (a "modified copy" subject) appears in its summary but never scores. Needs a way to raise a finding that cites the field it read.
 

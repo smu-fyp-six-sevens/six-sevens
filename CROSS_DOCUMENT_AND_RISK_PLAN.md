@@ -2,7 +2,7 @@
 
 The per-case analysis is built (`backend/app/case_pipeline/`); `HOW_IT_WORKS.md` §3 describes it step by step and `FRAUD_DETECTION_MAP.md` §1B lists the files. This document keeps the design rules and what is still open.
 
-**Open:** Step 0 (the automatic trigger: today an officer clicks "Run case analysis"), the evals, a dismissal flow for cross-document findings, and unit tests for the hypothesiser and `summary.py`. `case_analysis_runs` must exist (see `README.md`); `CASE_ANALYSIS_ENABLED=false` is the kill switch; every run writes a step-by-step `trace` to its row for debugging.
+**Open:** the rest of the automatic trigger (Step 0 below), the evals, a dismissal flow for cross-document findings, and unit tests for the hypothesiser and `summary.py`. `case_analysis_runs` must exist (see `README.md`); `CASE_ANALYSIS_ENABLED=false` is the kill switch; every run writes a step-by-step `trace` to its row for debugging.
 
 ## Scope
 
@@ -14,14 +14,12 @@ The per-case analysis is built (`backend/app/case_pipeline/`); `HOW_IT_WORKS.md`
 | `case_risk.py` | The only source of the score (deterministic). |
 | `additional_documents.py`, `supporting_documents.py` | Rule-based recommendations merged with the agent's requests into one list. The merged list is stored on the case (`cases.recommended_additional_documents`) when a run completes and is still the newest (the run's own result no longer carries it). Planned: the rule-based recommendations also feed the agent. |
 
-## Step 0: per-case trigger (not built)
+## Step 0: per-case trigger (open parts)
 
-**Rule:** the pipeline runs once every approved document has been scanned, and re-runs whenever that set changes.
-
-- **Gate:** at least one approved document and none still queued, processing, extracting or detecting. Rejected and cancelled documents don't count; approved Other documents do. Re-evaluated on every completion, approval, rejection, deletion, upload or re-detection.
-- **Fingerprint:** each run stores a hash of its inputs (document ids, fields, finding ids and severities). A mismatch means the result is **stale**. Built.
-- **Supersede:** an in-flight run's inputs are outdated the moment a document changes, and its result must never be published. Mark it superseded when the input changes, not when the scan finishes. A fence token (`current_run_id` on the case row; every write conditional on it) makes a superseded run's writes not apply; cancelling the call only saves cost. The final commit is one atomic fingerprint check and write. Start the new run after a 5–10 second debounce, keep showing the previous result marked stale, and cap re-runs per case per hour. The run record lives in the database so the fence survives a restart.
-- **Failure:** a crashed run is recorded and retryable; a superseded run is not a failure.
+The trigger is built (`service.start_if_due`, `HOW_IT_WORKS.md` §3): the gate, the fingerprint, no repeat over the same inputs, a newer run replacing an outdated one, the hourly cap. Still open:
+- **Cancel the outdated run.** It runs to the end and spends its calls; only its result is dropped (`superseded`).
+- **A fence on the case row** (`current_run_id`, every write conditional on it). Today the newest run wins by start time, and the check before publishing a result isn't atomic, so two instances finishing at once could both publish. Two instances deciding a run is due at the same moment could also start two (each process holds a lock per case, not across instances).
+- **Debounce** (5–10 s) before an automatic start, for an officer's burst of rejections.
 
 ## Approved Other documents
 
@@ -148,7 +146,7 @@ False positives on clean generated cases (including Other documents), recall on 
 
 1. Non-conclusive hypotheses are never shown or stored.
 2. Severity is capped: a hypothesis alone can't reach High without a calculation or registry mismatch.
-3. The pipeline should trigger automatically when all approved documents are scanned, and supersede on change (not built).
+3. The pipeline starts on its own once every document is decided and every approved one scanned, and a change replaces an outdated run.
 4. Approved Other documents are scanned and counted towards risk.
 5. A case's risk score and recommended documents come only from an analysis run; the views read them.
 6. This module produces cross-document findings only. A finding about one document's own figures, with nothing computed behind it, is left to that document's scan.
