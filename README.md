@@ -33,8 +33,10 @@ Backend (from `backend/`):
 ```bash
 pip install -r requirements-dev.lock
 pip install --no-deps -e .
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --reload-dir app
 ```
+
+`--reload-dir app` restarts the server only for changes under `app/`, not for tests, scripts or generated documents elsewhere in `backend/`.
 
 **Dependencies:** `requirements.txt` holds the allowed ranges and is the file to edit. `requirements.lock` (the image) and `requirements-dev.lock` (CI and local, adding the dev tools) pin every version, so a build never picks up a release nobody tested. After changing `requirements.txt` or `pyproject.toml`'s dev list, or to take newer releases, regenerate both (from `backend/`, with `pip install uv`), then run the tests:
 

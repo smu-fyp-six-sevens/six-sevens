@@ -29,6 +29,20 @@ def _skip_case_stage_sync(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_automatic_case_analysis(monkeypatch: pytest.MonkeyPatch):
+    """
+    Detection runs and an officer's document changes may start the case analysis, which reads the case back.
+    Tests of those aren't about it; test_case_auto_analysis.py exercises the real one.
+    """
+    from app.case_pipeline import service
+
+    async def _skip(case_id):
+        return None
+
+    monkeypatch.setattr(service, "start_if_due", _skip)
+
+
+@pytest.fixture(autouse=True)
 def _cases_are_not_finalised(monkeypatch: pytest.MonkeyPatch):
     """
     Every route that changes a document or case first checks its case isn't

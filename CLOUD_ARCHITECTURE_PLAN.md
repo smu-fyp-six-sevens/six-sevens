@@ -186,7 +186,7 @@ Cost: about $0 idle and cents per merge or night (Cloud Run and Supabase only; n
 
 ## 12. Running it
 
-**Daily development (unchanged):** `cd backend && uvicorn app.main:app --reload` and `cd frontend && npm run dev`. One process runs every role; no Docker, Pub/Sub or Kong needed.
+**Daily development (unchanged):** `cd backend && uvicorn app.main:app --reload --reload-dir app` and `cd frontend && npm run dev`. One process runs every role; no Docker, Pub/Sub or Kong needed.
 
 **The split locally** (opt-in): `docker compose up --build` (stop uvicorn first; Kong takes :8000), then `npm run dev`. Containers: the Pub/Sub emulator plus `pubsub-init` (creates the topic and subscriptions, then exits), Kong, api, one `workers` container running the three workers (to save memory) and audit-metrics: about 3.5 GB. `--profile frontend` adds the nginx build on :5173. To debug the workers in the IDE: `PUSH_HOST=host.docker.internal PUSH_PORT=8001 docker compose up --build --scale workers=0`, then run uvicorn on :8001 from `backend/` with `ROLE=doc-worker,detection-worker,case-worker EVENT_TRANSPORT=pubsub PUBSUB_EMULATOR_HOST=localhost:8085 GOOGLE_CLOUD_PROJECT=local`. The emulator has no OIDC or IAM, so `/push` takes unsigned requests locally.
 
