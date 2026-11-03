@@ -569,7 +569,9 @@ export interface paths {
         /**
          * Get Detection Metrics
          * @description Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only
-         *     cases created on or after `since` and at these stages, as the dashboard's filters pick.
+         *     cases created at or after `since` and before `before`, and at these stages, as the dashboard's filters pick.
+         *     The two are instants, not days: the dashboard sends the start of the officer's own days, so a case counts on
+         *     the same day here as in the dashboard's case counts.
          */
         get: operations["get_detection_metrics_detection_metrics_get"];
         put?: never;
@@ -3821,6 +3823,11 @@ export interface components {
             /** Pages */
             pages: number[];
             /**
+             * Places
+             * @default []
+             */
+            places: components["schemas"]["Place"][];
+            /**
              * Severity
              * @enum {string}
              */
@@ -3846,6 +3853,23 @@ export interface components {
             right: number;
             /** Top */
             top: number;
+        };
+        /**
+         * Place
+         * @description Where on a page the evidence is printed, for the preview to box (points, origin top-left).
+         */
+        Place: {
+            /** Bbox */
+            bbox: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Page */
+            page: number;
+            /** Text */
+            text: string;
         };
         /** ProcessingErrorEntry */
         ProcessingErrorEntry: {
@@ -5435,6 +5459,7 @@ export interface operations {
         parameters: {
             query?: {
                 since?: string | null;
+                before?: string | null;
                 status?: components["schemas"]["CaseStage"][];
             };
             header?: {

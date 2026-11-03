@@ -43,6 +43,7 @@ const TOOL_LABELS: Record<string, string> = {
   numerical_checks_tool: 'Figures',
   date_consistency_tool: 'Dates',
   external_validation_tool: 'Registry check',
+  page_consistency_tool: 'Pages',
 };
 
 function isBBox(bbox: unknown): bbox is BBox {
