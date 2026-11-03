@@ -1,0 +1,268 @@
+/* Styles for the standalone AI Agents guide. Keep selectors scoped to this page so existing views are unaffected. */
+.agent-directory-page {
+  min-height: 100vh;
+}
+
+.agent-directory-content {
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 10px 0 56px;
+}
+
+.agent-directory-intro {
+  margin: 8px 0 26px;
+}
+
+.agent-directory-eyebrow {
+  margin: 0 0 8px;
+  color: var(--steel);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .14em;
+}
+
+.agent-directory-intro h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(28px, 4vw, 38px);
+  font-weight: 720;
+  letter-spacing: -.035em;
+  line-height: 1.15;
+}
+
+.agent-directory-lede {
+  max-width: none;
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  font-size: 16px;
+}
+
+.agent-directory-flow,
+.agent-directory-section,
+.agent-directory-note {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  box-shadow: 0 2px 5px var(--ink-a08);
+}
+
+.agent-directory-flow {
+  margin-bottom: 30px;
+  padding: 22px 24px 24px;
+}
+
+.agent-directory-flow-heading,
+.agent-directory-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.agent-directory-flow h2,
+.agent-directory-section h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.agent-directory-flow-heading p,
+.agent-directory-section-heading p {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.agent-directory-count {
+  flex: none;
+  padding: 4px 9px;
+  border: 1px solid var(--slate-89);
+  border-radius: 999px;
+  color: var(--slate-54);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.agent-directory-flow ol {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-directory-flow li {
+  display: flex;
+  gap: 11px;
+  min-width: 0;
+  padding: 4px 16px 0 0;
+}
+
+.agent-directory-flow li + li {
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+}
+
+.agent-directory-flow li > span {
+  color: var(--steel);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agent-directory-flow li strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.agent-directory-flow li p {
+  margin: 3px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-directory-section {
+  margin-bottom: 18px;
+  padding: 22px 24px 24px;
+}
+
+.agent-directory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.agent-directory-card {
+  min-width: 0;
+  padding: 17px 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--orange-99);
+}
+
+.agent-directory-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.agent-directory-mark {
+  display: grid;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--blue-95);
+  color: var(--steel);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.agent-directory-role {
+  margin: 0 0 2px;
+  color: var(--slate-54);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.agent-directory-card h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.agent-directory-description {
+  margin: 13px 0 10px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.agent-directory-card ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  color: var(--slate-34);
+  font-size: 12px;
+  list-style: none;
+}
+
+.agent-directory-card li {
+  position: relative;
+  padding-left: 15px;
+}
+
+.agent-directory-card li::before {
+  position: absolute;
+  top: .62em;
+  left: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--steel);
+  content: '';
+}
+
+.agent-directory-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--slate-97a);
+  box-shadow: none;
+}
+
+.agent-directory-note > span {
+  display: grid;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid var(--slate-77);
+  border-radius: 50%;
+  color: var(--steel);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.agent-directory-note p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.agent-directory-note strong {
+  color: var(--ink);
+}
+
+@media (max-width: 760px) {
+  .agent-directory-content { width: min(100% - 28px, 620px); padding-top: 2px; }
+  .agent-directory-flow, .agent-directory-section { padding: 18px; }
+  .agent-directory-flow ol { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 16px; }
+  .agent-directory-flow li:nth-child(3) { padding-left: 0; border-left: 0; }
+  .agent-directory-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 420px) {
+  .agent-directory-flow-heading, .agent-directory-section-heading { gap: 8px; }
+  .agent-directory-count { padding: 3px 6px; font-size: 9px; }
+  .agent-directory-flow ol { grid-template-columns: 1fr; }
+  .agent-directory-flow li, .agent-directory-flow li + li { padding: 0; border-left: 0; }
+}

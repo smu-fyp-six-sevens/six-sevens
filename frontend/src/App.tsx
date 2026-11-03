@@ -22,6 +22,7 @@ const loadDocumentDetailsPage = () => import('./pages/DocumentDetailsPage');
 const UploadPage = lazy(loadUploadPage);
 const DocumentDetailsPage = lazy(loadDocumentDetailsPage);
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const AgentDirectoryPage = lazy(() => import('./pages/AgentDirectoryPage'));
 import { getToken } from './lib/api';
 import type { CaseRiskLevel } from './services/uploadService';
 import { LoadErrorState } from './components/LoadErrorState';
@@ -284,6 +285,15 @@ export default function App() {
           element={
             <RequireAuth isAuthed={isAuthed}>
               <DashboardRoute />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/agents"
+          element={
+            <RequireAuth isAuthed={isAuthed}>
+              <AgentDirectoryPage />
             </RequireAuth>
           }
         />
