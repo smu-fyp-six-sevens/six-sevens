@@ -142,6 +142,9 @@ def test_a_deleted_page_is_reported_once_as_missing() -> None:
     [finding] = result.findings
     assert finding.check_code == "PAGE.NUMBERING"
     assert "page 2 missing" in finding.summary
+    # The page numbers either side of the gap are boxed where they're printed, top right.
+    assert [(place.page, place.text) for place in finding.places] == [(1, "Page 1 of 4"), (2, "Page 3 of 4")]
+    assert all(place.bbox[0] >= 460 and place.bbox[3] <= 40 for place in finding.places)
     # The rows break across the gap, so BS.RUNNING_BALANCE reports the balances: the carry check doesn't repeat it.
     assert not any("brings forward" in e and "carries forward" in e for e in finding.evidence)
 
@@ -172,6 +175,10 @@ def test_an_edited_carry_line_is_one_finding_with_both_pieces_of_evidence() -> N
     assert finding.pages == [1, 2]
     assert "99,999.99" in finding.summary
     assert len(finding.evidence) == 1  # the same boundary: its own page's balance and the previous page's carry
+    # Both carry lines it compares are boxed, each with its amount.
+    assert [(place.page, place.text) for place in finding.places] == [
+        (1, "Balance Carried Forward 10,446.00"), (2, "Balance Brought Forward 99,999.99"),
+    ]
 
 
 def test_a_carry_mismatch_where_the_rows_also_break_is_left_to_the_running_balance_check() -> None:
@@ -220,6 +227,9 @@ def test_a_page_swapped_in_from_another_account_is_one_finding_on_that_page() ->
     assert codes.count("PAGE.HEADER_IDENTITY") == 1 and codes.count("PAGE.CARRY_FORWARD") == 2
     # Every contributing check is listed once, the lead first, so per-check counts see the merged ones too.
     assert finding.check_codes == ["PAGE.HEADER_IDENTITY", "PAGE.CARRY_FORWARD"]
+    # The account number is boxed where page 1 prints ours and page 2 prints theirs.
+    boxed = [(place.page, place.text) for place in finding.places]
+    assert (1, "Account No: 012-345678-9") in boxed and (2, "Account No: 555-111222-3") in boxed
 
 
 def test_a_masked_account_number_on_a_later_page_agrees() -> None:
@@ -236,6 +246,8 @@ def test_a_page_of_another_size_is_a_signal() -> None:
     statement = make_statement(page_sizes={2: (612, 792)})  # US Letter among A4
     [finding] = _check(statement.pdf, statement.fields()).findings
     assert (finding.check_code, finding.severity, finding.pages) == ("PAGE.SOURCE", "signal", [2])
+    # The finding is about the page itself, so the whole page is boxed.
+    assert [(place.page, place.bbox) for place in finding.places] == [(2, (0.0, 0.0, 612.0, 792.0))]
 
 
 def test_a_page_in_fonts_no_other_page_uses_is_a_signal() -> None:
@@ -270,8 +282,10 @@ def test_a_scanned_page_among_digital_pages_is_a_signal() -> None:
     doc.delete_page(1)
     scan = doc.new_page(pno=1, width=A4[0], height=A4[1])
     scan.insert_image(scan.rect, pixmap=picture)
-    codes = {(f.check_code, tuple(f.pages)) for f in _check(doc.tobytes(), statement.fields()).findings}
-    assert ("PAGE.SOURCE", (2,)) in codes
+    findings = _check(doc.tobytes(), statement.fields()).findings
+    assert ("PAGE.SOURCE", (2,)) in {(f.check_code, tuple(f.pages)) for f in findings}
+    # A scan has no text positions, yet every finding still boxes every page it names.
+    assert all({place.page for place in f.places} == set(f.pages) for f in findings)
 
 
 def test_a_duplicated_page_is_one_finding() -> None:
@@ -280,6 +294,8 @@ def test_a_duplicated_page_is_one_finding() -> None:
     assert finding.pages == [2, 3]
     assert "PAGE.DUPLICATE" in finding.check_codes
     assert finding.check_codes[0] == finding.check_code
+    # Every page a finding names is boxed somewhere on it.
+    assert {place.page for place in finding.places} == {2, 3}
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +322,9 @@ def test_the_tool_reports_findings_for_the_content_specialist() -> None:
     [finding] = output["findings"]
     assert finding["id"] == "page_consistency_tool-1"
     assert finding["check_code"] == "PAGE.NUMBERING" and finding["pages"] == [1, 2]
+    assert finding["bbox_units"] == "pt"
+    boxed = [(loc["page"], loc["text"]) for loc in finding["locations"]]
+    assert (1, "Page 1 of 3") in boxed and (2, "Page 3 of 3") in boxed
     assert "page_consistency_tool" in {t.name for t in SPECIALISTS["content_validation"].tools}
     assert TOOL_CATEGORIES["page_consistency_tool"] == FindingCategory.TAMPERING_FORENSIC
 

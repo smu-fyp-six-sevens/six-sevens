@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import datetime, timedelta, timezone
 
 from unittest.mock import patch
 
@@ -136,13 +136,31 @@ def test_the_accuracy_filters_join_each_review_to_its_case_in_the_database() -> 
         patch("app.findings_repository.service_supabase_client") as client,
         patch("app.findings_repository.fetch_all", side_effect=lambda build, order: (build(), [])[1]),
     ):
-        findings_repository.list_reviews(date(2026, 10, 1), [CaseStage.CASE_ANALYSED.value])
+        findings_repository.list_reviews(datetime(2026, 10, 1), [CaseStage.CASE_ANALYSED.value])
 
     select = client.return_value.table.return_value.select
     assert "cases!inner(id)" in select.call_args.args[0]
     reviewed = select.return_value.not_.is_.return_value
-    reviewed.gte.assert_called_once_with("cases.created_at", "2026-10-01")
+    # A time without a zone is UTC.
+    reviewed.gte.assert_called_once_with("cases.created_at", "2026-10-01T00:00:00.000000Z")
     reviewed.gte.return_value.in_.assert_called_once_with("cases.status", ["case_analysed"])
+
+
+def test_the_accuracy_window_is_the_officers_days_not_utcs() -> None:
+    # 1 to 3 Nov in Singapore: a case created at 7am on 1 Nov there (23:00 UTC on 31 Oct) is in it, as the
+    # dashboard's case counts have it.
+    from app import findings_repository
+
+    singapore = timezone(timedelta(hours=8))
+    with (
+        patch("app.findings_repository.service_supabase_client") as client,
+        patch("app.findings_repository.fetch_all", side_effect=lambda build, order: (build(), [])[1]),
+    ):
+        findings_repository.list_reviews(datetime(2026, 11, 1, tzinfo=singapore), [], datetime(2026, 11, 4, tzinfo=singapore))
+
+    reviewed = client.return_value.table.return_value.select.return_value.not_.is_.return_value
+    reviewed.gte.assert_called_once_with("cases.created_at", "2026-10-31T16:00:00.000000Z")
+    reviewed.gte.return_value.lt.assert_called_once_with("cases.created_at", "2026-11-03T16:00:00.000000Z")
 
 
 

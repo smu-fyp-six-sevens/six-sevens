@@ -1122,6 +1122,64 @@
   outline-offset: 1px;
 }
 
+/* "Dim page": a small switch, lit while the page is dimmed. */
+.xray-dim {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  margin-left: 4px;
+  padding: 0 10px 0 8px;
+  border: 1px solid var(--slate-29);
+  border-radius: 6px;
+  background: var(--slate-24);
+  color: var(--slate-90);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.xray-dim:hover {
+  border-color: var(--slate-60);
+  background: var(--slate-29);
+}
+
+.xray-dim:focus-visible {
+  outline: 2px solid var(--blue-77);
+  outline-offset: 1px;
+}
+
+.xray-dim-switch {
+  position: relative;
+  width: 24px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--slate-40);
+  transition: background-color .15s;
+}
+
+.xray-dim-switch::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--white);
+  content: '';
+  transition: transform .15s;
+}
+
+.xray-dim[aria-pressed='true'] .xray-dim-switch {
+  background: var(--blue-77);
+}
+
+.xray-dim[aria-pressed='true'] .xray-dim-switch::after {
+  transform: translateX(10px);
+}
+
 .xray-severity {
   flex: none;
   padding: 1px 7px;

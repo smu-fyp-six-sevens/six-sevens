@@ -525,9 +525,9 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section.locator('.risk-badge')).toHaveText('High risk');
-    await expect(section.locator('.risk-score-value')).toHaveText('58');
+    await expect(section.locator('.severity-gauge-value')).toHaveText('58');
     await expect(section.locator('.risk-score-level')).toHaveText('High risk · 50–79');
-    await expect(section.locator('.risk-gauge')).toHaveAttribute('aria-label', 'Score 58 out of 100, High risk');
+    await expect(section.locator('.severity-gauge')).toHaveAttribute('aria-label', 'Risk score 58 out of 100, High');
     await expect(section).toContainText('2 high · 3 medium · 1 low');
 
     // The documents are a card of their own, listed collapsed until reviewed (the low-only bank statement
@@ -1273,6 +1273,17 @@ test.describe('X-ray in the findings review', () => {
     await netPay.getByRole('button', { name: 'Show on document · 2 places' }).click();
     await expect(status).toContainText('Finding 1 of 3 · place 1 of 2');
     await dialog.locator('.risk-findings li', { hasText: 'vertically offset' }).getByRole('button', { name: /Show on page 1/ }).click();
+
+    // "Dim page" off shows the page as printed, the flagged places still outlined; on again, it's dimmed.
+    const dim = dialog.getByRole('button', { name: 'Dim page' });
+    await expect(dim).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog.locator('.finding-highlight-shade')).not.toHaveCount(0);
+    await dim.click();
+    await expect(dim).toHaveAttribute('aria-pressed', 'false');
+    await expect(dialog.locator('.finding-highlight-shade')).toHaveCount(0);
+    await expect(dialog.locator('[data-highlight-id="layout_anomalies_tool-1"]')).toBeVisible();
+    await dim.click();
+    await expect(dialog.locator('.finding-highlight-shade')).not.toHaveCount(0);
 
     await page.keyboard.press('Escape');
     await expect(status).toHaveText('2 findings on the page');

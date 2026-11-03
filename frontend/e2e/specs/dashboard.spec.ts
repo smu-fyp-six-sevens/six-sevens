@@ -7,12 +7,11 @@ import { makeCase, makeDocument } from '../support/mockBackend';
  * and a refresh button that reads the cases again (no socket covers the whole list).
  */
 
-const casesTab = (page: Page) => page.getByRole('navigation', { name: 'Dashboard sections' }).getByRole('button', { name: /^Cases/ });
-
-async function openCases(page: Page) {
+// Every case since the start, on the Overview: Needs attention names each case waiting on an officer.
+async function openAllTime(page: Page) {
   await page.goto('/dashboard');
-  await page.getByLabel('Date range').selectOption('All time');
-  await casesTab(page).click();
+  await page.getByRole('button', { name: 'Date range' }).click();
+  await page.getByRole('button', { name: 'All time' }).click();
 }
 
 test.describe('Dashboard', () => {
@@ -22,7 +21,7 @@ test.describe('Dashboard', () => {
       makeCase({ id: 'case-b', greenlink_case_id: 'GLDB-7002', company_name: 'Bolt Logistics' }),
     );
 
-    await openCases(page);
+    await openAllTime(page);
 
     await expect(page.getByText('Acme Pte Ltd')).toBeVisible();
     await expect(page.getByText('Bolt Logistics')).toBeVisible();
@@ -31,7 +30,7 @@ test.describe('Dashboard', () => {
 
   test('the refresh button reads the cases again, without the loading screen', async ({ page, backend }) => {
     backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd' }));
-    await openCases(page);
+    await openAllTime(page);
     await expect(page.getByText('Acme Pte Ltd')).toBeVisible();
     const before = backend.requestsTo('GET', /^\/cases\?/).length;
 
@@ -52,7 +51,7 @@ test.describe('Dashboard', () => {
 
     await page.reload();
 
-    await expect(page.getByRole('heading', { name: 'Recurring findings' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Flags by check' })).toBeVisible();
   });
 
   test('the status filter is the case queue\'s: several statuses at once, with their counts', async ({ page, backend }) => {
@@ -63,7 +62,7 @@ test.describe('Dashboard', () => {
       makeCase({ id: 'case-c', greenlink_case_id: 'GLDB-7003', company_name: 'Cedar Holdings', status: 'failed' }),
     );
     backend.documents.push(makeDocument({ case_id: 'case-c', status: 'failed' }));
-    await openCases(page);
+    await openAllTime(page);
 
     await page.getByRole('button', { name: 'Filter by status' }).click();
     const list = page.getByRole('group', { name: 'status filter' });
@@ -76,5 +75,48 @@ test.describe('Dashboard', () => {
     await expect(page.getByText('Acme Pte Ltd')).toHaveCount(0);
     await expect(page.getByText('Bolt Logistics')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Filter by status (9 selected)' })).toBeVisible();
+  });
+
+  test('a custom range picked on the calendar narrows the dashboard to it', async ({ page, backend }) => {
+    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: new Date().toISOString() }));
+    await page.goto('/dashboard');
+    await expect(page.getByText('Acme Pte Ltd')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Date range' }).click();
+    await page.getByRole('button', { name: /^Custom range/ }).click();
+    // The first two days of the left-hand month (last month): before the case was created today.
+    const days = page.locator('.range-calendar-month').first().locator('.range-calendar-day');
+    await days.nth(0).click();
+    await days.nth(1).click();
+    await page.getByRole('button', { name: 'Apply' }).click();
+
+    await expect(page.getByRole('button', { name: 'Date range' })).not.toHaveText(/Last 30 days/);
+    await expect(page.getByText('Acme Pte Ltd')).toHaveCount(0);
+  });
+
+  test('compare picks the first period, then a second one outside it, and shows both', async ({ page, backend }) => {
+    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: new Date().toISOString() }));
+    await page.goto('/dashboard');
+    const compare = page.getByRole('button', { name: 'Compare two periods' });
+
+    // Step 1 opens on the period in view (the last 30 days): keep it.
+    await compare.click();
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+    // Step 2: the first period's days can't be picked; two months back is clear of them.
+    await expect(page.getByText('First period:')).toBeVisible();
+    await expect(page.locator('.range-calendar-day.today')).toBeDisabled();
+    await page.getByRole('button', { name: 'Previous month' }).click();
+    const days = page.locator('.range-calendar-month').first().locator('.range-calendar-day');
+    await days.nth(0).click();
+    await days.nth(1).click();
+    await page.getByRole('button', { name: 'Compare', exact: true }).click();
+
+    await expect(page.locator('.compare-banner')).toContainText('Comparison');
+    await expect(page.locator('.compare-banner-warning')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Stop comparing' }).click();
+    await expect(page.locator('.compare-banner')).toHaveCount(0);
+    await expect(compare).toHaveText(/^Compare/);
   });
 });

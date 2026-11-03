@@ -794,6 +794,47 @@
   background: var(--steel-a08);
 }
 
+/* SelectMenu: HeaderFilter's look for a single choice, a tick in place of the checkbox. */
+.select-menu-chevron {
+  width: 10px;
+  height: 7px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.select-menu-option {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+}
+
+.select-menu-option:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: -2px;
+}
+
+.select-menu-option[aria-selected='true'] {
+  font-weight: 600;
+}
+
+.select-menu-check {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: var(--steel);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* A column header that sorts. Both arrows show; the current direction's is dark. */
 .case-sort {
   display: inline-flex;

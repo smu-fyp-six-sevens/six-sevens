@@ -19,6 +19,7 @@ import DocumentReviewModal from './DocumentReviewModal';
 import type { ReviewLink } from './DocumentReviewModal';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { SCORE_BANDS } from './scoreBands';
+import { SeverityGauge } from './SeverityGauge';
 import { readingOrder } from '../../components/findingHighlights';
 import type { HighlightArea } from '../../components/findingHighlights';
 
@@ -50,32 +51,20 @@ function ScoreGauge({ score, level }: { score: number; level: string }) {
   const band = SCORE_BANDS.find((b) => b.level === level);
   return (
     <div className="risk-score">
-      <div className="risk-score-figure">
-        <span className="risk-score-value">{score}</span>
-        <span className="risk-score-scale">/100</span>
-      </div>
+      <SeverityGauge score={score} level={level} />
       <div className="risk-score-detail">
         <span className={`risk-score-level risk-score-level--${level.toLowerCase()}`}>
           {level} risk{band ? ` · ${band.min}–${band.max}` : ''}
         </span>
-        <div className="risk-gauge" role="img" aria-label={`Score ${score} out of 100, ${level} risk`}>
+        {/* What each part of the dial means, the case's own level marked, so the level never rests on colour alone. */}
+        <ul className="severity-legend" aria-label="Score bands">
           {SCORE_BANDS.map((b) => (
-            <span
-              key={b.level}
-              className={`risk-gauge-band risk-gauge-band--${b.level.toLowerCase()} ${b.level === level ? 'risk-gauge-band--current' : ''}`}
-              style={{ flexGrow: b.max - b.min + 1 }}
-              title={`${b.level}: ${b.min}–${b.max}`}
-            />
+            <li key={b.level} className={b.level === level ? 'severity-legend-current' : undefined}>
+              <span className={`severity-legend-swatch risk-gauge-band--${b.level.toLowerCase()}`} aria-hidden="true" />
+              {b.level} <span className="severity-legend-range">{b.min}–{b.max}</span>
+            </li>
           ))}
-          <span className="risk-gauge-marker" style={{ left: `${Math.min(100, Math.max(0, score))}%` }} />
-        </div>
-        <div className="risk-gauge-labels" aria-hidden="true">
-          {SCORE_BANDS.map((b) => (
-            <span key={b.level} style={{ flexGrow: b.max - b.min + 1 }}>
-              {b.level}
-            </span>
-          ))}
-        </div>
+        </ul>
       </div>
     </div>
   );

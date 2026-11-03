@@ -16,6 +16,14 @@ EvidenceKey = tuple
 
 
 @dataclass(frozen=True)
+class Place:
+    """Where on a page the evidence is printed, for the preview to box (points, origin top-left)."""
+    page: int
+    bbox: tuple[float, float, float, float]
+    text: str
+
+
+@dataclass(frozen=True)
 class Evidence:
     """One check's observation, before evidence about the same page or boundary is merged."""
     check_code: str
@@ -25,6 +33,8 @@ class Evidence:
     summary: str
     stated: str | None = None
     expected: str | None = None
+    # Empty when the check reads the page as a whole, or the page has no text layer (OCR has no positions).
+    places: tuple[Place, ...] = ()
 
 
 @dataclass
@@ -44,6 +54,8 @@ class PageFinding(BaseModel):
     expected: str | None = None
     # What other checks saw at the same page or boundary: one cause, reported once.
     evidence: list[str] = []
+    # Where the merged evidence is printed, in page order.
+    places: list[Place] = []
 
 
 class PageConsistencyResult(BaseModel):
