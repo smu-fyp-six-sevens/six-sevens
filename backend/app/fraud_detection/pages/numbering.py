@@ -10,11 +10,11 @@ total for each account is read as separate runs.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ..numerical_validation.models import SkippedCheck
-from .models import CheckOutcome, Evidence
-from .page_view import PageView
+from .models import CheckOutcome, Evidence, Place
+from .page_view import PAGE_BAND_FRACTION, PageView, place_of
 
 CODE = "PAGE.NUMBERING"
 # "Page 2 of 4", "Page 2/4", anywhere on the page.
@@ -36,6 +36,17 @@ def printed_number(page: PageView) -> tuple[int, int] | None:
         return None
     printed, total = int(match.group(1)), int(match.group(2))
     return (printed, total) if printed >= 1 and total >= 1 else None
+
+
+def _number_place(page: PageView) -> Place | None:
+    """Where the page prints its number, read the way printed_number reads it; None on an OCR page (no
+    positions) or when the number is split across lines."""
+    band = page.size[1] * PAGE_BAND_FRACTION
+    in_band = [line for line in page.placed if line.y1 <= band or line.y0 >= page.size[1] - band]
+    line = next((line for line in page.placed if _PAGE_RE.search(line.text)), None) or next(
+        (line for line in in_band if _BARE_RE.search(line.text)), None,
+    )
+    return place_of(page.number, [line]) if line is not None else None
 
 
 def _runs(numbered: list[_Numbered]) -> list[list[_Numbered]]:
@@ -119,4 +130,9 @@ def check_numbering(pages: list[PageView]) -> CheckOutcome:
                 f"{_missing(highest + 1, total)} missing at the end",
                 stated=f"last page {highest}", expected=f"{total}",
             ))
+    # Each finding boxes the page numbers it's about, so the officer sees them on the page.
+    places = {page.number: place for page in pages if (place := _number_place(page)) is not None}
+    outcome.evidence = [
+        replace(item, places=tuple(places[page] for page in item.pages if page in places)) for item in outcome.evidence
+    ]
     return outcome

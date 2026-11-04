@@ -1294,6 +1294,17 @@ test.describe('X-ray in the findings review', () => {
     await expect(status).toContainText('Finding 1 of 3 · place 1 of 2');
     await dialog.locator('.risk-findings li', { hasText: 'vertically offset' }).getByRole('button', { name: /Show on page 1/ }).click();
 
+    // "Dim page" off shows the page as printed, the flagged places still outlined; on again, it's dimmed.
+    const dim = dialog.getByRole('button', { name: 'Dim page' });
+    await expect(dim).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog.locator('.finding-highlight-shade')).not.toHaveCount(0);
+    await dim.click();
+    await expect(dim).toHaveAttribute('aria-pressed', 'false');
+    await expect(dialog.locator('.finding-highlight-shade')).toHaveCount(0);
+    await expect(dialog.locator('[data-highlight-id="layout_anomalies_tool-1"]')).toBeVisible();
+    await dim.click();
+    await expect(dialog.locator('.finding-highlight-shade')).not.toHaveCount(0);
+
     await page.keyboard.press('Escape');
     await expect(status).toHaveText('2 findings on the page');
     await expect(card).toHaveCount(0);

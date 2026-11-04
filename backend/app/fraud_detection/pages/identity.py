@@ -18,8 +18,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..numerical_validation.models import SkippedCheck
-from .models import CheckOutcome, Evidence
-from .page_view import PageView
+from .models import CheckOutcome, Evidence, Place
+from .page_view import PageView, place_of
 
 CODE = "PAGE.HEADER_IDENTITY"
 ANCHOR_FIELDS = (
@@ -100,6 +100,25 @@ def _read_under_label(page: PageView, label: _Label) -> str | None:
     return None
 
 
+def _value_place(page: PageView, value: str) -> Place | None:
+    """Where the page prints the value."""
+    pattern = _value_pattern(value)
+    line = next((line for line in page.placed if pattern.search(line.text)), None)
+    return place_of(page.number, [line]) if line else None
+
+
+def _label_place(page: PageView, label: _Label) -> Place | None:
+    """Where the page prints the label, and the value with it: on the same line, or the line under it."""
+    wanted = _norm(label.text)
+    ordered = sorted(page.placed, key=lambda line: (line.y0, line.x0))
+    for index, line in enumerate(ordered):
+        if label.on_own_line and _norm(_clean_label(line.text)) == wanted:
+            return place_of(page.number, ordered[index:index + 2])
+        if not label.on_own_line and _after_label(line.text, wanted) is not None:
+            return place_of(page.number, [line])
+    return None
+
+
 def check_header_identity(pages: list[PageView], fields: dict[str, Any]) -> CheckOutcome:
     outcome = CheckOutcome()
     anchors = {
@@ -121,10 +140,12 @@ def check_header_identity(pages: list[PageView], fields: dict[str, Any]) -> Chec
             compared += 1
             if not _agrees(read, value):
                 shown = read[: max(len(value) + 8, 24)]
+                by_number = {p.number: p for p in pages}
+                places = (_value_place(by_number[source_page], value), _label_place(page, label))
                 outcome.evidence.append(Evidence(
                     CODE, "impossible", ("page", page.number), (source_page, page.number),
                     f'Page {page.number} prints {label.text} "{shown}", but page {source_page} prints "{value}"',
-                    stated=shown, expected=value,
+                    stated=shown, expected=value, places=tuple(place for place in places if place),
                 ))
     if compared == 0:
         outcome.skipped.append(SkippedCheck(

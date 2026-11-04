@@ -1,21 +1,27 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import AppHeader from '../components/AppHeader';
 import HeaderFilter, { type FilterOption } from '../components/HeaderFilter';
+import PeriodMenu, { CUSTOM_RANGE } from '../components/PeriodMenu';
+import CompareMenu from '../components/CompareMenu';
+import CompareDelta from '../components/CompareDelta';
 import { RefreshButton } from '../components/RefreshButton';
 import { DashboardSkeleton } from '../components/Skeletons';
-import { InfoIcon, InfoLabel } from '../components/InfoTip';
+import { InfoIcon } from '../components/InfoTip';
 import { CasePipeline } from './CasePipeline';
 import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
 import { CoverageRings, FlagPills, RiskOverview } from './DashboardInsights';
 import { CasesOverTime, MostRequestedDocuments, NeedsAttention, ProcessingAndCost, type AttentionCase } from './DashboardCasePanels';
+import { useCaseCosts } from './dashboardCosts';
+import { CheckBreakdown, CheckDocumentMatrix, FlagKpis, FlagsByRisk, type FlagCase } from './DashboardFlagAnalytics';
+import { CaseKpis, CostAgainstTime, RiskScoreSpread, StageBreakdown, TimeAndCostByCase, type AnalyticsCase, type CostState } from './DashboardCaseAnalytics';
 import { CASE_STAGES, caseStageLabel, caseStageTone } from '../utils/caseStages';
 import { StageMark } from '../components/StageMark';
-import { formatDuration } from './upload/processingTimes';
 import { formatDocumentType, type CaseStage, type DetectionMetricsFilters } from '../services/uploadService';
 import { formatCheck } from '../utils/checkLabels';
 import { Icon } from '../components/Icon';
+import { PRESETS, formatPeriod, inPeriod, isoDay, overlap, presetPeriod, type Period } from '../utils/dateRange';
 
 // A case stage's label (utils/caseStages.ts), so the dashboard and the case queue name and colour cases the same way.
 type Status = string;
@@ -49,7 +55,7 @@ interface MockCase {
   documentTypes: string[];
   flags: string[];
   // Per flag name: its worst severity in this case and the document types it's on; absent for preview rows.
-  flagInfo?: Record<string, { severity: FlagSummary['severity']; documentTypes: string[] }>;
+  flagInfo?: Record<string, { severity: FlagSummary['severity']; count: number; documentTypes: string[] }>;
 }
 
 interface FlagSummary {
@@ -73,7 +79,6 @@ const MOCK_CASES: MockCase[] = [
 ];
 // Preview rows only: live cases carry their real time from the case list.
 const SAMPLE_PROCESSING_MS = [184_000, 170_000, 237_000, 125_000, 245_000, 160_000, 188_000, 264_000, 143_000, 179_000];
-const PROCESSING_TIME_HELP = 'Total time taken from upload to completed case analysis, excluding manual review. Shown once the case has been analysed.';
 
 const STATUSES: Status[] = CASE_STAGES.map((stage) => caseStageLabel(stage));
 // A stage's label back to the stage, for its colour and for the accuracy filter the backend applies.
@@ -102,7 +107,6 @@ const FLAG_SEVERITY: Record<string, FlagSummary['severity']> = {
   'Font anomaly': 'Medium',
 };
 
-const CASES_PER_PAGE = 10;
 // Rows in each Overview insight panel, so the side-by-side panels stay the same height.
 const INSIGHT_ROWS = 6;
 // Document types are rings, four to a row: two rows before "Show all".
@@ -202,13 +206,59 @@ function sampleRecommendedDocuments(item: MockCase): string[] {
   return [...recommendations];
 }
 
-function dateLimit(range: string): string | null {
-  if (range === 'All time') return null;
-  const days = Number(range.split(' ')[1]);
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return date.toISOString().slice(0, 10);
+// Everything the panels read from a set of cases, worked out the same way for the period and the comparison.
+function deriveView(cases: DashboardCase[], costs: Record<string, number> | null) {
+  const statusCounts = Object.fromEntries(STATUSES.map((status) => [status, cases.filter((item) => item.status === status).length])) as Record<Status, number>;
+
+  const typeCounts = new Map<string, number>();
+  cases.forEach((item) => item.documentTypes.forEach((type) => typeCounts.set(type, (typeCounts.get(type) ?? 0) + 1)));
+  const byDocumentType = [...typeCounts.entries()].sort((a, b) => b[1] - a[1]);
+
+  const casesByFlag = new Map<string, DashboardCase[]>();
+  cases.forEach((item) => item.flags.forEach((flag) => casesByFlag.set(flag, [...(casesByFlag.get(flag) ?? []), item])));
+  const flagRows: FlagSummary[] = [...casesByFlag.entries()].map(([name, flagged]) => ({
+    name,
+    cases: flagged,
+    // The worst severity any case has for this flag, and only the document types it was found on.
+    severity: flagged.map((item) => item.flagInfo?.[name]?.severity ?? FLAG_SEVERITY[name] ?? 'Medium')
+      .sort((a, b) => SEVERITY_RANK[b] - SEVERITY_RANK[a])[0],
+    documentTypes: [...new Set(flagged.flatMap((item) => item.flagInfo?.[name]?.documentTypes ?? item.documentTypes))],
+  }));
+
+  // Each case's flags as the Flags tab counts them: per check, its severity, flag count and document types.
+  const flagCases: FlagCase[] = cases.map((item) => ({
+    id: item.id, routeId: item.routeId, applicant: item.applicant, risk: item.risk,
+    flags: item.flags.map((name) => ({
+      name,
+      severity: item.flagInfo?.[name]?.severity ?? FLAG_SEVERITY[name] ?? 'Medium',
+      count: item.flagInfo?.[name]?.count ?? 1,
+      documentTypes: item.flagInfo?.[name]?.documentTypes ?? item.documentTypes,
+    })),
+  }));
+
+  // Each case as Needs attention shows it: why it waits, its most serious flag, and what to request.
+  const attentionCases: AttentionCase[] = cases.map((item) => {
+    const topFlag = item.flags
+      .map((name) => ({ name, severity: item.flagInfo?.[name]?.severity ?? FLAG_SEVERITY[name] ?? 'Medium' }))
+      .sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity])[0] ?? null;
+    return {
+      id: item.id, routeId: item.routeId, applicant: item.applicant, status: item.status, tone: statusTone(item.status),
+      stuck: item.stuck ?? false, submitted: item.submitted, risk: item.risk, score: item.score, topFlag,
+      toRequest: item.recommendedDocs ?? [],
+    };
+  });
+
+  const analyticsCases: AnalyticsCase[] = cases.map((item) => ({
+    id: item.id, routeId: item.routeId, applicant: item.applicant, status: item.status, tone: statusTone(item.status),
+    risk: item.risk, score: item.score, processingMs: item.processingMs ?? null,
+    cost: item.caseId && costs?.[item.caseId] != null ? costs[item.caseId] : null,
+  }));
+
+  return { cases, statusCounts, byDocumentType, flagRows, flagCases, attentionCases, analyticsCases };
 }
+type DashboardView = ReturnType<typeof deriveView>;
+
+type DashboardCase = MockCase;
 
 function dashboardStatus(label: string): Status {
   return STATUSES.includes(label) ? label : caseStageLabel('open');
@@ -235,13 +285,14 @@ export default function DashboardPage({
     else params.set('tab', next.toLowerCase());
     return params;
   });
-  const [range, setRange] = useState('Last 30 days');
+  // A preset's name, or "Custom range" with the custom period.
+  const [rangeChoice, setRangeChoice] = useState<string>('Last 30 days');
+  const [customPeriod, setCustomPeriod] = useState<Period | null>(null);
+  // The period picked on the Compare calendar; null when not comparing.
+  const [comparePeriod, setComparePeriod] = useState<Period | null>(null);
   // Empty: every status, as on the case queue.
   const [statusFilter, setStatusFilter] = useState<Set<Status>>(new Set());
-  const [riskOrder, setRiskOrder] = useState<'highest' | 'lowest'>('highest');
   const [showAllDocTypes, setShowAllDocTypes] = useState(false);
-  // Null: no column chosen, so the default order (most cases first).
-  const [flagSort, setFlagSort] = useState<{ key: 'severity' | 'cases'; descending: boolean } | null>(null);
 
   const dashboardCases = useMemo(() => caseRecords.length
     ? caseRecords.map((record, index) => {
@@ -253,7 +304,8 @@ export default function DashboardPage({
         caseId: record.id,
         stuck: record.stuck ?? false,
         applicant: record.applicant,
-        submitted: record.created_at?.slice(0, 10) || example.submitted,
+        // The day it was created in the officer's time zone, as the date range and calendar count days.
+        submitted: record.created_at ? isoDay(new Date(record.created_at)) : example.submitted,
         status: dashboardStatus(record.status),
         risk: record.riskLevel ?? null,
         score: record.riskScore ?? null,
@@ -264,6 +316,7 @@ export default function DashboardPage({
         flags: (record.flags ?? []).map((flag) => formatCheck(flag.check)),
         flagInfo: Object.fromEntries((record.flags ?? []).map((flag) => [formatCheck(flag.check), {
           severity: flagSeverity(flag.severity),
+          count: flag.count,
           documentTypes: flag.documentTypes.map((type) => formatDocumentType(type)),
         }])),
       };
@@ -275,25 +328,28 @@ export default function DashboardPage({
     })),
   [caseRecords]);
 
+  const period = useMemo(() => (rangeChoice === CUSTOM_RANGE && customPeriod ? customPeriod : presetPeriod(rangeChoice)), [rangeChoice, customPeriod]);
+  const rangeLabel = rangeChoice === CUSTOM_RANGE && customPeriod ? formatPeriod(customPeriod) : rangeChoice;
+
   // Every case, whoever created it: the date and status filters are the only narrowing.
-  const casesInRange = useMemo(() => {
-    const since = dateLimit(range);
-    return dashboardCases.filter((item) => !since || item.submitted >= since);
-  }, [dashboardCases, range]);
+  const casesInRange = useMemo(() => dashboardCases.filter((item) => inPeriod(item.submitted, period)), [dashboardCases, period]);
   const visibleCases = useMemo(
     () => casesInRange.filter((item) => !statusFilter.size || statusFilter.has(item.status)),
     [casesInRange, statusFilter],
   );
+  const compareCases = useMemo(
+    () => (comparePeriod ? dashboardCases.filter((item) => inPeriod(item.submitted, comparePeriod) && (!statusFilter.size || statusFilter.has(item.status))) : null),
+    [dashboardCases, comparePeriod, statusFilter],
+  );
 
   // The same date and status choice for the accuracy figures, which the backend filters (cases are the reviews' own).
-  const accuracyFilters = useMemo<DetectionMetricsFilters>(() => ({
-    since: dateLimit(range),
-    statuses: [...statusFilter].flatMap((status) => STAGE_BY_LABEL.get(status) ?? []),
-  }), [range, statusFilter]);
+  const statuses = useMemo(() => [...statusFilter].flatMap((status) => STAGE_BY_LABEL.get(status) ?? []), [statusFilter]);
+  const accuracyFilters = useMemo<DetectionMetricsFilters>(() => ({ since: period.from, until: period.to, statuses }), [period, statuses]);
+  const compareAccuracyFilters = useMemo<DetectionMetricsFilters | null>(
+    () => (comparePeriod ? { since: comparePeriod.from, until: comparePeriod.to, statuses } : null),
+    [comparePeriod, statuses],
+  );
 
-  const statusCounts = useMemo(() => Object.fromEntries(
-    STATUSES.map((status) => [status, visibleCases.filter((item) => item.status === status).length]),
-  ) as Record<Status, number>, [visibleCases]);
   // The filter's counts ignore the status filter itself, like the case queue's.
   const stageCounts = useMemo(
     () => Object.fromEntries(CASE_STAGES.map((stage) => [stage, statusCounts[caseStageLabel(stage)]])) as Record<CaseStage, number>,
@@ -306,87 +362,43 @@ export default function DashboardPage({
     label: <><StageMark stage={statusStage(status)} />{status}</>,
   }));
 
-  const byDocumentType = useMemo(() => {
-    const counts = new Map<string, number>();
-    visibleCases.forEach((item) => item.documentTypes.forEach((type) => {
-      counts.set(type, (counts.get(type) ?? 0) + 1);
-    }));
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  }, [visibleCases]);
+  // Claude spend for the live cases in view and in the comparison, for the totals and the Cases tab's charts.
+  const costIds = useMemo(
+    () => [...new Set([...visibleCases, ...(compareCases ?? [])].flatMap((item) => (item.caseId ? [item.caseId] : [])))],
+    [visibleCases, compareCases],
+  );
+  const { costs, error: costError } = useCaseCosts(costIds);
+  const costState: CostState = !caseRecords.length ? 'unavailable' : costError ? 'error' : costs === null ? 'loading' : 'loaded';
 
-  const flagRows = useMemo<FlagSummary[]>(() => {
-    const casesByFlag = new Map<string, MockCase[]>();
-    visibleCases.forEach((item) => item.flags.forEach((flag) => {
-      casesByFlag.set(flag, [...(casesByFlag.get(flag) ?? []), item]);
-    }));
-    return [...casesByFlag.entries()].map(([name, cases]) => ({
-      name,
-      cases,
-      // The worst severity any case has for this flag, and only the document types it was found on.
-      severity: cases.map((item) => item.flagInfo?.[name]?.severity ?? FLAG_SEVERITY[name] ?? 'Medium')
-        .sort((a, b) => SEVERITY_RANK[b] - SEVERITY_RANK[a])[0],
-      documentTypes: [...new Set(cases.flatMap((item) => item.flagInfo?.[name]?.documentTypes ?? item.documentTypes))],
-    }));
-  }, [visibleCases]);
-  const sortedFlagRows = useMemo(() => {
-    const severity = (flag: FlagSummary) => SEVERITY_RANK[flag.severity];
-    const cases = (flag: FlagSummary) => flag.cases.length;
-    const [first, second] = flagSort?.key === 'severity' ? [severity, cases] : [cases, severity];
-    const sign = flagSort && !flagSort.descending ? 1 : -1;
-    return [...flagRows].sort((a, b) => sign * (first(a) - first(b)) || sign * (second(a) - second(b)));
-  }, [flagRows, flagSort]);
-  // Each click on a column: high to low, then low to high, then back to no sort.
-  const sortFlagsBy = (key: 'severity' | 'cases') => setFlagSort((current) => {
-    if (current?.key !== key) return { key, descending: true };
-    return current.descending ? { key, descending: false } : null;
-  });
-  // The case queue's sort header (CaseQueuePage SortHeader): both arrows, the current direction's one dark.
-  const sortHeader = (key: 'severity' | 'cases', label: string) => {
-    const direction = flagSort?.key === key ? (flagSort.descending ? 'desc' : 'asc') : undefined;
-    return (
-      <th aria-sort={direction === 'desc' ? 'descending' : direction === 'asc' ? 'ascending' : undefined}>
-        <button
-          type="button"
-          className="case-sort"
-          data-direction={direction}
-          aria-label={`Sort by ${label.toLowerCase()} (${direction === 'desc' ? 'high to low' : direction === 'asc' ? 'low to high' : 'not sorted'})`}
-          onClick={() => sortFlagsBy(key)}
-        >
-          {label}
-          <svg className="case-sort-arrows" viewBox="0 0 8 14" aria-hidden="true">
-            <path className="case-sort-up" d="M4 0 8 5H0z" />
-            <path className="case-sort-down" d="M4 14 0 9h8z" />
-          </svg>
-        </button>
-      </th>
-    );
-  };
-
-  // The commonest flags, most cases first, for the Overview.
-  const commonFlags = [...flagRows].sort((a, b) => b.cases.length - a.cases.length).slice(0, INSIGHT_ROWS);
-  const flaggedCaseCount = visibleCases.filter((item) => item.flags.length > 0).length;
-  const highFlagCount = flagRows.filter((item) => item.severity === 'High').length;
-  // Each case as Needs attention shows it: why it waits, its most serious flag, and what to request.
-  const attentionCases = useMemo<AttentionCase[]>(() => visibleCases.map((item) => {
-    const topFlag = item.flags
-      .map((name) => ({ name, severity: item.flagInfo?.[name]?.severity ?? FLAG_SEVERITY[name] ?? 'Medium' }))
-      .sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity])[0] ?? null;
-    return {
-      id: item.id, routeId: item.routeId, applicant: item.applicant, status: item.status, tone: statusTone(item.status),
-      stuck: item.stuck ?? false, submitted: item.submitted, risk: item.risk, score: item.score, topFlag,
-      toRequest: item.recommendedDocs ?? [],
-    };
-  }), [visibleCases]);
-  const openCase = (item: MockCase) => navigate(`/cases/${encodeURIComponent(item.routeId || item.id)}`);
-  const sortedCaseRows = useMemo(() => [...visibleCases].sort((a, b) => {
-    // Unscored cases rank below Low, so they sit last for "Critical first" and first for "Low first".
-    const rank = (item: MockCase) => (item.risk ? { Critical: 4, High: 3, Medium: 2, Low: 1 }[item.risk] : 0);
-    if (riskOrder === 'highest') return rank(b) - rank(a) || (b.score ?? 0) - (a.score ?? 0);
-    return rank(a) - rank(b) || (a.score ?? 0) - (b.score ?? 0);
-  }), [riskOrder, visibleCases]);
+  const view = useMemo(() => deriveView(visibleCases, costs), [visibleCases, costs]);
+  const before: DashboardView | null = useMemo(() => (compareCases ? deriveView(compareCases, costs) : null), [compareCases, costs]);
+  const { statusCounts, byDocumentType, flagRows, flagCases, attentionCases, analyticsCases } = view;
+  // The commonest flags, most cases first, for the Overview. When comparing, a flag raised only in the comparison
+  // is listed at 0 after them, so a drop to none shows rather than the row disappearing.
+  const wasFlagged = new Map(before?.flagRows.map((row) => [row.name, row]));
+  const commonFlags = [
+    ...[...flagRows].sort((a, b) => b.cases.length - a.cases.length),
+    ...[...wasFlagged.values()].filter((row) => !flagRows.some((now) => now.name === row.name))
+      .sort((a, b) => b.cases.length - a.cases.length).map((row) => ({ ...row, cases: [] })),
+  ].slice(0, INSIGHT_ROWS);
+  // Each document type in view, then any only in the comparison at 0, for the same reason.
+  const documentTypes: [string, number][] = [
+    ...byDocumentType,
+    ...(before?.byDocumentType ?? []).filter(([type]) => !byDocumentType.some(([now]) => now === type)).map(([type]): [string, number] => [type, 0]),
+  ];
+  const openAnalyticsCase = (item: AnalyticsCase) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`);
+  const stages = useMemo(() => STATUSES.map((status) => ({ label: status, tone: statusTone(status) })), []);
 
   return (
     <main className="shell dashboard-shell">
+      {/* White stripes laid over a comparison mark drawn in SVG (rings, dots), as CSS stripes are on the bars. */}
+      <svg className="sr-only" aria-hidden="true">
+        <defs>
+          <pattern id="compare-stripes" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)">
+            <rect width="2.2" height="5" fill="rgba(255, 255, 255, .65)" />
+          </pattern>
+        </defs>
+      </svg>
       <AppHeader />
       <div className="dashboard-app">
       <main className="dashboard-main">
@@ -407,9 +419,27 @@ export default function DashboardPage({
             </nav>
             <div className="dashboard-toolbar-actions">
               <div className="dashboard-filters">
-                <select aria-label="Date range" value={range} onChange={(event) => setRange(event.target.value)}><option>Last 7 days</option><option>Last 30 days</option><option>Last 90 days</option><option>All time</option></select>
+                <PeriodMenu
+                  name="Date range"
+                  trigger={rangeLabel}
+                  options={PRESETS.map((preset) => ({ label: preset, onSelect: () => setRangeChoice(preset) }))}
+                  selected={rangeChoice}
+                  custom={customPeriod}
+                  onCustom={(picked) => { setCustomPeriod(picked); setRangeChoice(CUSTOM_RANGE); }}
+                />
+                <CompareMenu
+                  period={period}
+                  compare={comparePeriod}
+                  onCompare={(first, second) => {
+                    // The later period is always "This period", so every change reads as now against before.
+                    const [later, earlier] = second.to > first.to ? [second, first] : [first, second];
+                    setCustomPeriod(later);
+                    setRangeChoice(CUSTOM_RANGE);
+                    setComparePeriod(earlier);
+                  }}
+                  onStop={() => setComparePeriod(null)}
+                />
                 <HeaderFilter name="status" title="Status" options={statusOptions} selected={statusFilter} disabled={isLoading} onChange={(next) => setStatusFilter(next as Set<Status>)} />
-                {tab === 'Cases' && <label className="risk-sort-filter"><span className="sr-only">Sort by risk</span><select value={riskOrder} onChange={(event) => setRiskOrder(event.target.value as 'highest' | 'lowest')}><option value="highest">Critical first</option><option value="lowest">Low first</option></select></label>}
                 {/* The dashboard reads the cases on opening; this reads them again (no socket covers the whole list). */}
                 <span className="dashboard-refresh"><RefreshButton isRefreshing={isRefreshing} onClick={onRefresh} label="cases" /></span>
               </div>
@@ -425,7 +455,41 @@ export default function DashboardPage({
         <div className="dashboard-content dashboard-body-content">
           {/* First load: placeholders in the dashboard's own layout, not the sample cases. The Accuracy tab loads its own figures. */}
           {isLoading && tab !== 'Accuracy' ? <DashboardSkeleton /> : <>
-          {tab !== 'Flags' && tab !== 'Accuracy' && <CasePipeline counts={stageCounts} total={visibleCases.length} period={range} />}
+          {comparePeriod && before && (
+            <div className="compare-banner">
+              <span className="compare-banner-period">
+                <i className="compare-swatch" aria-hidden="true" />
+                <span><small>This period</small><span><strong>{formatPeriod(period)}</strong> · {visibleCases.length} {visibleCases.length === 1 ? 'case' : 'cases'}</span></span>
+              </span>
+              <span className="compare-banner-vs">vs</span>
+              <span className="compare-banner-period">
+                <i className="compare-swatch compare-swatch--was" aria-hidden="true" />
+                <span><small>Comparison</small><span><strong>{formatPeriod(comparePeriod)}</strong> · {before.cases.length} {before.cases.length === 1 ? 'case' : 'cases'}</span></span>
+              </span>
+              <span className="compare-banner-key">
+                In the charts, solid is this period and striped is the comparison. Each period's cases are those created
+                in it, counted by their status now.
+              </span>
+              {/* How to read the figures, in the periods' own dates. The comparison is normally the earlier period; a
+                  date range changed afterwards can make it the later one, and the wording says so rather than "since". */}
+              <p className="compare-banner-note">
+                Big numbers are <strong>{formatPeriod(period)}</strong>.{' '}
+                {comparePeriod.to < (period.from ?? period.to)
+                  ? <>Pills show the change since <strong>{formatPeriod(comparePeriod)}</strong>: for example, "+1" means 1 more than in {formatPeriod(comparePeriod)}.</>
+                  : <>Pills show how it differs from <strong>{formatPeriod(comparePeriod)}</strong>: for example, "+1" means 1 more than in {formatPeriod(comparePeriod)}.</>}
+                {' '}Green is better, red is worse.
+              </p>
+              {overlap(period, comparePeriod) && (
+                <p className="compare-banner-warning compare-banner-overlap" role="alert">
+                  The periods overlap ({formatPeriod(overlap(period, comparePeriod)!)}): cases created then count in both.
+                </p>
+              )}
+            </div>
+          )}
+          {tab === 'Overview' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
+            <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-period">{rangeLabel}</span></div><span className="stat-number">{visibleCases.length}</span>{before ? <CompareDelta value={visibleCases.length} previous={before.cases.length} /> : <span className="stat-caption">Cases in view</span>}</article>
+            {STATUSES.map((status) => <article key={status} className={`dashboard-stat-card${before && !statusCounts[status] && !before.statusCounts[status] ? ' stat-card--quiet' : ''}`}><div className="stat-top"><span className="stat-caption">{status}</span><span className={`case-status-dot tone-${statusTone(status)}`} /></div><span className="stat-number">{statusCounts[status]}</span>{before ? <CompareDelta value={statusCounts[status]} previous={before.statusCounts[status]} /> : <span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span>}</article>)}
+          </section>}
           {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
           {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
 
@@ -433,49 +497,54 @@ export default function DashboardPage({
           <section className="dashboard-insight-grid">
             <article className="dashboard-panel flag-insight-panel">
               <div className="panel-heading"><div><h2>Most common flags</h2><p>Issues raised across the cases in view</p></div><button className="text-button" onClick={() => setTab('Flags')}>View flags <span>→</span></button></div>
-              {commonFlags.length ? <FlagPills flags={commonFlags.map((flag) => ({ name: flag.name, severity: flag.severity, caseIds: flag.cases.map((item) => item.id) }))} caseCount={visibleCases.length} onOpen={() => setTab('Flags')} /> : <p className="empty-insight">No flags in this date and status selection.</p>}
+              {commonFlags.length ? <FlagPills flags={commonFlags.map((flag) => ({ name: flag.name, severity: flag.severity, caseIds: flag.cases.map((item) => item.id), previous: before ? wasFlagged.get(flag.name)?.cases.length ?? 0 : undefined }))} caseCount={visibleCases.length} compareCaseCount={before?.cases.length} onOpen={() => setTab('Flags')} /> : <p className="empty-insight">No flags in this date and status selection.</p>}
             </article>
             <article className="dashboard-panel">
-              <div className="panel-heading"><div><h2>Documents by type</h2><p>Share of the cases in view that include each document type</p></div>{byDocumentType.length > DOCUMENT_TYPE_ROWS && <button className="text-button" onClick={() => setShowAllDocTypes((value) => !value)}>{showAllDocTypes ? 'Show fewer' : `Show all ${byDocumentType.length}`}</button>}</div>
-              {byDocumentType.length ? <CoverageRings types={showAllDocTypes ? byDocumentType : byDocumentType.slice(0, DOCUMENT_TYPE_ROWS)} caseCount={visibleCases.length} /> : <p className="empty-insight">No documents in this date and status selection.</p>}
+              <div className="panel-heading"><div><h2>Documents by type</h2><p>Share of the cases in view that include each document type</p></div>{documentTypes.length > DOCUMENT_TYPE_ROWS && <button className="text-button" onClick={() => setShowAllDocTypes((value) => !value)}>{showAllDocTypes ? 'Show fewer' : `Show all ${documentTypes.length}`}</button>}</div>
+              {documentTypes.length ? <CoverageRings types={showAllDocTypes ? documentTypes : documentTypes.slice(0, DOCUMENT_TYPE_ROWS)} caseCount={visibleCases.length} compare={before ? { types: new Map(before.byDocumentType), caseCount: before.cases.length } : undefined} /> : <p className="empty-insight">No documents in this date and status selection.</p>}
             </article>
           </section>
 
           <section className="dashboard-lower-grid">
             <article className="dashboard-panel risk-snapshot-panel">
               <div className="panel-heading"><div><h2>Risk overview</h2><p>Current cases grouped by assessed risk level</p></div></div>
-              <RiskOverview cases={visibleCases} />
+              <RiskOverview cases={visibleCases} compare={before?.cases} />
               <p className="snapshot-note"><InfoIcon /> Consider document findings, case status and review context alongside the risk score.</p>
             </article>
           </section>
           <section className="dashboard-pair-grid">
             <NeedsAttention cases={attentionCases} onOpen={(item) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`)} />
-            <MostRequestedDocuments cases={attentionCases} />
+            <MostRequestedDocuments cases={attentionCases} compare={before?.attentionCases} />
           </section>
           <section className="dashboard-pair-grid">
-            <CasesOverTime cases={visibleCases} since={dateLimit(range)} />
-            <ProcessingAndCost cases={visibleCases} isPreview={!caseRecords.length} />
+            <CasesOverTime cases={visibleCases} period={period} compare={before && comparePeriod ? { cases: before.cases, period: comparePeriod } : undefined} />
+            <ProcessingAndCost cases={visibleCases} compare={before?.cases} costs={costs} costError={costError} isPreview={!caseRecords.length} />
           </section>
-          <DetectionAccuracySummary filters={accuracyFilters} onViewAll={() => setTab('Accuracy')} />
+          <DetectionAccuracySummary filters={accuracyFilters} compareFilters={compareAccuracyFilters} onViewAll={() => setTab('Accuracy')} />
           </>}
 
           {tab === 'Cases' && <>
-            <CaseTable cases={sortedCaseRows} heading="All cases" onOpenCase={openCase} showRiskAnalysis showProcessingTime isPreview={!caseRecords.length} />
+            <CaseKpis cases={analyticsCases} compare={before?.analyticsCases} costState={costState} />
+            <section className="dashboard-pair-grid">
+              <TimeAndCostByCase cases={analyticsCases} compare={before?.analyticsCases} costState={costState} onOpen={openAnalyticsCase} />
+              <StageBreakdown cases={analyticsCases} compare={before?.analyticsCases} stages={stages} />
+            </section>
+            <section className="dashboard-pair-grid">
+              <CostAgainstTime cases={analyticsCases} compare={before?.analyticsCases} costState={costState} onOpen={openAnalyticsCase} />
+              <RiskScoreSpread cases={analyticsCases} compare={before?.analyticsCases} />
+            </section>
+            {!caseRecords.length && <p className="dashboard-data-note">Sample cases: processing times are illustrative and Claude cost is recorded for live cases only.</p>}
           </>}
 
           {tab === 'Flags' && <>
-            <section className="flag-summary-grid">
-              <article className="dashboard-stat-card"><span className="stat-caption">Cases with flags</span><span className="stat-number">{flaggedCaseCount}</span><span className="stat-caption">of {visibleCases.length} cases in view</span></article>
-              <article className="dashboard-stat-card"><span className="stat-caption">Flag categories</span><span className="stat-number">{flagRows.length}</span><span className="stat-caption">distinct finding types</span></article>
-              <article className="dashboard-stat-card"><span className="stat-caption">High severity categories</span><span className="stat-number">{highFlagCount}</span><span className="stat-caption">require closer review</span></article>
-            </section>
-            <section className="dashboard-panel flag-register">
-              <div className="panel-heading"><div><h2>Recurring findings</h2><p>Frequency, severity and affected evidence in the selected case set</p></div><span className="panel-kicker">{range.toUpperCase()}</span></div>
-              <div className="case-table-wrap"><table className="dashboard-case-table flag-table"><thead><tr><th>FLAG</th>{sortHeader('severity', 'SEVERITY')}{sortHeader('cases', 'CASES')}<th>DOCUMENT TYPES</th><th>EXAMPLE CASES</th></tr></thead><tbody>{sortedFlagRows.map((flag) => <tr key={flag.name}><td data-label="Flag"><strong className="flag-name">{flag.name}</strong></td><td data-label="Severity"><span className={`flag-severity ${flag.severity.toLowerCase()}`}>{flag.severity}</span></td><td data-label="Cases"><strong>{flag.cases.length}</strong></td><td data-label="Document types"><span className="flag-doc-types">{flag.documentTypes.join(', ')}</span></td><td data-label="Example cases"><span className="flag-case-ids">{flag.cases.slice(0, 2).map((item) => item.id).join(', ')}{flag.cases.length > 2 ? ` +${flag.cases.length - 2} more` : ''}</span></td></tr>)}</tbody></table>{!flagRows.length && <p className="empty-insight table-empty">No flags in this date and status selection.</p>}</div>
-              <footer className="table-footer"><span>Showing <strong>{flagRows.length}</strong> flag categories</span></footer>
+            <FlagKpis cases={flagCases} compare={before?.flagCases} />
+            <CheckBreakdown cases={flagCases} compare={before?.flagCases} onOpen={(item) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`)} />
+            <section className="dashboard-pair-grid">
+              <CheckDocumentMatrix cases={flagCases} compare={before?.flagCases} />
+              <FlagsByRisk cases={flagCases} compare={before?.flagCases} />
             </section>
           </>}
-          {tab === 'Accuracy' && <DetectionAccuracyPanel filters={accuracyFilters} />}
+          {tab === 'Accuracy' && <DetectionAccuracyPanel filters={accuracyFilters} compareFilters={compareAccuracyFilters} />}
           </>}
         </div>
       </main>

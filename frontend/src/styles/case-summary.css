@@ -170,11 +170,12 @@
   color: var(--white);
 }
 
+/* The score on the dial, its level and the score bands beside it. */
 .risk-score {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 24px;
+  gap: 12px 28px;
   margin: 0 20px 14px;
 }
 
@@ -185,9 +186,9 @@
 
 .risk-score-level {
   display: block;
-  margin-bottom: 8px;
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 700;
+  line-height: 1.25;
 }
 
 .risk-score-level--low { color: var(--ink-soft); }
