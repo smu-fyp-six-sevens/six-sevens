@@ -267,6 +267,87 @@ def test_addresses_that_differ_only_in_formatting_are_one_finding() -> None:
     assert "notice of assessment" in findings[0].summary and "company constitution" in findings[0].summary
 
 
+def test_a_personal_address_finding_names_whose_address_it_is() -> None:
+    # Unnamed ("The address is ..."), the evidence request read it as the company's address and asked for one.
+    context = _context(
+        _doc("a", "bank_statement", {"entity_type": "individual", "individual_name": "LAKSHMI D/O RAJENDRAN",
+                                     "individual_address": "236 Serangoon Avenue 3, #07-118, Singapore 550236"}),
+        _doc("b", "credit_report", {"individual_name": "Lakshmi d/o Rajendran", "id_number": "S8427269H",
+                                    "individual_address": "4 Toh Yi Drive, #04-11, Singapore 590004"}),
+    )
+
+    [finding] = [f for f in run_deterministic_checks(context).findings if "address" in f.summary]
+
+    assert finding.summary.startswith("Lakshmi d/o Rajendran's address is ")
+
+
+_OLD = "236 Serangoon Avenue 3, #07-118, Singapore 550236"
+_CURRENT = "4 Toh Yi Drive, #04-11, Singapore 590004"
+
+
+def _personal_statement(doc_id: str, address: str, period_end: str | None) -> DocumentRecord:
+    fields = {"entity_type": "individual", "individual_name": "LAKSHMI D/O RAJENDRAN", "individual_address": address}
+    if period_end:
+        fields["statement_period_end"] = period_end
+    return _doc(doc_id, "bank_statement", fields)
+
+
+def _credit_report(address: str = _CURRENT) -> DocumentRecord:
+    return _doc("cbr", "credit_report", {"individual_name": "Lakshmi d/o Rajendran", "id_number": "S8427269H",
+                                         "individual_address": address, "report_date": "29 Aug 2026"})
+
+
+def _address_findings(context) -> list:
+    return [f for f in run_deterministic_checks(context).findings if "address" in f.summary]
+
+
+def test_an_old_statement_against_the_rest_of_the_case_is_a_finding_that_asks_for_recent_proof() -> None:
+    context = _context(_personal_statement("old", _OLD, "28 FEB 2026"), _credit_report())
+
+    [finding] = _address_findings(context)
+
+    assert "recent proof of address" in finding.rationale
+
+
+def test_a_newer_statement_with_the_current_address_makes_the_old_one_a_previous_address() -> None:
+    context = _context(_personal_statement("old", _OLD, "28 FEB 2026"), _credit_report(),
+                       _personal_statement("new", _CURRENT, "31 AUG 2026"))
+    result = run_deterministic_checks(context)
+
+    assert [f for f in result.findings if "address" in f.summary] == []
+    assert any("is a previous address" in line for line in result.consistent)
+
+
+def test_a_newer_utility_bill_with_the_current_address_also_settles_it() -> None:
+    bill = _doc("bill", "proof_of_address", {"entity_type": "individual", "individual_name": "Lakshmi d/o Rajendran",
+                                             "individual_address": _CURRENT, "bill_date": "07 Sep 2026"})
+    context = _context(_personal_statement("old", _OLD, "28 FEB 2026"), _credit_report(), bill)
+
+    assert _address_findings(context) == []
+
+
+def test_the_odd_address_on_the_newest_document_is_still_a_finding() -> None:
+    context = _context(_personal_statement("old", _CURRENT, "28 FEB 2026"), _credit_report(),
+                       _personal_statement("new", _OLD, "31 AUG 2026"))
+
+    assert len(_address_findings(context)) == 1
+
+
+def test_an_old_address_also_on_a_credit_report_is_still_a_finding() -> None:
+    # Only proofs of address can be superseded: a credit report keeping the other address is a real conflict.
+    context = _context(_personal_statement("old", _OLD, "28 FEB 2026"), _credit_report(_OLD),
+                       _personal_statement("new", _CURRENT, "31 AUG 2026"))
+
+    assert len(_address_findings(context)) == 1
+
+
+def test_an_undated_old_statement_is_still_a_finding() -> None:
+    context = _context(_personal_statement("old", _OLD, None), _credit_report(),
+                       _personal_statement("new", _CURRENT, "31 AUG 2026"))
+
+    assert len(_address_findings(context)) == 1
+
+
 def test_an_agent_finding_that_restates_a_code_finding_is_dropped() -> None:
     from app.case_pipeline.cross_document.deterministic import restates_a_code_finding
     from app.case_pipeline.models import CrossDocFinding, FindingCategory
