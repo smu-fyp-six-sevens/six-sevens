@@ -1,10 +1,20 @@
 /* Notes on a case or document (components/NotesCard.tsx). Kept compact: it sits at the top of
-   every document page, above the document itself. */
+   every document page, above the document itself. Its frame and inset match .details-card, so its text starts
+   in line with the document card's below it. */
+
+.notes-card {
+  --notes-inset: 26px;
+  margin-top: 22px;
+  border-color: var(--slate-90);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px var(--ink-a04);
+}
 
 .notes-card .summary-card-header {
   gap: 12px;
-  padding: 10px 16px;
+  padding: 12px var(--notes-inset) 0;
   margin-bottom: 10px;
+  border-bottom: 0;
 }
 
 .notes-card .summary-card-title {
@@ -34,7 +44,7 @@
 .notes-composer {
   display: grid;
   gap: 6px;
-  margin: 0 16px 10px;
+  margin: 0 var(--notes-inset) 10px;
 }
 
 /* The new-note box and its Save button share a row. */
@@ -64,7 +74,7 @@
 .notes-textarea:focus-visible {
   outline: none;
   border-color: var(--steel);
-  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.18);
+  box-shadow: 0 0 0 3px rgba(53, 95, 150, 0.18);
 }
 
 .notes-composer-actions {
@@ -95,11 +105,11 @@
 }
 
 .notes-card .card-error {
-  margin: 0 16px 10px;
+  margin: 0 var(--notes-inset) 10px;
 }
 
 .notes-empty {
-  margin: 0 16px 10px;
+  margin: 0 var(--notes-inset) 10px;
   font-size: 12.5px;
   color: var(--ink-soft);
 }
@@ -108,7 +118,7 @@
   display: grid;
   gap: 6px;
   margin: 0;
-  padding: 0 16px 12px;
+  padding: 0 var(--notes-inset) 14px;
   list-style: none;
 }
 

@@ -82,6 +82,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/audit/costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Case Costs
+         * @description Claude spend at list price for each of these cases (repeat case_id), from the audit trail: the dashboard's
+         *     totals. A case with no costed run is absent. Runs a document had before being moved into a case are counted
+         *     with its old case; GET /audit/cases/{case_id}/cost has a case's exact breakdown.
+         */
+        get: operations["get_case_costs_audit_costs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/audit/events": {
         parameters: {
             query?: never;
@@ -547,7 +569,9 @@ export interface paths {
         /**
          * Get Detection Metrics
          * @description Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only
-         *     cases created on or after `since` and at these stages, as the dashboard's filters pick.
+         *     cases created at or after `since` and before `before`, and at these stages, as the dashboard's filters pick.
+         *     The two are instants, not days: the dashboard sends the start of the officer's own days, so a case counts on
+         *     the same day here as in the dashboard's case counts.
          */
         get: operations["get_detection_metrics_detection_metrics_get"];
         put?: never;
@@ -3861,6 +3885,11 @@ export interface components {
             /** Pages */
             pages: number[];
             /**
+             * Places
+             * @default []
+             */
+            places: components["schemas"]["Place"][];
+            /**
              * Severity
              * @enum {string}
              */
@@ -3886,6 +3915,23 @@ export interface components {
             right: number;
             /** Top */
             top: number;
+        };
+        /**
+         * Place
+         * @description Where on a page the evidence is printed, for the preview to box (points, origin top-left).
+         */
+        Place: {
+            /** Bbox */
+            bbox: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Page */
+            page: number;
+            /** Text */
+            text: string;
         };
         /** ProcessingErrorEntry */
         ProcessingErrorEntry: {
@@ -4495,6 +4541,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseCost"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_case_costs_audit_costs_get: {
+        parameters: {
+            query?: {
+                case_id?: string[];
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -5440,6 +5521,7 @@ export interface operations {
         parameters: {
             query?: {
                 since?: string | null;
+                before?: string | null;
                 status?: components["schemas"]["CaseStage"][];
             };
             header?: {

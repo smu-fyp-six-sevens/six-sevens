@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import type { DocumentRecord } from '../../services/uploadService';
 import type { ExtractedField } from './fieldDisplay';
@@ -14,6 +14,8 @@ import {
 import { buildFieldDraft, formatFieldDisplayValue, formatNumberWithCommas, isArrayOfLabelValueStrings, isArrayOfObjects, isArrayOfPrimitives, isPlainKeyValueObject, keyValueObjectRows, labelValueStringRows } from './fieldDisplay';
 import { humanizeFieldKey, normaliseFieldName } from '../../utils/fieldLabels';
 import { ErrorMessage } from '../../components/ErrorMessage';
+import { ArrayFieldEditButton, LabelValueArrayEditButton, ObjectFieldEditButton } from './ArrayFieldEditors';
+import { Icon } from '../../components/Icon';
 
 export function ExtractedInformationCard({
   canAddOrDeleteFields,
@@ -24,6 +26,8 @@ export function ExtractedInformationCard({
   setDocument,
   setFieldDraft,
   editing,
+  review,
+  footer,
 }: {
   // Until the document is approved or rejected, even a verified one: the officer can always add what is missing.
   canAddOrDeleteFields: boolean;
@@ -35,6 +39,20 @@ export function ExtractedInformationCard({
   setFieldDraft: Dispatch<SetStateAction<Record<string, string>>>;
   // The add and delete field state (useFieldEditing), passed as one object.
   editing: FieldEditing;
+  // Set while the document needs the officer's review: the fields that need attention become inputs in this same
+  // table, and Save fields sits under it. `extractedFields` then also holds the required fields extraction missed.
+  review?: {
+    canEditFields: boolean;
+    fieldDraft: Record<string, string>;
+    handleFieldChange: (key: string, value: string) => void;
+    handleSaveFields: () => void | Promise<void>;
+    isSaving: boolean;
+    needsAttention: (key: string, field: ExtractedField) => boolean;
+    saveError: string | null;
+    saveMessage: string | null;
+  };
+  // Under the table, attached to this card: the approve and reject bar.
+  footer?: ReactNode;
 }) {
   const {
     addFieldError,
@@ -84,13 +102,23 @@ export function ExtractedInformationCard({
     }
   }
 
+  const attentionCount = review
+    ? extractedFields.filter(([key, field]) => review.needsAttention(key, field)).length
+    : 0;
+
   return (
-        <section className="details-card">
+        <section className={`details-card${review ? ' details-card--review' : ''}`}>
           <div className="details-section-heading">
-            <span className="details-section-icon">▣</span>
+            <span className="details-section-icon"><Icon name="file" size={20} /></span>
             <span>Extracted Information</span>
 
-            {lowestConfidence != null && (
+            {review && attentionCount > 0 && (
+              <span className="documents-card-review-count">
+                {attentionCount} {attentionCount === 1 ? 'field needs' : 'fields need'} review
+              </span>
+            )}
+
+            {lowestConfidence != null && !review && (
               <span className="extraction-confidence">
                 Lowest field confidence:{' '}
                 <strong>
@@ -124,12 +152,19 @@ export function ExtractedInformationCard({
                 title={isCollapsed ? 'Expand' : 'Collapse'}
                 onClick={() => setIsCollapsed((collapsed) => !collapsed)}
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M6 9l6 6 6-6" />
                 </svg>
               </button>
             </div>
           </div>
+
+          {!isCollapsed && review && (
+            <p className="review-description">
+              Correct the highlighted fields and save before approving. A field you change is saved with a confidence of{' '}
+              <strong>1.00</strong>; the others keep theirs.
+            </p>
+          )}
 
           {!isCollapsed && canAddOrDeleteFields && isAddFieldOpen && (
             <div className="add-field-form">
@@ -227,15 +262,7 @@ export function ExtractedInformationCard({
           {!isCollapsed && deleteFieldError && <ErrorMessage className="add-field-error" message={deleteFieldError} />}
 
           {isCollapsed ? null : extractedFields.length === 0 ? (
-            <div className="review-message review-message--error">
-              <div>
-                <strong>No extracted fields available.</strong>
-                <div>
-                  There is currently no extracted data available for
-                  this document.
-                </div>
-              </div>
-            </div>
+            <p className="extracted-empty">No fields have been extracted from this document.</p>
           ) : (
             <div className="extracted-table">
               <div className="extracted-table-header">
@@ -247,14 +274,16 @@ export function ExtractedInformationCard({
               {extractedFields.map(([key, field]) => (
                 <div
                   key={key}
-                  className="extracted-table-row"
+                  className={`extracted-table-row${review && !isInFlight && review.needsAttention(key, field) ? ' extracted-table-row--editing' : ''}`}
                 >
                   <span className="field-name">
                     {humanizeFieldKey(key)}
                   </span>
 
                   <span className="field-value">
-                    {field.value === null || field.value === undefined ? (
+                    {review && !isInFlight && review.needsAttention(key, field) ? (
+                      <FieldEditor fieldKey={key} field={field} review={review} />
+                    ) : field.value === null || field.value === undefined ? (
                       '—'
                     ) : isArrayOfObjects(field.value) ? (
                       <ArrayValueCell label={humanizeFieldKey(key)} rows={field.value} />
@@ -304,6 +333,29 @@ export function ExtractedInformationCard({
             </div>
           )}
 
+          {!isCollapsed && review && (
+            <div className="manual-review-actions">
+              <div className="manual-review-message">
+                {review.saveMessage && <span className="save-success">✓ {review.saveMessage}</span>}
+
+                {review.saveError && <ErrorMessage inline message={review.saveError} />}
+              </div>
+
+              {review.canEditFields && (
+                <button
+                  type="button"
+                  className="details-save-button"
+                  disabled={review.isSaving || isInFlight}
+                  onClick={() => void review.handleSaveFields()}
+                >
+                  {review.isSaving ? 'Saving…' : 'Save fields'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {footer}
+
           {fieldToDelete && (
             <ConfirmDialog
               title="Delete this field?"
@@ -316,5 +368,60 @@ export function ExtractedInformationCard({
             />
           )}
         </section>
+  );
+}
+
+// A field's value as an input (or the editor button for a list or object), while the document needs review.
+function FieldEditor({
+  fieldKey,
+  field,
+  review,
+}: {
+  fieldKey: string;
+  field: ExtractedField;
+  review: NonNullable<Parameters<typeof ExtractedInformationCard>[0]['review']>;
+}) {
+  const { fieldDraft, handleFieldChange, isSaving } = review;
+  const label = humanizeFieldKey(fieldKey);
+
+  if (isArrayOfObjects(field.value)) {
+    return (
+      <ArrayFieldEditButton
+        label={label}
+        draftJson={fieldDraft[fieldKey] ?? '[]'}
+        disabled={isSaving}
+        onChange={(json) => handleFieldChange(fieldKey, json)}
+      />
+    );
+  }
+  if (isArrayOfLabelValueStrings(field.value)) {
+    return (
+      <LabelValueArrayEditButton
+        label={label}
+        draftJson={fieldDraft[fieldKey] ?? '[]'}
+        disabled={isSaving}
+        onChange={(json) => handleFieldChange(fieldKey, json)}
+      />
+    );
+  }
+  if (isPlainKeyValueObject(field.value)) {
+    return (
+      <ObjectFieldEditButton
+        label={label}
+        draftJson={fieldDraft[fieldKey] ?? '{}'}
+        disabled={isSaving}
+        onChange={(json) => handleFieldChange(fieldKey, json)}
+      />
+    );
+  }
+  return (
+    <input
+      type="text"
+      className={`manual-review-input${!fieldDraft[fieldKey]?.trim() ? ' manual-review-input--empty' : ''}`}
+      aria-label={label}
+      value={fieldDraft[fieldKey] ?? ''}
+      disabled={isSaving}
+      onChange={(event) => handleFieldChange(fieldKey, event.target.value)}
+    />
   );
 }

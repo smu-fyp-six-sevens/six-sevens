@@ -17,7 +17,7 @@ their document or case.
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any, cast
 
 from .case_pipeline.categories import category_for_finding
@@ -140,12 +140,21 @@ def list_reviews_for_case(case_id: str) -> list[FindingReview]:
     return sorted((_review(row) for row in rows), key=lambda review: review.created_at)
 
 
-def list_reviews(since: date | None = None, stages: list[str] | None = None) -> list[FindingReview]:
+def _utc(moment: datetime) -> str:
+    # In UTC with a "Z": a "+08:00" offset would need escaping in the PostgREST query string.
+    aware = moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    return aware.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def list_reviews(
+    since: datetime | None = None, stages: list[str] | None = None, before: datetime | None = None,
+) -> list[FindingReview]:
     """
-    Every review, or only those on cases created on or after `since` (UTC date) and at one of these stages: the
-    database joins each finding to its case and filters, so no case list is read.
+    Every review, or only those on cases created at or after `since` and before `before` and at one of these
+    stages: the database joins each finding to its case and filters, so no case list is read. A time without a
+    zone is taken as UTC.
     """
-    if since is None and not stages:
+    if since is None and before is None and not stages:
         return [_review(row) for row in fetch_all(_reviews_query, "id")]
 
     def build():
@@ -154,7 +163,9 @@ def list_reviews(since: date | None = None, stages: list[str] | None = None) -> 
             .not_.is_("reviewer", "null")
         )
         if since is not None:
-            query = query.gte("cases.created_at", since.isoformat())
+            query = query.gte("cases.created_at", _utc(since))
+        if before is not None:
+            query = query.lt("cases.created_at", _utc(before))
         if stages:
             query = query.in_("cases.status", stages)
         return query

@@ -143,6 +143,18 @@ export async function getCaseCost(caseId: string): Promise<CaseCost> {
   return (await response.json()) as CaseCost;
 }
 
+// Claude spend recorded for each of these cases, for the dashboard's totals: case id to USD; a case with no costed
+// run is absent. Not the exact per-case breakdown: getCaseCost has that.
+export async function getCaseCosts(caseIds: string[]): Promise<Record<string, number>> {
+  if (caseIds.length === 0) return {};
+  const query = new URLSearchParams(caseIds.map((id) => ['case_id', id]));
+  const response = await authFetch(`/audit/costs?${query}`);
+
+  await assertOk(response, 'Failed to fetch the case costs');
+
+  return (await response.json()) as Record<string, number>;
+}
+
 // Every analysis of the case, newest first: who started it, its score and change, and whether it's out of date.
 export async function listCaseAnalysisRuns(caseId: string): Promise<CaseAnalysisRunItem[]> {
   const response = await authFetch(`/cases/${caseId}/analysis/runs`);

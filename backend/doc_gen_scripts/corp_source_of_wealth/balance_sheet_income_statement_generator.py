@@ -564,7 +564,7 @@ def _build_pdf(output_path: str, story: list, *, producer: str = "DocuSuite Ente
 # Public entry point
 # --------------------------------------------------------------------------
 
-def compute_years(seed: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def compute_years(seed: str, share_capital: float | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Pure financial-engine computation (no PDF rendering) — the numeric core
     of generate_financial_statements(), factored out so any other document
@@ -577,10 +577,16 @@ def compute_years(seed: str) -> tuple[dict[str, Any], dict[str, Any]]:
     `seed` drives every amount; the same seed always reproduces the same
     (cur, prev) pair, matching whatever generate_financial_statements()
     would render for that seed.
+
+    `share_capital` is the case's issued and paid-up capital (case_facts.
+    company_facts), so the accounts agree with the ACRA profile and the
+    constitution. The pool is still drawn from when it is given, so every
+    other amount stays the same; it is only used when no capital is given.
     """
     rng = seeded_rng(seed)
     structure = _build_structure(rng)
-    share_capital = float(rng.choice(SHARE_CAPITAL_POOL))
+    drawn_capital = float(rng.choice(SHARE_CAPITAL_POOL))
+    share_capital = float(share_capital) if share_capital is not None else drawn_capital
 
     revenue_prev = round(rng.uniform(1_400_000, 5_200_000), -3)
     growth = rng.uniform(0.02, 0.22)
@@ -600,6 +606,7 @@ def generate_financial_statements(
     director_name: str,
     period_end: date,
     seed: str,
+    share_capital: float | None = None,
     prior_period_end: date | None = None,
     signing_date: date | None = None,
     synthetic_tag: bool = True,
@@ -619,7 +626,7 @@ def generate_financial_statements(
         days=seeded_rng(f"{seed}|signing-date").randint(80, 150)
     )
 
-    cur, prev = compute_years(seed)
+    cur, prev = compute_years(seed, share_capital)
 
     s = _styles()
     registry = NoteRegistry()
@@ -712,6 +719,7 @@ def generate(xlsx: str | Path, outdir: str | Path, cases: list[str] | None = Non
             director_name=director_name,
             period_end=period_end,
             seed=f"{case_id}|sow-financials",
+            share_capital=facts["share_capital"],
             synthetic_tag=synthetic_tag,
         )
         written.append(primary)

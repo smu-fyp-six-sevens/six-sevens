@@ -1,10 +1,10 @@
 import type { CaseAnalysisOverview, CaseRisk, CaseRiskLevel, WaitingDocument } from '../../services/uploadService';
 import { REQUIRED_DOCUMENT_TYPES } from '../../services/uploadService';
+import type { IconName } from '../../components/Icon';
 
 export type CaseSection =
   | 'summary'
   | 'documents'
-  | 'approved'
   | 'risk'
   | 'analysis'
   | 'additional'
@@ -12,20 +12,19 @@ export type CaseSection =
   | 'audit'
   | 'cost';
 
-export const CASE_SECTIONS: { id: CaseSection; label: string; icon: string }[] = [
-  { id: 'summary', label: 'Case Summary', icon: '◫' },
-  { id: 'documents', label: 'Documents', icon: '▤' },
-  { id: 'approved', label: 'Approved Documents', icon: '✓' },
-  { id: 'analysis', label: 'Case Analysis', icon: '◇' },
-  { id: 'risk', label: 'Risk Summary', icon: '▥' },
-  { id: 'additional', label: 'Additional Documents', icon: '⊕' },
-  { id: 'notes', label: 'Notes', icon: '✎' },
-  { id: 'audit', label: 'Audit Trail', icon: '◴' },
-  { id: 'cost', label: 'Claude Cost', icon: '$' },
+export const CASE_SECTIONS: { id: CaseSection; label: string; short: string; icon: IconName }[] = [
+  { id: 'summary', label: 'Case Summary', short: 'Summary', icon: 'summary' },
+  { id: 'documents', label: 'Documents', short: 'Documents', icon: 'documents' },
+  { id: 'analysis', label: 'Case Analysis', short: 'Analysis', icon: 'analysis' },
+  { id: 'risk', label: 'Risk Summary', short: 'Risk', icon: 'risk' },
+  { id: 'additional', label: 'Additional Documents', short: 'Additional', icon: 'additional' },
+  { id: 'notes', label: 'Notes', short: 'Notes', icon: 'notes' },
+  { id: 'audit', label: 'Audit Trail', short: 'Audit', icon: 'audit' },
+  { id: 'cost', label: 'Claude Cost', short: 'Cost', icon: 'cost' },
 ];
 
 // The sections whose menu item has a status line under its label, which only the live snapshot can fill in.
-export const SECTIONS_WITH_STATUS: CaseSection[] = ['documents', 'approved', 'analysis', 'risk', 'additional'];
+export const SECTIONS_WITH_STATUS: CaseSection[] = ['documents', 'analysis', 'risk', 'additional'];
 
 export function isCaseSection(value: string | null): value is CaseSection {
   return CASE_SECTIONS.some((section) => section.id === value);
@@ -93,9 +92,9 @@ export function outOfDateMessage(overview: CaseAnalysisOverview): OutOfDateMessa
 }
 
 export function caseSectionStatuses({
-  documentCount,
   approvedCount,
   detectedCount,
+  missingCount,
   processingCount,
   flaggedCount,
   toApproveCount,
@@ -104,9 +103,10 @@ export function caseSectionStatuses({
   risk,
   additionalDocumentCount,
 }: {
-  documentCount: number;
   approvedCount: number;
   detectedCount: number;
+  // Required documents the case still lacks (the Documents tab's Missing group).
+  missingCount: number;
   // Documents still waiting on the officer's decision: being uploaded or extracted, flagged, or ready to approve.
   processingCount: number;
   flaggedCount: number;
@@ -118,25 +118,21 @@ export function caseSectionStatuses({
 }): Partial<Record<CaseSection, SectionStatus>> {
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
-  // The upload and review tab: only documents not yet approved or rejected count. What needs the officer comes
-  // first, flagged ones before the rest; detection is the Approved tab's.
+  // The Documents tab: what is still to do, most urgent first, and once nothing is, how many are through detection.
   const waiting = [
+    missingCount > 0 && `${missingCount} Missing`,
     flaggedCount > 0 && `${flaggedCount} To Review`,
     toApproveCount > 0 && `${toApproveCount} To Approve`,
     processingCount > 0 && `${processingCount} Processing`,
   ].filter(Boolean);
   const documents: SectionStatus =
-    documentCount === 0
-      ? { tone: 'idle', text: 'None Uploaded' }
-      : waiting.length === 0
+    waiting.length > 0
+      ? { tone: flaggedCount + toApproveCount > 0 ? 'action' : processingCount > 0 ? 'progress' : 'idle', text: waiting.slice(0, 3).join(' · ') }
+      : approvedCount === 0
         ? { tone: 'done', text: 'All Decided' }
-        : { tone: flaggedCount + toApproveCount > 0 ? 'action' : 'progress', text: waiting.slice(0, 2).join(' · ') };
-
-  // The approved documents, and how many of them detection has finished.
-  const approved: SectionStatus =
-    approvedCount === 0
-      ? { tone: 'idle', text: 'None Yet' }
-      : { tone: detectedCount === approvedCount ? 'done' : 'progress', text: `${detectedCount}/${approvedCount} Detected` };
+        : detectedCount === approvedCount
+          ? { tone: 'done', text: `${detectedCount} Detected` }
+          : { tone: 'progress', text: `${detectedCount}/${approvedCount} Detected` };
 
   const analysis: SectionStatus = !analysisOverview
     ? analysisReady
@@ -170,7 +166,7 @@ export function caseSectionStatuses({
       ? { tone: 'action', text: `${additionalDocumentCount} To Request` }
       : { tone: 'done', text: 'None Needed' };
 
-  return { documents, approved, analysis, risk: riskStatus, additional };
+  return { documents, analysis, risk: riskStatus, additional };
 }
 
 // How many required checklist documents aren't approved yet, out of all of them: "8 out of 11 not yet approved".

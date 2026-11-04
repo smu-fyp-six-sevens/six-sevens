@@ -26,6 +26,20 @@ def _case_cost(case_id: str) -> audit.CaseCost:
     return audit.case_cost(case_id, [document.id for document in documents])
 
 
+@router.get("/costs")
+async def get_case_costs(case_id: list[str] = Query(default=[], max_length=500)) -> dict[str, float]:
+    """
+    Claude spend at list price for each of these cases (repeat case_id), from the audit trail: the dashboard's
+    totals. A case with no costed run is absent. Runs a document had before being moved into a case are counted
+    with its old case; GET /audit/cases/{case_id}/cost has a case's exact breakdown.
+    """
+    return await to_thread_or_502(
+        audit.cost_usd_many, case_id,
+        detail="Failed to read the audit trail. Check Supabase table access.",
+        log=("Failed to read the cost of %d cases", len(case_id)),
+    )
+
+
 @router.get("/cases/{case_id}/cost")
 async def get_case_cost(case_id: str) -> audit.CaseCost:
     """

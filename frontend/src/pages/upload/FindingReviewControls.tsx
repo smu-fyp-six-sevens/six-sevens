@@ -5,6 +5,7 @@ import { Rate } from '../../components/Rate';
 import { RATE_MEANING, belowTargetNote, formatCheck } from '../../utils/checkLabels';
 import { InfoLabel } from '../../components/InfoTip';
 import { officerName } from '../../lib/officers';
+import { Icon } from '../../components/Icon';
 
 export type GroupReviewStatus = 'not_reviewed' | 'saved' | 'unsaved';
 
@@ -285,7 +286,7 @@ export function ReviewSummary({
       </div>
       {reviewed === 0 && (
         <div className="review-summary-empty">
-          <span className="review-summary-empty-icon" aria-hidden="true">✓</span>
+          <span className="review-summary-empty-icon" aria-hidden="true"><Icon name="check" size={18} /></span>
           <div className="review-summary-empty-copy">
             <strong>No findings reviewed yet</strong>
             <p>Precision and recall for this case appear here once its findings are reviewed.</p>

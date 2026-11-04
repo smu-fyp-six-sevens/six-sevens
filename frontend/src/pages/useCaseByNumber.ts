@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import type { CaseRecord } from '../App';
 import { getCaseByNumber } from '../services/uploadService';
-import { toCaseRecord } from '../utils/caseRecord';
+import { toCaseRecord, type CaseRecord } from '../utils/caseRecord';
 
 type Lookup =
   | { status: 'loading' }

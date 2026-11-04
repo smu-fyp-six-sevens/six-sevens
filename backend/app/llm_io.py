@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from dataclasses import dataclass, field
 from collections.abc import Callable
@@ -25,6 +26,17 @@ T = TypeVar("T", bound=BaseModel)
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
+
+
+def probability(value: Any) -> float:
+    """A model's confidence as a finite number in [0, 1]; zero when absent or invalid."""
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(1.0, max(0.0, number)) if math.isfinite(number) else 0.0
 
 
 def message_text(content: Any) -> str:

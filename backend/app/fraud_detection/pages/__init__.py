@@ -28,17 +28,19 @@ from .duplicates import check_duplicates
 from .identity import check_header_identity
 from .models import SEVERITY_RANK, CheckOutcome, Evidence, PageConsistencyResult, PageFinding
 from .numbering import check_numbering
-from .page_view import PageView, place_rows, read_pages
+from .page_view import PageView, place_rows, read_pages, whole_page
 from .source import check_source
 
 NOTHING_TO_CHECK_SINGLE_PAGE = "Nothing to check: a single-page document"
 NOTHING_TO_CHECK_NOT_PDF = "Nothing to check: an image upload is a single page"
 
 
-def merge(evidence: list[Evidence]) -> list[PageFinding]:
+def merge(evidence: list[Evidence], pages: list[PageView]) -> list[PageFinding]:
     """One finding per page or boundary: the strongest evidence leads, the rest is listed with it. Evidence
     about a page also takes in the boundaries on either side of it: a page swapped in mid-statement breaks
-    the carry lines before and after it, and that is the same cause."""
+    the carry lines before and after it, and that is the same cause. Every page a finding names is boxed:
+    where the lines it rests on are, else the whole page."""
+    by_number = {page.number: page for page in pages}
     groups: dict[tuple, list[Evidence]] = {}
     for item in evidence:
         groups.setdefault(item.key, []).append(item)
@@ -50,12 +52,17 @@ def merge(evidence: list[Evidence]) -> list[PageFinding]:
     for items in groups.values():
         items.sort(key=lambda e: SEVERITY_RANK[e.severity])
         lead = items[0]
+        numbers = sorted({page for item in items for page in item.pages})
+        places = {place for item in items for place in item.places}
+        placed = {place.page for place in places}
+        places |= {whole_page(by_number[n]) for n in numbers if n not in placed and n in by_number}
         findings.append(PageFinding(
             check_code=lead.check_code, severity=lead.severity,
             check_codes=list(dict.fromkeys(item.check_code for item in items)),
-            pages=sorted({page for item in items for page in item.pages}),
+            pages=numbers,
             summary=lead.summary, stated=lead.stated, expected=lead.expected,
             evidence=[f"{item.check_code}: {item.summary}" for item in items[1:]],
+            places=sorted(places, key=lambda p: (p.page, p.bbox[1], p.bbox[0])),
         ))
     findings.sort(key=lambda f: (SEVERITY_RANK[f.severity], f.pages))
     return findings
@@ -73,7 +80,7 @@ def run_checks(pages: list[PageView], fields: dict[str, Any]) -> tuple[list[Page
     ]
     evidence = [item for outcome in outcomes for item in outcome.evidence]
     skipped = [item for outcome in outcomes for item in outcome.skipped]
-    return merge(evidence), skipped
+    return merge(evidence, pages), skipped
 
 
 def _check(document_id: str, file_bytes: bytes, filename: str, fields: dict[str, Any]) -> PageConsistencyResult:

@@ -13,6 +13,7 @@ from ...ingestion.ingestion_service import ingest_document
 from ..font_consistency import _font_family
 from ..numerical_validation.common import _as_number, _field_number, _rows, row_amount
 from ..shared.pdf_pages import pages as _pdf_pages
+from .models import Place
 
 # Page numbers live in the top and bottom bands of a page.
 PAGE_BAND_FRACTION = 0.12
@@ -52,6 +53,19 @@ class PageView:
     @property
     def money_count(self) -> int:
         return len(MONEY_RE.findall(self.text))
+
+
+def place_of(page: int, lines: list[PlacedLine]) -> Place:
+    """One box around these lines of a page, for the preview to highlight."""
+    x0, y0 = min(line.x0 for line in lines), min(line.y0 for line in lines)
+    x1, y1 = max(line.x1 for line in lines), max(line.y1 for line in lines)
+    return Place(page, (round(x0, 2), round(y0, 2), round(x1, 2), round(y1, 2)), " ".join(line.text for line in lines))
+
+
+def whole_page(page: PageView) -> Place:
+    """The whole page: for evidence about the page itself (its size, a scan, a copy), or where no line can be
+    placed (an OCR page has no positions)."""
+    return Place(page.number, (0.0, 0.0, float(page.size[0]), float(page.size[1])), f"Page {page.number}")
 
 
 def collapse(text: str) -> str:

@@ -55,9 +55,12 @@
   --slate-11: #111827;
   /* white */
   --white: #ffffff;
-  /* sand */
-  --sand-92: #efede8;
-  --sand-66: #b7af9c;
+  /* stone: the neutral surfaces and dividers beside the paper */
+  --stone-99: #fefefd;
+  --stone-98: #fafaf9;
+  --stone-94: #efefed;
+  --stone-90: #e7e6e2;
+  --stone-70: #b3b2ad;
   /* blue */
   --blue-97: #eef6ff;
   --blue-95: #e8f0fb;
@@ -87,13 +90,10 @@
   --green-23: #17603c;
   --green-20: #15502f;
   /* orange */
-  --orange-99: #fffefb;
-  --orange-97: #faf9f5;
   --orange-96: #fff7ed;
   --orange-95: #fff8e8;
   --orange-92: #fdf0d8;
   --orange-91: #fbe3d5;
-  --orange-90: #ece8de;
   --orange-83: #f6c9b0;
   --orange-76: #ead39a;
   --orange-75: #e3b79e;
@@ -133,10 +133,8 @@
   --red-54: #c94b4b;
   --red-53: #d33b3b;
   --red-51: #dc2626;
-  --red-51a: #f21039;
   --red-48: #c33131;
   --red-47: #c4442a;
-  --red-47a: #e0114f;
   --red-46: #b23b3b;
   --red-45: #c23e25;
   --red-45a: #b33131;
@@ -149,13 +147,13 @@
   --red-30: #861416;
   --red-29: #7f1414;
   /* translucent: a colour at an alpha (a08 is 8%), for shadows, tints and overlays */
-  --steel-a08: rgba(61, 90, 128, 0.08);
-  --steel-a10: rgba(61, 90, 128, 0.1);
-  --steel-a12: rgba(61, 90, 128, 0.12);
-  --steel-a15: rgba(61, 90, 128, 0.15);
-  --steel-a20: rgba(61, 90, 128, 0.2);
-  --steel-a25: rgba(61, 90, 128, 0.25);
-  --steel-a30: rgba(61, 90, 128, 0.3);
+  --steel-a08: rgba(53, 95, 150, 0.08);
+  --steel-a10: rgba(53, 95, 150, 0.1);
+  --steel-a12: rgba(53, 95, 150, 0.12);
+  --steel-a15: rgba(53, 95, 150, 0.15);
+  --steel-a20: rgba(53, 95, 150, 0.2);
+  --steel-a25: rgba(53, 95, 150, 0.25);
+  --steel-a30: rgba(53, 95, 150, 0.3);
   --ink-a04: rgba(18, 32, 61, 0.04);
   --ink-a05: rgba(18, 32, 61, 0.05);
   --ink-a08: rgba(18, 32, 61, 0.08);
@@ -164,4 +162,18 @@
   --navy-a32: rgba(23, 41, 77, 0.32);
   --blue-a10: rgba(23, 105, 209, 0.1);
   --red-a10: rgba(201, 75, 75, 0.1);
+
+  /* Risk level and finding severity: one scale from peach through orange to red and dark red, light to dark, so a
+     bigger problem looks louder and no level reads as safe.
+     Low is an outline with its word in ink-soft; Medium a tint; High and Critical solid with white text.
+     --risk-<level> is the level's mark (a dot, a bar, a card's edge); -tint, -border and -ink dress a badge;
+     -text is the level's word on white. */
+  --risk-low: #f6c9b0;
+  --risk-medium: #ec9673;
+  --risk-medium-tint: #fbe3d5;
+  --risk-medium-border: #f6c9b0;
+  --risk-medium-ink: #8a3f20;
+  --risk-medium-text: #a14a22;
+  --risk-high: #c4442a;
+  --risk-critical: #7f1414;
 }

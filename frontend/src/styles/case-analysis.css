@@ -20,7 +20,7 @@
   margin: 8px 20px 6px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
-  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -165,8 +165,8 @@
 
 .analysis-brief-label {
   margin-right: 8px;
-  font-family: var(--mono);
-  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -261,7 +261,7 @@
 }
 
 .analysis-run-change {
-  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: 11.5px;
   color: var(--ink-soft);
 }
@@ -274,7 +274,7 @@
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--slate-94);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--steel-dark);
 }

@@ -2,8 +2,10 @@ import { useState } from 'react';
 import type { CaseFailure, CaseRequirementCoverage, CaseStage } from '../../services/uploadService';
 import { finaliseCase } from '../../services/uploadService';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { StageMark } from '../../components/StageMark';
 import { caseFailureMessage, caseStageLabel, caseStageTone } from '../../utils/caseStages';
 import { missingRequirementsText, type CaseSection } from './caseSections';
+import { Icon } from '../../components/Icon';
 
 // The path every case follows. A stage off it (incomplete, failed) shows at the step it belongs to.
 const TRACK: CaseStage[] = [
@@ -63,7 +65,7 @@ function nextStep({ stage, failure, analysisRunning, analysisReady, findingsToRe
       }
       return analysisReady
         ? { text: 'Every document is scanned. The case analysis starts on its own; if it hasn\'t, start it here.', link: { label: 'Go to case analysis', section: 'analysis' } }
-        : { text: 'Approved documents are being scanned for fraud. The case analysis starts once they are done.', link: { label: 'View approved documents', section: 'approved' } };
+        : { text: 'Approved documents are being scanned for fraud. The case analysis starts once they are done.', link: { label: 'View approved documents', section: 'documents' } };
     case 'pending_evaluation':
       return {
         text: findingsToReview
@@ -81,7 +83,7 @@ function nextStep({ stage, failure, analysisRunning, analysisReady, findingsToRe
         link: failure === 'case_analysis'
           ? { label: 'Go to case analysis', section: 'analysis' }
           : failure === 'fraud_detection'
-            ? { label: 'View approved documents', section: 'approved' }
+            ? { label: 'View approved documents', section: 'documents' }
             : { label: 'View documents', section: 'documents' },
       };
     default:
@@ -153,11 +155,14 @@ export function CaseStageCard({
         <div className="case-status-summary">
           <div className="case-status-heading">
             <h2 id="case-stage-title">Case Status</h2>
-            <span className={`case-stage-badge tone-${caseStageTone(stage)}`}>{caseStageLabel(stage)}</span>
+            <span className={`case-stage-badge tone-${caseStageTone(stage)}`}>
+              <StageMark stage={stage} />
+              {caseStageLabel(stage)}
+            </span>
           </div>
           {next.text && (
             <p className={`case-status-next${stage === 'failed' ? ' case-status-next--failed' : ''}`} role="status">
-              {stage === 'failed' && <span aria-hidden="true">⚠ </span>}
+              {stage === 'failed' && <Icon name="alert" size={14} className="case-status-next-icon" />}
               {next.text}
               {next.link && (
                 <button type="button" className="case-status-link" onClick={() => onSelectSection(next.link!.section)}>
@@ -169,7 +174,7 @@ export function CaseStageCard({
         </div>
         {canFinalise && (
           <button type="button" className="case-status-finalise" disabled={busy} onClick={() => setConfirmingFinalise(true)}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 12.5l5 5L20 6.5" />
             </svg>
             Finalise Case
@@ -197,7 +202,7 @@ export function CaseStageCard({
               title={caseStageLabel(step)}
             >
               <span className="case-status-step-dot" aria-hidden="true">
-                {state === 'done' ? '✓' : state === 'failed' ? '✕' : ''}
+                {state === 'done' ? <Icon name="check" size={11} /> : state === 'failed' ? <Icon name="x" size={11} /> : null}
               </span>
               <span className="case-status-step-label">{label}</span>
             </li>

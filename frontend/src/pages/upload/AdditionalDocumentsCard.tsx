@@ -1,4 +1,5 @@
 import type { AdditionalDocument, AdditionalDocuments, RecommendationItem } from '../../services/uploadService';
+import { Icon } from '../../components/Icon';
 
 const formatMoney = (value: number) =>
   value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -62,7 +63,7 @@ export function AdditionalDocumentsCard({
     <section className="summary-card">
       <div className="summary-card-header">
         <div className="summary-card-title">
-          <span className="summary-icon summary-icon--audit">⊕</span>
+          <span className="summary-icon summary-icon--audit"><Icon name="additional" size={20} /></span>
           <h2>Additional Documents</h2>
         </div>
 
@@ -131,7 +132,7 @@ export function AdditionalDocumentsCard({
 
           {items.length === 0 && (reason === null || reason === 'none_needed') ? (
             <div className="summary-message summary-message--success">
-              <span className="summary-message-icon">✓</span>
+              <span className="summary-message-icon"><Icon name="check" size={18} /></span>
 
               <div>
                 <strong>No additional documents needed.</strong>

@@ -12,7 +12,7 @@
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  color: var(--slate-58);
+  color: var(--text-muted);
 }
 
 .search-box:focus-within {
@@ -31,7 +31,7 @@
 }
 
 .search-box input::placeholder {
-  color: var(--slate-66);
+  color: var(--text-muted);
 }
 
 .go-btn {
@@ -76,7 +76,7 @@
 
 .kebab-menu-button:hover:not(:disabled),
 .kebab-menu-button[aria-expanded='true'] {
-  background: var(--sand-92);
+  background: var(--stone-94);
   color: var(--ink);
 }
 
@@ -182,7 +182,7 @@
   padding: 20px 0;
   border: 1px dashed var(--line);
   border-radius: 8px;
-  background: var(--orange-99);
+  background: var(--stone-99);
 }
 
 .back-link {
@@ -240,7 +240,7 @@
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--amber-bg);
-  color: var(--amber);
+  color: var(--orange-27);
   font-size: 11px;
   font-weight: 600;
 }
@@ -399,9 +399,9 @@
   /* 48px = the row's ⋮ menu (32px button + 8px margin each side). */
   padding: 12px 48px 12px 20px;
   border-bottom: 1px solid var(--line);
-  background: var(--orange-97);
+  background: var(--stone-98);
   border-radius: 10px 10px 0 0;
-  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: 11.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -558,7 +558,7 @@
   min-width: 20px;
   padding: 0 3px;
   text-align: center;
-  color: var(--slate-65);
+  color: var(--text-muted);
 }
 
 @media (max-width: 760px) {
@@ -575,7 +575,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--orange-90);
+  border-bottom: 1px solid var(--stone-90);
   transition: background-color 0.12s;
 }
 
@@ -623,7 +623,7 @@
 }
 
 .case-row-id {
-  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--steel-dark);
@@ -768,7 +768,6 @@
 }
 
 .header-filter-count {
-  font-family: var(--mono);
   font-size: 11.5px;
   color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
@@ -779,7 +778,7 @@
   margin-top: 4px;
   padding: 8px 10px;
   border: 0;
-  border-top: 1px solid var(--orange-90);
+  border-top: 1px solid var(--stone-90);
   border-radius: 0 0 6px 6px;
   background: transparent;
   color: var(--steel);
@@ -792,6 +791,47 @@
 
 .header-filter-clear:hover {
   background: var(--steel-a08);
+}
+
+/* SelectMenu: HeaderFilter's look for a single choice, a tick in place of the checkbox. */
+.select-menu-chevron {
+  width: 10px;
+  height: 7px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.select-menu-option {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+}
+
+.select-menu-option:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: -2px;
+}
+
+.select-menu-option[aria-selected='true'] {
+  font-weight: 600;
+}
+
+.select-menu-check {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: var(--steel);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* A column header that sorts. Both arrows show; the current direction's is dark. */
@@ -856,7 +896,7 @@
 }
 
 .risk-badge--none {
-  background: var(--sand-92);
+  background: var(--stone-94);
   color: var(--ink-soft);
   font-weight: 600;
 }

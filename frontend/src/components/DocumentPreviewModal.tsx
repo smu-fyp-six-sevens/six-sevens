@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { getDocumentDownloadUrl } from '../services/uploadService';
 import DocumentPreviewBody from './DocumentPreviewBody';
 import { useDocumentPreviewUrl } from './useDocumentPreviewUrl';
+import { Icon } from './Icon';
 
 interface DocumentPreviewModalProps {
   documentId: string;
@@ -64,7 +65,7 @@ export default function DocumentPreviewModal({
               onClick={() => void handleDownload()}
               disabled={isDownloading}
             >
-              {isDownloading ? 'Preparing…' : '⭳ Download'}
+              {isDownloading ? 'Preparing…' : <><Icon name="download" size={14} /> Download</>}
             </button>
             <button
               type="button"

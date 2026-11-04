@@ -1,4 +1,5 @@
 import type { ContentGuardFinding, ContentGuardResponse } from '../../services/uploadService';
+import { Icon } from '../../components/Icon';
 
 const WHY_HIDDEN: Record<string, string> = {
   tiny: 'text too small to read',
@@ -62,7 +63,7 @@ export function ContentGuardWarning({ contentGuard }: { contentGuard: ContentGua
       className={`review-message ${contentGuard.blocked ? 'review-message--error' : 'review-message--warning'} content-guard-warning`}
       role="alert"
     >
-      <span className="content-guard-warning-icon" aria-hidden="true">⚠</span>
+      <span className="content-guard-warning-icon" aria-hidden="true"><Icon name="alert" size={18} /></span>
       <div>
         <strong>{title}</strong>
         <div>{detail}</div>

@@ -78,7 +78,7 @@ Pub/Sub redelivery covers a worker that dies mid-request. The sweeper covers the
 
 ## 6. Delivery and security
 
-**CI** (`.github/workflows/ci-cd.yml`, on every PR and every push to `main`, except docs-only pushes): backend (ruff, pyright, pytest with coverage; pip and exiftool cached), frontend (lint, build, Playwright in Microsoft's Playwright container, version pinned to the lockfile), security (Checkov on Terraform, Dockerfiles and workflows; Snyk on `requirements.txt` and npm; Terraform `fmt` and `validate`; **blocking**).
+**CI** (`.github/workflows/ci-cd.yml`, on every PR and every push to `main`, except docs-only pushes): backend (ruff, pyright, pytest with coverage; pip and exiftool cached), frontend (lint, build, Playwright in Microsoft's Playwright container, version pinned to the lockfile), security (Checkov on Terraform, Dockerfiles and workflows; pip-audit on `backend/requirements.lock` and `npm audit --audit-level=high`, every run; Snyk on the same files only when they change, weekly on Monday and by hand, to stay inside the free plan's monthly quota; Terraform `fmt` and `validate`; **blocking**, except Snyk for now, which is non-blocking until its quota resets). The weekly run skips the backend and frontend jobs.
 
 **Deploy** (`deploy.yml`, called by CI when all four pass on `main`, or run by hand; one at a time, never cancelled halfway):
 1. Build each image once (role targets of the backend Dockerfile, Kong, frontend, Grafana) into Artifact Registry `app`, skipping any this commit already has; a registry build cache keeps it fast. One service list at the top of the workflow drives every step.
@@ -106,7 +106,7 @@ Terraform owns everything else about a service (`deploy/terraform`); `apply` is 
 
 **Locked** (changing one touches every service): the event envelope and type names, one topic with filtered subscriptions, the ownership rules, a Dockerfile target per role, Kong as the only entry point, handler plus adapters.
 
-**Settled:** push delivery for Stage 1 (detection takes 1-2 min, inside the 600 s ack deadline; revisit if a stage's p95 passes 8 minutes); ingestion inside api; Grafana as our own Cloud Run service; `uvicorn` + `npm run dev` stays the default for everyone, compose is opt-in; tests stub Anthropic and Supabase; the injection tool only in uvicorn mode; case match stays in api; no Redis until a measured need; Snyk scans `requirements.txt`.
+**Settled:** push delivery for Stage 1 (detection takes 1-2 min, inside the 600 s ack deadline; revisit if a stage's p95 passes 8 minutes); ingestion inside api; Grafana as our own Cloud Run service; `uvicorn` + `npm run dev` stays the default for everyone, compose is opt-in; tests stub Anthropic and Supabase; the injection tool only in uvicorn mode; case match stays in api; no Redis until a measured need; Snyk scans `requirements.lock` and runs only when dependencies change or weekly (pip-audit and npm audit cover every run).
 
 **Open:**
 1. **Award check:** the supervisor accepted the Cloud Run architecture (2026-10-26, section 10); confirm the Cloud Native award assessment is fine with Kubernetes as a tested Helm chart rather than a running cluster.

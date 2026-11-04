@@ -31,27 +31,20 @@
   background: var(--white);
   box-shadow: 0 1px 2px rgb(18 32 61 / 5%);
 }
-.case-overview-topline { display: grid; grid-template-columns: minmax(230px, .9fr) minmax(0, 1.5fr); gap: 12px; }
+.case-overview-topline { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .case-overview-risk {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  flex-direction: column;
+  gap: 10px;
   min-width: 0;
-  padding: 19px 20px;
-  border-left: 4px solid var(--line);
+  padding: 16px 20px 18px;
 }
-.case-overview-risk--critical { border-left-color: var(--red-30); }
-.case-overview-risk--high { border-left-color: var(--red-45); }
-.case-overview-risk--medium { border-left-color: var(--amber); }
-.case-overview-risk--low { border-left-color: var(--green-40); }
-.case-overview-risk-copy { display: grid; gap: 4px; min-width: 0; }
+.case-overview-risk-title { margin: 0; font-size: 15px; font-weight: 700; }
+.case-overview-risk-body { display: flex; align-items: center; gap: 20px; }
+.case-overview-risk-copy { display: grid; gap: 2px; min-width: 0; }
 .case-overview-stat-label { color: var(--ink-soft); font-size: 12px; font-weight: 650; }
-.case-overview-risk-copy > strong { font-size: 20px; line-height: 1.25; }
-.case-overview-risk-copy > span:last-child { color: var(--ink-soft); font-size: 12px; }
-.case-overview-score { display: flex; align-items: baseline; flex: none; color: var(--ink-soft); }
-.case-overview-score strong { color: var(--ink); font-size: 38px; line-height: 1; }
-.case-overview-score span { font-size: 13px; }
+.case-overview-risk-copy > strong { font-size: 18px; line-height: 1.25; }
+.case-overview-risk-copy > span { color: var(--ink-soft); font-size: 12px; }
 .case-overview-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .case-overview-stat { display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: 14px 15px; }
 .case-overview-stat--interactive { border: 1px solid var(--line); color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -62,8 +55,8 @@
 .case-overview-stat--interactive:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
 .case-overview-stat-value { margin-top: 2px; font-size: 27px; line-height: 1.2; }
 .case-overview-stat-detail { margin-top: 3px; color: var(--ink-soft); font-size: 11px; line-height: 1.35; }
-.case-overview-stat--amber .case-overview-stat-value { color: var(--amber); }
-.case-overview-stat--red .case-overview-stat-value { color: var(--red); }
+.case-overview-stat--amber .case-overview-stat-value { color: var(--orange-27); }
+.case-overview-stat--red .case-overview-stat-value { color: var(--risk-medium-text); }
 .case-overview-stat--green .case-overview-stat-value { color: var(--teal); }
 /* Recent Documents and Key Findings side by side. */
 .case-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
@@ -71,27 +64,27 @@
 .case-overview-panel-heading { align-items: center; margin-bottom: 17px; }
 .case-overview-panel-heading h2 { margin: 0; font-size: 16px; line-height: 1.3; }
 .case-overview-panel-heading p { margin: 4px 0 0; color: var(--ink-soft); font-size: 12px; }
-.case-overview-panel-heading .case-overview-accuracy-stale { margin-top: 6px; color: var(--amber); font-weight: 600; }
+.case-overview-panel-heading .case-overview-accuracy-stale { margin-top: 6px; color: var(--orange-27); font-weight: 600; }
 .case-overview-panel-heading .case-overview-text-button { flex: none; padding: 3px 0; }
-.case-overview-document-icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 8px; background: var(--slate-94a); color: var(--steel); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .03em; }
+.case-overview-document-icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 8px; background: var(--slate-94a); color: var(--steel); font-variant-numeric: tabular-nums; font-size: 9px; font-weight: 700; letter-spacing: .03em; }
 .case-overview-findings { display: flex; flex-direction: column; }
 .case-overview-flagged-list,
 .case-overview-document-list { margin: 0; padding: 0; list-style: none; }
-.case-overview-flagged-list li + li { border-top: 1px solid var(--sand-92); }
+.case-overview-flagged-list li + li { border-top: 1px solid var(--stone-94); }
 .case-overview-flagged-document { display: flex; align-items: center; gap: 12px; width: calc(100% + 20px); min-width: 0; margin: 0 -10px; padding: 10px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .case-overview-flagged-document:hover { background: var(--slate-97); }
 .case-overview-flagged-document:focus-visible { outline: 2px solid var(--steel); outline-offset: -2px; }
 .case-overview-flagged-copy { display: grid; flex: 1; gap: 4px; min-width: 0; }
 .case-overview-flagged-copy > strong { overflow: hidden; font-size: 12.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .case-overview-flagged-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--ink-soft); font-size: 11px; }
-.case-overview-flagged-meta .case-overview-severity { min-width: 0; padding: 2px 7px; }
-.case-overview-flagged-chevron { flex: none; color: var(--slate-54); font-size: 18px; }
+.case-overview-flagged-meta .case-overview-severity { min-width: 0; }
+.case-overview-flagged-chevron { flex: none; color: var(--text-muted); font-size: 18px; }
 .case-overview-flagged-more { margin: 8px 0 0; color: var(--ink-soft); font-size: 11px; }
-.case-overview-severity { flex: none; min-width: 57px; padding: 3px 7px; border-radius: 5px; text-align: center; text-transform: uppercase; font-size: 9px; font-weight: 800; letter-spacing: .04em; }
+.case-overview-severity { flex: none; min-width: 52px; padding: 0 6px; border: 1px solid transparent; border-radius: 4px; text-align: center; text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: .03em; line-height: 16px; }
 /* The Risk Summary's severity colours (case-summary.css .risk-severity), so a level reads the same on both. */
-.case-overview-severity--high { color: var(--white); background: var(--red-43); }
-.case-overview-severity--medium { color: var(--orange-16); background: var(--orange-74); }
-.case-overview-severity--low { color: var(--orange-33); background: var(--orange-91); }
+.case-overview-severity--high { color: var(--white); background: var(--risk-high); }
+.case-overview-severity--medium { border-color: var(--risk-medium-border); color: var(--risk-medium-ink); background: var(--risk-medium-tint); }
+.case-overview-severity--low { border-color: var(--risk-low); color: var(--ink-soft); background: var(--white); }
 .case-overview-document-copy { display: grid; min-width: 0; gap: 3px; }
 .case-overview-empty { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border-radius: 9px; background: var(--slate-97); color: var(--ink-soft); }
 .case-overview-empty > span { color: var(--teal); font-size: 17px; font-weight: 700; }
@@ -102,48 +95,45 @@
 .case-overview-accuracy-empty-icon { display: grid; place-items: center; width: 36px; height: 36px; margin-bottom: 4px; border-radius: 10px; background: var(--slate-94a); color: var(--steel); font-size: 16px; font-weight: 800; }
 .case-overview-accuracy-empty strong { color: var(--ink); font-size: 13px; }
 .case-overview-accuracy-empty p { max-width: 36ch; margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
-.case-overview-document-list li { display: flex; align-items: center; gap: 11px; min-width: 0; padding: 10px 0; border-top: 1px solid var(--sand-92); }
+.case-overview-document-list li { display: flex; align-items: center; gap: 11px; min-width: 0; padding: 10px 0; border-top: 1px solid var(--stone-94); }
 .case-overview-document-list li:first-child { padding-top: 0; border-top: 0; }
 .case-overview-document-copy { flex: 1; }
 .case-overview-document-copy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .case-overview-document-copy small { color: var(--ink-soft); font-size: 11px; }
-.case-overview-document-status { flex: none; padding: 4px 9px; border-radius: 99px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.case-overview-document-status { flex: none; padding: 4px 9px; border-radius: 99px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .case-overview-document-status--done { color: var(--teal); background: var(--teal-bg); }
 .case-overview-document-status--action { color: var(--orange-30b); background: var(--amber-bg); }
 .case-overview-document-status--progress { color: var(--steel); background: var(--slate-94a); }
 .case-overview-document-status--muted { color: var(--ink-soft); background: var(--slate-94); }
-.case-overview-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.3fr); gap: 14px; align-items: stretch; }
+/* Time and cost side by side; Detection Accuracy takes the row under them. */
+.case-overview-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+.case-overview-classification { grid-column: 1 / -1; }
 /* With finding reviews off (Settings) there is no Detection Accuracy panel: the other two share the row. */
 .case-overview-metrics--no-accuracy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .case-overview-timing,
 .case-overview-cost,
 .case-overview-classification { display: flex; flex-direction: column; }
-.case-overview-metric-tag { flex: none; padding: 3px 9px; border: 1px dashed var(--slate-88); border-radius: 999px; color: var(--slate-54); font-size: 10px; font-weight: 700; }
+.case-overview-metric-tag { flex: none; padding: 3px 9px; border: 1px dashed var(--slate-88); border-radius: 999px; color: var(--text-muted); font-size: 11px; font-weight: 700; }
 .case-overview-timing-values { display: grid; gap: 8px; }
 .case-overview-timing-values > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; border: 1px solid var(--slate-91); border-radius: 8px; background: var(--slate-97); }
 .case-overview-timing-values span { display: flex; flex-direction: column; gap: 2px; color: var(--ink-soft); font-size: 12px; }
-.case-overview-timing-values small { color: var(--slate-54); font-size: 11px; }
-.case-overview-timing-values strong { flex: none; color: var(--steel-dark); font-family: var(--mono); font-size: 16px; font-weight: 600; }
+.case-overview-timing-values small { color: var(--text-muted); font-size: 11px; }
+.case-overview-timing-values strong { flex: none; color: var(--steel-dark); font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; }
 .case-overview-classification-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .case-overview-classification-table th,
-.case-overview-classification-table td { padding: 9px 4px; border-top: 1px solid var(--sand-92); text-align: right; }
+.case-overview-classification-table td { padding: 9px 4px; border-top: 1px solid var(--stone-94); text-align: right; }
 .case-overview-classification-table th:first-child { text-align: left; }
 .case-overview-classification-table thead th { padding-top: 0; border-top: 0; color: var(--ink-soft); font-size: 11px; font-weight: 650; }
 .case-overview-classification-table tbody th { font-weight: 650; }
-.case-overview-classification-table td { width: 28%; color: var(--ink-soft); font-family: var(--mono); }
+.case-overview-classification-table td { width: 28%; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .case-overview-classification-table tfoot th,
 .case-overview-classification-table tfoot td { border-top: 1px solid var(--line); color: var(--steel-dark); font-weight: 700; }
 .case-overview-classification-table tbody th { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .case-overview-classification-table td .rate { font-weight: 650; }
-.case-overview-metric-note { margin: auto 0 0; padding-top: 12px; color: var(--slate-59); font-size: 11px; }
+.case-overview-metric-note { margin: auto 0 0; padding-top: 12px; color: var(--text-muted); font-size: 11px; }
 
-@media (max-width: 1050px) {
-  .case-overview-topline { grid-template-columns: 1fr; }
+@media (max-width: 1600px) {
   .case-overview-grid { grid-template-columns: 1fr; }
-}
-@media (max-width: 1280px) {
-  .case-overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .case-overview-classification { grid-column: 1 / -1; }
 }
 @media (max-width: 760px) {
   .case-overview-metrics { grid-template-columns: 1fr; }
@@ -153,13 +143,51 @@
   .case-overview-stats { gap: 7px; }
   .case-overview-stat { padding: 12px 10px; }
   .case-overview-stat-value { font-size: 23px; }
-  .case-overview-stat-detail { font-size: 10px; }
+  .case-overview-stat-detail { font-size: 11px; }
 }
 @media (max-width: 520px) {
   .case-overview-panel { padding: 16px 14px; }
   .case-overview-panel-heading { align-items: flex-start; gap: 12px; }
   .case-overview-document-list li { flex-wrap: wrap; }
   .case-overview-document-status { margin-left: 45px; }
+}
+
+/* The severity dial (pages/upload/SeverityGauge.tsx): the levels' bands, faint, then filled up to the score,
+   which a pointer marks. Same colours and faint-then-solid treatment as the Risk Summary's bar (.risk-gauge). */
+.severity-gauge { flex: none; width: 170px; height: auto; overflow: visible; }
+.severity-gauge path { fill: none; }
+.severity-gauge-track,
+.severity-gauge-fill { stroke: var(--band); stroke-width: 16; }
+.severity-gauge-track { opacity: .3; }
+.severity-gauge--empty .severity-gauge-track { stroke: var(--line); opacity: 1; }
+.severity-gauge-sweep { stroke: var(--white); stroke-width: 20; animation: severity-gauge-sweep .9s cubic-bezier(.2, .8, .2, 1); }
+.severity-gauge-pointer { transform-box: view-box; transform-origin: 110px 112px; animation: severity-gauge-turn .9s cubic-bezier(.2, .8, .2, 1); }
+.severity-gauge-pointer line { stroke: var(--ink); stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 0 1.5px var(--white)) drop-shadow(0 0 1px var(--white)); }
+.severity-gauge-pointer path { fill: var(--ink); stroke: var(--white); stroke-width: 1.5; stroke-linejoin: round; }
+.severity-gauge-value { fill: var(--ink); font-size: 46px; font-weight: 700; letter-spacing: -.03em; }
+.severity-gauge--empty .severity-gauge-value { fill: var(--text-muted); }
+.severity-gauge-unit { fill: var(--ink-soft); font-size: 12px; }
+.severity-gauge-end { fill: var(--text-muted); font-size: 11px; }
+@keyframes severity-gauge-sweep { from { stroke-dashoffset: 100; } }
+@keyframes severity-gauge-turn { from { transform: rotate(-90deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .severity-gauge-sweep, .severity-gauge-pointer { animation: none; }
+}
+.severity-legend { display: grid; grid-template-columns: repeat(2, auto); justify-content: start; gap: 6px 18px; margin: 10px 0 0; padding: 10px 0 0; border-top: 1px solid var(--line); list-style: none; color: var(--ink-soft); font-size: 12px; }
+.severity-legend li { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.severity-legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
+.severity-legend-range { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.severity-legend-current { color: var(--ink); font-weight: 700; }
+.severity-legend-current .severity-legend-range { color: var(--ink-soft); }
+
+/* Case Summary page: the severity card and Case Status side by side on top; stacked when there's no room. */
+.case-summary-top { display: grid; grid-template-columns: minmax(460px, 2fr) minmax(0, 3fr); gap: 14px; align-items: stretch; margin-bottom: 18px; }
+.case-summary-top > .case-status-card { display: flex; flex-direction: column; margin: 0; }
+/* As tall as the severity card beside it: the steps sit in the middle of the room under the text. */
+.case-summary-top > .case-status-card .case-status-track { margin-block: auto; padding-top: 14px; }
+
+@media (max-width: 1400px) {
+  .case-summary-top { grid-template-columns: 1fr; }
 }
 
 /* Detection Accuracy: precision and recall side by side, then one card per reviewed check. */

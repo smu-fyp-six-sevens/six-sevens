@@ -169,7 +169,7 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     // One box per stage some case is at, in the order a case moves through them.
     await expect((await openFilter(page, 'status')).getByRole('checkbox')).toHaveCount(3);
     await expect((await openFilter(page, 'status')).locator('label')).toContainText([
-      'Open', 'Processing Documents', 'Pending Review',
+      'Awaiting Documents', 'Processing Documents', 'Pending Review',
     ]);
 
     await showOnly(page, 'status', /Pending Review/);
@@ -215,7 +215,7 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     const { platinum } = seedQueue(backend);
     await page.goto('/cases');
 
-    await showOnly(page, 'status', /Open/);
+    await showOnly(page, 'status', /Awaiting Documents/);
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText(platinum.company_name!);
@@ -275,7 +275,7 @@ test.describe('Case queue paging and filters @SCRUM-299', () => {
     await page.goto('/cases');
     await expect(caseCards(page)).toHaveCount(25);
 
-    await showOnly(page, 'status', /Case Analysed/, /Failed/);
+    await showOnly(page, 'status', /Ready to Finalise/, /Failed/);
 
     // 30 + 10 = 40 cases, so two pages of the filtered list, not of all 45.
     await expect(pagination(page)).toContainText('of 40');
@@ -386,7 +386,7 @@ test.describe('Case queue paging and filters @SCRUM-299', () => {
     await showOnly(page, 'status', /Failed/);
 
     await expect(pagination(page)).toContainText('of 10');
-    await expect(page.getByRole('group', { name: 'status filter' }).locator('label', { hasText: /Case Analysed/ })).toContainText('30');
+    await expect(page.getByRole('group', { name: 'status filter' }).locator('label', { hasText: /Ready to Finalise/ })).toContainText('30');
   });
 
   test('a page past the end falls back to the last page', async ({ page, backend }) => {
@@ -401,14 +401,16 @@ test.describe('Case queue paging and filters @SCRUM-299', () => {
 test.describe('Case page layout @SCRUM-299', () => {
   const sectionNav = (page: Page) => page.getByRole('navigation', { name: 'Case sections' });
 
-  test('a case opens on the summary, under a header that stays in view', async ({ page, backend }) => {
+  test('a case opens on the summary, with its title under the breadcrumbs', async ({ page, backend }) => {
     const theCase = makeCase({ id: 'case-layout', greenlink_case_id: 'GLDB-3001', company_name: 'Layout Co Pte Ltd' });
     backend.cases.push(theCase);
     await page.goto('/cases/GLDB-3001');
 
     await expect(sectionNav(page).getByRole('button', { name: /^Case Summary/ })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('main', { name: 'Case summary dashboard' })).toBeVisible();
-    await expect(page.locator('.case-header')).toHaveCSS('position', 'sticky');
+    const crumbs = await page.locator('.case-header .breadcrumbs').boundingBox();
+    const title = await page.locator('.case-header h1').boundingBox();
+    expect(title!.y).toBeGreaterThanOrEqual(crumbs!.y + crumbs!.height - 1);
   });
 
   test('opening a case from the queue shows its header at once, without waiting for the lookup', async ({ page, backend }) => {
@@ -428,23 +430,40 @@ test.describe('Case page layout @SCRUM-299', () => {
     await expect(sectionNav(page).getByRole('button', { name: /^Case Summary/ })).toBeVisible();
   });
 
-  test('the section menu collapses to its icons, and stays collapsed after a reload', async ({ page, backend }) => {
+  test('the section menu is a rail of icons that opens over the page without moving it', async ({ page, backend }) => {
     backend.cases.push(makeCase({ id: 'case-nav', greenlink_case_id: 'GLDB-3002', company_name: 'Nav Co Pte Ltd' }));
     await page.goto('/cases/GLDB-3002');
-    await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
-
-    await page.getByRole('button', { name: 'Collapse menu' }).click();
-
+    // Closed: icons only, but every section is still reachable by name.
     await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
-    // Still reachable by name, and still works.
+    const content = page.locator('.case-frame-main');
+    const before = await content.boundingBox();
+
+    await page.getByRole('button', { name: 'Expand menu' }).click();
+
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
+    // Opened over the page: the content is exactly where it was.
+    expect(await content.boundingBox()).toEqual(before);
+
+    // Escape closes it again.
+    await page.keyboard.press('Escape');
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
+
+    // Choosing a section goes there and closes the menu.
+    await page.getByRole('button', { name: 'Expand menu' }).click();
     await sectionNav(page).getByRole('button', { name: /^Documents/ }).click();
     await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
+  });
 
-    await page.reload();
+  test('a document page has the same menu, opening over the document', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    await page.goto(fixture.documentUrl(payslip));
 
-    await expect(page.getByRole('button', { name: 'Expand menu' })).toBeVisible();
     await page.getByRole('button', { name: 'Expand menu' }).click();
     await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
+    await sectionNav(page).getByRole('button', { name: /^Risk Summary/ }).click();
+    await expect(page).toHaveURL(/section=risk/);
   });
 
   test('the summary shows how long each stage took, from the recorded runs', async ({ page, backend }) => {
@@ -524,10 +543,10 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await openSection(page, 'Risk summary');
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
-    await expect(section.locator('.risk-badge')).toHaveText('High risk');
-    await expect(section.locator('.risk-score-value')).toHaveText('58');
-    await expect(section.locator('.risk-score-level')).toHaveText('High risk · 50–79');
-    await expect(section.locator('.risk-gauge')).toHaveAttribute('aria-label', 'Score 58 out of 100, High risk');
+    await expect(section.locator('.risk-badge')).toHaveText('High Risk');
+    await expect(section.locator('.severity-gauge-value')).toHaveText('58');
+    await expect(section.locator('.risk-score-level')).toHaveText('High Risk · 50–79');
+    await expect(section.locator('.severity-gauge')).toHaveAttribute('aria-label', 'Risk score 58 out of 100, High');
     await expect(section).toContainText('2 high · 3 medium · 1 low');
 
     // The documents are a card of their own, listed collapsed until reviewed (the low-only bank statement
@@ -592,16 +611,15 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
 
-    // Flagged items sit under the extracted files on the Documents tab.
-    const flagged = page.locator('.summary-card', {
-      has: page.getByRole('heading', { name: 'Flagged Items for Manual Review' }),
-    });
-    await expect(flagged.locator('.flagged-item')).toHaveCount(1);
-    await expect(flagged).toContainText('Fashion-Purchase-Order.pdf');
+    // A document that needs the officer says why under its name in the document list.
+    const row = page.locator('.documents-table-row', { hasText: 'Fashion-Purchase-Order.pdf' });
+    await expect(page.locator('.documents-table-row--review')).toHaveCount(1);
+    await expect(row.locator('.document-review-reason')).toContainText('could not be recognised');
+    await expect(page.locator('.documents-table-group--review')).toContainText('Needs Review');
     // Not confirmed by an officer yet, so it reads Unrecognised, not Other.
-    await expect(flagged.locator('.flagged-item-meta')).toContainText('Unrecognised');
-    await expect(flagged).toContainText('Document type could not be confidently recognised.');
-    await expect(flagged).not.toContainText('C014_CertIncorp.pdf');
+    await expect(row.locator('.document-type-cell')).toContainText('Unrecognised');
+    // The document that is fine has no reason under its name.
+    await expect(page.locator('.documents-table-row', { hasText: 'C014_CertIncorp.pdf' }).locator('.document-review-reason')).toHaveCount(0);
   });
 
   test('CM-009 the case audit trail is reached from case details and lists what was recorded for this case @CM-009', async ({ page, backend }) => {
@@ -1063,17 +1081,18 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const noa = fixture.document('Anchorpoint_IRAS_NOA');
     await page.goto(`${fixture.caseUrl}?section=documents`);
-    const noaRequirement = page.locator('.requirement-row').filter({ hasText: /^Notice of Assessment/ });
-    await expect(noaRequirement).toHaveClass(/fulfilled/);
+    const missing = (label: string) =>
+      page.locator('.checklist-missing-row').filter({ has: page.locator('.document-type-cell', { hasText: new RegExp(`^${label}$`) }) });
+    await expect(missing('Notice of Assessment')).toHaveCount(0);
 
     await page.goto(fixture.documentUrl(noa));
     await deleteDocument(page);
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
 
     await expect(page).toHaveURL(`${fixture.caseUrl}?section=documents`);
-    await expect(noaRequirement).not.toHaveClass(/fulfilled/);
-    // Only that requirement reverts: the others the case's documents fulfil stay ticked.
-    await expect(page.locator('.requirement-row').filter({ hasText: /^Certificate of Incorporation/ })).toHaveClass(/fulfilled/);
+    await expect(missing('Notice of Assessment')).toHaveCount(1);
+    // Only that requirement reverts: the others the case's documents fulfil stay met.
+    await expect(missing('Certificate of Incorporation')).toHaveCount(0);
   });
 
   test('CM-027 a document still processing cannot be deleted @CM-027', async ({ page, backend }) => {
@@ -1177,11 +1196,120 @@ test.describe('Case page: document actions, live updates and cost', () => {
     await openSection(page, 'Claude Cost');
 
     const card = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Claude Cost' }) });
-    await expect(card).toContainText('Total: $0.0825');
-    await expect(card).toContainText('documents $0.0525 · case analysis $0.0300');
+    await expect(card.locator('.cost-figure--total')).toContainText('$0.0825');
+    await expect(card.locator('.cost-figures')).toContainText('Documents$0.0525');
+    await expect(card.locator('.cost-figures')).toContainText('Case analysis$0.0300');
     await expect(card.locator('table').first()).toContainText(`${document.filename}$0.0525`);
     await card.getByText('3 runs').click();
     await expect(card.locator('details tbody tr')).toHaveCount(3);
     await expect(card.locator('details tbody tr').last()).toContainText('Case analysis');
+  });
+});
+
+/**
+ * Reviewing a document's findings in the Risk Summary shows the document in X-ray: once the page has drawn,
+ * shaded but for the areas detection flagged, numbered and stepped through place by place in the order of the
+ * list beside it (from a bar at its foot, or the arrow keys), with the finding being looked at picked out there.
+ */
+test.describe('X-ray in the findings review', () => {
+  // One blank A4 page: pdf.js rebuilds the missing cross-reference table.
+  const BLANK_PDF = [
+    '%PDF-1.4',
+    '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj',
+    '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj',
+    '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj',
+    'trailer<</Root 1 0 R>>',
+    '%%EOF',
+  ].join('\n');
+
+  test('steps through every place in the list\'s order with the list following, and Esc closes the card before the review', async ({ page, backend }) => {
+    const harbor = makeCase({ greenlink_case_id: 'GLDB-2002', risk: CASE_VIEWS.scored.risk });
+    backend.cases.push(harbor);
+    const payslipId = CASE_VIEWS.scored.risk!.contributing_findings.find((f) => f.filename === 'C011_Payslip.pdf')!.document_id;
+    backend.documents.push(
+      makeDocument({ id: payslipId, case_id: harbor.id, filename: 'C011_Payslip.pdf', document_type: 'payslip', status: 'detected' }),
+    );
+    const report = readRegressionFixture<{ findings: object[] }>('detection-report-c028.json');
+    const placedAt = (id: string, severity: string, ...bboxes: number[][]) => ({
+      ...report.findings[0], id, severity, summary: `${id} summary`, locations: bboxes.map((bbox) => ({ page: 1, bbox })),
+    });
+    backend.detectionReports[payslipId] = {
+      ...report,
+      document_id: payslipId,
+      // Higher up the page, the layout finding comes first in reading order, but after the font one in the list.
+      findings: [
+        placedAt('font_consistency_tool-1', 'high', [400, 400, 460, 412], [400, 600, 460, 612]),
+        placedAt('layout_anomalies_tool-1', 'medium', [400, 100, 460, 112]),
+      ],
+    };
+    // A real page to draw, so X-ray starts: the mock's own preview is empty.
+    await page.route('**/documents/*/download*', (route) =>
+      route.fulfill({ json: { document_id: payslipId, signed_url: 'http://files.test/payslip.pdf', expires_in: 3600 } }),
+    );
+    await page.route('http://files.test/**', (route) =>
+      route.fulfill({ body: BLANK_PDF, contentType: 'application/pdf', headers: { 'access-control-allow-origin': '*' } }),
+    );
+
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=risk`);
+    const review = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
+    await review.locator('.risk-document').first().getByRole('button').click();
+    const dialog = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
+    const status = dialog.locator('.xray-bar-status');
+    const activeRow = dialog.locator('.risk-findings li.risk-finding--active');
+    const card = dialog.locator('.finding-card');
+
+    // Numbered and stepped through in the list's order: its rows are the two font findings (high) then the
+    // layout one (medium). Once the page has drawn and the scan has passed, the first placed row is picked, at
+    // its first place, on the document and in the list.
+    await expect(dialog.locator('.xray-stage--ready')).toHaveCount(1);
+    await expect(status).toContainText('Finding 1 of 3 · place 1 of 2');
+    await expect(activeRow).toContainText('Net pay');
+    await expect(card).toContainText('Place 1 of 2');
+
+    // The row steps through its own places too, without walking every button (a word can recur dozens of times).
+    const rowPlaces = activeRow.getByRole('group', { name: 'Places on the document' });
+    await expect(rowPlaces).toContainText('Place 1 of 2 (Page 1)');
+    await rowPlaces.getByRole('button', { name: 'Next place' }).click();
+    await expect(status).toContainText('Finding 1 of 3 · place 2 of 2');
+    await rowPlaces.getByRole('button', { name: 'Previous place' }).click();
+    await expect(status).toContainText('Finding 1 of 3 · place 1 of 2');
+
+    // → goes to the row's other place, its card beside that place, then skips the second row (nothing placed).
+    await page.keyboard.press('ArrowRight');
+    await expect(status).toContainText('Finding 1 of 3 · place 2 of 2');
+    await expect(card).toContainText('Place 2 of 2');
+    await page.keyboard.press('ArrowRight');
+    await expect(status).toContainText('Finding 3 of 3');
+    await expect(activeRow).toContainText('vertically offset');
+    await expect(card).toContainText('layout_anomalies_tool-1 summary');
+
+    // Clicking a place opens the card there; a row's "Show on page" opens its finding at its first place.
+    await dialog.locator('[data-highlight-id="font_consistency_tool-1"][data-highlight-area="1"]').click();
+    await expect(card).toContainText('Place 2 of 2');
+    await dialog.locator('.risk-findings li', { hasText: 'vertically offset' }).getByRole('button', { name: /Show on page 1/ }).click();
+    await expect(status).toContainText('Finding 3 of 3');
+    // Not the row shown, a finding in several places offers one button to its first.
+    const netPay = dialog.locator('.risk-findings li', { hasText: 'Net pay' });
+    await netPay.getByRole('button', { name: 'Show on document · 2 places' }).click();
+    await expect(status).toContainText('Finding 1 of 3 · place 1 of 2');
+    await dialog.locator('.risk-findings li', { hasText: 'vertically offset' }).getByRole('button', { name: /Show on page 1/ }).click();
+
+    // "Dim page" off shows the page as printed, the flagged places still outlined; on again, it's dimmed.
+    const dim = dialog.getByRole('button', { name: 'Dim page' });
+    await expect(dim).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog.locator('.finding-highlight-shade')).not.toHaveCount(0);
+    await dim.click();
+    await expect(dim).toHaveAttribute('aria-pressed', 'false');
+    await expect(dialog.locator('.finding-highlight-shade')).toHaveCount(0);
+    await expect(dialog.locator('[data-highlight-id="layout_anomalies_tool-1"]')).toBeVisible();
+    await dim.click();
+    await expect(dialog.locator('.finding-highlight-shade')).not.toHaveCount(0);
+
+    await page.keyboard.press('Escape');
+    await expect(status).toHaveText('2 findings on the page');
+    await expect(card).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
   });
 });

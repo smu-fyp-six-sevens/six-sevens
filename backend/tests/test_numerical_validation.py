@@ -305,6 +305,20 @@ def test_open_close_flags_a_break() -> None:
     assert len(_codes(result, "BS.OPEN_CLOSE")) == 1
 
 
+def test_opening_balance_field_is_not_also_bound_as_the_closing_balance() -> None:
+    # A statement that prints no closing balance (GLDB-5's OCBC personal statement): the binder bound the closing
+    # role to the opening balance field, which the opening role already reads by name, so the check compared the
+    # transactions with the opening figure and flagged a reconciled statement.
+    transactions = [
+        {"amount": -170.00, "balance": 1672.60},
+        {"amount": 8994.51, "balance": 10667.11},
+    ]
+    fields = [_field("transactions", transactions), _field("opening_balance", "1842.60")]
+    outcome = run_numerical_checks("bank_statement", fields, [Binding("ledger_balance", "opening_balance")])
+    assert [f.check_code for f in outcome.findings if f.check_code.startswith("BS.")] == []
+    assert any("'ledger_balance' not bound to 'opening_balance'" in issue for issue in outcome.issues)
+
+
 def test_open_close_uses_stated_header_balances_when_present() -> None:
     # transactions[0].balance - transactions[0].amount = 10,000, matching
     # the stated opening_balance — but the stated ledger_balance (closing)

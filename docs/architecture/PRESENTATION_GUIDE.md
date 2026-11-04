@@ -100,7 +100,7 @@ The UI updates live: Supabase Realtime tells api a row changed, and api pushes a
 | **Independent scaling** | Cloud Run per service: workers have 2 vCPU and 4 GiB and scale on pushes; api scales up to 3; everything scales to zero when idle. |
 | **Resilience** | Pub/Sub redelivers, and dead-letters after 5 attempts. Handlers are idempotent with compare-and-swap status changes. A sweeper recovers stuck work. A deploy rolls back automatically when its checks fail. |
 | **Infrastructure as code** | Terraform: services, IAM, secrets, Pub/Sub, scheduler, monitoring, alerts, billing export, Grafana. |
-| **Secure delivery** | CI runs ruff, pyright (no suppressions allowed), pytest, Playwright, Checkov, Snyk, and Terraform validation. Deploys use Workload Identity Federation, so no stored keys. |
+| **Secure delivery** | CI runs ruff, pyright (no suppressions allowed), pytest, Playwright, Checkov, dependency audits (pip-audit and npm audit every run, Snyk when dependencies change and weekly), and Terraform validation. Deploys use Workload Identity Federation, so no stored keys. |
 | **Least privilege** | A service account per service; secrets readable only by the services that need them; workers callable only by Pub/Sub's signed identity. |
 | **Observability** | Metrics from every service (Managed Prometheus), traces across services (Cloud Trace), four Grafana dashboards, email alerts, an audit trail of every action. |
 | **Cost awareness** | Claude cost per agent, per document and per case; Cloud Run estimates live; actual GCP billing from the BigQuery export; a budget alert and a daily Claude spend alert. |
@@ -191,7 +191,7 @@ Dashed arrows are data reads and writes; solid arrows are requests and events.
 
 **Page 6: CI and deploy.** The delivery pipeline.
 - **How to read it:**
-  - **Top row:** CI runs four jobs in parallel on every push and pull request: backend (lint, type checks, tests), frontend (lint, build, 116 Playwright tests), security scans (Checkov, Snyk) and Terraform checks. A docs-only push skips all of it.
+  - **Top row:** CI runs four jobs in parallel on every push and pull request: backend (lint, type checks, tests), frontend (lint, build, 116 Playwright tests), security scans (Checkov, pip-audit, npm audit, and Snyk when dependencies change) and Terraform checks. A docs-only push skips all of it.
   - **The gate:** when all four pass on a push to `main`, the deploy starts by itself. A pull request or another branch stops at CI.
   - **Bottom row:** the deploy (it can also be started by hand). Only one runs at a time, and one is never cancelled halfway. It authenticates without a stored key, builds 8 images (5 role targets of the one backend Dockerfile, plus Kong, frontend and Grafana), rolls them out workers first, then checks the gateway: pass finishes the deploy, fail rolls every service back.
 - **Point to make:** it's continuous deployment, so every green change to `main` reaches production with no manual step, and a broken deploy undoes itself. The deploy only changes images; Terraform owns everything else.

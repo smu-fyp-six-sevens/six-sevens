@@ -63,6 +63,7 @@ Budgets are in `HOW_IT_WORKS.md` §8; database load is in `STABILITY_AUDIT.md` �
 
 ## Cloud operations
 
+- **Make Snyk blocking again once its monthly quota resets** (made non-blocking 2026-11-04): delete the two `continue-on-error: true` lines under the Snyk steps in `.github/workflows/ci-cd.yml`, and drop "temporarily non-blocking" from CLAUDE.md, README and CLOUD_ARCHITECTURE_PLAN §6.
 - **Frontend fully non-root:** nginx's workers already run as `nginx`; going all the way means `nginx-unprivileged` on 8080 (change `nginx.conf`, the frontend's `container_port` in `run.tf` and the compose port together, apply before deploying).
 - **Dead-lettered messages** stay in `domain-events-dead-letter-pull` until someone reads them (the sweeper rescues the document behind them).
 - **WebSocket ticket replay** within 10 s on a different api instance would be accepted; not worth a shared store.
