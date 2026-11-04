@@ -133,7 +133,39 @@ class CaseCostRun(BaseModel):
     attempt: int = 1
     llm_cost_usd: float
     llm_calls: int | None = None
+    # Every input token, cached or not; the cache reads and writes are part of it.
+    llm_input_tokens: int | None = None
+    llm_output_tokens: int | None = None
     llm_cache_read_tokens: int | None = None
+    llm_cache_write_tokens: int | None = None
+    # What the cache saved, net of the writes' extra cost; absent on runs recorded before it was.
+    llm_cache_saved_usd: float | None = None
+
+
+class CacheUse(BaseModel):
+    """How well prompt caching worked over some runs."""
+    runs: int = 0
+    input_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    # Share of the input tokens read from the cache (0-1); None with no input.
+    hit_rate: float | None = None
+    saved_usd: float = 0.0
+    # Runs recorded before the saving was, so not in saved_usd.
+    runs_without_saving: int = 0
+
+
+def cache_use(runs: list[CaseCostRun]) -> CacheUse:
+    counted = [r for r in runs if r.llm_input_tokens is not None]
+    input_tokens = sum(r.llm_input_tokens or 0 for r in counted)
+    read = sum(r.llm_cache_read_tokens or 0 for r in counted)
+    return CacheUse(
+        runs=len(counted), input_tokens=input_tokens, cache_read_tokens=read,
+        cache_write_tokens=sum(r.llm_cache_write_tokens or 0 for r in counted),
+        hit_rate=round(read / input_tokens, 4) if input_tokens else None,
+        saved_usd=round(sum(r.llm_cache_saved_usd or 0.0 for r in counted), 6),
+        runs_without_saving=sum(1 for r in counted if r.llm_cache_saved_usd is None),
+    )
 
 
 class CaseCostDocument(BaseModel):
@@ -161,6 +193,9 @@ class CaseCost(BaseModel):
     # What failed, cancelled and repeated runs cost: included in total_usd.
     failed_or_cancelled_usd: float = 0.0
     repeated_runs_usd: float = 0.0
+    # Prompt caching over every costed run, and per kind of run (document, extraction_rerun, detection, case_analysis).
+    cache: CacheUse = CacheUse()
+    cache_by_run: dict[str, CacheUse] = {}
     runs: list[CaseCostRun]
     timings: list[CaseCostTiming]
 
@@ -207,7 +242,11 @@ def case_cost(case_id: str, document_ids: list[str]) -> CaseCost:
         runs.append(CaseCostRun(
             occurred_at=event.occurred_at, type=event.type, run=kind, document_id=event.document_id,
             outcome=event.outcome, attempt=attempts[(event.document_id, kind)], llm_cost_usd=float(cost),
-            llm_calls=event.detail.get("llm_calls"), llm_cache_read_tokens=event.detail.get("llm_cache_read_tokens"),
+            llm_calls=event.detail.get("llm_calls"), llm_input_tokens=event.detail.get("llm_input_tokens"),
+            llm_output_tokens=event.detail.get("llm_output_tokens"),
+            llm_cache_read_tokens=event.detail.get("llm_cache_read_tokens"),
+            llm_cache_write_tokens=event.detail.get("llm_cache_write_tokens"),
+            llm_cache_saved_usd=event.detail.get("llm_cache_saved_usd"),
         ))
         if event.document_id:
             per_document[event.document_id] = per_document.get(event.document_id, 0.0) + float(cost)
@@ -231,6 +270,8 @@ def case_cost(case_id: str, document_ids: list[str]) -> CaseCost:
         case_analysis_usd=round(sum(r.llm_cost_usd for r in runs if r.run == "case_analysis"), 6),
         failed_or_cancelled_usd=round(sum(r.llm_cost_usd for r in runs if r.outcome != "success"), 6),
         repeated_runs_usd=round(sum(r.llm_cost_usd for r in runs if r.attempt > 1), 6),
+        cache=cache_use(runs),
+        cache_by_run={kind: cache_use([r for r in runs if r.run == kind]) for kind in sorted({r.run for r in runs if r.run})},
         runs=runs, timings=timings,
     )
 

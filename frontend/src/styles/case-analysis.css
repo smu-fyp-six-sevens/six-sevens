@@ -314,3 +314,16 @@
     animation-duration: 3s;
   }
 }
+
+/* Prompt caching on the Claude Cost card: how much input came from the cache. */
+.cache-use { margin: 16px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); }
+.cache-use h3 { margin: 0 0 8px; font-size: 1rem; }
+.cache-use-headline { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.cache-use-rate { font-family: var(--mono); font-size: 1.8rem; font-weight: 600; color: var(--teal); }
+.cache-use-meter { display: flex; height: 10px; margin: 10px 0 8px; overflow: hidden; border-radius: 5px; background: var(--slate-91); }
+.cache-use-meter--read { background: var(--teal); }
+.cache-use-meter--write { background: var(--orange-44); }
+.cache-use-meter--plain { background: var(--slate-91); }
+.cache-use-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0 0 12px; padding: 0; list-style: none; font-size: 0.85rem; color: var(--ink-soft); }
+.cache-use-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; vertical-align: -1px; }
+.cache-use-note { margin: 8px 0 0; font-size: 0.8rem; color: var(--ink-soft); }

@@ -1919,6 +1919,44 @@ export interface components {
             /** Results */
             results: components["schemas"]["BulkUploadItemResult"][];
         };
+        /**
+         * CacheUse
+         * @description How well prompt caching worked over some runs.
+         */
+        CacheUse: {
+            /**
+             * Cache Read Tokens
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Tokens
+             * @default 0
+             */
+            cache_write_tokens: number;
+            /** Hit Rate */
+            hit_rate: number | null;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Runs
+             * @default 0
+             */
+            runs: number;
+            /**
+             * Runs Without Saving
+             * @default 0
+             */
+            runs_without_saving: number;
+            /**
+             * Saved Usd
+             * @default 0
+             */
+            saved_usd: number;
+        };
         /** CaseAnalysis */
         CaseAnalysis: {
             additional_documents: components["schemas"]["AdditionalDocuments"] | null;
@@ -2036,6 +2074,22 @@ export interface components {
         };
         /** CaseCost */
         CaseCost: {
+            /** @default {
+             *       "cache_read_tokens": 0,
+             *       "cache_write_tokens": 0,
+             *       "input_tokens": 0,
+             *       "runs": 0,
+             *       "runs_without_saving": 0,
+             *       "saved_usd": 0
+             *     } */
+            cache: components["schemas"]["CacheUse"];
+            /**
+             * Cache By Run
+             * @default {}
+             */
+            cache_by_run: {
+                [key: string]: components["schemas"]["CacheUse"];
+            };
             /** Case Analysis Usd */
             case_analysis_usd: number;
             /** Case Id */
@@ -2100,10 +2154,18 @@ export interface components {
             document_id: string | null;
             /** Llm Cache Read Tokens */
             llm_cache_read_tokens: number | null;
+            /** Llm Cache Saved Usd */
+            llm_cache_saved_usd: number | null;
+            /** Llm Cache Write Tokens */
+            llm_cache_write_tokens: number | null;
             /** Llm Calls */
             llm_calls: number | null;
             /** Llm Cost Usd */
             llm_cost_usd: number;
+            /** Llm Input Tokens */
+            llm_input_tokens: number | null;
+            /** Llm Output Tokens */
+            llm_output_tokens: number | null;
             /**
              * Occurred At
              * Format: date-time
