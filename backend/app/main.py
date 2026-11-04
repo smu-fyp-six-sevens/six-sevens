@@ -18,7 +18,7 @@ from .fraud_detection.spelling import spelling_anomaly
 from .health import check_db_connection
 from .langgraph._anthropic import warm_up
 from .routers import audit as audit_router
-from .routers import cases, detection, documents, finding_reviews, monitoring, notes, upload, ws
+from .routers import agents, cases, detection, documents, finding_reviews, monitoring, notes, upload, ws
 from .workers import cases as case_worker
 from .workers import detection as detection_worker
 from .workers import documents as doc_worker
@@ -176,6 +176,7 @@ _protected = [Depends(auth.bind_actor)]
 app.include_router(health.router)
 
 if "api" in ROLES:
+    app.include_router(agents.router, dependencies=_protected)
     app.include_router(cases.router, dependencies=_protected)
     app.include_router(upload.router, dependencies=_protected)
     app.include_router(documents.router, dependencies=_protected)

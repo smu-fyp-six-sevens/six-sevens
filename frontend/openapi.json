@@ -761,6 +761,136 @@
         "title": "AgentDecision",
         "type": "object"
       },
+      "AgentPrompt": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "document_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Type"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/PromptSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_id",
+          "document_type",
+          "note",
+          "sections"
+        ],
+        "title": "AgentPrompt",
+        "type": "object"
+      },
+      "AgentRecord": {
+        "properties": {
+          "access_summary": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Access Summary",
+            "type": "array"
+          },
+          "call_budget": {
+            "title": "Call Budget",
+            "type": "string"
+          },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "limitations": {
+            "title": "Limitations",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "prompt_options": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Prompt Options",
+            "type": "array"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "group",
+          "purpose",
+          "limitations",
+          "model",
+          "prompt_version",
+          "tools",
+          "access_summary",
+          "call_budget",
+          "owner",
+          "prompt_options"
+        ],
+        "title": "AgentRecord",
+        "type": "object"
+      },
       "AnalysisAudit": {
         "description": "What produced a result, so a past run can be reconstructed.",
         "properties": {
@@ -6503,6 +6633,24 @@
         "title": "ProcessingErrorEntry",
         "type": "object"
       },
+      "PromptSection": {
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "text"
+        ],
+        "title": "PromptSection",
+        "type": "object"
+      },
       "ProofOfAddressCoverage": {
         "description": "How many of the case's identified individuals (one per accepted\nid_document) currently have an address on file, out of how many there\nare \u2014 see mapper.compute_identity_proof_of_address_progress.\ntotal=0 means no ID document has been accepted yet, so there's nothing\nto report coverage against (distinct from 0 covered out of >0 total).",
         "properties": {
@@ -7542,6 +7690,135 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/agents": {
+      "get": {
+        "description": "Read-only snapshot of configured agents and the limits currently applied to their pipelines.",
+        "operationId": "get_agent_registry_agents_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentRecord"
+                  },
+                  "title": "Response Get Agent Registry Agents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Registry",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/agents/{agent_id}/prompt": {
+      "get": {
+        "description": "Return source prompt templates for one role, with per-run inputs marked as placeholders.",
+        "operationId": "get_agent_prompt_view_agents__agent_id__prompt_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "document_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Document Type"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPrompt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Prompt View",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/api/dev/documents": {
       "get": {
         "description": "Template ids accepted by /inject (slugs, not original filenames).",
