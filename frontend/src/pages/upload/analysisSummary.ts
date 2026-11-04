@@ -6,6 +6,9 @@ export function checkChipLabel(line: string): string {
   const same = /^(?:The )?(.+?) (?:is|are) the same\b/i.exec(line);
   if (same) return same[1].charAt(0).toUpperCase() + same[1].slice(1);
   if (/^No address differs/i.test(line)) return 'Addresses';
+  // "<name>'s address "..." on <document> is a previous address: <newer document> ... shows "..."" (backend
+  // deterministic._addresses): the full sentence is the chip's hover text.
+  if (/ is a previous address: /.test(line)) return 'Previous address';
   return line;
 }
 

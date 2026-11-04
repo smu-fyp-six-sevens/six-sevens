@@ -5,6 +5,7 @@ import { officerName } from '../lib/officers';
 import { formatDate } from '../pages/document-details/formatters';
 import { addCaseNote, deleteCaseNote, listCaseNotes, updateCaseNote, type CaseNote } from '../services/uploadService';
 import { ErrorMessage } from './ErrorMessage';
+import { Icon } from './Icon';
 
 const MAX_NOTE_LENGTH = 4000; // MAX_NOTE_LENGTH in backend/app/models.py
 const WHOLE_CASE = '';
@@ -206,7 +207,7 @@ export function NotesCard({
     <section className="summary-card notes-card">
       <div className="summary-card-header">
         <div className="summary-card-title">
-          <span className="summary-icon">✎</span>
+          <span className="summary-icon"><Icon name="notes" size={20} /></span>
           <h2>Notes{threads.length > 0 && <span className="notes-count"> · {threads.length}</span>}</h2>
         </div>
         {finalised ? (

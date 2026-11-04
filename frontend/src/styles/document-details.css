@@ -24,8 +24,8 @@
   min-width: 0;
 }
 
-/* The first card lines up with the top of the preview. */
-.document-details-main > .details-card:first-of-type {
+/* Whatever comes first (the notes, a warning, a card) lines up with the top of the preview. */
+.document-details-main > :first-child {
   margin-top: 0;
 }
 
@@ -41,10 +41,10 @@
 /* Stays in view under the sticky top bar while the fields scroll. */
 .document-preview-pane {
   position: sticky;
-  top: calc(var(--topbar-height) + var(--case-header-height) + 16px);
+  top: calc(var(--topbar-height) + 16px);
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--topbar-height) - var(--case-header-height) - 32px);
+  height: calc(100vh - var(--topbar-height) - 32px);
   overflow: hidden;
   border: 1px solid var(--slate-90);
   border-radius: 12px;
@@ -150,6 +150,69 @@
 .debug-table tbody tr + tr td { border-top: 1px solid var(--slate-94); }
 .debug-actions { display: flex; flex-wrap: wrap; gap: 0.5em; }
 
+/* The detection report (DetectionPanel.tsx): the verdict, then the findings as rows, then how it was checked. */
+.detection-card h2 { margin: 0; font-size: 17px; }
+.detection-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.detection-head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.detection-head .panel-refresh-button { position: static; }
+.detection-button {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  color: var(--steel-dark);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.detection-button:hover:not(:disabled) { border-color: var(--steel); background: var(--slate-97); }
+.detection-button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--steel-a20); }
+.detection-button:disabled { opacity: 0.55; cursor: not-allowed; }
+.detection-note { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; }
+.detection-empty { margin: 0; color: var(--ink-soft); font-size: 13.5px; }
+
+/* The verdict: the label is the panel's one block of colour, the summary beside it is plain text. Flagged takes
+   the risk scale's red; inconclusive is the officer's amber (it needs a look); clean is the success teal. */
+.detection-verdict { display: flex; align-items: baseline; gap: 12px; }
+.detection-verdict-label { flex: none; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.detection-verdict-summary { margin: 0; color: var(--ink); font-size: 14.5px; line-height: 1.55; max-width: 70ch; }
+.detection-verdict--flagged .detection-verdict-label { background: var(--risk-high); color: var(--white); }
+.detection-verdict--inconclusive .detection-verdict-label { background: var(--amber-bg); color: var(--orange-27); box-shadow: inset 0 0 0 1px var(--orange-76); }
+.detection-verdict--clean .detection-verdict-label { background: var(--teal); color: var(--white); }
+
+/* What couldn't be checked: no box, only its heading in amber, so it reads as a reason the verdict isn't clean. */
+.detection-unassessed .detection-subhead { color: var(--orange-27); }
+.detection-unassessed ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; color: var(--ink-soft); font-size: 13.5px; line-height: 1.5; }
+.detection-unassessed strong { color: var(--ink); font-weight: 600; }
+
+.detection-subhead { display: flex; align-items: baseline; gap: 6px; margin: 24px 0 8px; font-size: 14px; }
+.detection-count { color: var(--text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.detection-findings { margin: 0; padding: 0; list-style: none; }
+.detection-findings > li { display: flex; align-items: flex-start; gap: 14px; padding: 12px 0; border-top: 1px solid var(--slate-94); }
+.detection-findings > li:first-child { border-top: 0; padding-top: 2px; }
+.detection-findings .risk-severity { margin-top: 2px; }
+.detection-finding-text { display: grid; gap: 3px; min-width: 0; font-size: 13.5px; }
+.detection-finding-text strong { font-weight: 600; }
+.detection-finding-text p { margin: 0; color: var(--ink-soft); line-height: 1.5; }
+.detection-finding-meta { color: var(--text-muted); font-size: 12px; }
+
+/* How it was checked, with the single checks at its end: one fold, for an officer who wants the working. */
+.detection-more { margin-top: 20px; border-top: 1px solid var(--slate-94); }
+.detection-more > summary { width: fit-content; padding: 12px 0 0; color: var(--steel); font-size: 13px; font-weight: 600; cursor: pointer; }
+.detection-more > summary:focus-visible { outline: none; border-radius: 4px; box-shadow: 0 0 0 3px var(--steel-a20); }
+.detection-more-body { padding-top: 12px; font-size: 13px; }
+.detection-specialists { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.detection-specialists > li { display: grid; gap: 3px; }
+.detection-specialists p { margin: 0; color: var(--ink-soft); line-height: 1.5; }
+.detection-dismissed { margin: 4px 0 0; padding-left: 18px; color: var(--ink-soft); }
+.detection-second-look { margin: 14px 0 0; color: var(--ink-soft); line-height: 1.5; }
+.detection-second-look strong { color: var(--ink); }
+.detection-more-body h4 { margin: 16px 0 6px; font-size: 13px; }
+.detection-plain-list { margin: 0; padding-left: 18px; color: var(--ink-soft); }
+.detection-checks { display: flex; flex-wrap: wrap; gap: 8px; }
+
 .document-header {
   display: flex;
   align-items: flex-start;
@@ -175,7 +238,7 @@
   flex-direction: column;
   gap: 6px;
   margin-top: 10px;
-  color: var(--slate-48);
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -280,14 +343,14 @@
 
 .badge.warn {
   background: var(--amber-bg);
-  color: var(--amber);
+  color: var(--orange-27);
 }
 
 .details-label {
   display: block;
   margin-bottom: 7px;
-  color: var(--slate-53);
-  font-size: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -343,11 +406,17 @@
 
 .add-field-button:hover {
   background: var(--slate-97);
-  border-color: var(--slate-65a);
+  border-color: var(--steel);
+}
+
+.add-field-button:focus-visible,
+.add-field-form-actions button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--steel-a20);
 }
 
 .add-field-form {
-  margin-top: 14px;
+  margin: 0 0 16px;
   padding: 16px;
   border: 1px solid var(--slate-91);
   border-radius: 8px;
@@ -380,8 +449,8 @@
 
 .add-field-form-row input:focus {
   outline: none;
-  border-color: var(--slate-46);
-  box-shadow: 0 0 0 2px var(--grey-a12);
+  border-color: var(--steel);
+  box-shadow: 0 0 0 3px var(--steel-a20);
 }
 
 .add-field-error {
@@ -410,7 +479,7 @@
 
 .add-field-form-actions button:last-child {
   border: none;
-  background: var(--slate-11);
+  background: var(--ink);
   color: var(--white);
 }
 
@@ -471,8 +540,8 @@
   min-height: 42px;
   background: var(--slate-97);
   border-bottom: 1px solid var(--slate-90);
-  color: var(--slate-48);
-  font-size: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -496,13 +565,7 @@
 .field-name {
   min-width: 0;
   color: var(--slate-47);
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -523,13 +586,7 @@
   border-radius: 5px;
   background: var(--green-94);
   color: var(--green-29);
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
   font-weight: 700;
 }
@@ -543,14 +600,8 @@
 
 .extraction-confidence {
   margin-left: auto;
-  color: var(--slate-48);
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    monospace;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -590,12 +641,12 @@
 .array-modal-trigger-button:disabled {
   border-color: var(--slate-90);
   background: var(--slate-97);
-  color: var(--slate-67);
+  color: var(--text-muted);
   cursor: not-allowed;
 }
 
 .array-value-hint {
-  color: var(--slate-48);
+  color: var(--text-muted);
   font-weight: 400;
 }
 
@@ -784,7 +835,7 @@
   border: none;
   border-radius: 6px;
   background: none;
-  color: var(--slate-48);
+  color: var(--text-muted);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
@@ -888,9 +939,12 @@
   transition: box-shadow 0.15s, background 0.15s;
 }
 
-.finding-highlight--low { --highlight: var(--orange-58); }
-.finding-highlight--medium { --highlight: var(--orange-53); }
-.finding-highlight--high { --highlight: var(--red-43); }
+/* On the risk scale (tokens.css --risk-*), one step stronger than the badges so a box reads against the
+   page; the tag's text turns dark where white would not pass on the lighter colour. */
+.finding-highlight--low { --highlight: var(--risk-medium); }
+.finding-highlight--medium { --highlight: var(--risk-high); }
+.finding-highlight--high { --highlight: var(--risk-critical); }
+.finding-highlight--low .finding-highlight-tag { color: var(--ink); }
 
 .finding-highlight:hover,
 .finding-highlight:focus-visible {
@@ -920,7 +974,7 @@
   border-radius: 3px;
   background: var(--highlight);
   color: var(--white);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.5;
   white-space: nowrap;
@@ -1009,7 +1063,6 @@
   width: min(260px, 90%);
   padding: 10px 12px 11px;
   border: 1px solid color-mix(in srgb, var(--highlight) 45%, var(--slate-20));
-  border-top: 3px solid var(--highlight);
   border-radius: 8px;
   background: rgba(23, 41, 77, 0.94);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 18px color-mix(in srgb, var(--highlight) 30%, transparent);
@@ -1020,14 +1073,15 @@
   animation: xray-card-in 0.2s ease-out;
 }
 
-.finding-card--low { --highlight: var(--orange-58); }
-.finding-card--medium { --highlight: var(--orange-53); }
-.finding-card--high { --highlight: var(--red-43); }
+/* The card is dark, so its accent takes the scale's lighter steps; the severity is the word, in white. */
+.finding-card--low { --highlight: var(--risk-low); }
+.finding-card--medium { --highlight: var(--risk-medium); }
+.finding-card--high { --highlight: var(--risk-high); }
 
 .finding-card-severity {
-  color: var(--highlight);
-  font-family: var(--mono);
-  font-size: 10px;
+  color: var(--white);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1043,7 +1097,7 @@
 }
 
 .finding-card-places {
-  color: var(--slate-70);
+  color: var(--slate-77);
   font-size: 11px;
 }
 
@@ -1122,20 +1176,79 @@
   outline-offset: 1px;
 }
 
+/* "Dim page": a small switch, lit while the page is dimmed. */
+.xray-dim {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  margin-left: 4px;
+  padding: 0 10px 0 8px;
+  border: 1px solid var(--slate-29);
+  border-radius: 6px;
+  background: var(--slate-24);
+  color: var(--slate-90);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.xray-dim:hover {
+  border-color: var(--slate-60);
+  background: var(--slate-29);
+}
+
+.xray-dim:focus-visible {
+  outline: 2px solid var(--blue-77);
+  outline-offset: 1px;
+}
+
+.xray-dim-switch {
+  position: relative;
+  width: 24px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--slate-40);
+  transition: background-color .15s;
+}
+
+.xray-dim-switch::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--white);
+  content: '';
+  transition: transform .15s;
+}
+
+.xray-dim[aria-pressed='true'] .xray-dim-switch {
+  background: var(--blue-77);
+}
+
+.xray-dim[aria-pressed='true'] .xray-dim-switch::after {
+  transform: translateX(10px);
+}
+
 .xray-severity {
   flex: none;
   padding: 1px 7px;
+  border: 1px solid transparent;
   border-radius: 4px;
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 /* The Risk Summary's severity colours (case-summary.css .risk-severity). */
-.xray-severity--high { background: var(--red-43); color: var(--white); }
-.xray-severity--medium { background: var(--orange-74); color: var(--orange-16); }
-.xray-severity--low { background: var(--orange-91); color: var(--orange-33); }
+.xray-severity--high { background: var(--risk-high); color: var(--white); }
+.xray-severity--medium { border-color: var(--risk-medium-border); background: var(--risk-medium-tint); color: var(--risk-medium-ink); }
+.xray-severity--low { border-color: var(--risk-low); background: var(--white); color: var(--ink-soft); }
 
 @media (prefers-reduced-motion: reduce) {
   .xray-stage .finding-highlight-layer {
@@ -1272,7 +1385,7 @@
   border: none;
   border-radius: 6px;
   background: none;
-  color: var(--slate-48);
+  color: var(--text-muted);
   cursor: pointer;
 }
 
@@ -1300,8 +1413,8 @@
 
 .array-modal-body thead th {
   background: var(--slate-97);
-  color: var(--slate-48);
-  font-size: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1319,7 +1432,7 @@
 
 .array-modal-empty {
   padding: 16px 8px;
-  color: var(--slate-48);
+  color: var(--text-muted);
   text-align: center;
 }
 
@@ -1465,25 +1578,33 @@
   color: var(--orange-30);
 }
 
+/* Same look as .error-message (base.css): the title in red, what to do about it in the ink beneath. */
 .review-message--error {
-  background: var(--red-97);
-  border: 1px solid var(--red-89);
-  color: var(--red-42);
+  background: var(--red-98);
+  border: 1px solid var(--red-86);
+  color: var(--ink-soft);
 }
 
-.review-message--error strong,
-.review-message--error div {
-  color: var(--red-42);
+.review-message--error strong {
+  color: var(--red-44);
+  font-weight: 600;
 }
 
 .details-failure-reason {
   margin-top: 16px;
+  padding: 12px 14px;
+  font-size: 13.5px;
 }
 
 .review-message--error .details-failure-reason-hint {
-  margin-top: 8px;
-  color: var(--slate-40);
-  font-style: italic;
+  margin-top: 6px;
+}
+
+/* A document with no extracted fields: the page already says why, so this is a quiet line, not a second alert. */
+.extracted-empty {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13.5px;
 }
 
 /* Content guard warning, at the top of the document page */
@@ -1524,22 +1645,67 @@
 .content-guard-findings blockquote {
   margin: 4px 0 0;
   padding: 6px 10px;
-  border-left: 3px solid currentColor;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.6);
   color: var(--slate-40);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 /* Approve / reject */
 
+/* The approve and reject decision stays in reach at the foot of the window while the officer reads the fields and
+   the report, instead of waiting at the end of a long page. */
+/* The approve bar: a card that floats just above the bottom edge while the fields scroll under it. What is
+   stopping approval reads on its left, the buttons sit on its right. */
 .document-actions {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
   display: flex;
-  justify-content: flex-end;
-  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
   margin-top: 22px;
-  padding-top: 20px;
-  border-top: 1px solid var(--slate-91);
+  padding: 12px 14px 12px 18px;
+  border: 1px solid var(--slate-90);
+  border-radius: 12px;
+  background: var(--white);
+  box-shadow: 0 6px 20px -6px var(--ink-a16), 0 1px 3px var(--ink-a05);
+}
+
+.approval-blockers {
+  display: grid;
+  gap: 6px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+/* In the bar the buttons take only the width of their labels, so the message keeps the rest of the row. */
+.document-actions .document-action--reject,
+.document-actions .document-action--approve,
+.document-actions .document-action--cancel,
+.document-actions .document-action--retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 9px 16px;
+  white-space: nowrap;
+}
+
+.approval-blockers:empty {
+  display: none;
+}
+
+.document-actions-row {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-left: auto;
 }
 
 .document-action--reject,
@@ -1609,22 +1775,19 @@
   color: var(--slate-46);
 }
 
+/* Why approval is blocked: guidance, not a failure, so ink on white with an amber mark instead of red text. */
 .approval-warning {
-  margin: 0 0 8px;
-  color: var(--red-51a);
+  margin: 0;
+  padding-left: 24px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 2.5 18.5 17h-17z' fill='none' stroke='%23d33b3b' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M10 8v4' stroke='%23d33b3b' stroke-width='1.6' stroke-linecap='round'/%3E%3Ccircle cx='10' cy='14.4' r='.9' fill='%23d33b3b'/%3E%3C/svg%3E") no-repeat 0 1px / 16px 16px;
+  color: var(--ink-soft);
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .approval-warning strong {
-  color: var(--red-47a);
+  color: var(--ink);
   font-weight: 600;
-}
-
-.document-actions-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
 }
 /* Responsive */
 
@@ -1648,7 +1811,16 @@
   }
 
   .document-actions {
+    position: static;
     flex-direction: column;
+    align-items: stretch;
+    box-shadow: none;
+  }
+
+  .document-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+    margin-left: 0;
   }
 
   .document-action--reject,
@@ -1657,4 +1829,30 @@
   .document-action--retry {
     width: 100%;
   }
+}
+
+/* The decision bar as the foot of the extracted-information card: full width, a hairline above it, still stuck to the
+   bottom of the screen while the fields scroll. */
+.details-card .document-actions {
+  margin: 20px -26px -24px;
+  padding: 14px 26px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 -10px 16px -14px var(--ink-a16);
+}
+
+.approval-ready {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.approval-ready .icon {
+  margin-top: 2px;
+  color: var(--teal);
 }

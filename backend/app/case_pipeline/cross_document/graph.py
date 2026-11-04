@@ -5,11 +5,11 @@ Two model calls in total. Only conclusive, verified findings leave it.
 
 from __future__ import annotations
 
-import math
 from typing import Any, Required, TypedDict, cast
 
 from langgraph.graph import END, StateGraph
 
+from ...llm_io import probability
 from ..models import CrossDocFinding, Hypothesis
 from .agents import adjudicate, gather_evidence, hypothesise
 from .deterministic import brief, restates_a_code_finding, run_deterministic_checks
@@ -73,17 +73,6 @@ async def _judge_node(state: AnalysisState) -> dict:
     return {"verdicts": verdicts}
 
 
-def _probability(value: Any) -> float:
-    """Bound confidence values before they are persisted in the run audit."""
-    if isinstance(value, bool):
-        return 0.0
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return 0.0
-    return min(1.0, max(0.0, number)) if math.isfinite(number) else 0.0
-
-
 def _finalise_node(state: AnalysisState) -> dict:
     context = state["context"]
     calls_by_hypothesis = state.get("calls") or {}
@@ -98,7 +87,7 @@ def _finalise_node(state: AnalysisState) -> dict:
         "agent": "hypothesis_planner",
         "decision_id": "plan",
         "decision": f"proposed {len(hypotheses)} hypothesis(es)",
-        "confidence": _probability(state.get("planner_confidence")),
+        "confidence": probability(state.get("planner_confidence")),
     })
     for hypothesis in hypotheses:
         agent_decisions.append({
@@ -118,7 +107,7 @@ def _finalise_node(state: AnalysisState) -> dict:
             "agent": "hypothesis_judge",
             "decision_id": hypothesis.id,
             "decision": "conclusive" if verdict and verdict.get("conclusive") is True else "inconclusive",
-            "confidence": _probability(verdict.get("confidence")) if verdict else 0.0,
+            "confidence": probability(verdict.get("confidence")) if verdict else 0.0,
         })
         if verdict is None:
             # Not the same as "not conclusive": the judge gave no verdict (a cut-off or non-JSON reply).

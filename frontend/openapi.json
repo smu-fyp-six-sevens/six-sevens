@@ -6527,6 +6527,14 @@
             "title": "Pages",
             "type": "array"
           },
+          "places": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Place"
+            },
+            "title": "Places",
+            "type": "array"
+          },
           "severity": {
             "enum": [
               "impossible",
@@ -6561,7 +6569,8 @@
           "summary",
           "stated",
           "expected",
-          "evidence"
+          "evidence",
+          "places"
         ],
         "title": "PageFinding",
         "type": "object"
@@ -6607,6 +6616,46 @@
           "page_height"
         ],
         "title": "PageMargins",
+        "type": "object"
+      },
+      "Place": {
+        "description": "Where on a page the evidence is printed, for the preview to box (points, origin top-left).",
+        "properties": {
+          "bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Bbox",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page",
+          "bbox",
+          "text"
+        ],
+        "title": "Place",
         "type": "object"
       },
       "ProcessingErrorEntry": {
@@ -9920,7 +9969,7 @@
     },
     "/detection-metrics": {
       "get": {
-        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created on or after `since` and at these stages, as the dashboard's filters pick.",
+        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created at or after `since` and before `before`, and at these stages, as the dashboard's filters pick.\nThe two are instants, not days: the dashboard sends the start of the officer's own days, so a case counts on\nthe same day here as in the dashboard's case counts.",
         "operationId": "get_detection_metrics_detection_metrics_get",
         "parameters": [
           {
@@ -9930,7 +9979,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "format": "date",
+                  "format": "date-time",
                   "type": "string"
                 },
                 {
@@ -9938,6 +9987,23 @@
                 }
               ],
               "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
             }
           },
           {

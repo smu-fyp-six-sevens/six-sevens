@@ -1,31 +1,46 @@
 /* =========================================================
    Stage tones: one colour per group of stages, by who acts next
    (see caseStageTone in utils/caseStages.ts), shared by the case
-   queue's dots and the Case Status badge.
+   queue's marks, the badges, the Case Status card and the
+   dashboard's pipeline. The stage's shape (components/StageMark)
+   carries its meaning too, so colour is never the only cue.
    ========================================================= */
 
-/* --tone fills dots and the card's edge; --tone-ink is for text, dark enough to read on the tint even for the
-   lightest shade. A group's shades run light to deep in the order a case reaches them. */
-.tone-grey    { --tone: var(--slate-60); --tone-ink: var(--slate-34); --tone-tint: var(--slate-97a); --tone-border: var(--slate-86); }
-.tone-blue-1  { --tone: var(--blue-67); --tone-ink: var(--blue-42); --tone-tint: var(--blue-97); --tone-border: var(--blue-86); }
-.tone-blue-2  { --tone: var(--blue-48); --tone-ink: var(--blue-37); --tone-tint: var(--blue-95); --tone-border: var(--blue-81); }
-.tone-amber-1 { --tone: var(--orange-66); --tone-ink: var(--orange-27); --tone-tint: var(--orange-95); --tone-border: var(--orange-76); }
-.tone-amber-2 { --tone: var(--orange-53a); --tone-ink: var(--orange-27); --tone-tint: var(--amber-bg); --tone-border: var(--orange-75a); }
-.tone-amber-3 { --tone: var(--orange-44); --tone-ink: var(--orange-30b); --tone-tint: var(--amber-bg); --tone-border: var(--orange-74a); }
-.tone-amber-4 { --tone: var(--orange-37); --tone-ink: var(--orange-24); --tone-tint: var(--orange-91); --tone-border: var(--orange-71); }
-.tone-green   { --tone: var(--green-30); --tone-ink: var(--green-23); --tone-tint: var(--green-94); --tone-border: var(--green-77); }
-.tone-slate   { --tone: var(--blue-25); --tone-ink: var(--blue-25); --tone-tint: var(--slate-93a); --tone-border: var(--blue-77a); }
-.tone-red     { --tone: var(--red-45a); --tone-ink: var(--red-40); --tone-tint: var(--red-97); --tone-border: var(--red-83); }
+/* --tone fills marks and the card's edge (3:1 or more on white); --tone-ink is for text on the tint (4.5:1 or
+   more). Blocked is the officer's turn too, so it shares the amber; its triangle sets it apart. */
+.tone-idle    { --tone: var(--slate-48); --tone-ink: var(--slate-34); --tone-tint: var(--slate-97a); --tone-border: var(--slate-86); }
+.tone-system  { --tone: var(--blue-43); --tone-ink: var(--blue-42); --tone-tint: var(--blue-95); --tone-border: var(--blue-86); }
+.tone-officer,
+.tone-blocked { --tone: var(--amber); --tone-ink: var(--orange-27); --tone-tint: var(--orange-95); --tone-border: var(--orange-76); }
+.tone-done    { --tone: var(--green-30); --tone-ink: var(--green-23); --tone-tint: var(--green-94); --tone-border: var(--green-77); }
+.tone-closed  { --tone: var(--slate-29); --tone-ink: var(--slate-29); --tone-tint: var(--slate-93a); --tone-border: var(--slate-84a); }
+.tone-failed  { --tone: var(--red); --tone-ink: var(--red-37); --tone-tint: var(--red-bg); --tone-border: var(--red-83); }
+
+/* A stage's mark (components/StageMark.tsx): its shape drawn in the tone. */
+.stage-mark {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  color: var(--tone, var(--slate-48));
+  vertical-align: -2px;
+}
+
+.case-stage-badge .stage-mark {
+  width: 12px;
+  height: 12px;
+  margin-right: 5px;
+}
 
 /* =========================================================
    Case Status: where the case stands, what to do next, and a
    slim track of the steps a case moves through.
    ========================================================= */
 
+/* The stage's colour lives in its badge's mark, not on the card's edge. */
 .case-status-card {
   margin-bottom: 16px;
   padding: 16px 20px 14px;
-  border-left: 4px solid var(--tone, var(--line));
 }
 
 .case-status-top {
@@ -139,7 +154,7 @@
   border-radius: 50%;
   background: var(--white);
   color: var(--white);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   box-sizing: border-box;
@@ -190,7 +205,7 @@
   }
 
   .case-status-step-label {
-    font-size: 10.5px;
+    font-size: 11px;
   }
 }
 
@@ -240,23 +255,25 @@
   box-shadow: 0 0 0 3px rgba(31, 122, 77, 0.3);
 }
 
+/* Beside the case title: a quiet line, not a box, between the title and the case actions. */
+.case-title-row > .case-title { flex: 0 1 auto; order: 0; }
+.case-title-row > .case-finalised-banner { order: 1; }
+.case-title-row > .case-title-actions { order: 2; margin-left: auto; }
+
 .case-finalised-banner {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 16px 0 0;
-  padding: 11px 14px;
-  border: 1px solid var(--tone-border, var(--blue-77a));
-  border-radius: 8px;
-  background: var(--slate-93a);
-  color: var(--blue-25);
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--steel-dark);
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .case-finalised-banner svg {
   flex-shrink: 0;
-  width: 17px;
-  height: 17px;
-  margin-top: 1px;
+  width: 15px;
+  height: 15px;
 }
+
+.case-status-next-icon { margin-right: 5px; }

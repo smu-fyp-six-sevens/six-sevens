@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -241,15 +241,18 @@ async def delete_finding_review(
 
 @router.get("/detection-metrics", response_model=DetectionMetrics)
 async def get_detection_metrics(
-    since: date | None = None,
+    since: datetime | None = None,
+    before: datetime | None = None,
     status_filter: list[CaseStage] = Query(default=[], alias="status"),
 ) -> DetectionMetrics:
     """
     Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only
-    cases created on or after `since` and at these stages, as the dashboard's filters pick.
+    cases created at or after `since` and before `before`, and at these stages, as the dashboard's filters pick.
+    The two are instants, not days: the dashboard sends the start of the officer's own days, so a case counts on
+    the same day here as in the dashboard's case counts.
     """
     reviews = await to_thread_or_502(
-        findings_repository.list_reviews, since, [stage.value for stage in status_filter],
+        findings_repository.list_reviews, since, [stage.value for stage in status_filter], before,
         detail="Failed to load the finding reviews. Check Supabase table access.",
         log=("Failed to list finding reviews",),
     )

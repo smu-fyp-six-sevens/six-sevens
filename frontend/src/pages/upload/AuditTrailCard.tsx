@@ -11,6 +11,7 @@ import { humanizeFieldKey } from '../../utils/fieldLabels';
 import { describeFailureReason } from '../document-details/formatters';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { formatDuration } from './processingTimes';
+import { Icon } from '../../components/Icon';
 
 interface AuditDocument {
   id: string;
@@ -366,7 +367,7 @@ export function AuditTrailCard({
     <section className="summary-card audit-card">
       <div className="summary-card-header">
         <div className="summary-card-title">
-          <span className="summary-icon summary-icon--audit">◴</span>
+          <span className="summary-icon summary-icon--audit"><Icon name="audit" size={20} /></span>
           <h2>
             Case Audit Trail{events && events.length > 0 && <span className="audit-count"> · {events.length}</span>}
           </h2>

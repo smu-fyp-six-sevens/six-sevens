@@ -62,8 +62,8 @@
   min-height: 42px;
   background: var(--slate-97);
   border-bottom: 1px solid var(--slate-91);
-  color: var(--slate-48);
-  font-size: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -72,11 +72,10 @@
 .documents-table--selectable .documents-table-header,
 .documents-table--selectable .documents-table-row {
   grid-template-columns:
-    36px
-    minmax(170px, 2fr)
-    minmax(130px, 1.2fr)
-    minmax(140px, 1.3fr)
-    minmax(110px, 1fr);
+    44px
+    minmax(170px, 1.3fr)
+    minmax(230px, 2.6fr)
+    minmax(130px, 1fr);
 }
 
 .document-select-cell {
@@ -156,7 +155,7 @@
 }
 
 .bulk-icon-count {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
 }
@@ -198,16 +197,143 @@
 .documents-table-row--clickable:focus-visible {
   outline: none;
   background: var(--slate-97a);
-  box-shadow: inset 3px 0 0 var(--blue-45);
+  box-shadow: inset 0 0 0 2px var(--steel);
 }
 
 .document-filename {
   min-width: 0;
+  color: var(--slate-20);
+  font-weight: 600;
+}
+
+.document-filename-line {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--slate-20);
-  font-weight: 600;
+}
+
+/* Why the document waits on the officer, under its name: red, like its mark. */
+.document-review-reason {
+  display: block;
+  max-width: 62ch;
+  margin-top: 3px;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.documents-table-row--review {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+/* Documents, as a checklist: one progress figure beside the title, and the table split by where each file waits. */
+.checklist-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.checklist-progress strong {
+  color: var(--ink);
+}
+
+.checklist-bar {
+  width: 90px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.checklist-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--steel);
+}
+
+.documents-table-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px 6px;
+  border-top: 1px solid var(--line);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.documents-table-group .num {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.documents-table-group--review,
+.documents-table-group--review .num {
+  color: var(--red);
+}
+
+/* A required document not uploaded yet: same grid as a file row, with its type in the type column. */
+.checklist-missing-row {
+  display: grid;
+  grid-template-columns: 44px minmax(170px, 1.3fr) minmax(230px, 2.6fr) minmax(130px, 1fr);
+  align-items: center;
+  column-gap: 18px;
+  min-height: 46px;
+  padding: 0 20px;
+  border-top: 1px solid var(--slate-94);
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.checklist-missing-row .document-type-cell {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.checklist-hint {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.checklist-additional {
+  border-top: 0;
+}
+
+/* The round mark before a filename: red for a document that needs the officer, a tick once it is ready. */
+.row-mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  color: var(--white);
+}
+
+.row-mark--review {
+  border-color: var(--red-53);
+  background: var(--red-53);
+}
+
+.row-mark--pending {
+  border-color: var(--teal);
+  background: var(--teal);
+}
+
+.row-mark--processing {
+  border-color: var(--steel);
+  border-top-color: transparent;
 }
 
 .document-type-cell {
@@ -216,7 +342,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--slate-40);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
 }
 
@@ -261,7 +387,7 @@
   border-radius: 999px;
   background: var(--orange-96);
   color: var(--orange-37);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -380,4 +506,226 @@
 .document-status.document-status--rejected {
   background: var(--red-97);
   color: var(--red-51);
+}
+
+/* In the checklist the document type is what a row is about, and the filename is the detail under that. */
+.documents-table--selectable .document-type-cell {
+  display: flex;
+  align-items: center;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: normal;
+  overflow: visible;
+}
+
+.documents-table--selectable .document-filename {
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.documents-table--selectable .checklist-missing-row .document-type-cell {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+/* A status as a pill: grey by default, green once extracted, steel while in flight, red when it failed. */
+.status-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--stone-94);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-pill--ok {
+  background: var(--teal-bg);
+  color: var(--teal);
+}
+
+.status-pill--proc {
+  background: var(--steel-a10);
+  color: var(--steel-dark);
+}
+
+.status-pill--warn {
+  background: var(--amber-bg);
+  color: var(--orange-27);
+}
+
+.status-pill--fail {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.row-mark--rejected {
+  border-color: var(--slate-46);
+  background: var(--slate-46);
+}
+
+/* The optional documents and the decided ones sit under their own group labels, quieter than the checklist above. */
+.documents-table-group .muted-note {
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.documents-table-group--toggle {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.documents-table-group--toggle:hover {
+  background: var(--slate-97);
+}
+
+.documents-table-group--toggle:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--steel);
+}
+
+.group-chevron {
+  flex: none;
+  transition: transform 0.12s;
+}
+
+.documents-table-group--toggle[aria-expanded='true'] .group-chevron {
+  transform: rotate(90deg);
+}
+
+.checklist-decided .documents-table-group {
+  padding-bottom: 12px;
+}
+
+/* The first column: every row starts with its round mark. On a file row the checkbox takes the mark's place when the
+   pointer is over the row, while anything is selected, and for keyboard focus. */
+.documents-table--selectable .document-select-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.documents-table--selectable .document-select-cell > * {
+  grid-area: 1 / 1;
+}
+
+.documents-table-row .document-select-cell:has(input) input[type='checkbox'] {
+  margin: 0;
+  opacity: 0;
+}
+
+.documents-table-row:hover .document-select-cell:has(input) input[type='checkbox'],
+.documents-table--has-selection .document-select-cell:has(input) input[type='checkbox'],
+.documents-table-row .document-select-cell input[type='checkbox']:checked,
+.documents-table-row .document-select-cell input[type='checkbox']:focus-visible {
+  opacity: 1;
+}
+
+.documents-table-row:hover .document-select-cell:has(input) .row-mark,
+.documents-table--has-selection .document-select-cell:has(input) .row-mark,
+.documents-table-row .document-select-cell:has(input:checked) .row-mark,
+.documents-table-row .document-select-cell:has(input:focus-visible) .row-mark {
+  opacity: 0;
+}
+
+@media (hover: none) {
+  .documents-table-row .document-select-cell:has(input) input[type='checkbox'] {
+    opacity: 1;
+  }
+
+  .documents-table-row .document-select-cell:has(input) .row-mark {
+    opacity: 0;
+  }
+}
+
+/* A group's chevron sits in the first column, level with the marks and checkboxes; its label starts where the
+   document types do. */
+.documents-table-group--toggle {
+  padding-left: 20px;
+}
+
+.documents-table-group--toggle .group-chevron {
+  margin: 0 26px 0 16px;
+}
+
+/* Group headers as clear category bands: a tinted strip with a line above and below, bigger and bolder than the rows
+   under it, and the count as a small pill. */
+.documents-table-group,
+.documents-table-group--toggle {
+  min-height: 44px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-top: 1px solid var(--slate-86);
+  border-bottom: 1px solid var(--slate-86);
+  background: var(--stone-98);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.documents-table-group--toggle:hover {
+  background: var(--stone-94);
+}
+
+.documents-table-group .num {
+  padding: 1px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.documents-table-group--review {
+  color: var(--red);
+}
+
+.documents-table-group--review .num {
+  border-color: transparent;
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.documents-table-group .group-chevron {
+  width: 14px;
+  height: 14px;
+}
+
+/* Lines between rows, strong enough to see. */
+.documents-table-row,
+.checklist-missing-row {
+  border-bottom-color: var(--line);
+}
+
+.checklist-missing-row {
+  border-top: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* A document still being worked on: its mark spins. */
+.row-mark--processing {
+  animation: row-mark-spin 0.9s linear infinite;
+}
+
+@keyframes row-mark-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row-mark--processing { animation: none; }
 }

@@ -87,7 +87,7 @@
 }
 
 .skeleton-preview {
-  height: calc(100vh - var(--topbar-height) - var(--case-header-height) - 56px);
+  height: calc(100vh - var(--topbar-height) - 140px);
   min-height: 320px;
   border: 1px solid var(--slate-90);
   border-radius: 12px;
@@ -105,15 +105,3 @@
   }
 }
 
-/* The /dashboard while its cases load (DashboardSkeleton): bars spaced like a stat card's caption, number and note. */
-.dashboard-skeleton-stat {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.dashboard-skeleton-stat .skeleton-bar--title {
-  width: 45%;
-  height: 26px;
-}

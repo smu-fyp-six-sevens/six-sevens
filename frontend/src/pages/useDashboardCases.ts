@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CaseRecord } from '../App';
 import { listCasesPage } from '../services/uploadService';
-import { toCaseRecord } from '../utils/caseRecord';
+import { toCaseRecord, type CaseRecord } from '../utils/caseRecord';
 
 // The case list's page size limit (routers/cases.py).
 const PAGE_SIZE = 100;

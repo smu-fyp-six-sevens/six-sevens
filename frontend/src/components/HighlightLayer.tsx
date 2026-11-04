@@ -1,7 +1,13 @@
 import { useId } from 'react';
 import type { FindingHighlight, HighlightRect } from './findingHighlights';
 import { highlightRect } from './findingHighlights';
-import type { HighlightOptions } from './HighlightedDocument';
+
+// How the boxes are drawn: plain (the Risk Summary's review), or X-ray (the document page's inspection mode),
+// where the page is shaded except the flagged areas and the selected finding opens a card beside its box.
+export interface HighlightOptions {
+  shade?: boolean;
+  detail?: boolean;
+}
 
 // Which of the selected finding's areas is being looked at (its card goes beside that one), and where it falls
 // among the places of its row in the findings list ("Place 2 of 3"), when it has several.

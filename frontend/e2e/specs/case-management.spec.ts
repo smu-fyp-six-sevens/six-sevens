@@ -169,7 +169,7 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     // One box per stage some case is at, in the order a case moves through them.
     await expect((await openFilter(page, 'status')).getByRole('checkbox')).toHaveCount(3);
     await expect((await openFilter(page, 'status')).locator('label')).toContainText([
-      'Open', 'Processing Documents', 'Pending Review',
+      'Awaiting Documents', 'Processing Documents', 'Pending Review',
     ]);
 
     await showOnly(page, 'status', /Pending Review/);
@@ -215,7 +215,7 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     const { platinum } = seedQueue(backend);
     await page.goto('/cases');
 
-    await showOnly(page, 'status', /Open/);
+    await showOnly(page, 'status', /Awaiting Documents/);
 
     await expect(caseCards(page)).toHaveCount(1);
     await expect(caseCards(page)).toContainText(platinum.company_name!);
@@ -275,7 +275,7 @@ test.describe('Case queue paging and filters @SCRUM-299', () => {
     await page.goto('/cases');
     await expect(caseCards(page)).toHaveCount(25);
 
-    await showOnly(page, 'status', /Case Analysed/, /Failed/);
+    await showOnly(page, 'status', /Ready to Finalise/, /Failed/);
 
     // 30 + 10 = 40 cases, so two pages of the filtered list, not of all 45.
     await expect(pagination(page)).toContainText('of 40');
@@ -386,7 +386,7 @@ test.describe('Case queue paging and filters @SCRUM-299', () => {
     await showOnly(page, 'status', /Failed/);
 
     await expect(pagination(page)).toContainText('of 10');
-    await expect(page.getByRole('group', { name: 'status filter' }).locator('label', { hasText: /Case Analysed/ })).toContainText('30');
+    await expect(page.getByRole('group', { name: 'status filter' }).locator('label', { hasText: /Ready to Finalise/ })).toContainText('30');
   });
 
   test('a page past the end falls back to the last page', async ({ page, backend }) => {
@@ -401,14 +401,16 @@ test.describe('Case queue paging and filters @SCRUM-299', () => {
 test.describe('Case page layout @SCRUM-299', () => {
   const sectionNav = (page: Page) => page.getByRole('navigation', { name: 'Case sections' });
 
-  test('a case opens on the summary, under a header that stays in view', async ({ page, backend }) => {
+  test('a case opens on the summary, with its title under the breadcrumbs', async ({ page, backend }) => {
     const theCase = makeCase({ id: 'case-layout', greenlink_case_id: 'GLDB-3001', company_name: 'Layout Co Pte Ltd' });
     backend.cases.push(theCase);
     await page.goto('/cases/GLDB-3001');
 
     await expect(sectionNav(page).getByRole('button', { name: /^Case Summary/ })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('main', { name: 'Case summary dashboard' })).toBeVisible();
-    await expect(page.locator('.case-header')).toHaveCSS('position', 'sticky');
+    const crumbs = await page.locator('.case-header .breadcrumbs').boundingBox();
+    const title = await page.locator('.case-header h1').boundingBox();
+    expect(title!.y).toBeGreaterThanOrEqual(crumbs!.y + crumbs!.height - 1);
   });
 
   test('opening a case from the queue shows its header at once, without waiting for the lookup', async ({ page, backend }) => {
@@ -428,23 +430,42 @@ test.describe('Case page layout @SCRUM-299', () => {
     await expect(sectionNav(page).getByRole('button', { name: /^Case Summary/ })).toBeVisible();
   });
 
-  test('the section menu collapses to its icons, and stays collapsed after a reload', async ({ page, backend }) => {
+  test('the section menu is a rail of icons that opens over the page without moving it', async ({ page, backend }) => {
     backend.cases.push(makeCase({ id: 'case-nav', greenlink_case_id: 'GLDB-3002', company_name: 'Nav Co Pte Ltd' }));
     await page.goto('/cases/GLDB-3002');
-    await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
-
-    await page.getByRole('button', { name: 'Collapse menu' }).click();
-
+    // Measure the loaded page: while it loads, the skeleton's frame can be there twice, and its height differs.
+    await expect(page.getByRole('region', { name: 'Document counts' })).toBeVisible();
+    // Closed: icons only, but every section is still reachable by name.
     await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
-    // Still reachable by name, and still works.
+    const content = page.locator('.case-frame-main');
+    const before = await content.boundingBox();
+
+    await page.getByRole('button', { name: 'Expand menu' }).click();
+
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
+    // Opened over the page: the content is exactly where it was.
+    expect(await content.boundingBox()).toEqual(before);
+
+    // Escape closes it again.
+    await page.keyboard.press('Escape');
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
+
+    // Choosing a section goes there and closes the menu.
+    await page.getByRole('button', { name: 'Expand menu' }).click();
     await sectionNav(page).getByRole('button', { name: /^Documents/ }).click();
     await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
+  });
 
-    await page.reload();
+  test('a document page has the same menu, opening over the document', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    await page.goto(fixture.documentUrl(payslip));
 
-    await expect(page.getByRole('button', { name: 'Expand menu' })).toBeVisible();
     await page.getByRole('button', { name: 'Expand menu' }).click();
     await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
+    await sectionNav(page).getByRole('button', { name: /^Risk Summary/ }).click();
+    await expect(page).toHaveURL(/section=risk/);
   });
 
   test('the summary shows how long each stage took, from the recorded runs', async ({ page, backend }) => {
@@ -524,10 +545,10 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await openSection(page, 'Risk summary');
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
-    await expect(section.locator('.risk-badge')).toHaveText('High risk');
-    await expect(section.locator('.risk-score-value')).toHaveText('58');
-    await expect(section.locator('.risk-score-level')).toHaveText('High risk · 50–79');
-    await expect(section.locator('.risk-gauge')).toHaveAttribute('aria-label', 'Score 58 out of 100, High risk');
+    await expect(section.locator('.risk-badge')).toHaveText('High Risk');
+    await expect(section.locator('.severity-gauge-value')).toHaveText('58');
+    await expect(section.locator('.risk-score-level')).toHaveText('High Risk · 50–79');
+    await expect(section.locator('.severity-gauge')).toHaveAttribute('aria-label', 'Risk score 58 out of 100, High');
     await expect(section).toContainText('2 high · 3 medium · 1 low');
 
     // The documents are a card of their own, listed collapsed until reviewed (the low-only bank statement
@@ -592,16 +613,15 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
 
-    // Flagged items sit under the extracted files on the Documents tab.
-    const flagged = page.locator('.summary-card', {
-      has: page.getByRole('heading', { name: 'Flagged Items for Manual Review' }),
-    });
-    await expect(flagged.locator('.flagged-item')).toHaveCount(1);
-    await expect(flagged).toContainText('Fashion-Purchase-Order.pdf');
+    // A document that needs the officer says why under its name in the document list.
+    const row = page.locator('.documents-table-row', { hasText: 'Fashion-Purchase-Order.pdf' });
+    await expect(page.locator('.documents-table-row--review')).toHaveCount(1);
+    await expect(row.locator('.document-review-reason')).toContainText('could not be recognised');
+    await expect(page.locator('.documents-table-group--review')).toContainText('Needs Review');
     // Not confirmed by an officer yet, so it reads Unrecognised, not Other.
-    await expect(flagged.locator('.flagged-item-meta')).toContainText('Unrecognised');
-    await expect(flagged).toContainText('Document type could not be confidently recognised.');
-    await expect(flagged).not.toContainText('C014_CertIncorp.pdf');
+    await expect(row.locator('.document-type-cell')).toContainText('Unrecognised');
+    // The document that is fine has no reason under its name.
+    await expect(page.locator('.documents-table-row', { hasText: 'C014_CertIncorp.pdf' }).locator('.document-review-reason')).toHaveCount(0);
   });
 
   test('CM-009 the case audit trail is reached from case details and lists what was recorded for this case @CM-009', async ({ page, backend }) => {
@@ -1063,17 +1083,18 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const noa = fixture.document('Anchorpoint_IRAS_NOA');
     await page.goto(`${fixture.caseUrl}?section=documents`);
-    const noaRequirement = page.locator('.requirement-row').filter({ hasText: /^Notice of Assessment/ });
-    await expect(noaRequirement).toHaveClass(/fulfilled/);
+    const missing = (label: string) =>
+      page.locator('.checklist-missing-row').filter({ has: page.locator('.document-type-cell', { hasText: new RegExp(`^${label}$`) }) });
+    await expect(missing('Notice of Assessment')).toHaveCount(0);
 
     await page.goto(fixture.documentUrl(noa));
     await deleteDocument(page);
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
 
     await expect(page).toHaveURL(`${fixture.caseUrl}?section=documents`);
-    await expect(noaRequirement).not.toHaveClass(/fulfilled/);
-    // Only that requirement reverts: the others the case's documents fulfil stay ticked.
-    await expect(page.locator('.requirement-row').filter({ hasText: /^Certificate of Incorporation/ })).toHaveClass(/fulfilled/);
+    await expect(missing('Notice of Assessment')).toHaveCount(1);
+    // Only that requirement reverts: the others the case's documents fulfil stay met.
+    await expect(missing('Certificate of Incorporation')).toHaveCount(0);
   });
 
   test('CM-027 a document still processing cannot be deleted @CM-027', async ({ page, backend }) => {
@@ -1177,8 +1198,9 @@ test.describe('Case page: document actions, live updates and cost', () => {
     await openSection(page, 'Claude Cost');
 
     const card = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Claude Cost' }) });
-    await expect(card).toContainText('Total: $0.0825');
-    await expect(card).toContainText('documents $0.0525 · case analysis $0.0300');
+    await expect(card.locator('.cost-figure--total')).toContainText('$0.0825');
+    await expect(card.locator('.cost-figures')).toContainText('Documents$0.0525');
+    await expect(card.locator('.cost-figures')).toContainText('Case analysis$0.0300');
     await expect(card.locator('table').first()).toContainText(`${document.filename}$0.0525`);
     await card.getByText('3 runs').click();
     await expect(card.locator('details tbody tr')).toHaveCount(3);
@@ -1273,6 +1295,17 @@ test.describe('X-ray in the findings review', () => {
     await netPay.getByRole('button', { name: 'Show on document · 2 places' }).click();
     await expect(status).toContainText('Finding 1 of 3 · place 1 of 2');
     await dialog.locator('.risk-findings li', { hasText: 'vertically offset' }).getByRole('button', { name: /Show on page 1/ }).click();
+
+    // "Dim page" off shows the page as printed, the flagged places still outlined; on again, it's dimmed.
+    const dim = dialog.getByRole('button', { name: 'Dim page' });
+    await expect(dim).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog.locator('.finding-highlight-shade')).not.toHaveCount(0);
+    await dim.click();
+    await expect(dim).toHaveAttribute('aria-pressed', 'false');
+    await expect(dialog.locator('.finding-highlight-shade')).toHaveCount(0);
+    await expect(dialog.locator('[data-highlight-id="layout_anomalies_tool-1"]')).toBeVisible();
+    await dim.click();
+    await expect(dialog.locator('.finding-highlight-shade')).not.toHaveCount(0);
 
     await page.keyboard.press('Escape');
     await expect(status).toHaveText('2 findings on the page');

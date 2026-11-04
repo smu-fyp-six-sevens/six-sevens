@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -273,6 +273,18 @@ def test_detection_metrics_cover_every_reviewed_case(repos) -> None:
     assert body["cases_reviewed"] == 2 and body["documents_reviewed"] == 2
     assert body["overall"]["precision"] == 0.5
     assert body["target_precision"] == detection_metrics.TARGET_PRECISION
+
+
+def test_detection_metrics_pass_the_date_window_on(repos) -> None:
+    # October in Singapore: the dashboard sends the start of the officer's 1 Oct and of 1 Nov, in UTC.
+    findings_repo, _ = repos
+    findings_repo.list_reviews.return_value = []
+    # As the browser's toISOString() writes them, URL-encoded.
+    response = client.get("/detection-metrics?since=2026-09-30T16%3A00%3A00.000Z&before=2026-10-31T16%3A00%3A00.000Z")
+    assert response.status_code == 200
+    findings_repo.list_reviews.assert_called_once_with(
+        datetime(2026, 9, 30, 16, tzinfo=timezone.utc), [], datetime(2026, 10, 31, 16, tzinfo=timezone.utc),
+    )
 
 
 # --- audit trail ---------------------------------------------------------------------------------------------

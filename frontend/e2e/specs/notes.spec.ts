@@ -196,6 +196,6 @@ test.describe('Attach officer notes @sprint4 @SCRUM-81', () => {
     expect(payslip.status).toBe('approved');
     await expect(page.locator('.notes-locked')).toContainText('approved and locked');
     await expect(page.getByRole('button', { name: /add field/i })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /^approve/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^approve document/i })).toHaveCount(0);
   });
 });

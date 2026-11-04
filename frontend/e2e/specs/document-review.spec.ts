@@ -20,10 +20,16 @@ const routingOutcome = (page: Page) =>
   page.locator('.details-label', { hasText: 'Routing Outcome' }).locator('xpath=following-sibling::strong');
 const fieldRow = (page: Page, label: string) =>
   page.locator('.extracted-table-row').filter({ has: page.locator('.field-name', { hasText: new RegExp(`^${label}$`) }) });
+// With the review form open, the read-only table of the same fields starts folded.
+const showExtracted = async (page: Page) => {
+  await expect(page.getByRole('button', { name: /(Expand|Collapse) extracted information/ })).toBeVisible();
+  const expand = page.getByRole('button', { name: 'Expand extracted information' });
+  if (await expand.isVisible()) await expand.click();
+};
 const reviewSection = (page: Page) => page.locator('.details-card--review');
 const reviewRow = (page: Page, label: string) =>
-  reviewSection(page).locator('.manual-review-row').filter({
-    has: page.locator('.manual-review-field', { hasText: new RegExp(`^${label}$`) }),
+  reviewSection(page).locator('.extracted-table-row--editing').filter({
+    has: page.locator('.field-name', { hasText: new RegExp(`^${label}$`) }),
   });
 
 /**
@@ -64,6 +70,7 @@ test.describe('Extract text from documents @sprint2 @SCRUM-9', () => {
     const cert = fixture.document('C014_CertIncorp');
 
     await page.goto(fixture.documentUrl(cert));
+    await showExtracted(page);
 
     await expect(fieldRow(page, 'Company Former Name').locator('.field-value')).toHaveText('—');
     await expect(page.locator('.document-status')).toContainText('Extracted');
@@ -135,11 +142,12 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await expect(routingOutcome(page)).toHaveText('Manual Review');
     await expect(reviewSection(page)).toBeVisible();
     const uen = reviewRow(page, 'UEN');
-    await expect(uen).toHaveClass(/manual-review-row--needs-attention/);
+    await expect(uen).toHaveClass(/extracted-table-row--editing/);
     await expect(uen.locator('input')).toHaveValue('');
     await expect(uen.locator('input')).toBeEnabled();
     // Fields extraction was confident about stay read-only.
-    await expect(reviewRow(page, 'Company Name').locator('input')).toBeDisabled();
+    // A field that is fine stays plain text: nothing to edit.
+    await expect(fieldRow(page, 'Company Name').locator('input')).toHaveCount(0);
   });
 
   test('DI-024 / DI-025 a filled-in field is saved and kept, and the document goes Manual Review -> Accepted -> Approved @DI-024 @DI-025', async ({ page, backend }) => {
@@ -156,6 +164,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     // Saved and human-verified: the field is no longer flagged, so the whole manual-review section closes.
     await expect(reviewSection(page)).toHaveCount(0);
     await expect(routingOutcome(page)).toHaveText('Accepted');
+    await showExtracted(page);
     await expect(fieldRow(page, 'UEN').locator('.field-value')).toHaveText('201634564N');
     const saved = backend.requestsTo('PATCH', `/documents/${cert.id}/extracted-fields`);
     expect(saved).toHaveLength(1);
@@ -170,11 +179,12 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await expect(routingOutcome(page)).toHaveText('Accepted');
     await expect(reviewSection(page)).toHaveCount(0);
 
-    await page.getByRole('button', { name: '✓ Approve Document' }).click();
+    await page.getByRole('button', { name: 'Approve Document' }).click();
     await expect(routingOutcome(page)).toHaveText('Approved');
     expect(backend.requestsTo('POST', `/documents/${cert.id}/approve`)).toHaveLength(1);
-    await page.goto(`${fixture.caseUrl}?section=approved`);
-    await expect(page.locator('.approved-documents-card')).toContainText(cert.filename);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
+    await page.locator('.documents-table-group--toggle', { hasText: 'Approved' }).click();
+    await expect(page.locator('.documents-card')).toContainText(cert.filename);
   });
 
   test('an unrecognised document starts as Unrecognised and only becomes Other once the officer picks it @DI-others', async ({ page, backend }) => {
@@ -216,7 +226,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     const { fixture, cert } = certWithMissingUen(backend);
     await page.goto(fixture.documentUrl(cert));
 
-    await expect(page.getByRole('button', { name: '✓ Approve Document' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Approve Document' })).toBeDisabled();
     const requiredWarning = page.locator('.approval-warning', { hasText: 'Please complete the following required field' });
     await expect(requiredWarning).toContainText('Cannot approve yet');
     await expect(requiredWarning.locator('strong')).toHaveText('UEN');
@@ -232,7 +242,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await expect(routingOutcome(page)).toHaveText('Accepted');
     await expect(reviewSection(page)).toHaveCount(0);
     await expect(page.locator('.approval-warning')).toHaveCount(0);
-    await page.getByRole('button', { name: '✓ Approve Document' }).click();
+    await page.getByRole('button', { name: 'Approve Document' }).click();
 
     await expect(routingOutcome(page)).toHaveText('Approved');
     expect(backend.requestsTo('POST', `/documents/${report.id}/approve`)).toHaveLength(1);
@@ -325,6 +335,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     const fields = cert.extracted_fields as Record<string, { id?: string; value: unknown; confidence: number | null }>;
     fields.former_names = { id: 'field-former_names', value: null, confidence: 0.4 };
     await page.goto(fixture.documentUrl(cert));
+    await showExtracted(page);
 
     await fieldRow(page, 'Former Names').locator('.delete-field-button').click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();

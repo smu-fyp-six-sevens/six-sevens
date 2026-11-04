@@ -31,10 +31,10 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
     await expect(dropZone).toBeVisible();
     await expect(dropZone).toContainText('Drag files here or browse');
     await expect(dropZone).toContainText('PDF · PNG · JPG — up to 25MB each');
-    await expect(page.getByText('No files selected yet')).toBeVisible();
+    await expect(page.getByText('No files selected yet')).toHaveCount(0);
 
     await browseFiles(page, [pdf('payslip.pdf')]);
-    await expect(page.locator('.section-label', { hasText: 'Selected files' })).toBeVisible();
+    await expect(page.locator('.upload-box .file-row')).toHaveCount(1);
     await expect(uploadButton(page)).toHaveText('Upload 1 file');
   });
 

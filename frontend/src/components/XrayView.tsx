@@ -41,6 +41,8 @@ export default function XrayView({
   const stageRef = useRef<HTMLDivElement>(null);
   // The document has drawn: the shade, glow and scan wait for it.
   const [ready, setReady] = useState(false);
+  // The page is dimmed around the flagged areas each time X-ray opens; "Dim page" turns it off while it's open.
+  const [dimmed, setDimmed] = useState(true);
   const byId = new Map(highlights.map((highlight) => [highlight.id, highlight]));
   // The list's rows, then (not expected) any placed finding no row names, as rows of their own.
   const named = new Set(order?.flat());
@@ -141,7 +143,7 @@ export default function XrayView({
         // The place already open, clicked again, closes its card.
         onSelect={(id, area) => (id === activeId && area === activeArea ? onSelect(null) : onSelect(id, area))}
         onReady={() => setReady(true)}
-        shade
+        shade={dimmed}
         detail
       />
 
@@ -169,6 +171,11 @@ export default function XrayView({
             ›
           </button>
         )}
+        {/* Off, the page shows as printed with the flagged areas outlined, to read the parts around them. */}
+        <button type="button" className="xray-dim" aria-pressed={dimmed} onClick={() => setDimmed(!dimmed)} title="Darken the page around the flagged areas">
+          <span className="xray-dim-switch" aria-hidden="true" />
+          Dim page
+        </button>
       </div>
     </div>
   );

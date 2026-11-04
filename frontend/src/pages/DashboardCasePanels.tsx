@@ -1,16 +1,17 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
-import { getCaseCosts } from '../services/uploadService';
 import { formatDuration } from './upload/processingTimes';
+import { median, usd } from './dashboardCosts';
+import { LEVELS, RISK_RANK, levelClass, type Level, type Risk } from './dashboardRisk';
+import CompareDelta from '../components/CompareDelta';
+import type { Period } from '../utils/dateRange';
+import { caseStageLabel } from '../utils/caseStages';
 
 // The dashboard Overview's case panels: what is waiting on an officer, how many cases came in over time, which
 // documents the analyses ask for most, and what the processing took in time and Claude spend. None lists cases the
 // way the case queue does; each answers a question about them.
 
-type Risk = 'Critical' | 'High' | 'Medium' | 'Low';
 type FlagSeverity = 'High' | 'Medium' | 'Low';
-
-const RISK_RANK: Record<Risk, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // "today", "1 day", "5 days": how long ago a case came in.
@@ -43,13 +44,13 @@ export interface AttentionCase {
 // What the officer has to do for a case at each stage that waits on them; the others (the system is working, or
 // the case is closed) don't need attention.
 const WAITING_ON_OFFICER: Record<string, string> = {
-  Failed: 'Failed: open it to see what to fix',
-  'Pending Review': 'Documents waiting for review',
-  'Documents Incomplete': 'Required documents missing',
-  'Ready for Analysis': 'Ready for the case analysis',
-  'Pending Evaluation': 'Findings waiting for review',
-  'Case Analysed': 'Analysed: ready to finalise',
-  Open: 'No documents uploaded yet',
+  [caseStageLabel('failed')]: 'Failed: open it to see what to fix',
+  [caseStageLabel('pending_review')]: 'Documents waiting for review',
+  [caseStageLabel('documents_incomplete')]: 'Required documents missing',
+  [caseStageLabel('ready_for_analysis')]: 'Ready for the case analysis',
+  [caseStageLabel('pending_evaluation')]: 'Findings waiting for review',
+  [caseStageLabel('case_analysed')]: 'Analysed: ready to finalise',
+  [caseStageLabel('open')]: 'No documents uploaded yet',
 };
 
 const SHOWN_WAITING = 6;
@@ -89,7 +90,7 @@ export function NeedsAttention({ cases, onOpen }: { cases: AttentionCase[]; onOp
                   <span>{item.applicant}</span>
                 </span>
                 <span className="attention-reason">
-                  <span className={`case-status-dot tone-${item.stuck ? 'red' : item.tone}`} aria-hidden="true" />
+                  <span className={`case-status-dot tone-${item.stuck ? 'failed' : item.tone}`} aria-hidden="true" />
                   <span>
                     {reason}
                     <small>Submitted {age(item.submitted)}</small>
@@ -152,10 +153,6 @@ export function NeedsAttention({ cases, onOpen }: { cases: AttentionCase[]; onOp
 // ---------------------------------------------------------------------------------------------------------------
 // Cases over time
 
-type Level = Risk | 'Not scored';
-const LEVELS: Level[] = ['Critical', 'High', 'Medium', 'Low', 'Not scored'];
-const levelClass = (level: Level) => (level === 'Not scored' ? 'risk-overview--none' : `risk-gauge-band--${level.toLowerCase()}`);
-
 function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -183,16 +180,13 @@ function bucketLabel(start: string, unit: 'day' | 'week' | 'month'): string {
     : date.toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
 }
 
-// Cases submitted per day, week or month across the date range (whichever keeps the columns readable), each column
-// split by the cases' risk level.
-export function CasesOverTime({ cases, since }: { cases: { submitted: string; risk: Risk | null }[]; since: string | null }) {
-  const today = isoDay(new Date());
-  const first = since ?? cases.map((item) => item.submitted).sort()[0] ?? today;
-  const days = Math.round((new Date(today).getTime() - new Date(first).getTime()) / DAY_MS) + 1;
-  const unit = days <= 31 ? 'day' : days <= 140 ? 'week' : 'month';
+type TimelineCase = { submitted: string; risk: Risk | null };
+type Bucket = { start: string; counts: Record<Level, number>; total: number };
 
-  const buckets: { start: string; counts: Record<Level, number>; total: number }[] = [];
-  for (let start = bucketStart(first, unit); start <= today; start = nextBucket(start, unit)) {
+// The period's cases per day, week or month, from the bucket holding its first day to the one holding its last.
+function bucketCases(cases: TimelineCase[], first: string, last: string, unit: 'day' | 'week' | 'month'): Bucket[] {
+  const buckets: Bucket[] = [];
+  for (let start = bucketStart(first, unit); start <= last; start = nextBucket(start, unit)) {
     buckets.push({ start, counts: { Critical: 0, High: 0, Medium: 0, Low: 0, 'Not scored': 0 }, total: 0 });
   }
   const byStart = new Map(buckets.map((bucket) => [bucket.start, bucket]));
@@ -202,16 +196,86 @@ export function CasesOverTime({ cases, since }: { cases: { submitted: string; ri
     bucket.counts[item.risk ?? 'Not scored'] += 1;
     bucket.total += 1;
   }
-  const peak = Math.max(1, ...buckets.map((bucket) => bucket.total));
-  // Three labels under the axis: the first column, the middle one and the last.
-  const labelled = new Set([0, Math.floor((buckets.length - 1) / 2), buckets.length - 1]);
+  return buckets;
+}
+
+const daysIn = (from: string, to: string) => Math.round((new Date(to).getTime() - new Date(from).getTime()) / DAY_MS) + 1;
+const unitFor = (days: number) => (days <= 31 ? 'day' : days <= 140 ? 'week' : 'month');
+
+function Stack({ bucket, peak, was = false }: { bucket: Bucket; peak: number; was?: boolean }) {
+  if (!bucket.total) return null;
+  return (
+    <div className={`timeline-stack${was ? ' timeline-stack--was' : ''}`} style={{ height: `${(bucket.total / peak) * 100}%` }}>
+      {LEVELS.map((level) => (bucket.counts[level] ? <i key={level} className={levelClass(level)} style={{ flexGrow: bucket.counts[level] }} /> : null))}
+    </div>
+  );
+}
+
+function TipCounts({ bucket }: { bucket: Bucket }) {
+  return (
+    <>
+      {LEVELS.filter((level) => bucket.counts[level]).map((level) => (
+        <span key={level}>
+          <i className={levelClass(level)} aria-hidden="true" />
+          {level} {bucket.counts[level]}
+        </span>
+      ))}
+    </>
+  );
+}
+
+const caseCount = (count: number) => `${count} ${count === 1 ? 'case' : 'cases'}`;
+
+// Cases submitted per day, week or month across the date range (whichever keeps the columns readable), each column
+// split by the cases' risk level. When comparing, both periods share one date axis, the comparison's columns in the
+// same colours, striped. Periods far apart would leave that axis mostly empty, so then they're laid over each other
+// from their first days instead, as long as the longer one, the comparison's totals a dashed line.
+export function CasesOverTime({ cases, period, compare }: { cases: TimelineCase[]; period: Period; compare?: { cases: TimelineCase[]; period: Period } }) {
+  const first = period.from ?? cases.map((item) => item.submitted).sort()[0] ?? period.to;
+  const compareFirst = compare ? compare.period.from ?? compare.cases.map((item) => item.submitted).sort()[0] ?? compare.period.to : null;
+  const comparison = compare && compareFirst ? { first: compareFirst, last: compare.period.to, cases: compare.cases } : null;
+
+  const lengths = [daysIn(first, period.to), comparison ? daysIn(comparison.first, comparison.last) : 0];
+  const [earlier, later] = comparison && comparison.first < first
+    ? [{ last: comparison.last }, { first }]
+    : [{ last: period.to }, { first: comparison?.first ?? period.to }];
+  const gap = comparison ? Math.max(0, daysIn(earlier.last, later.first) - 2) : 0;
+  const overlay = Boolean(comparison) && gap > Math.max(...lengths);
+
+  let unit: 'day' | 'week' | 'month';
+  let now: Bucket[];
+  let was: (Bucket | null)[];
+  if (comparison && overlay) {
+    unit = unitFor(Math.max(...lengths));
+    const nowBuckets = bucketCases(cases, first, period.to, unit);
+    const wasBuckets = bucketCases(comparison.cases, comparison.first, comparison.last, unit);
+    const count = Math.max(nowBuckets.length, wasBuckets.length);
+    now = Array.from({ length: count }, (_, index) => nowBuckets[index] ?? { start: `pad-${index}`, counts: { Critical: 0, High: 0, Medium: 0, Low: 0, 'Not scored': 0 }, total: 0 });
+    was = Array.from({ length: count }, (_, index) => wasBuckets[index] ?? null);
+  } else {
+    const axisFirst = comparison && comparison.first < first ? comparison.first : first;
+    const axisLast = comparison && comparison.last > period.to ? comparison.last : period.to;
+    unit = unitFor(daysIn(axisFirst, axisLast));
+    now = bucketCases(cases, axisFirst, axisLast, unit);
+    was = comparison ? bucketCases(comparison.cases, axisFirst, axisLast, unit) : now.map(() => null);
+  }
+  const peak = Math.max(1, ...now.map((bucket) => bucket.total), ...was.map((bucket) => bucket?.total ?? 0));
+  // Labels under the axis: the ends, and where each period starts on a shared axis (else the middle).
+  const starts = comparison && !overlay ? [first, comparison.first].map((day) => now.findIndex((bucket) => bucket.start === bucketStart(day, unit))) : [Math.floor((now.length - 1) / 2)];
+  const labelled = new Set([0, now.length - 1, ...starts]);
+  const label = (index: number) => (overlay ? `${unit === 'day' ? 'Day' : unit === 'week' ? 'Week' : 'Month'} ${index + 1}` : bucketLabel(now[index].start, unit));
 
   return (
     <section className="dashboard-panel">
       <div className="panel-heading">
         <div>
           <h2>Cases over time</h2>
-          <p>Cases submitted per {unit}, by risk level</p>
+          <p>
+            Cases submitted per {unit}, by risk level
+            {comparison && (overlay
+              ? `; the periods are far apart, so they're laid over each other from their first ${unit}, the dashed line the comparison`
+              : '; the comparison period\'s bars are striped')}
+          </p>
         </div>
       </div>
       <ul className="timeline-legend" aria-label="Risk levels">
@@ -221,38 +285,68 @@ export function CasesOverTime({ cases, since }: { cases: { submitted: string; ri
             {level}
           </li>
         ))}
+        {comparison && (
+          <li>
+            {overlay
+              ? <svg className="timeline-legend-line" viewBox="0 0 18 10" aria-hidden="true"><path d="M1 5h16" /><circle cx="9" cy="5" r="2.5" /></svg>
+              : <i className="timeline-legend-was" aria-hidden="true" />}
+            Comparison
+          </li>
+        )}
       </ul>
-      {cases.length === 0 ? (
+      {cases.length === 0 && !comparison?.cases.length ? (
         <p className="empty-insight">No cases submitted in this date and status selection.</p>
       ) : (
         <div className="timeline" role="img" aria-label={`Cases submitted per ${unit}, peaking at ${peak}`}>
           <span className="timeline-peak" aria-hidden="true">{peak}</span>
           <div className="timeline-columns">
-            {buckets.map((bucket, index) => (
-              <div key={bucket.start} className="timeline-column" style={{ '--column': index } as CSSProperties}>
-                <div className="timeline-stack" style={{ height: `${(bucket.total / peak) * 100}%` }}>
-                  {LEVELS.map((level) =>
-                    bucket.counts[level] ? <i key={level} className={levelClass(level)} style={{ flexGrow: bucket.counts[level] }} /> : null,
+            {overlay && (
+              <svg className="timeline-was-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                <polyline points={was.map((bucket, index) => `${((index + 0.5) / was.length) * 100},${100 - ((bucket?.total ?? 0) / peak) * 100}`).join(' ')} />
+              </svg>
+            )}
+            {now.map((bucket, index) => {
+              const other = was[index];
+              return (
+                <div key={bucket.start} className="timeline-column" style={{ '--column': index } as CSSProperties}>
+                  {overlay && other && other.total > 0 && (
+                    <span className="timeline-was-dot" style={{ bottom: `${(other.total / peak) * 100}%` }} aria-hidden="true" />
                   )}
+                  <div className="timeline-bars">
+                    <Stack bucket={bucket} peak={peak} />
+                    {!overlay && other && <Stack bucket={other} peak={peak} was />}
+                  </div>
+                  {/* Hover: the column's dates and its counts. */}
+                  <span className="timeline-tip" role="tooltip">
+                    {overlay ? (
+                      <>
+                        <strong>{label(index)}</strong>
+                        {bucket.start.startsWith('pad-') ? <span>This period: past its end</span> : (
+                          <span>This period ({unit === 'week' ? 'week of ' : ''}{bucketLabel(bucket.start, unit)}): {caseCount(bucket.total)}</span>
+                        )}
+                        <TipCounts bucket={bucket} />
+                        <span className="timeline-tip-was">
+                          {other ? `Comparison (${unit === 'week' ? 'week of ' : ''}${bucketLabel(other.start, unit)}): ${caseCount(other.total)}` : 'Comparison: past its end'}
+                        </span>
+                        {other && <TipCounts bucket={other} />}
+                      </>
+                    ) : (
+                      <>
+                        <strong>{unit === 'week' ? 'Week of ' : ''}{bucketLabel(bucket.start, unit)} · {caseCount(bucket.total + (other?.total ?? 0))}</strong>
+                        <TipCounts bucket={bucket} />
+                        {other && other.total > 0 && (
+                          <>
+                            <span className="timeline-tip-was">Comparison period: {caseCount(other.total)}</span>
+                            <TipCounts bucket={other} />
+                          </>
+                        )}
+                      </>
+                    )}
+                  </span>
+                  <span className="timeline-label" aria-hidden="true">{labelled.has(index) ? label(index) : ''}</span>
                 </div>
-                {/* Hover: the column's date and its count per level. */}
-                <span className="timeline-tip" role="tooltip">
-                  <strong>
-                    {unit === 'week' ? 'Week of ' : ''}
-                    {bucketLabel(bucket.start, unit)} · {bucket.total} {bucket.total === 1 ? 'case' : 'cases'}
-                  </strong>
-                  {LEVELS.filter((level) => bucket.counts[level]).map((level) => (
-                    <span key={level}>
-                      <i className={levelClass(level)} aria-hidden="true" />
-                      {level} {bucket.counts[level]}
-                    </span>
-                  ))}
-                </span>
-                <span className="timeline-label" aria-hidden="true">
-                  {labelled.has(index) ? bucketLabel(bucket.start, unit) : ''}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -280,7 +374,8 @@ const REQUEST_GROUPS: { name: string; pattern: RegExp }[] = [
 const SHOWN_GROUPS = 6;
 
 // The documents the analyses ask for most, grouped by kind: how many cases ask for each, with examples on hover.
-export function MostRequestedDocuments({ cases }: { cases: { id: string; toRequest: string[] }[] }) {
+// The cases asking for each kind of document.
+function requestGroups(cases: { id: string; toRequest: string[] }[]) {
   const groups = new Map<string, { cases: Set<string>; examples: string[] }>();
   for (const item of cases) {
     for (const request of item.toRequest) {
@@ -291,9 +386,20 @@ export function MostRequestedDocuments({ cases }: { cases: { id: string; toReque
       groups.set(name, group);
     }
   }
+  return groups;
+}
+
+export function MostRequestedDocuments({ cases, compare }: { cases: { id: string; toRequest: string[] }[]; compare?: { id: string; toRequest: string[] }[] }) {
+  const groups = requestGroups(cases);
+  const before = compare ? requestGroups(compare) : null;
+  // A kind asked for only in the comparison is listed at 0 cases, so a drop to none shows rather than disappearing.
+  for (const [name, group] of before ?? []) {
+    if (!groups.has(name)) groups.set(name, { cases: new Set(), examples: group.examples });
+  }
+  const wasSize = (name: string) => before?.get(name)?.cases.size ?? 0;
   // Other last, whatever its size: it isn't one kind of document.
   const ranked = [...groups.entries()]
-    .sort(([a, x], [b, y]) => Number(a === 'Other') - Number(b === 'Other') || y.cases.size - x.cases.size)
+    .sort(([a, x], [b, y]) => Number(a === 'Other') - Number(b === 'Other') || y.cases.size - x.cases.size || wasSize(b) - wasSize(a))
     .slice(0, SHOWN_GROUPS);
   const asking = cases.filter((item) => item.toRequest.length > 0).length;
   const peak = Math.max(1, ...ranked.map(([, group]) => group.cases.size));
@@ -311,7 +417,7 @@ export function MostRequestedDocuments({ cases }: { cases: { id: string; toReque
       ) : (
         <ul className="request-list">
           {ranked.map(([name, group]) => (
-            <li key={name} className="request-row" title={`e.g. ${group.examples.join('; ')}`}>
+            <li key={name} className={`request-row${before ? ' request-row--compare' : ''}`} title={`e.g. ${group.examples.join('; ')}`}>
               <span className="request-name">{name}</span>
               <span className="request-track" aria-hidden="true">
                 <i style={{ width: `${(group.cases.size / peak) * 100}%` }} />
@@ -320,6 +426,7 @@ export function MostRequestedDocuments({ cases }: { cases: { id: string; toReque
                 {group.cases.size}
                 <small> {group.cases.size === 1 ? 'case' : 'cases'}</small>
               </strong>
+              {before && <CompareDelta value={group.cases.size} previous={wasSize(name)} compact />}
             </li>
           ))}
         </ul>
@@ -335,46 +442,24 @@ export function MostRequestedDocuments({ cases }: { cases: { id: string; toReque
 // ---------------------------------------------------------------------------------------------------------------
 // Processing time and cost
 
-const usd = (value: number) => `$${value.toFixed(value < 1 ? 3 : 2)}`;
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
 // How long the automated processing took and what Claude cost, across the analysed cases in view: the middle and
 // the extremes. Costs come from the audit trail, so only for live cases.
 export function ProcessingAndCost({
   cases,
+  compare,
+  costs,
+  costError,
   isPreview,
 }: {
   cases: { id: string; caseId?: string; processingMs?: number | null }[];
+  // The comparison period's cases, when comparing.
+  compare?: { id: string; caseId?: string; processingMs?: number | null }[];
+  costs: Record<string, number> | null;
+  costError: string | null;
   isPreview: boolean;
 }) {
   const timed = cases.flatMap((item) => (item.processingMs != null ? [{ id: item.id, value: item.processingMs }] : []));
-  const [costs, setCosts] = useState<Record<string, number> | null>(null);
-  const [costError, setCostError] = useState<string | null>(null);
   const live = cases.flatMap((item) => (item.caseId ? [item.caseId] : []));
-  const key = live.join(',');
-
-  useEffect(() => {
-    if (!key) return;
-    let cancelled = false;
-    setCostError(null);
-    getCaseCosts(key.split(','))
-      .then((loaded) => {
-        if (!cancelled) setCosts(loaded);
-      })
-      .catch((err: unknown) => {
-        // The panel says only that the costs didn't load (a missing route reads as "no longer exists" otherwise).
-        console.error('Failed to load the case costs:', err);
-        if (!cancelled) setCostError("Couldn't load the costs. Try refreshing.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [key]);
 
   const costed = cases.flatMap((item) =>
     item.caseId && costs?.[item.caseId] != null ? [{ id: item.id, value: costs[item.caseId] }] : [],
@@ -382,6 +467,8 @@ export function ProcessingAndCost({
   const slowest = timed.length ? timed.reduce((a, b) => (b.value > a.value ? b : a)) : null;
   const priciest = costed.length ? costed.reduce((a, b) => (b.value > a.value ? b : a)) : null;
   const total = costed.reduce((sum, item) => sum + item.value, 0);
+  const compareTimes = compare?.flatMap((item) => (item.processingMs != null ? [item.processingMs] : [])) ?? [];
+  const compareCosts = compare?.flatMap((item) => (item.caseId && costs?.[item.caseId] != null ? [costs[item.caseId]] : [])) ?? [];
 
   return (
     <section className="dashboard-panel processing-panel">
@@ -397,6 +484,7 @@ export function ProcessingAndCost({
         {timed.length ? (
           <>
             <strong>{formatDuration(median(timed.map((item) => item.value)))}</strong>
+            {compare && <CompareDelta value={median(timed.map((item) => item.value))} previous={compareTimes.length ? median(compareTimes) : null} format={formatDuration} better="down" />}
             <span className="processing-metric-detail">
               {timed.length} analysed {timed.length === 1 ? 'case' : 'cases'} · slowest {slowest!.id}, {formatDuration(slowest!.value)}
             </span>
@@ -417,6 +505,7 @@ export function ProcessingAndCost({
         ) : costed.length ? (
           <>
             <strong>{usd(total)}</strong>
+            {compare && <CompareDelta value={total} previous={compareCosts.length ? compareCosts.reduce((sum, value) => sum + value, 0) : null} format={usd} better="down" />}
             <span className="processing-metric-detail">
               {usd(total / costed.length)} a case on average · highest {priciest!.id}, {usd(priciest!.value)}
             </span>
