@@ -309,10 +309,20 @@ def _balance_sheet(values: dict[str, Any], plain: dict[str, str], sections: dict
                                   "total_liabilities": liabilities, "total_equity": equity})
 
 
-def _shared_field_conflicts(bindings: list[Binding], values: dict[str, Any], outcome: RunOutcome) -> set[tuple[str, str]]:
+def _shared_field_conflicts(
+    bindings: list[Binding], values: dict[str, Any], outcome: RunOutcome, check_roles: set[str],
+) -> set[tuple[str, str]]:
     """A plain field can hold one value, so bind it to one role. Where a field is bound to several roles, keep the
-    role named after the field (or the first one). Returns the (role, field) pairs to drop."""
-    roles_by_field: dict[str, list[str]] = {}
+    role named after the field (or the first one). Returns the (role, field) pairs to drop.
+
+    A field named after a role the checks read fills that role by name (_resolve_plain) unless a binding points
+    the role elsewhere, so it counts as bound to it: an opening_balance field must not also be bound as the
+    ledger_balance of a statement that prints no closing balance."""
+    redirected = {b.role for b in bindings if b.row is None and b.role != b.field}
+    roles_by_field: dict[str, list[str]] = {  # list fields have their own rule (see run_numerical_checks)
+        name: [name] for name, value in values.items()
+        if name in check_roles and name not in redirected and array_rows(value) is None
+    }
     for binding in bindings:
         if binding.row is None and binding.field in values and binding.role not in roles_by_field.setdefault(binding.field, []):
             roles_by_field[binding.field].append(binding.role)
@@ -342,7 +352,8 @@ def run_numerical_checks(
     plain: dict[str, str] = {}
     rows: dict[str, tuple[str, int]] = {}
     bound_rows: list[tuple[str, str, int]] = []
-    dropped = _shared_field_conflicts(bindings, values, outcome)
+    check_roles = {role for entry in _applicable(document_type, group) for role in entry.roles}
+    dropped = _shared_field_conflicts(bindings, values, outcome, check_roles)
     for binding in bindings:
         if binding.field not in values:
             outcome.issues.append(f"'{binding.field}' is not a field in this document")

@@ -444,6 +444,16 @@ def personal_draw_bf_row(c: pdfcanvas.Canvas, opening: float, y: float) -> float
     return y - 15
 
 
+def personal_draw_cf_row(c: pdfcanvas.Canvas, closing: float, y: float) -> float:
+    """The statement's closing balance, after its last transaction. Without it the statement states no closing
+    balance at all, and the extracted fields have nothing to reconcile the transactions against."""
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica-Oblique", 8)
+    c.drawString(X_DESC, y - 10, "BALANCE C/F")
+    c.drawRightString(R_BALANCE, y - 10, f"{closing:,.2f}")
+    return y - 15
+
+
 def personal_draw_row(c: pdfcanvas.Canvas, txn: Txn, y: float) -> float:
     lines = _personal_row_lines(txn.lines[0])
     h = _personal_row_height(txn)
@@ -628,8 +638,8 @@ def render_ocbc_personal(ctx: dict[str, Any], blocks: list[Block], out_pdf: Path
     pages: list[list[Txn]] = []
     current: list[Txn] = []
     budget = first_top - content_bottom - 15  # BALANCE B/F row on page 1
-    for txn in all_txns:
-        h = _personal_row_height(txn)
+    for i, txn in enumerate(all_txns):
+        h = _personal_row_height(txn) + (15 if i == len(all_txns) - 1 else 0)  # the last one is followed by C/F
         if current and budget - h < 0:
             pages.append(current)
             current, budget = [], cont_top - content_bottom
@@ -639,7 +649,7 @@ def render_ocbc_personal(ctx: dict[str, Any], blocks: list[Block], out_pdf: Path
 
     # Pass 2: does the totals + closing block fit after the last page's rows?
     last_page_top = cont_top if len(pages) > 1 else first_top
-    consumed = sum(_personal_row_height(t) for t in pages[-1])
+    consumed = sum(_personal_row_height(t) for t in pages[-1]) + 15  # BALANCE C/F
     if len(pages) == 1:
         consumed += 15  # BALANCE B/F
     leftover = (last_page_top - content_bottom) - consumed
@@ -648,6 +658,7 @@ def render_ocbc_personal(ctx: dict[str, Any], blocks: list[Block], out_pdf: Path
         pages.append([])  # a page with no transaction rows, just totals + closing
 
     total_pages = len(pages)
+    last_rows_page = max((i for i, rows in enumerate(pages, start=1) if rows), default=1)
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
     c = pdfcanvas.Canvas(str(out_pdf), pagesize=A4)
     c.setTitle(f"Statement of Account — {ctx['account_holder']}")
@@ -665,6 +676,8 @@ def render_ocbc_personal(ctx: dict[str, Any], blocks: list[Block], out_pdf: Path
             y = personal_draw_bf_row(c, blocks[0].opening, y)
         for txn in page_rows:
             y = personal_draw_row(c, txn, y)
+        if i == last_rows_page:
+            y = personal_draw_cf_row(c, blocks[-1].closing if blocks else 0.0, y)
         if i == total_pages:
             y -= 6
             y = personal_draw_totals(c, ctx, y)
