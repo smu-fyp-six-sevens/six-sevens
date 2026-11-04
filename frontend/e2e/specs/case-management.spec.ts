@@ -433,6 +433,8 @@ test.describe('Case page layout @SCRUM-299', () => {
   test('the section menu is a rail of icons that opens over the page without moving it', async ({ page, backend }) => {
     backend.cases.push(makeCase({ id: 'case-nav', greenlink_case_id: 'GLDB-3002', company_name: 'Nav Co Pte Ltd' }));
     await page.goto('/cases/GLDB-3002');
+    // Measure the loaded page: while it loads, the skeleton's frame can be there twice, and its height differs.
+    await expect(page.getByRole('region', { name: 'Document counts' })).toBeVisible();
     // Closed: icons only, but every section is still reachable by name.
     await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
     const content = page.locator('.case-frame-main');
