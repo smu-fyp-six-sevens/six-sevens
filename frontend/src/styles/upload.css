@@ -253,7 +253,7 @@
 /* Case pages (components/CaseFrame.tsx): the section menu down the left from under the top bar, the page's header and
    content in the column beside it. The menu is a rail of icons that opens over the page. */
 .case-frame {
-  --case-nav-width: 52px;
+  --case-nav-width: 76px;
 
   display: grid;
   grid-template-columns: var(--case-nav-width) minmax(0, 1fr);
@@ -312,33 +312,92 @@
   stroke-linejoin: round;
 }
 
+/* The rail: each section is an icon in a rounded tile with its name under it, the current one's tile filled. */
 .case-nav:not(.case-nav--open) .case-nav-toggle {
+  flex-direction: column;
   justify-content: center;
-  padding: 7px 0;
+  gap: 4px;
+  padding: 4px 0;
+  background: none;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
 }
 
-.case-nav:not(.case-nav--open) .case-nav-toggle-label,
+.case-nav:not(.case-nav--open) .case-nav-toggle svg {
+  box-sizing: content-box;
+  width: 16px;
+  height: 16px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  transition: background-color 0.12s;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-toggle:hover svg,
+.case-nav:not(.case-nav--open) .case-nav-item:hover .case-nav-icon {
+  background: var(--steel-a10);
+}
+
 .case-nav:not(.case-nav--open) .case-nav-text {
   display: none;
 }
 
 .case-nav:not(.case-nav--open) .case-nav-item {
+  flex-direction: column;
   justify-content: center;
-  min-height: 40px;
-  padding: 8px 0;
+  gap: 4px;
+  min-height: 0;
+  padding: 4px 0;
+  background: none;
+  text-align: center;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-item.active {
+  background: none;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-item:hover {
+  background: none;
 }
 
 .case-nav:not(.case-nav--open) .case-nav-item .case-nav-icon {
   position: relative;
+  display: grid;
+  place-items: center;
   align-self: center;
+  width: 44px;
+  height: 32px;
   margin-top: 0;
+  border-radius: 12px;
+  transition: background-color 0.12s;
 }
 
-/* A collapsed item has no status line, so its dot sits on the icon. */
+.case-nav:not(.case-nav--open) .case-nav-item.active .case-nav-icon {
+  background: var(--steel-a20);
+  color: var(--steel-dark);
+}
+
+.case-nav-short {
+  display: none;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-short {
+  display: block;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-item.active .case-nav-short {
+  color: var(--steel-dark);
+}
+
+/* A collapsed item has no status line, so its dot sits on the icon's tile, like a notification badge. */
 .case-nav-badge {
   position: absolute;
-  top: -3px;
-  right: -6px;
+  top: 1px;
+  right: 3px;
   box-shadow: 0 0 0 2px var(--paper);
 }
 
@@ -1000,7 +1059,7 @@
   }
 
   .case-nav:not(.case-nav--open) .case-nav-item {
-    min-width: 40px;
+    min-width: 64px;
   }
 
   .case-nav-item.active {
@@ -1221,5 +1280,254 @@
 
   .case-nav--open .case-nav-item {
     white-space: normal;
+  }
+}
+
+/* Rail proportions: bigger icons in their tiles, and room between one section's caption and the next one's icon. */
+.case-nav:not(.case-nav--open) ul {
+  gap: 10px;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-item .case-nav-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-toggle {
+  margin-bottom: 10px;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-toggle svg {
+  width: 18px;
+  height: 18px;
+  padding: 7px 13px;
+}
+
+/* The rail as a bar of its own: a shaded strip from the window's left edge with a line down its right side. The frame
+   reaches out over the page's side margin, so the bar sits flush left and the page keeps its place beside it. */
+.case-frame {
+  --case-nav-width: 72px;
+
+  margin-left: -24px;
+  grid-template-columns: calc(var(--case-nav-width) + 24px) minmax(0, 1fr);
+  column-gap: 20px;
+}
+
+.case-nav:not(.case-nav--open) {
+  min-height: calc(100vh - var(--topbar-height) - 40px);
+  padding: 12px 0 16px 24px;
+  border-right: 1px solid var(--line);
+  background: var(--steel-a08);
+}
+
+.case-nav:not(.case-nav--open) .case-nav-toggle:hover svg,
+.case-nav:not(.case-nav--open) .case-nav-item:hover .case-nav-icon {
+  background: var(--steel-a10);
+}
+
+.case-nav:not(.case-nav--open) .case-nav-item.active .case-nav-icon {
+  background: var(--steel-a20);
+  box-shadow: none;
+}
+
+/* Bigger icons and captions, closer to the text size of the page. */
+.case-nav:not(.case-nav--open) .case-nav-item .case-nav-icon {
+  width: 52px;
+  height: 34px;
+  border-radius: 8px;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-item .case-nav-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-toggle svg {
+  box-sizing: border-box;
+  width: 52px;
+  height: 34px;
+  padding: 5px 14px;
+  border-radius: 8px;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-short,
+.case-nav:not(.case-nav--open) .case-nav-toggle {
+  font-size: 12px;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-item,
+.case-nav:not(.case-nav--open) .case-nav-toggle {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.case-nav--open {
+  left: 0;
+  border-radius: 0 12px 12px 0;
+}
+
+.case-nav-badge {
+  box-shadow: none;
+}
+
+@media (max-width: 860px) {
+  .case-frame {
+    margin-left: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .case-nav:not(.case-nav--open) {
+    min-height: 0;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .case-nav:not(.case-nav--open) .case-nav-item .case-nav-icon {
+    width: 44px;
+  }
+
+  .case-nav--open {
+    border-radius: 12px;
+  }
+}
+
+/* The rail hangs straight from the top bar and runs the full height below it; the page's own space above its header
+   moves into the content column. */
+.case-frame {
+  padding-top: 0;
+}
+
+.case-frame-main {
+  padding-top: 20px;
+}
+
+.case-frame-nav {
+  top: var(--topbar-height);
+}
+
+.case-nav:not(.case-nav--open) {
+  min-height: calc(100vh - var(--topbar-height));
+  padding-top: 18px;
+}
+
+.case-nav--open {
+  top: 0;
+}
+
+@media (max-width: 860px) {
+  .case-frame {
+    padding-top: 16px;
+  }
+
+  .case-frame-main {
+    padding-top: 0;
+  }
+
+  .case-frame-nav {
+    top: auto;
+  }
+
+  .case-nav:not(.case-nav--open) {
+    min-height: 0;
+    padding-top: 6px;
+  }
+}
+
+/* The rail is exactly as tall as the window under the top bar, so everything in it fits on one screen and it stays put
+   while the page scrolls. Closed, it sits under the top bar (which is at 20); only the opened menu rises above the page. */
+.case-frame-nav {
+  z-index: 15;
+  height: calc(100vh - var(--topbar-height));
+}
+
+.case-frame-nav:has(.case-nav--open) {
+  z-index: 900;
+}
+
+.case-nav:not(.case-nav--open) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 10px 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-toggle {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+/* The sections share what height is left between them, so a taller window spreads them and a short one packs them. */
+.case-nav:not(.case-nav--open) ul {
+  flex: 1;
+  justify-content: space-between;
+  gap: 2px;
+  min-height: min-content;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-item,
+.case-nav:not(.case-nav--open) .case-nav-toggle {
+  align-items: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-item .case-nav-icon,
+.case-nav:not(.case-nav--open) .case-nav-toggle svg {
+  height: 30px;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-item {
+  gap: 2px;
+}
+
+@media (max-width: 860px) {
+  .case-frame-nav {
+    height: auto;
+    z-index: 15;
+  }
+
+  .case-frame-nav:has(.case-nav--open) {
+    z-index: 900;
+  }
+
+  .case-nav:not(.case-nav--open) {
+    display: block;
+    height: auto;
+    padding: 6px;
+    overflow: visible;
+  }
+
+  .case-nav:not(.case-nav--open) .case-nav-item .case-nav-icon {
+    height: 34px;
+  }
+}
+
+/* A short window: tighter tiles, so the whole rail still fits. */
+@media (min-width: 861px) and (max-height: 660px) {
+  .case-nav:not(.case-nav--open) {
+    padding: 6px 0;
+  }
+
+  .case-nav:not(.case-nav--open) .case-nav-item .case-nav-icon,
+  .case-nav:not(.case-nav--open) .case-nav-toggle svg {
+    height: 24px;
+  }
+
+  .case-nav:not(.case-nav--open) .case-nav-item .case-nav-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .case-nav:not(.case-nav--open) .case-nav-toggle svg {
+    padding: 2px 16px;
+  }
+
+  .case-nav:not(.case-nav--open) .case-nav-item {
+    padding-top: 2px;
+    padding-bottom: 2px;
   }
 }

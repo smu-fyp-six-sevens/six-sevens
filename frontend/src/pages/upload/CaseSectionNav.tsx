@@ -83,6 +83,8 @@ export function CaseSectionNav({
                     <span className={`case-nav-dot case-nav-dot--${status.tone} case-nav-badge`} />
                   )}
                 </span>
+                {/* The rail's caption under the icon; the open menu has the full label instead. */}
+                <span className="case-nav-short" aria-hidden="true">{section.short}</span>
                 <span className="case-nav-text">
                   <span className="case-nav-label">{section.label}</span>
                   {status && (

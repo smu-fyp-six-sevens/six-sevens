@@ -5,11 +5,9 @@ import AppHeader from '../components/AppHeader';
 import HeaderFilter, { type FilterOption } from '../components/HeaderFilter';
 import PeriodMenu, { CUSTOM_RANGE } from '../components/PeriodMenu';
 import CompareMenu from '../components/CompareMenu';
-import CompareDelta from '../components/CompareDelta';
 import { RefreshButton } from '../components/RefreshButton';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { InfoIcon } from '../components/InfoTip';
-import { CasePipeline } from './CasePipeline';
 import { DetectionAccuracyPanel, DetectionAccuracySummary } from './DetectionAccuracyPanel';
 import { CoverageRings, FlagPills, RiskOverview } from './DashboardInsights';
 import { CasesOverTime, MostRequestedDocuments, NeedsAttention, ProcessingAndCost, type AttentionCase } from './DashboardCasePanels';
@@ -18,9 +16,10 @@ import { CheckBreakdown, CheckDocumentMatrix, FlagKpis, FlagsByRisk, type FlagCa
 import { CaseKpis, CostAgainstTime, RiskScoreSpread, StageBreakdown, TimeAndCostByCase, type AnalyticsCase, type CostState } from './DashboardCaseAnalytics';
 import { CASE_STAGES, caseStageLabel, caseStageTone } from '../utils/caseStages';
 import { StageMark } from '../components/StageMark';
+import { Icon } from '../components/Icon';
+import { CasePipeline } from './CasePipeline';
 import { formatDocumentType, type CaseStage, type DetectionMetricsFilters } from '../services/uploadService';
 import { formatCheck } from '../utils/checkLabels';
-import { Icon } from '../components/Icon';
 import { PRESETS, formatPeriod, inPeriod, isoDay, overlap, presetPeriod, type Period } from '../utils/dateRange';
 
 // A case stage's label (utils/caseStages.ts), so the dashboard and the case queue name and colour cases the same way.
@@ -111,87 +110,6 @@ const FLAG_SEVERITY: Record<string, FlagSummary['severity']> = {
 const INSIGHT_ROWS = 6;
 // Document types are rings, four to a row: two rows before "Show all".
 const DOCUMENT_TYPE_ROWS = 8;
-
-// Page buttons to show: always the first and last, the current one and its neighbours, with gaps as null.
-function pageNumbers(current: number, count: number): Array<number | null> {
-  const wanted = [...new Set([1, current - 1, current, current + 1, count])].filter((page) => page >= 1 && page <= count).sort((a, b) => a - b);
-  return wanted.flatMap((page, index) => (index > 0 && page - wanted[index - 1] > 1 ? [null, page] : [page]));
-}
-
-function CaseTable({ cases, heading, onOpenCase, showRiskAnalysis = false, showProcessingTime = false, isPreview = false }: { cases: MockCase[]; heading: string; onOpenCase: (item: MockCase) => void; showRiskAnalysis?: boolean; showProcessingTime?: boolean; isPreview?: boolean }) {
-  // Back to the first page whenever the filters or sort hand over a different list.
-  const [paging, setPaging] = useState({ cases, page: 1 });
-  const pageCount = Math.max(1, Math.ceil(cases.length / CASES_PER_PAGE));
-  const page = paging.cases === cases ? Math.min(paging.page, pageCount) : 1;
-  const goTo = (next: number) => setPaging({ cases, page: next });
-  const first = (page - 1) * CASES_PER_PAGE;
-  const pageCases = cases.slice(first, first + CASES_PER_PAGE);
-  return (
-    <section className="dashboard-panel cases-panel">
-      <div className="panel-heading"><div><h2>{heading}</h2>{showProcessingTime && isPreview && <p>Sample timings</p>}</div><Link className="text-button" to="/cases">Open case queue <span>→</span></Link></div>
-      <div className="case-table-wrap">
-        <table className={`dashboard-case-table${showProcessingTime ? ' case-register-table' : showRiskAnalysis ? ' case-overview-table' : ''}`}>
-          <thead><tr>
-            <th>CASE / APPLICANT</th><th className="center-col">SUBMITTED</th><th className="center-col">STATUS</th>
-            <th className="center-col">RISK</th>
-            {showProcessingTime && <th className="center-col"><InfoLabel label="PROCESSING TIME" tip={PROCESSING_TIME_HELP} /></th>}
-            <th>{showRiskAnalysis ? 'RECOMMENDED ADDITIONAL DOCUMENTS' : 'TOP FLAGS'}</th>
-          </tr></thead>
-          <tbody>
-            {pageCases.map((item) => (
-              <tr
-                key={item.id}
-                className={item.routeId ? 'case-row-clickable' : undefined}
-                onClick={() => item.routeId && onOpenCase(item)}
-                onKeyDown={(event) => {
-                  if (item.routeId && (event.key === 'Enter' || event.key === ' ')) {
-                    event.preventDefault();
-                    onOpenCase(item);
-                  }
-                }}
-                role={item.routeId ? 'link' : undefined}
-                tabIndex={item.routeId ? 0 : undefined}
-                aria-label={item.routeId ? `Open case ${item.id}` : undefined}
-              >
-                <td data-label="Case / applicant"><strong>{item.id}</strong><span>{item.applicant}</span></td>
-                <td className="center-col" data-label="Submitted">{new Date(`${item.submitted}T12:00:00`).toLocaleDateString('en-SG', { day: '2-digit', month: 'short' })}</td>
-                <td className="center-col" data-label="Status"><span className={`case-stage-badge tone-${statusTone(item.status)}`}><StageMark stage={statusStage(item.status)} />{item.status}</span></td>
-                <td className="center-col" data-label="Risk">
-                  <div className="risk-cell">
-                    {item.risk
-                      ? <span className={`risk-score risk-score-${item.risk.toLowerCase()}`}><b>{item.score ?? '—'}</b><span className="risk-level">{item.risk}</span></span>
-                      : <span className="processing-pending" title="Shown once the case has been analysed">—</span>}
-                  </div>
-                </td>
-                {showProcessingTime ? <td className="center-col" data-label="Processing time">{item.processingMs != null ? <span className="processing-total">{formatDuration(item.processingMs)}</span> : <span className="processing-pending" title="Shown once the case has been analysed">—</span>}</td> : null}
-                {showRiskAnalysis
-                  ? <td data-label="Recommended additional documents">
-                    {item.recommendedDocs?.length
-                      ? <span className="recommended-documents">{item.recommendedDocs.join(', ')}</span>
-                      : <span className="processing-pending">—</span>}
-                  </td>
-                  : <td data-label="Top flags">{item.flags.length ? <span className="table-flag">{item.flags[0]}{item.flags.length > 1 ? <small> +{item.flags.length - 1}</small> : null}</span> : <span className="no-flag">No flags</span>}</td>}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!cases.length ? <p className="empty-insight table-empty">No cases match the current filters.</p> : null}
-      </div>
-      <footer className="table-footer">
-        <span>{cases.length > CASES_PER_PAGE ? <>Showing <strong>{first + 1}–{first + pageCases.length}</strong> of <strong>{cases.length}</strong> cases</> : <>Showing <strong>{cases.length}</strong> {cases.length === 1 ? 'case' : 'cases'}</>}</span>
-        {pageCount > 1 && (
-          <nav className="table-pagination" aria-label="Case pages">
-            <button type="button" onClick={() => goTo(page - 1)} disabled={page === 1} aria-label="Previous page">‹</button>
-            {pageNumbers(page, pageCount).map((number, index) => number === null
-              ? <span key={`gap-${index}`} className="pagination-gap">…</span>
-              : <button type="button" key={number} className={number === page ? 'active' : ''} aria-current={number === page ? 'page' : undefined} onClick={() => goTo(number)}>{number}</button>)}
-            <button type="button" onClick={() => goTo(page + 1)} disabled={page === pageCount} aria-label="Next page">›</button>
-          </nav>
-        )}
-      </footer>
-    </section>
-  );
-}
 
 // Preview rows only: live cases carry their analysis's recommendations from the case list.
 function sampleRecommendedDocuments(item: MockCase): string[] {
@@ -351,10 +269,6 @@ export default function DashboardPage({
   );
 
   // The filter's counts ignore the status filter itself, like the case queue's.
-  const stageCounts = useMemo(
-    () => Object.fromEntries(CASE_STAGES.map((stage) => [stage, statusCounts[caseStageLabel(stage)]])) as Record<CaseStage, number>,
-    [statusCounts],
-  );
   const statusOptions: FilterOption[] = STATUSES.map((status) => ({
     value: status,
     text: status,
@@ -373,6 +287,9 @@ export default function DashboardPage({
   const view = useMemo(() => deriveView(visibleCases, costs), [visibleCases, costs]);
   const before: DashboardView | null = useMemo(() => (compareCases ? deriveView(compareCases, costs) : null), [compareCases, costs]);
   const { statusCounts, byDocumentType, flagRows, flagCases, attentionCases, analyticsCases } = view;
+  const countsByStage = (counts: Record<Status, number>) =>
+    Object.fromEntries(CASE_STAGES.map((stage) => [stage, counts[caseStageLabel(stage)]])) as Record<CaseStage, number>;
+  const stageCounts = countsByStage(statusCounts);
   // The commonest flags, most cases first, for the Overview. When comparing, a flag raised only in the comparison
   // is listed at 0 after them, so a drop to none shows rather than the row disappearing.
   const wasFlagged = new Map(before?.flagRows.map((row) => [row.name, row]));
@@ -387,7 +304,7 @@ export default function DashboardPage({
     ...(before?.byDocumentType ?? []).filter(([type]) => !byDocumentType.some(([now]) => now === type)).map(([type]): [string, number] => [type, 0]),
   ];
   const openAnalyticsCase = (item: AnalyticsCase) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`);
-  const stages = useMemo(() => STATUSES.map((status) => ({ label: status, tone: statusTone(status) })), []);
+  const stages = useMemo(() => STATUSES.map((status) => ({ label: status, tone: statusTone(status), stage: statusStage(status) })), []);
 
   return (
     <main className="shell dashboard-shell">
@@ -486,10 +403,7 @@ export default function DashboardPage({
               )}
             </div>
           )}
-          {tab === 'Overview' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
-            <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-period">{rangeLabel}</span></div><span className="stat-number">{visibleCases.length}</span>{before ? <CompareDelta value={visibleCases.length} previous={before.cases.length} /> : <span className="stat-caption">Cases in view</span>}</article>
-            {STATUSES.map((status) => <article key={status} className={`dashboard-stat-card${before && !statusCounts[status] && !before.statusCounts[status] ? ' stat-card--quiet' : ''}`}><div className="stat-top"><span className="stat-caption">{status}</span><span className={`case-status-dot tone-${statusTone(status)}`} /></div><span className="stat-number">{statusCounts[status]}</span>{before ? <CompareDelta value={statusCounts[status]} previous={before.statusCounts[status]} /> : <span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span>}</article>)}
-          </section>}
+          {tab === 'Overview' && <CasePipeline counts={stageCounts} total={visibleCases.length} period={rangeLabel} before={before ? { counts: countsByStage(before.statusCounts), total: before.cases.length } : undefined} />}
           {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
           {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
 

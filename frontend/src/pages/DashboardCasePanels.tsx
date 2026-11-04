@@ -4,6 +4,7 @@ import { formatDuration } from './upload/processingTimes';
 import { median, usd } from './dashboardCosts';
 import CompareDelta from '../components/CompareDelta';
 import type { Period } from '../utils/dateRange';
+import { caseStageLabel } from '../utils/caseStages';
 
 // The dashboard Overview's case panels: what is waiting on an officer, how many cases came in over time, which
 // documents the analyses ask for most, and what the processing took in time and Claude spend. None lists cases the
@@ -45,13 +46,13 @@ export interface AttentionCase {
 // What the officer has to do for a case at each stage that waits on them; the others (the system is working, or
 // the case is closed) don't need attention.
 const WAITING_ON_OFFICER: Record<string, string> = {
-  Failed: 'Failed: open it to see what to fix',
-  'Pending Review': 'Documents waiting for review',
-  'Documents Incomplete': 'Required documents missing',
-  'Ready for Analysis': 'Ready for the case analysis',
-  'Pending Evaluation': 'Findings waiting for review',
-  'Case Analysed': 'Analysed: ready to finalise',
-  Open: 'No documents uploaded yet',
+  [caseStageLabel('failed')]: 'Failed: open it to see what to fix',
+  [caseStageLabel('pending_review')]: 'Documents waiting for review',
+  [caseStageLabel('documents_incomplete')]: 'Required documents missing',
+  [caseStageLabel('ready_for_analysis')]: 'Ready for the case analysis',
+  [caseStageLabel('pending_evaluation')]: 'Findings waiting for review',
+  [caseStageLabel('case_analysed')]: 'Analysed: ready to finalise',
+  [caseStageLabel('open')]: 'No documents uploaded yet',
 };
 
 const SHOWN_WAITING = 6;
@@ -91,7 +92,7 @@ export function NeedsAttention({ cases, onOpen }: { cases: AttentionCase[]; onOp
                   <span>{item.applicant}</span>
                 </span>
                 <span className="attention-reason">
-                  <span className={`case-status-dot tone-${item.stuck ? 'red' : item.tone}`} aria-hidden="true" />
+                  <span className={`case-status-dot tone-${item.stuck ? 'failed' : item.tone}`} aria-hidden="true" />
                   <span>
                     {reason}
                     <small>Submitted {age(item.submitted)}</small>

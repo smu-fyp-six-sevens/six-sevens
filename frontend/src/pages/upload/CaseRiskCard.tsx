@@ -20,7 +20,6 @@ import type { ReviewLink } from './DocumentReviewModal';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { SCORE_BANDS } from './scoreBands';
 import { SeverityGauge, SeverityLegend } from './SeverityGauge';
-import { SeverityGauge } from './SeverityGauge';
 import { readingOrder } from '../../components/findingHighlights';
 import type { HighlightArea } from '../../components/findingHighlights';
 import { Icon } from '../../components/Icon';
@@ -59,15 +58,7 @@ function ScoreGauge({ score, level }: { score: number; level: string }) {
         <span className={`risk-score-level risk-score-level--${level.toLowerCase()}`}>
           {level} Risk{band ? ` · ${band.min}–${band.max}` : ''}
         </span>
-        {/* What each part of the dial means, the case's own level marked, so the level never rests on colour alone. */}
-        <ul className="severity-legend" aria-label="Score bands">
-          {SCORE_BANDS.map((b) => (
-            <li key={b.level} className={b.level === level ? 'severity-legend-current' : undefined}>
-              <span className={`severity-legend-swatch risk-gauge-band--${b.level.toLowerCase()}`} aria-hidden="true" />
-              {b.level} <span className="severity-legend-range">{b.min}–{b.max}</span>
-            </li>
-          ))}
-        </ul>
+        <SeverityLegend level={level} />
       </div>
     </div>
   );

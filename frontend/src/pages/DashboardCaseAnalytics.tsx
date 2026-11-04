@@ -3,6 +3,7 @@ import SelectMenu from '../components/SelectMenu';
 import CompareDelta from '../components/CompareDelta';
 import { formatDuration } from './upload/processingTimes';
 import { median, usd } from './dashboardCosts';
+import { StageMark } from '../components/StageMark';
 
 // The dashboard's Cases tab: what the cases in view cost and took, where they are, and how they scored. The case
 // queue lists the cases; this answers questions about them as a set.
@@ -210,7 +211,7 @@ export function TimeAndCostByCase({ cases, compare, costState, onOpen }: { cases
 // Where the cases are
 
 // The cases in view split by stage, in the stages' own order: one bar, then a row per stage holding cases.
-export function StageBreakdown({ cases, compare, stages }: { cases: AnalyticsCase[]; compare?: AnalyticsCase[]; stages: { label: string; tone: string }[] }) {
+export function StageBreakdown({ cases, compare, stages }: { cases: AnalyticsCase[]; compare?: AnalyticsCase[]; stages: { label: string; tone: string; stage?: string }[] }) {
   const counts = stages.map((stage) => ({
     ...stage,
     count: cases.filter((item) => item.status === stage.label).length,
@@ -237,7 +238,7 @@ export function StageBreakdown({ cases, compare, stages }: { cases: AnalyticsCas
           <ul className="stage-list">
             {held.map((stage) => (
               <li key={stage.label}>
-                <span className={`case-status-dot tone-${stage.tone}`} aria-hidden="true" />
+                <StageMark stage={stage.stage} />
                 <span className="stage-name">{stage.label}</span>
                 <strong>{stage.count}</strong>
                 {compare

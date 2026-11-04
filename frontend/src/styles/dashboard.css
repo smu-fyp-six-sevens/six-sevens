@@ -32,7 +32,7 @@
 .dashboard-filters .header-filter-list { right: 0; left: auto; z-index: 25; }
 .dashboard-stat-card { min-height: 117px; padding: 15px 17px 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); }
 .stat-top { display: flex; align-items: center; justify-content: space-between; min-height: 21px; }
-.stat-period { color: var(--slate-65); font-size: 12.5px; }
+.stat-period { color: var(--text-muted); font-size: 12.5px; }
 .dashboard-stat-card .stat-caption { color: var(--slate-54); font-size: 13px; }
 .stat-number { display: block; margin: 9px 0 1px; color: var(--slate-18); font-size: 26px; font-weight: 720; letter-spacing: -.04em; line-height: 1; }
 .dashboard-insight-grid, .dashboard-lower-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 14px; margin-bottom: 14px; }
@@ -397,15 +397,15 @@ button.attention-row:focus-visible { outline: 2px solid var(--steel); outline-of
 .case-kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .case-kpi-grid .dashboard-stat-card { display: grid; align-content: start; gap: 2px; min-height: 0; }
 .case-kpi-grid .stat-number { margin: 8px 0 4px; font-variant-numeric: tabular-nums; }
-.stat-number small { color: var(--slate-62); font-size: 15px; font-weight: 600; letter-spacing: 0; }
+.stat-number small { color: var(--text-muted); font-size: 15px; font-weight: 600; letter-spacing: 0; }
 
 /* Time and cost by case: two bars a row on their own scales, a tick at each median. */
 .case-cost-panel .panel-heading { align-items: center; }
 .case-cost-head, .case-cost-row { display: grid; grid-template-columns: minmax(140px, .9fr) minmax(0, 1.2fr) minmax(0, 1.2fr); align-items: center; gap: 18px; }
-.case-cost-head { padding: 0 8px 8px; border-bottom: 1px solid var(--sand-92); color: var(--slate-58); font-size: 11px; font-weight: 750; letter-spacing: .08em; }
-.case-cost-head small { color: var(--slate-62); font-weight: 600; letter-spacing: 0; text-transform: none; }
+.case-cost-head { padding: 0 8px 8px; border-bottom: 1px solid var(--line); color: var(--text-muted); font-size: 11px; font-weight: 750; letter-spacing: .08em; }
+.case-cost-head small { color: var(--text-muted); font-weight: 600; letter-spacing: 0; text-transform: none; }
 .case-cost-list { display: grid; margin: 0; padding: 0; list-style: none; }
-.case-cost-list li + li { border-top: 1px solid var(--sand-92); }
+.case-cost-list li + li { border-top: 1px solid var(--line); }
 .case-cost-row { width: 100%; padding: 10px 8px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; }
 button.case-cost-row { cursor: pointer; }
 button.case-cost-row:hover { background: var(--slate-97); }
@@ -429,10 +429,10 @@ button.case-cost-row:focus-visible { outline: 2px solid var(--steel); outline-of
 .stage-bar { display: flex; gap: 2px; height: 14px; margin-bottom: 16px; overflow: hidden; border-radius: 7px; background: var(--slate-94); }
 .stage-bar i { min-width: 6px; background: var(--tone); animation: risk-overview-in .7s cubic-bezier(.2, .8, .2, 1) backwards; transform-origin: left; }
 .stage-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.stage-list li { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto 44px; align-items: center; gap: 10px; color: var(--slate-34); font-size: 13px; }
+.stage-list li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto 44px; align-items: center; gap: 10px; color: var(--slate-34); font-size: 13px; }
 .stage-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stage-list strong { color: var(--ink); font-variant-numeric: tabular-nums; }
-.stage-share { color: var(--slate-62); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.stage-share { color: var(--text-muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Cost against processing time: a dot per case; hover names it. */
 .scatter { position: relative; }
@@ -452,7 +452,7 @@ button.case-cost-row:focus-visible { outline: 2px solid var(--steel); outline-of
 .check-panel { margin-bottom: 14px; }
 .check-panel .panel-heading { align-items: center; }
 .check-list { display: grid; margin: 0 -8px; padding: 0; list-style: none; }
-.check-list li + li { border-top: 1px solid var(--sand-92); }
+.check-list li + li { border-top: 1px solid var(--line); }
 .check-row { display: grid; grid-template-columns: minmax(170px, 1.1fr) 64px minmax(80px, 2fr) 92px 70px; align-items: center; gap: 16px; width: 100%; padding: 11px 8px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .check-row:hover, .check-list li.open .check-row { background: var(--slate-97); }
 .check-row:focus-visible { outline: 2px solid var(--steel); outline-offset: -2px; }
@@ -467,17 +467,17 @@ button.case-cost-row:focus-visible { outline: 2px solid var(--steel); outline-of
 .check-bar--low { background: var(--orange-91); box-shadow: inset 0 0 0 1px var(--orange-75); }
 .check-figure { color: var(--ink-soft); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .check-figure strong { color: var(--ink); font-size: 14px; }
-.check-figure small { margin-left: 6px; color: var(--slate-62); font-size: 11.5px; }
-.check-detail { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(140px, .6fr); gap: 14px 24px; margin: 0 8px 12px 25px; padding: 14px 16px; border: 1px solid var(--sand-92); border-radius: 8px; background: var(--paper); }
+.check-figure small { margin-left: 6px; color: var(--text-muted); font-size: 11.5px; }
+.check-detail { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(140px, .6fr); gap: 14px 24px; margin: 0 8px 12px 25px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
 .check-detail > div { display: grid; align-content: start; gap: 8px; min-width: 0; }
 .check-detail-cases { grid-column: 1 / -1; }
-.check-detail-label { color: var(--slate-58); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.check-detail-label { color: var(--text-muted); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .check-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .check-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--slate-88); border-radius: 999px; background: var(--white); color: var(--slate-34); font-size: 12px; }
-.check-chip small { color: var(--slate-62); font-weight: 650; }
+.check-chip small { color: var(--text-muted); font-weight: 650; }
 .check-case { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--white); color: var(--ink-soft); font: inherit; font-size: 12.5px; }
 .check-case strong { color: var(--ink); }
-.check-case small { color: var(--slate-62); }
+.check-case small { color: var(--text-muted); }
 .check-case i { width: 8px; height: 8px; border-radius: 2px; }
 button.check-case { cursor: pointer; }
 button.check-case:hover { border-color: var(--steel); }
@@ -488,7 +488,7 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 /* Where each check flags: checks by document types, each cell shaded by its count on one hue. */
 .flag-matrix-wrap { overflow-x: auto; }
 .flag-matrix { width: 100%; border-collapse: separate; border-spacing: 3px; table-layout: fixed; }
-.flag-matrix th { color: var(--slate-58); font-size: 11.5px; font-weight: 600; }
+.flag-matrix th { color: var(--text-muted); font-size: 11.5px; font-weight: 600; }
 /* Names wrap between words only ("Incorporation" never splits); the full name is the header's tooltip. */
 .flag-matrix thead th { padding: 0 2px 6px; font-size: 11px; line-height: 1.3; text-align: center; overflow-wrap: normal; vertical-align: bottom; }
 .flag-matrix thead th:first-child, .flag-matrix tbody th { width: 150px; }
@@ -499,7 +499,7 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 /* Comparing: the count and its change side by side; a cell flagged only in the comparison shows the change alone. */
 .flag-matrix--compare td > span { display: flex; justify-content: center; align-items: center; gap: 5px; }
 .flag-matrix td > span.flag-matrix-gone { background: transparent; }
-.flag-matrix .compare-pill { padding: 0 5px; font-size: 10.5px; }
+.flag-matrix .compare-pill { padding: 0 5px; font-size: 11px; }
 
 /* Flags by risk level: a bar per level, the average flags a case of that level carries. */
 .flag-risk-list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
@@ -508,7 +508,7 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .flag-risk-level i { width: 9px; height: 9px; border-radius: 3px; }
 .flag-risk-list .request-track i { background: var(--band, var(--slate-84)); }
 .flag-risk-list strong { color: var(--ink); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
-.flag-risk-list small { grid-column: 2 / -1; color: var(--slate-62); font-size: 11.5px; }
+.flag-risk-list small { grid-column: 2 / -1; color: var(--text-muted); font-size: 11.5px; }
 
 /* Comparing two periods. This period keeps its own colours; the comparison is light grey everywhere: a swatch in
    the banner, columns behind the bars, a thin bar or ring beside them, grey ticks on tracks, hollow dots. Each figure
@@ -521,7 +521,7 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 }
 .compare-swatch { flex: none; width: 14px; height: 26px; border-radius: 3px; background: var(--slate-48); }
 .compare-swatch--was { background: var(--compare-stripes), var(--slate-48); }
-.compare-banner-key { margin-left: auto; color: var(--slate-62); font-size: 12px; }
+.compare-banner-key { margin-left: auto; color: var(--text-muted); font-size: 12px; }
 /* The comparison's value on a track: a striped marker above it (a median or target is a line through it). */
 .compare-marker { position: absolute; top: -11px; width: 12px; height: 9px; margin-left: -6px; background: var(--compare-stripes), var(--slate-48); clip-path: polygon(0 0, 100% 0, 50% 100%); cursor: help; }
 .compare-marker--key { position: static; display: inline-block; margin: 0; }
@@ -529,14 +529,14 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .compare-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 14px; padding: 10px 16px; border: 1px solid var(--slate-88); border-radius: 10px; background: var(--white); color: var(--ink-soft); font-size: 13px; }
 .compare-banner-period { display: inline-flex; align-items: center; gap: 9px; }
 .compare-banner-period > span { display: grid; line-height: 1.3; }
-.compare-banner-period small { color: var(--slate-62); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.compare-banner-period small { color: var(--text-muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
 .compare-banner strong { color: var(--ink); font-weight: 650; }
-.compare-banner-vs { color: var(--slate-62); font-size: 12px; font-weight: 600; }
+.compare-banner-vs { color: var(--text-muted); font-size: 12px; font-weight: 600; }
 .compare-banner-note { flex-basis: 100%; margin: 2px 0 0; padding-top: 8px; border-top: 1px solid var(--slate-94); color: var(--ink-soft); font-size: 12.5px; }
 .compare-banner-warning { flex-basis: 100%; margin: 2px 0 0; padding: 7px 10px; border-radius: 7px; background: var(--amber-bg); color: var(--orange-27); font-size: 12.5px; }
 .compare-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 22px; color: var(--ink-soft); font-size: 12.5px; }
 .compare-was { font-variant-numeric: tabular-nums; }
-.compare-line--same, .compare-line--none { color: var(--slate-62); }
+.compare-line--same, .compare-line--none { color: var(--text-muted); }
 .compare-pill { display: inline-flex; align-items: center; justify-self: end; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .compare-pill--up { background: var(--blue-95); color: var(--blue-37); }
 .compare-pill--down { background: var(--slate-94); color: var(--slate-34); }
@@ -557,7 +557,7 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .coverage-ring-track--was { stroke: var(--slate-97); stroke-width: 4; }
 .coverage-ring-was-fill, .coverage-ring-was-stripes { fill: none; stroke: var(--slate-60); stroke-width: 4; }
 .coverage-ring-was-stripes { stroke: url(#compare-stripes); }
-.coverage-ring-was { color: var(--slate-62); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.coverage-ring-was { color: var(--text-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .risk-overview-count { display: flex; align-items: center; gap: 8px; }
 .risk-overview-bar--was { height: 6px; margin-top: -6px; border-radius: 3px; }
 .risk-overview-bar--was i { background-image: var(--compare-stripes); }
@@ -572,7 +572,7 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .period-menu-list { min-width: 280px; }
 .period-menu-list .select-menu-option:disabled { opacity: .45; cursor: default; }
 .period-menu-list .select-menu-option:disabled:hover { background: transparent; }
-.period-menu-detail { margin-left: auto; padding-left: 12px; color: var(--slate-62); font-size: 12px; white-space: nowrap; }
+.period-menu-detail { margin-left: auto; padding-left: 12px; color: var(--text-muted); font-size: 12px; white-space: nowrap; }
 .period-menu-calendar-icon { width: 15px; height: 15px; margin-left: auto; fill: none; stroke: var(--slate-60); stroke-width: 1.4; stroke-linecap: round; }
 .period-menu-calendar { padding: 14px 16px 12px; }
 .range-calendar-months { display: grid; grid-template-columns: repeat(2, 238px); gap: 24px; }
@@ -585,7 +585,7 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .range-calendar-nav:hover:not(:disabled) { border-color: var(--steel); color: var(--steel-dark); }
 .range-calendar-nav:disabled { opacity: .35; cursor: default; }
 .range-calendar-grid { display: grid; grid-template-columns: repeat(7, 34px); row-gap: 2px; }
-.range-calendar-weekday { padding: 4px 0 6px; color: var(--slate-62); font-size: 11px; font-weight: 650; text-align: center; }
+.range-calendar-weekday { padding: 4px 0 6px; color: var(--text-muted); font-size: 11px; font-weight: 650; text-align: center; }
 .range-calendar-day { position: relative; height: 32px; padding: 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 12.5px; font-variant-numeric: tabular-nums; cursor: pointer; }
 .range-calendar-day:hover:not(:disabled) { border-radius: 7px; background: var(--steel-a08); }
 .range-calendar-day:focus-visible { z-index: 1; border-radius: 7px; outline: 2px solid var(--steel); outline-offset: -2px; }
@@ -597,7 +597,7 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .range-calendar-day.range-start.range-end { border-radius: 7px; }
 .range-calendar-day.edge { background: var(--steel); color: var(--white); font-weight: 650; }
 .range-calendar-day.edge:hover { background: var(--steel-dark); }
-.range-calendar-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--orange-90); }
+.range-calendar-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .range-calendar-foot > span { flex: 1; color: var(--ink-soft); font-size: 12.5px; }
 .range-calendar-cancel, .range-calendar-apply { height: 32px; padding: 0 14px; border-radius: 7px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .range-calendar-cancel { border: 1px solid var(--line); background: var(--white); color: var(--ink-soft); }
@@ -682,7 +682,7 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .dashboard-filters .period-menu:has(.period-menu-clear) .header-filter-trigger { border-radius: 7px 0 0 7px; }
 
 /* Compare: two steps on one calendar, the first period's days disabled for the second. */
-.compare-steps { display: grid; gap: 6px; margin: 0 0 14px; padding: 0 0 12px; border-bottom: 1px solid var(--orange-90); list-style: none; color: var(--slate-62); font-size: 12.5px; }
+.compare-steps { display: grid; gap: 6px; margin: 0 0 14px; padding: 0 0 12px; border-bottom: 1px solid var(--line); list-style: none; color: var(--text-muted); font-size: 12.5px; }
 .compare-steps li { display: flex; align-items: center; gap: 8px; }
 .compare-steps li span { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--slate-86); border-radius: 50%; font-size: 11px; font-weight: 700; }
 .compare-steps li.current { color: var(--ink); font-weight: 650; }
@@ -713,8 +713,8 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .accuracy-key-target { width: 2px; height: 12px; border-radius: 1px; background: var(--ink); opacity: .45; }
 .accuracy-check-meters .rate-meter--compare { grid-template-columns: 38px minmax(40px, 1fr) auto; }
 .rate-meter--compare.rate-meter--empty { display: flex; align-items: center; gap: 10px; }
-.rate-meter-new { color: var(--slate-62); font-size: 11.5px; white-space: nowrap; }
+.rate-meter-new { color: var(--text-muted); font-size: 11.5px; white-space: nowrap; }
 .rate-change { display: block; margin-top: 4px; }
-.review-mix-total .compare-was { margin-left: 6px; color: var(--slate-62); font-size: 12px; }
+.review-mix-total .compare-was { margin-left: 6px; color: var(--text-muted); font-size: 12px; }
 .review-mix-total .compare-pill, .review-mix-counts .compare-pill { margin-left: 5px; padding: 1px 6px; font-size: 11px; }
 .accuracy-card-change { display: block; margin-bottom: 4px; }

@@ -12,15 +12,15 @@ export type CaseSection =
   | 'audit'
   | 'cost';
 
-export const CASE_SECTIONS: { id: CaseSection; label: string; icon: IconName }[] = [
-  { id: 'summary', label: 'Case Summary', icon: 'summary' },
-  { id: 'documents', label: 'Documents', icon: 'documents' },
-  { id: 'analysis', label: 'Case Analysis', icon: 'analysis' },
-  { id: 'risk', label: 'Risk Summary', icon: 'risk' },
-  { id: 'additional', label: 'Additional Documents', icon: 'additional' },
-  { id: 'notes', label: 'Notes', icon: 'notes' },
-  { id: 'audit', label: 'Audit Trail', icon: 'audit' },
-  { id: 'cost', label: 'Claude Cost', icon: 'cost' },
+export const CASE_SECTIONS: { id: CaseSection; label: string; short: string; icon: IconName }[] = [
+  { id: 'summary', label: 'Case Summary', short: 'Summary', icon: 'summary' },
+  { id: 'documents', label: 'Documents', short: 'Documents', icon: 'documents' },
+  { id: 'analysis', label: 'Case Analysis', short: 'Analysis', icon: 'analysis' },
+  { id: 'risk', label: 'Risk Summary', short: 'Risk', icon: 'risk' },
+  { id: 'additional', label: 'Additional Documents', short: 'Additional', icon: 'additional' },
+  { id: 'notes', label: 'Notes', short: 'Notes', icon: 'notes' },
+  { id: 'audit', label: 'Audit Trail', short: 'Audit', icon: 'audit' },
+  { id: 'cost', label: 'Claude Cost', short: 'Cost', icon: 'cost' },
 ];
 
 // The sections whose menu item has a status line under its label, which only the live snapshot can fill in.
