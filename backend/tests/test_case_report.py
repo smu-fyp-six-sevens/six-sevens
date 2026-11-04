@@ -122,7 +122,7 @@ def test_report_without_an_analysis_says_so_once_and_leaves_out_the_analysis_sec
     assert "Acme Holdings Pte Ltd" in text
     assert "GLDB-137" in text
     assert "Green Link Digital Bank" in text
-    assert "OPEN" in text  # the case's stage
+    assert "AWAITING DOCUMENTS" in text  # the case's stage
     assert text.count("No case analysis has been run yet.") == 1
     assert "Confidential · Generated 30 Oct 2026, 14:00 SGT by K. Lim" in text
     for section in ("Summary", "Risk Assessment", "Cross-Document Analysis", "Additional Documents to Request"):
