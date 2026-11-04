@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Icon } from './Icon';
 
 interface DropZoneProps {
   onFiles: (files: File[]) => void;
@@ -50,7 +51,7 @@ export default function DropZone({ onFiles, disabled = false }: DropZoneProps) {
         }}
       />
 
-      <div className="dz-icon" aria-hidden="true">⇪</div>
+      <div className="dz-icon" aria-hidden="true"><Icon name="upload" size={26} /></div>
       <div className="dz-title">
         Drag files here or{' '}
         <span className="browse-link">browse</span>

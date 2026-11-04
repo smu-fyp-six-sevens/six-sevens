@@ -5,7 +5,6 @@ import AppHeader from '../components/AppHeader';
 import HeaderFilter, { type FilterOption } from '../components/HeaderFilter';
 import PeriodMenu, { CUSTOM_RANGE } from '../components/PeriodMenu';
 import CompareMenu from '../components/CompareMenu';
-import CompareDelta from '../components/CompareDelta';
 import { RefreshButton } from '../components/RefreshButton';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { InfoIcon } from '../components/InfoTip';
@@ -16,7 +15,10 @@ import { useCaseCosts } from './dashboardCosts';
 import { CheckBreakdown, CheckDocumentMatrix, FlagKpis, FlagsByRisk, type FlagCase } from './DashboardFlagAnalytics';
 import { CaseKpis, CostAgainstTime, RiskScoreSpread, StageBreakdown, TimeAndCostByCase, type AnalyticsCase, type CostState } from './DashboardCaseAnalytics';
 import { CASE_STAGES, caseStageLabel, caseStageTone } from '../utils/caseStages';
-import { formatDocumentType, type DetectionMetricsFilters } from '../services/uploadService';
+import { StageMark } from '../components/StageMark';
+import { Icon } from '../components/Icon';
+import { CasePipeline } from './CasePipeline';
+import { formatDocumentType, type CaseStage, type DetectionMetricsFilters } from '../services/uploadService';
 import { formatCheck } from '../utils/checkLabels';
 import { PRESETS, formatPeriod, inPeriod, isoDay, overlap, presetPeriod, type Period } from '../utils/dateRange';
 
@@ -63,15 +65,15 @@ interface FlagSummary {
 }
 
 const MOCK_CASES: MockCase[] = [
-  { id: 'GLDB-02481', applicant: 'Meridian Consulting Group', submitted: '2026-10-18', status: 'Case Analysed', risk: 'High', score: 82, analyst: 'J. Tan', documentTypes: ['Bank statement', 'Payslip'], flags: ['Identity mismatch', 'Balance inconsistency', 'Unverified address'] },
+  { id: 'GLDB-02481', applicant: 'Meridian Consulting Group', submitted: '2026-10-18', status: 'Ready to Finalise', risk: 'High', score: 82, analyst: 'J. Tan', documentTypes: ['Bank statement', 'Payslip'], flags: ['Identity mismatch', 'Balance inconsistency', 'Unverified address'] },
   { id: 'GLDB-02480', applicant: 'Northstar Trading Pte Ltd', submitted: '2026-10-17', status: 'Processing Documents', risk: 'Medium', score: 58, analyst: 'A. Lim', documentTypes: ['Certificate', 'Bank statement'], flags: ['Company detail mismatch', 'Unusual transaction'] },
-  { id: 'GLDB-02479', applicant: 'Harbourlight Foods', submitted: '2026-10-16', status: 'Open', risk: 'High', score: 77, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Certificate'], flags: ['Invalid postal code', 'Identity mismatch'] },
+  { id: 'GLDB-02479', applicant: 'Harbourlight Foods', submitted: '2026-10-16', status: 'Awaiting Documents', risk: 'High', score: 77, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Certificate'], flags: ['Invalid postal code', 'Identity mismatch'] },
   { id: 'GLDB-02478', applicant: 'Cedar & Stone Pte Ltd', submitted: '2026-10-15', status: 'Failed', risk: 'Low', score: 18, analyst: 'M. Goh', documentTypes: ['Bank statement', 'Payslip'], flags: [] },
-  { id: 'GLDB-02477', applicant: 'Orchid Systems', submitted: '2026-10-13', status: 'Case Analysed', risk: 'High', score: 91, analyst: 'A. Lim', documentTypes: ['Certificate', 'Proof of address'], flags: ['Invalid registration number', 'Identity mismatch', 'Font anomaly'] },
+  { id: 'GLDB-02477', applicant: 'Orchid Systems', submitted: '2026-10-13', status: 'Ready to Finalise', risk: 'High', score: 91, analyst: 'A. Lim', documentTypes: ['Certificate', 'Proof of address'], flags: ['Invalid registration number', 'Identity mismatch', 'Font anomaly'] },
   { id: 'GLDB-02476', applicant: 'Brightpath Logistics', submitted: '2026-10-12', status: 'Processing Documents', risk: 'Medium', score: 49, analyst: 'J. Tan', documentTypes: ['Bank statement', 'Certificate'], flags: ['Balance inconsistency'] },
   { id: 'GLDB-02475', applicant: 'Evergreen Medical Supplies', submitted: '2026-10-10', status: 'Processing Documents', risk: 'Low', score: 22, analyst: 'M. Goh', documentTypes: ['Payslip', 'Proof of address'], flags: [] },
-  { id: 'GLDB-02474', applicant: 'Silverline Manufacturing', submitted: '2026-10-08', status: 'Open', risk: 'Medium', score: 64, analyst: 'A. Lim', documentTypes: ['Certificate', 'Bank statement'], flags: ['Company detail mismatch', 'Unusual transaction'] },
-  { id: 'GLDB-02473', applicant: 'Bluepeak Design Studio', submitted: '2026-09-29', status: 'Case Analysed', risk: 'Medium', score: 61, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Bank statement'], flags: ['Invalid postal code', 'Identity mismatch'] },
+  { id: 'GLDB-02474', applicant: 'Silverline Manufacturing', submitted: '2026-10-08', status: 'Awaiting Documents', risk: 'Medium', score: 64, analyst: 'A. Lim', documentTypes: ['Certificate', 'Bank statement'], flags: ['Company detail mismatch', 'Unusual transaction'] },
+  { id: 'GLDB-02473', applicant: 'Bluepeak Design Studio', submitted: '2026-09-29', status: 'Ready to Finalise', risk: 'Medium', score: 61, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Bank statement'], flags: ['Invalid postal code', 'Identity mismatch'] },
   { id: 'GLDB-02472', applicant: 'Pioneer Green Energy', submitted: '2026-09-22', status: 'Processing Documents', risk: 'Low', score: 31, analyst: 'M. Goh', documentTypes: ['Certificate', 'Payslip'], flags: ['Company detail mismatch'] },
 ];
 // Preview rows only: live cases carry their real time from the case list.
@@ -83,6 +85,10 @@ const STAGE_BY_LABEL = new Map(CASE_STAGES.map((stage) => [caseStageLabel(stage)
 
 function statusTone(status: Status): string {
   return caseStageTone(STAGE_BY_LABEL.get(status));
+}
+
+function statusStage(status: Status): string | undefined {
+  return STAGE_BY_LABEL.get(status);
 }
 const SEVERITY_RANK: Record<FlagSummary['severity'], number> = { High: 3, Medium: 2, Low: 1 };
 function flagSeverity(value: string): FlagSummary['severity'] {
@@ -267,7 +273,7 @@ export default function DashboardPage({
     value: status,
     text: status,
     count: casesInRange.filter((item) => item.status === status).length,
-    label: <><span className={`case-status-dot tone-${statusTone(status)}`} aria-hidden="true" />{status}</>,
+    label: <><StageMark stage={statusStage(status)} />{status}</>,
   }));
 
   // Claude spend for the live cases in view and in the comparison, for the totals and the Cases tab's charts.
@@ -281,6 +287,9 @@ export default function DashboardPage({
   const view = useMemo(() => deriveView(visibleCases, costs), [visibleCases, costs]);
   const before: DashboardView | null = useMemo(() => (compareCases ? deriveView(compareCases, costs) : null), [compareCases, costs]);
   const { statusCounts, byDocumentType, flagRows, flagCases, attentionCases, analyticsCases } = view;
+  const countsByStage = (counts: Record<Status, number>) =>
+    Object.fromEntries(CASE_STAGES.map((stage) => [stage, counts[caseStageLabel(stage)]])) as Record<CaseStage, number>;
+  const stageCounts = countsByStage(statusCounts);
   // The commonest flags, most cases first, for the Overview. When comparing, a flag raised only in the comparison
   // is listed at 0 after them, so a drop to none shows rather than the row disappearing.
   const wasFlagged = new Map(before?.flagRows.map((row) => [row.name, row]));
@@ -295,7 +304,7 @@ export default function DashboardPage({
     ...(before?.byDocumentType ?? []).filter(([type]) => !byDocumentType.some(([now]) => now === type)).map(([type]): [string, number] => [type, 0]),
   ];
   const openAnalyticsCase = (item: AnalyticsCase) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`);
-  const stages = useMemo(() => STATUSES.map((status) => ({ label: status, tone: statusTone(status) })), []);
+  const stages = useMemo(() => STATUSES.map((status) => ({ label: status, tone: statusTone(status), stage: statusStage(status) })), []);
 
   return (
     <main className="shell dashboard-shell">
@@ -319,7 +328,7 @@ export default function DashboardPage({
                 const count = isLoading ? null : item === 'Cases' ? visibleCases.length : item === 'Flags' ? flagRows.length : null;
                 return (
                   <button key={item} className={tab === item ? 'active' : ''} aria-current={tab === item ? 'page' : undefined} onClick={() => setTab(item)}>
-                    <span className="nav-icon" aria-hidden="true">{item === 'Overview' ? '▦' : item === 'Cases' ? '▤' : item === 'Flags' ? '⚑' : item === 'Accuracy' ? '✓' : '◎'}</span>{item}
+                    <span className="nav-icon" aria-hidden="true"><Icon name={item === 'Overview' ? 'overview' : item === 'Cases' ? 'documents' : item === 'Flags' ? 'flag' : 'approved'} size={15} /></span>{item}
                     {count !== null && <span className="nav-count">{count}</span>}
                   </button>
                 );
@@ -394,10 +403,7 @@ export default function DashboardPage({
               )}
             </div>
           )}
-          {tab === 'Overview' && <section className="dashboard-stat-grid" aria-label="Case counts by status">
-            <article className="dashboard-stat-card stat-total"><div className="stat-top"><span className="stat-period">{rangeLabel}</span></div><span className="stat-number">{visibleCases.length}</span>{before ? <CompareDelta value={visibleCases.length} previous={before.cases.length} /> : <span className="stat-caption">Cases in view</span>}</article>
-            {STATUSES.map((status) => <article key={status} className={`dashboard-stat-card${before && !statusCounts[status] && !before.statusCounts[status] ? ' stat-card--quiet' : ''}`}><div className="stat-top"><span className="stat-caption">{status}</span><span className={`case-status-dot tone-${statusTone(status)}`} /></div><span className="stat-number">{statusCounts[status]}</span>{before ? <CompareDelta value={statusCounts[status]} previous={before.statusCounts[status]} /> : <span className="stat-caption">{visibleCases.length ? `${Math.round(statusCounts[status] / visibleCases.length * 100)}% of cases` : '0% of cases'}</span>}</article>)}
-          </section>}
+          {tab === 'Overview' && <CasePipeline counts={stageCounts} total={visibleCases.length} period={rangeLabel} before={before ? { counts: countsByStage(before.statusCounts), total: before.cases.length } : undefined} />}
           {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
           {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
 

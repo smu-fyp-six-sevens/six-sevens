@@ -5,6 +5,7 @@ import { updateCase } from '../services/uploadService';
 import { MAX_COMPANY_NAME_LENGTH, validateCompanyName } from '../utils/caseValidation';
 import { CharacterCount } from './CharacterCount';
 import { ErrorMessage } from './ErrorMessage';
+import { StageMark } from './StageMark';
 
 interface CaseRowProps {
   caseRecord: CaseRecord;
@@ -131,7 +132,7 @@ export default function CaseRow({
         <span className="case-row-name">{caseRecord.applicant}</span>
 
         <span className="case-row-status">
-          <span className={`case-status-dot tone-${caseRecord.statusTone}`} aria-hidden="true" />
+          <StageMark stage={caseRecord.caseStatus} />
           {caseRecord.status}
           {caseRecord.stuck && (
             <span className="case-row-stuck" title="A document has been processing longer than expected">
