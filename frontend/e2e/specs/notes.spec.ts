@@ -82,10 +82,12 @@ test.describe('Case and document notes @SCRUM-81', () => {
  * live run used case GLDB-130; the captured Anchorpoint case (GLDB-02) stands in for it here.
  */
 test.describe('Attach officer notes @sprint4 @SCRUM-81', () => {
-  /** What reloading must leave unchanged: the note's header (author, time, document) and its exact timestamp. */
+  /** The note fields that should be stable across reloads. */
   const snapshotOf = async (note: Locator) => ({
-    meta: await note.locator('.note-meta').textContent(),
-    time: await note.locator('time').getAttribute('datetime'),
+    author: await note.locator('.note-meta strong').textContent(),
+    displayedTime: await note.locator('time').textContent(),
+    timestamp: await note.locator('time').getAttribute('datetime'),
+    document: await note.locator('.note-document').textContent(),
   });
 
   test('CM-029 / CM-031 / CM-033 / CM-034 a case note shows its author and time, no document, and survives a reload @CM-029 @CM-031 @CM-033 @CM-034', async ({ page, backend }) => {
@@ -140,11 +142,14 @@ test.describe('Attach officer notes @sprint4 @SCRUM-81', () => {
       await expect(note.locator('time')).not.toBeEmpty();
       await expect(note.locator('.note-document')).toHaveText(payslip.filename);
     }
-    const before = await snapshotOf(notes.last());
+    const attachedNote = page.getByTestId('note').filter({ hasText: 'CPF figure checked against the CPF statement.' });
+    await expect(attachedNote).toHaveCount(1);
+    const before = await snapshotOf(attachedNote);
 
     await page.reload();
     await expect(notes).toHaveCount(2);
-    expect(await snapshotOf(notes.last())).toEqual(before);
+    await expect(attachedNote.locator('.note-body')).toHaveText('CPF figure checked against the CPF statement.');
+    expect(await snapshotOf(attachedNote)).toEqual(before);
 
     // Both are under the payslip, and not under another document of the case.
     await page.goto(fixture.documentUrl(payslip));
