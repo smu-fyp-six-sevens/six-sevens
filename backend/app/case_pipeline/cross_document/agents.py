@@ -19,7 +19,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import math
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -30,22 +29,12 @@ from ...guardrails.envelope import fence
 from ...langgraph._anthropic import build_chat_anthropic
 from ...langgraph.cache_gate import cache_gate
 from ...run_context import spend_model_call
-from ...llm_io import forced_args, message_text, parse_json_object, salvage_list, thinking_summaries, was_cut_off
+from ...llm_io import forced_args, message_text, parse_json_object, probability, salvage_list, thinking_summaries, was_cut_off
 from ..models import Hypothesis, PlannedCheck
 from .bias import has_protected_text
 from .evidence import CaseContext, render_dossier
 from .tools import COMPUTED_TOOLS, CROSS_DOCUMENT_TOOLS, build_tools
 
-
-def _probability(value: Any) -> float:
-    """Return a finite model confidence in [0, 1], using zero for absent or invalid values."""
-    if isinstance(value, bool):
-        return 0.0
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return 0.0
-    return min(1.0, max(0.0, number)) if math.isfinite(number) else 0.0
 
 logger = logging.getLogger("classifier_pipeline.case_pipeline.agents")
 
@@ -294,14 +283,14 @@ async def hypothesise(context: CaseContext) -> tuple[list[Hypothesis], float]:
     via = "tool"
     if args is not None:
         items = args.get("hypotheses") or []
-        planner_confidence = _probability(args.get("confidence"))
+        planner_confidence = probability(args.get("confidence"))
     else:
         # The model answered in text instead of calling the tool (or was cut off): read what is there.
         via = "text"
         reply = message_text(response.content)
         parsed = parse_json_object(reply) or {}
         items = parsed.get("hypotheses") or ([] if parsed else salvage_list(reply, "hypotheses"))
-        planner_confidence = _probability(parsed.get("confidence"))
+        planner_confidence = probability(parsed.get("confidence"))
     tool_names = {t.name for t in build_tools(context, [])}
 
     hypotheses: list[Hypothesis] = []
@@ -333,7 +322,7 @@ async def hypothesise(context: CaseContext) -> tuple[list[Hypothesis], float]:
         hypotheses.append(Hypothesis(
             id=f"h{index + 1}",
             claim=str(item["claim"])[:300],
-            confidence=_probability(item.get("confidence")),
+            confidence=probability(item.get("confidence")),
             documents=[d for d in item.get("documents") or [] if isinstance(d, str) and d in context.docs],
             proof=str(item.get("proof") or "")[:300],
             refutation_document=refutation_document,

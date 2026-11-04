@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { CaseRecord } from '../App';
+import type { CaseRecord } from '../utils/caseRecord';
+import type { Risk } from './dashboardRisk';
 import AppHeader from '../components/AppHeader';
 import HeaderFilter, { type FilterOption } from '../components/HeaderFilter';
 import PeriodMenu, { CUSTOM_RANGE } from '../components/PeriodMenu';
@@ -24,7 +25,6 @@ import { PRESETS, formatPeriod, inPeriod, isoDay, overlap, presetPeriod, type Pe
 
 // A case stage's label (utils/caseStages.ts), so the dashboard and the case queue name and colour cases the same way.
 type Status = string;
-type Risk = 'Critical' | 'High' | 'Medium' | 'Low';
 type Role = 'Manager' | 'Analyst';
 
 // Manager view is kept but hidden for now; flip to true to show the role switch again.

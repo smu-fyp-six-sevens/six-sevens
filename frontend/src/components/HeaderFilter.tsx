@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { useDismiss } from './useDismiss';
 import type { ReactNode } from 'react';
 
 export interface FilterOption {
@@ -57,25 +58,7 @@ export default function HeaderFilter({ name, title, options, selected, disabled 
     if (!isOpen) setCleared(false);
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') setIsOpen(false);
-    }
-
-    document.addEventListener('mousedown', closeOnOutsideClick);
-    document.addEventListener('keydown', closeOnEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', closeOnOutsideClick);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [isOpen]);
+  useDismiss(rootRef, isOpen, () => setIsOpen(false));
 
   return (
     <span className="header-filter" ref={rootRef}>

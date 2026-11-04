@@ -1,16 +1,13 @@
 import { useState, type CSSProperties } from 'react';
 import SelectMenu from '../components/SelectMenu';
 import CompareDelta from '../components/CompareDelta';
+import { LEVELS, levelClass, type Risk } from './dashboardRisk';
 
 // The dashboard's Flags tab: how much the checks flag, which checks and documents the flags land on, and how flags
 // line up with the cases' risk. Each check opens to the cases it flagged.
 
-type Risk = 'Critical' | 'High' | 'Medium' | 'Low';
-type Level = Risk | 'Not scored';
 type Severity = 'High' | 'Medium' | 'Low';
-const LEVELS: Level[] = ['Critical', 'High', 'Medium', 'Low', 'Not scored'];
 const SEVERITY_RANK: Record<Severity, number> = { High: 3, Medium: 2, Low: 1 };
-const levelClass = (level: Level) => (level === 'Not scored' ? 'risk-overview--none' : `risk-gauge-band--${level.toLowerCase()}`);
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 export interface FlagCase {

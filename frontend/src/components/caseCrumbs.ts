@@ -1,6 +1,5 @@
-import type { CaseRecord } from '../App';
 import { listCaseDocuments, listCasesPage } from '../services/uploadService';
-import { toCaseRecord } from '../utils/caseRecord';
+import { toCaseRecord, type CaseRecord } from '../utils/caseRecord';
 import { caseNumberLabel } from '../utils/caseSearch';
 import type { Breadcrumb } from './Breadcrumbs';
 

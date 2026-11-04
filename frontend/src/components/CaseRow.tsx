@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CaseRecord } from '../App';
+import type { CaseRecord } from '../utils/caseRecord';
 import KebabMenu from './KebabMenu';
 import { updateCase } from '../services/uploadService';
 import { MAX_COMPANY_NAME_LENGTH, validateCompanyName } from '../utils/caseValidation';

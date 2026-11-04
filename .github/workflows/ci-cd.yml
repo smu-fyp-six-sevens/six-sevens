@@ -4,11 +4,12 @@ on:
   push:
     branches:
       - main
-    # A push of only docs or workflow files neither tests nor redeploys anything.
+    # A push of only docs, workflow files or .gitignore neither tests nor redeploys anything.
     paths-ignore:
       - '**.md'
       - 'docs/**'
       - '.github/workflows/**'
+      - '.gitignore'
   pull_request:
   workflow_dispatch:
   # Weekly: Snyk again for vulnerabilities published since the dependencies last changed (Monday 09:00 SGT).

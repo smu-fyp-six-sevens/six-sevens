@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
+import { useDismiss } from './useDismiss';
 import type { ReactNode } from 'react';
 import RangeCalendar from './RangeCalendar';
 import type { Period } from '../utils/dateRange';
@@ -43,25 +44,7 @@ export default function PeriodMenu({ name, trigger, active = false, options, sel
     triggerRef.current?.focus();
   }
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setView('closed');
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') close();
-    }
-
-    document.addEventListener('mousedown', closeOnOutsideClick);
-    document.addEventListener('keydown', closeOnEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', closeOnOutsideClick);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [isOpen]);
+  useDismiss(rootRef, isOpen, () => setView('closed'), close);
 
   const tick = (on: boolean) => (
     <svg className="select-menu-check" viewBox="0 0 12 12" aria-hidden="true">{on && <path d="M2 6.5 4.8 9 10 3" />}</svg>

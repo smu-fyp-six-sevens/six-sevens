@@ -1,10 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { useDismiss } from './useDismiss';
 import { NavLink, useNavigate } from 'react-router-dom';
-import type { CaseRecord } from '../App';
 import { clearToken, getUsername } from '../lib/api';
 import { officerLabel } from '../lib/officers';
 import { searchCases } from '../services/uploadService';
-import { toCaseRecord } from '../utils/caseRecord';
+import { toCaseRecord, type CaseRecord } from '../utils/caseRecord';
 import { caseNumberLabel, findExactCase } from '../utils/caseSearch';
 import BrandLink from './BrandLink';
 
@@ -189,25 +189,7 @@ function AccountMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const username = getUsername();
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') setIsOpen(false);
-    }
-
-    document.addEventListener('mousedown', closeOnOutsideClick);
-    document.addEventListener('keydown', closeOnEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', closeOnOutsideClick);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [isOpen]);
+  useDismiss(rootRef, isOpen, () => setIsOpen(false));
 
   return (
     <div className="officer-tag" ref={rootRef}>

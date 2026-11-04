@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { CaseRecord } from '../App';
+import type { CaseRecord } from '../utils/caseRecord';
 import Breadcrumbs, { type Breadcrumb } from './Breadcrumbs';
 
 interface CaseHeaderProps {

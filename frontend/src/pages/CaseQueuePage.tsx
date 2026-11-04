@@ -9,7 +9,7 @@ import type { FilterOption } from '../components/HeaderFilter';
 import Pagination from '../components/Pagination';
 import { deleteCase } from '../services/uploadService';
 import type { CaseRiskFilter, CaseSort, CaseStage } from '../services/uploadService';
-import type { CaseRecord } from '../App';
+import type { CaseRecord } from '../utils/caseRecord';
 import { CASE_STAGES, caseStageLabel, isCaseStage } from '../utils/caseStages';
 import { StageMark } from '../components/StageMark';
 import { caseNumberLabel } from '../utils/caseSearch';

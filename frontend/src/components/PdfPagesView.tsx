@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PDFPageProxy } from 'pdfjs-dist';
 import HighlightLayer from './HighlightLayer';
-import type { ActivePlace } from './HighlightLayer';
+import type { ActivePlace, HighlightOptions } from './HighlightLayer';
 import type { FindingHighlight } from './findingHighlights';
-import type { HighlightOptions } from './HighlightedDocument';
 
 // pdf.js is large and only this view needs it, so it loads with the first PDF shown. Its worker is
 // bundled by Vite as a .js file (nginx's mime.types has no .mjs, and a worker needs a script type),

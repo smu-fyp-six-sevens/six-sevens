@@ -91,6 +91,17 @@ The database was wiped on 2026-10-31 and the fallbacks for older rows were remov
 
 ---
 
+## 6. Worth a look (not read yet)
+
+Found by the size and coupling in a code graph (2026-11-05), not by reading the code. Each needs a real review before it counts as a problem.
+
+- **`case_report.py`:** 1,298 lines and 88 symbols, and it depends on 17 other files. It's about twice the size of `case_service.py`, so it's the best candidate for a real review.
+- **`DocumentDetailsPage.tsx` and `UploadPage.tsx`:** 712 and 510 lines, and each depends on 36–37 files.
+- **`routers/detection.py`:** it depends on 33 files, a lot for a router. `documents.py` was split into a service for the same reason.
+- **`_finding`:** defined in 7 files. The copies haven't been compared.
+
+---
+
 ## Suggested order
 
 1. **Revoke TRUNCATE on the audit trail** (§4.3), one line of SQL.

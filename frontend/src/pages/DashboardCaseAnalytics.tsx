@@ -3,16 +3,11 @@ import SelectMenu from '../components/SelectMenu';
 import CompareDelta from '../components/CompareDelta';
 import { formatDuration } from './upload/processingTimes';
 import { median, usd } from './dashboardCosts';
+import { LEVELS, RISK_RANK, levelClass, type Risk } from './dashboardRisk';
 import { StageMark } from '../components/StageMark';
 
 // The dashboard's Cases tab: what the cases in view cost and took, where they are, and how they scored. The case
 // queue lists the cases; this answers questions about them as a set.
-
-type Risk = 'Critical' | 'High' | 'Medium' | 'Low';
-type Level = Risk | 'Not scored';
-const LEVELS: Level[] = ['Critical', 'High', 'Medium', 'Low', 'Not scored'];
-const RISK_RANK: Record<Risk, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-const levelClass = (level: Level) => (level === 'Not scored' ? 'risk-overview--none' : `risk-gauge-band--${level.toLowerCase()}`);
 
 export interface AnalyticsCase {
   id: string;

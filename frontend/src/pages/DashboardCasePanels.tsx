@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDuration } from './upload/processingTimes';
 import { median, usd } from './dashboardCosts';
+import { LEVELS, RISK_RANK, levelClass, type Level, type Risk } from './dashboardRisk';
 import CompareDelta from '../components/CompareDelta';
 import type { Period } from '../utils/dateRange';
 import { caseStageLabel } from '../utils/caseStages';
@@ -10,10 +11,7 @@ import { caseStageLabel } from '../utils/caseStages';
 // documents the analyses ask for most, and what the processing took in time and Claude spend. None lists cases the
 // way the case queue does; each answers a question about them.
 
-type Risk = 'Critical' | 'High' | 'Medium' | 'Low';
 type FlagSeverity = 'High' | 'Medium' | 'Low';
-
-const RISK_RANK: Record<Risk, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // "today", "1 day", "5 days": how long ago a case came in.
@@ -154,10 +152,6 @@ export function NeedsAttention({ cases, onOpen }: { cases: AttentionCase[]; onOp
 
 // ---------------------------------------------------------------------------------------------------------------
 // Cases over time
-
-type Level = Risk | 'Not scored';
-const LEVELS: Level[] = ['Critical', 'High', 'Medium', 'Low', 'Not scored'];
-const levelClass = (level: Level) => (level === 'Not scored' ? 'risk-overview--none' : `risk-gauge-band--${level.toLowerCase()}`);
 
 function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10);

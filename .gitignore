@@ -36,6 +36,9 @@ frontend/test-results/
 
 .ruff_cache/
 
+# Graphify's code graph
+graphify-out/
+
 # Terraform
 deploy/terraform/.terraform/
 deploy/terraform/.terraform.lock.hcl.bak
