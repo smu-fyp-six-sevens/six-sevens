@@ -11,6 +11,9 @@ on:
       - '.github/workflows/**'
   pull_request:
   workflow_dispatch:
+  # Weekly: Snyk again for vulnerabilities published since the dependencies last changed (Monday 09:00 SGT).
+  schedule:
+    - cron: '0 1 * * 1'
 
 permissions:
   contents: read
@@ -18,6 +21,8 @@ permissions:
 jobs:
   backend-ci:
     name: Backend CI
+    # The weekly run is for the dependency scans only.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -101,6 +106,7 @@ jobs:
     # cases against a mocked backend, frontend/e2e) — one job, one install,
     # instead of a second job repeating checkout/setup-node/npm ci.
     name: Frontend CI
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     # Chromium and its system libraries come with the image, so there is no browser install step. The tag must
     # match @playwright/test in frontend/package-lock.json; bump both together.
@@ -154,13 +160,16 @@ jobs:
   security:
     # Blocking: a high-severity finding fails the build and stops the deploy. Findings that don't apply are
     # skipped inline with a reason (#checkov:skip=...), never by making this job optional.
-    name: Security (Checkov, Snyk, Terraform)
+    name: Security (Checkov, dependency audits, Snyk, Terraform)
     runs-on: ubuntu-latest
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          # The whole history, so the dependency check below can compare with the commit before this push.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -190,15 +199,53 @@ jobs:
         if: ${{ !cancelled() }}
         run: checkov -d .github/workflows --framework github_actions --compact --quiet
 
-      - name: Snyk (Python dependencies)
+      # Every run: free scanners with no quota, blocking. pip-audit fails on any known vulnerability (OSV gives no
+      # severity to filter on); npm audit on high and critical.
+      - name: pip-audit (Python dependencies)
         if: ${{ !cancelled() }}
+        run: |
+          python -m pip install "pip-audit>=2.7,<3"
+          pip-audit -r backend/requirements.lock --no-deps --disable-pip
+
+      - name: npm audit (npm dependencies)
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+      # Snyk's free plan has a monthly test quota, so it runs only when the dependencies change, on the weekly
+      # schedule, or by hand.
+      - name: Did the dependencies change?
+        id: deps
+        if: ${{ !cancelled() }}
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base="$PUSH_BEFORE"
+          [ "$EVENT" = "pull_request" ] && base="$PR_BASE"
+          if [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ] \
+            || ! git cat-file -e "${base:-none}^{commit}" 2>/dev/null \
+            || ! git diff --quiet "$base" HEAD -- backend/requirements.lock frontend/package.json frontend/package-lock.json; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Dependencies unchanged: Snyk skipped (pip-audit and npm audit ran)."
+          fi
+
+      # Temporarily non-blocking (continue-on-error) while the monthly quota is used up; remove both
+      # continue-on-error lines once it resets, so Snyk blocks again when it runs.
+      - name: Snyk (Python dependencies)
+        if: ${{ !cancelled() && steps.deps.outputs.changed == 'true' }}
+        continue-on-error: true
         run: |
           # Snyk reads installed packages for a requirements file, so install them first.
           python -m pip install -r backend/requirements.lock
           npx --yes snyk@1 test --file=backend/requirements.lock --package-manager=pip --severity-threshold=high
 
       - name: Snyk (npm dependencies)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.deps.outputs.changed == 'true' }}
+        continue-on-error: true
         run: cd frontend && npm ci && npx --yes snyk@1 test --severity-threshold=high
 
       # Terraform format and validity only: no state, no credentials. `apply` stays a manual step
