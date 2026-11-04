@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Registry
+         * @description Read-only snapshot of configured agents and the limits currently applied to their pipelines.
+         */
+        get: operations["get_agent_registry_agents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/prompt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Prompt View
+         * @description Return source prompt templates for one role, with per-run inputs marked as placeholders.
+         */
+        get: operations["get_agent_prompt_view_agents__agent_id__prompt_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dev/documents": {
         parameters: {
             query?: never;
@@ -1770,6 +1810,47 @@ export interface components {
             decision: string;
             /** Decision Id */
             decision_id: string;
+        };
+        /** AgentPrompt */
+        AgentPrompt: {
+            /** Agent Id */
+            agent_id: string;
+            /** Document Type */
+            document_type: string | null;
+            /** Note */
+            note: string;
+            /** Sections */
+            sections: components["schemas"]["PromptSection"][];
+        };
+        /** AgentRecord */
+        AgentRecord: {
+            /** Access Summary */
+            access_summary: string[];
+            /** Call Budget */
+            call_budget: string;
+            /** Group */
+            group: string;
+            /** Id */
+            id: string;
+            /** Limitations */
+            limitations: string;
+            /** Model */
+            model: string;
+            /** Name */
+            name: string;
+            /** Owner */
+            owner: string | null;
+            /**
+             * Prompt Options
+             * @default []
+             */
+            prompt_options: string[];
+            /** Prompt Version */
+            prompt_version: string | null;
+            /** Purpose */
+            purpose: string;
+            /** Tools */
+            tools: string[];
         };
         /**
          * AnalysisAudit
@@ -3945,6 +4026,13 @@ export interface components {
              */
             occurred_at: string;
         };
+        /** PromptSection */
+        PromptSection: {
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+        };
         /**
          * ProofOfAddressCoverage
          * @description How many of the case's identified individuals (one per accepted
@@ -4420,6 +4508,72 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_agent_registry_agents_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_prompt_view_agents__agent_id__prompt_get: {
+        parameters: {
+            query?: {
+                document_type?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPrompt"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_injection_documents_api_dev_documents_get: {
         parameters: {
             query?: never;
