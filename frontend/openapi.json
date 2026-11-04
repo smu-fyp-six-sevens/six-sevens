@@ -3009,6 +3009,14 @@
             ],
             "title": "Document Type"
           },
+          "feedback_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Feedback Ids",
+            "type": "array"
+          },
           "filename": {
             "title": "Filename",
             "type": "string"
@@ -3090,7 +3098,8 @@
           "category",
           "source",
           "also_on",
-          "repeat_of"
+          "repeat_of",
+          "feedback_ids"
         ],
         "title": "ContributingFinding",
         "type": "object"
@@ -3500,6 +3509,14 @@
             ],
             "title": "Document Type"
           },
+          "feedback_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Feedback Ids",
+            "type": "array"
+          },
           "filename": {
             "title": "Filename",
             "type": "string"
@@ -3542,7 +3559,8 @@
           "summary",
           "reason",
           "category",
-          "fingerprint"
+          "fingerprint",
+          "feedback_ids"
         ],
         "title": "DismissedFinding",
         "type": "object"
@@ -4149,6 +4167,164 @@
         "title": "ExtractedDate",
         "type": "object"
       },
+      "FeedbackDetail": {
+        "description": "A feedback item opened: what the officer said, with the case it came from.",
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "check_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Code"
+          },
+          "check_name": {
+            "title": "Check Name",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "document_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Type"
+          },
+          "greenlink_case_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greenlink Case Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "verdict",
+              "missed"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reason_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Label"
+          },
+          "reviewer": {
+            "title": "Reviewer",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "document",
+              "case"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "enum": [
+                  "correct",
+                  "wrong"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          }
+        },
+        "required": [
+          "id",
+          "case_id",
+          "document_id",
+          "scope",
+          "kind",
+          "check_name",
+          "check_code",
+          "document_type",
+          "verdict",
+          "reason",
+          "summary",
+          "note",
+          "reviewer",
+          "updated_at",
+          "reason_label",
+          "greenlink_case_id"
+        ],
+        "title": "FeedbackDetail",
+        "type": "object"
+      },
       "FieldComparison": {
         "description": "One document-vs-case comparison \u2014 AC4's \"what caused the mismatch\".",
         "properties": {
@@ -4343,6 +4519,25 @@
             ],
             "title": "Note"
           },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "normal_for_document",
+                  "within_tolerance",
+                  "tool_misread",
+                  "explained_elsewhere",
+                  "not_relevant",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "reviewer": {
             "title": "Reviewer",
             "type": "string"
@@ -4405,6 +4600,7 @@
           "agent_decision",
           "severity",
           "verdict",
+          "reason",
           "note",
           "reviewer",
           "created_at",
@@ -6936,6 +7132,37 @@
             "minLength": 1,
             "title": "Fingerprint",
             "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "normal_for_document",
+                  "within_tolerance",
+                  "tool_misread",
+                  "explained_elsewhere",
+                  "not_relevant",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           },
           "scope": {
             "enum": [
@@ -12094,6 +12321,75 @@
         "summary": "Retry Document",
         "tags": [
           "documents"
+        ]
+      }
+    },
+    "/finding-feedback": {
+      "get": {
+        "description": "Feedback items the agents applied to a finding, opened: the officer's reason and note (confidential details already\nremoved) and the original case. An item an officer has since withdrawn is no longer listed.",
+        "operationId": "get_finding_feedback_finding_feedback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 50,
+              "title": "Ids",
+              "type": "array"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FeedbackDetail"
+                  },
+                  "title": "Response Get Finding Feedback Finding Feedback Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Finding Feedback",
+        "tags": [
+          "finding-reviews"
         ]
       }
     },

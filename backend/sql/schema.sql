@@ -127,6 +127,8 @@ create table public.findings (
     verdict text,
     reviewer text,
     review_note text,
+    -- Why a finding marked wrong is a false alarm (one of the fixed reasons the review offers).
+    review_reason text,
     reviewed_at timestamptz,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
@@ -147,6 +149,39 @@ create table public.findings (
             and reviewer is not null)
     ),
     constraint findings_review_shape check (verdict is null or (reviewer is not null and reviewed_at is not null))
+);
+
+-- What officers taught the agents (app/feedback_repository.py). One row per verdict or missed issue an officer
+-- saved, with the confidential details taken out (app/feedback_scrub.py). Unlike findings, it is not replaced when a
+-- run finishes: it survives re-runs, and is deleted only when the officer clears the verdict or the missed issue.
+-- Before a specialist reviews a document it is shown up to 5 items for the same check from other cases.
+--   source_key: names what the item is about, so saving again replaces it: 'v:<case>:<document or case>:<fingerprint>'
+--               for a verdict, 'm:<findings row id>' for a missed issue.
+--   verdict:    'correct' (the finding was real: a confirmation), 'wrong' (a false alarm), null for a missed issue.
+-- case_id is kept without a foreign key, so an item outlives its case (the link to it then finds none).
+create table public.finding_feedback (
+    id uuid not null default gen_random_uuid(),
+    source_key text not null,
+    case_id text not null,
+    document_id uuid,
+    scope text not null,
+    kind text not null,
+    check_name text not null,
+    check_code text,
+    document_type text,
+    verdict text,
+    reason text,
+    summary text not null default ''::text,
+    note text,
+    reviewer text not null,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint finding_feedback_pkey primary key (id),
+    constraint finding_feedback_source_key unique (source_key),
+    constraint finding_feedback_scope_check check (scope = any (array['document'::text, 'case'::text])),
+    constraint finding_feedback_kind_check check (kind = any (array['verdict'::text, 'missed'::text])),
+    constraint finding_feedback_verdict_check check (verdict = any (array['correct'::text, 'wrong'::text])),
+    constraint finding_feedback_shape check ((kind = 'verdict') = (verdict is not null))
 );
 
 -- An officer's saved review of a group with no findings to mark: a document, or the case's cross-document group.
@@ -257,6 +292,7 @@ create index case_notes_parent_idx on public.case_notes (parent_id);
 create index review_sign_offs_document_idx on public.review_sign_offs (document_id);
 create index cases_risk_idx on public.cases (risk_rank, created_at desc);
 create index findings_reviewed_idx on public.findings (case_id) where reviewer is not null;
+create index finding_feedback_check_idx on public.finding_feedback (check_name, scope, updated_at desc);
 
 -- Trigger -----------------------------------------------------------------------------------------------------------
 
@@ -346,7 +382,9 @@ alter table public.extracted_fields enable row level security;
 alter table public.detection_results enable row level security;
 alter table public.findings enable row level security;
 alter table public.review_sign_offs enable row level security;
+alter table public.finding_feedback enable row level security;
 grant select, insert, update, delete on public.review_sign_offs to service_role;
+grant select, insert, update, delete on public.finding_feedback to service_role;
 alter table public.langgraph_trace enable row level security;
 alter table public.case_analysis_runs enable row level security;
 alter table public.risk_scores enable row level security;

@@ -1303,3 +1303,187 @@
   border-radius: 6px;
   background: var(--amber-bg);
 }
+
+/* Why a finding ticked as a false alarm is one: one-click reasons under it (optional). */
+.false-alarm-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.false-alarm-reasons-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.false-alarm-chip {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.false-alarm-chip:hover:not(:disabled) {
+  border-color: var(--steel);
+  color: var(--ink);
+}
+
+.false-alarm-chip--on {
+  border-color: var(--steel);
+  background: var(--steel-a10);
+  color: var(--steel-dark);
+  font-weight: 700;
+}
+
+.false-alarm-chip:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+.false-alarm-reason {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* The officer feedback an agent applied to a finding, opened on demand. */
+.applied-feedback {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.applied-feedback > summary {
+  color: var(--steel);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.applied-feedback-note {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+}
+
+.applied-feedback-list {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.applied-feedback-item {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+}
+
+.applied-feedback-item > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.applied-feedback-verdict {
+  flex-shrink: 0;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.applied-feedback-verdict--wrong {
+  color: var(--risk-medium-ink);
+}
+
+.applied-feedback-verdict--correct,
+.applied-feedback-verdict--missed {
+  color: var(--steel-dark);
+}
+
+.applied-feedback-summary {
+  min-width: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.applied-feedback-detail {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 8px 0 2px;
+}
+
+.applied-feedback-detail dt {
+  color: var(--text-muted);
+}
+
+.applied-feedback-detail dd {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.false-alarm-note {
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.false-alarm-note:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
+.group-review-incomplete {
+  color: var(--risk-medium-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* The review bar as two zones: Select all and what the ticks mean on the left, the review's state and Save together
+   on the right. When the panel is narrow the right zone drops to its own row, still at the right. */
+.group-review-bar {
+  gap: 10px 16px;
+  padding: 4px 0 12px;
+}
+
+.group-review-hint {
+  flex: 1 1 240px;
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.group-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  margin-left: auto;
+}
+
+.group-review-save {
+  padding: 6px 16px;
+  white-space: nowrap;
+}
+
+/* "Set aside" is a longer word than a severity: a wider badge column for every finding row so the text stays aligned,
+   and room round the word. */
+.risk-findings .risk-severity {
+  flex-basis: 76px;
+  padding: 3px 8px;
+  line-height: 1.3;
+}

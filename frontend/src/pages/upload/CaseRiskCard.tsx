@@ -10,9 +10,11 @@ import type {
   ReviewScope,
 } from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
+import type { FalseAlarmReason, ReviewVerdict } from '../../services/uploadService';
 import { formatCheck as formatTool } from '../../utils/checkLabels';
 import type { GroupReviewStatus } from './FindingReviewControls';
-import { GroupReviewBar, MetricsLine, MissedIssues, ReviewSummary } from './FindingReviewControls';
+import { GroupReviewBar, MetricsLine, MissedIssues, ReasonChips, ReviewSummary } from './FindingReviewControls';
+import { AppliedFeedback } from './AppliedFeedback';
 import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
 import { compareFindings } from './uploadHelpers';
 import DocumentReviewModal from './DocumentReviewModal';
@@ -242,8 +244,11 @@ export function CaseRiskCard({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // The document open for review beside its findings, by id.
   const [reviewing, setReviewing] = useState<string | null>(null);
-  // Ticks the officer changed but hasn't saved, by row key. A row without one shows its saved verdict.
+  // Ticks (the agents got it wrong) the officer changed but hasn't saved, by row key. A row without one shows its saved
+  // verdict. The reasons given for false alarms, likewise.
   const [drafts, setDrafts] = useState<Record<string, boolean>>({});
+  const [reasonDrafts, setReasonDrafts] = useState<Record<string, FalseAlarmReason | null>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const reviewsOn = reviewsRequired;
   const reviews = useFindingReviews(caseId, scored !== null && reviewsOn);
   const allReviews = reviews.data?.reviews ?? [];
@@ -311,8 +316,36 @@ export function CaseRiskCard({
     ];
   }
 
+  // A tick marks a finding the agents got wrong. On a scored finding that is a false alarm (verdict wrong); on one the
+  // specialists set aside it is a real issue they dismissed (verdict correct). Unticked is the agents being right.
+  function verdictOf(tick: ReturnType<typeof ticks>[number], ticked: boolean): ReviewVerdict {
+    return ticked === tick.setAside ? 'correct' : 'wrong';
+  }
+
+  function savedTick(tick: ReturnType<typeof ticks>[number]) {
+    const saved = verdictFor(allReviews, tick.shown)?.verdict ?? null;
+    return saved !== null && saved === verdictOf(tick, true);
+  }
+
   function isTicked(tick: ReturnType<typeof ticks>[number]) {
-    return drafts[tick.key] ?? verdictFor(allReviews, tick.shown)?.verdict === 'correct';
+    return drafts[tick.key] ?? savedTick(tick);
+  }
+
+  // Why a ticked scored finding is a false alarm: the officer's pick, else the saved one.
+  function reasonOf(tick: ReturnType<typeof ticks>[number]): FalseAlarmReason | null {
+    return reasonDrafts[tick.key] !== undefined ? reasonDrafts[tick.key] : (verdictFor(allReviews, tick.shown)?.reason ?? null);
+  }
+
+  // The note an "Other" reason needs: the officer's, else the saved one.
+  function noteOf(tick: ReturnType<typeof ticks>[number]): string {
+    return noteDrafts[tick.key] ?? verdictFor(allReviews, tick.shown)?.note ?? '';
+  }
+
+  // A ticked false alarm is complete once it has a reason, and for "Other" a note.
+  function lacksReason(tick: ReturnType<typeof ticks>[number]): boolean {
+    if (tick.setAside || !isTicked(tick)) return false;
+    const reason = reasonOf(tick);
+    return reason === null || (reason === 'other' && noteOf(tick).trim() === '');
   }
 
   // A group with no findings to mark is reviewed once an officer saves it.
@@ -326,9 +359,15 @@ export function CaseRiskCard({
     const all = ticks(group);
     if (all.length === 0) return signOffFor(group) ? 'saved' : 'not_reviewed';
     const saved = all.map((tick) => verdictFor(allReviews, tick.shown)?.verdict ?? null);
-    const changed = all.some((tick, index) => {
+    const changed = all.some((tick) => {
       const draft = drafts[tick.key];
-      return draft !== undefined && draft !== (saved[index] === 'correct');
+      const reason = reasonDrafts[tick.key];
+      const note = noteDrafts[tick.key];
+      return (
+        (draft !== undefined && draft !== savedTick(tick)) ||
+        (reason !== undefined && reason !== (verdictFor(allReviews, tick.shown)?.reason ?? null)) ||
+        (note !== undefined && note.trim() !== (verdictFor(allReviews, tick.shown)?.note ?? ''))
+      );
     });
     if (changed) return 'unsaved';
     return saved.every((verdict) => verdict !== null) ? 'saved' : 'not_reviewed';
@@ -344,7 +383,15 @@ export function CaseRiskCard({
       all.length > 0
         ? await reviews.saveGroup(
             `group:${group.documentId}`,
-            all.map((tick) => ({ members: tick.members, verdict: isTicked(tick) ? 'correct' : 'wrong' })),
+            all.map((tick) => {
+              const ticked = isTicked(tick);
+              return {
+                members: tick.members,
+                verdict: verdictOf(tick, ticked),
+                reason: ticked && !tick.setAside ? reasonOf(tick) : null,
+                note: ticked && !tick.setAside && reasonOf(tick) === 'other' ? noteOf(tick).trim() : null,
+              };
+            }),
           )
         : await reviews.signOff(
             `group:${group.documentId}`,
@@ -352,9 +399,11 @@ export function CaseRiskCard({
             group.scope === 'case' ? null : group.documentId,
           );
     // Saved: the rows show their saved verdicts again.
-    setDrafts((current) =>
-      Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${group.documentId}:`))),
-    );
+    const otherGroups = <T,>(current: Record<string, T>) =>
+      Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${group.documentId}:`)));
+    setDrafts(otherGroups);
+    setReasonDrafts(otherGroups);
+    setNoteDrafts(otherGroups);
     // Done with it: close it, so it moves into the reviewed list rather than jumping down the page open.
     if (saved) {
       setReviewing((current) => (current === group.documentId ? null : current));
@@ -457,6 +506,7 @@ export function CaseRiskCard({
             total={all.length}
             status={groupStatus(document)}
             saving={saving}
+            incomplete={all.filter(lacksReason).length}
             onToggleAll={(checked) => setTicked(scoredTicks.map((tick) => tick.key), checked)}
             onSave={() => void saveGroup(document)}
           />
@@ -491,7 +541,7 @@ export function CaseRiskCard({
                   <input
                     type="checkbox"
                     className="review-tick risk-finding-tick"
-                    aria-label={`Real issue: ${finding.summary}`}
+                    aria-label={`Agents got this wrong: ${finding.summary}`}
                     checked={isTicked(tick)}
                     disabled={saving || readOnly}
                     onChange={(event) => setTicked([tick.key], event.target.checked)}
@@ -507,6 +557,17 @@ export function CaseRiskCard({
                     {count > 1 && <span className="risk-repeat">×{count}</span>}
                   </span>
                   {detail && <span className="risk-finding-rationale">{detail}</span>}
+                  {reviews.data && isTicked(tick) && (
+                    <ReasonChips
+                      reason={reasonOf(tick)}
+                      note={noteOf(tick)}
+                      disabled={saving}
+                      readOnly={readOnly}
+                      onChange={(reason) => setReasonDrafts((current) => ({ ...current, [tick.key]: reason }))}
+                      onNoteChange={(note) => setNoteDrafts((current) => ({ ...current, [tick.key]: note }))}
+                    />
+                  )}
+                  <AppliedFeedback ids={finding.feedback_ids} />
                   {finding.repeat_of && (
                     <span className="risk-finding-rationale">
                       Also found on another document; counted once there, not again here.
@@ -532,43 +593,34 @@ export function CaseRiskCard({
               </li>
             );
           })}
-        </ul>
-        {document.dismissed.length > 0 && (
-          <details className="risk-dismissed">
-            <summary className="risk-dismissed-heading">
-              <span className="risk-chevron" aria-hidden="true">›</span>
-              <span>
-                Set aside by the specialists ({document.dismissed.length}): not scored.
-                {reviews.data && ' Tick any that is a real issue after all.'}
-              </span>
-            </summary>
-            <ul className="risk-findings">
-              {document.dismissed.map((finding) => {
-                const tick = tickFor.get(`${document.documentId}:dismissed:${finding.finding_id}`)!;
-                return (
-                  <li key={`dismissed:${finding.finding_id}`}>
-                    {reviews.data && (
-                      <input
-                        type="checkbox"
-                        className="review-tick risk-finding-tick"
-                        aria-label={`Real issue (set aside): ${finding.summary}`}
-                        checked={isTicked(tick)}
-                        disabled={saving || readOnly}
-                        onChange={(event) => setTicked([tick.key], event.target.checked)}
-                      />
+          {document.dismissed.map((finding) => {
+            const tick = tickFor.get(`${document.documentId}:dismissed:${finding.finding_id}`)!;
+            return (
+              <li key={`dismissed:${finding.finding_id}`}>
+                {reviews.data && (
+                  <input
+                    type="checkbox"
+                    className="review-tick risk-finding-tick"
+                    aria-label={`Agents got this wrong (set aside, but real): ${finding.summary}`}
+                    checked={isTicked(tick)}
+                    disabled={saving || readOnly}
+                    onChange={(event) => setTicked([tick.key], event.target.checked)}
+                  />
+                )}
+                <span className="risk-severity risk-severity--dismissed">set aside</span>
+                <span className="risk-finding-text">
+                  <span className="risk-finding-check">{formatTool(finding.tool)}</span>
+                  <span className="risk-finding-summary">{finding.summary}</span>
+                  {finding.reason && <span className="risk-finding-rationale">Why set aside: {finding.reason}</span>}
+                    {reviews.data && !readOnly && (
+                      <span className="risk-finding-rationale">Tick it if it is a real issue after all.</span>
                     )}
-                    <span className="risk-severity risk-severity--dismissed">set aside</span>
-                    <span className="risk-finding-text">
-                      <span className="risk-finding-check">{formatTool(finding.tool)}</span>
-                      <span className="risk-finding-summary">{finding.summary}</span>
-                      {finding.reason && <span className="risk-finding-rationale">Why set aside: {finding.reason}</span>}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </details>
-        )}
+                  <AppliedFeedback ids={finding.feedback_ids} />
+                </span>
+              </li>
+            );
+          })}
+        </ul>
         {reviews.data && (
           <MissedIssues
             readOnly={readOnly}

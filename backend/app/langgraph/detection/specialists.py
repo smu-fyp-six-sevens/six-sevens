@@ -22,6 +22,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from typing_extensions import TypedDict
 
+from . import feedback as detection_feedback
 from . import tools as detection_tools
 from .tool_timeout import guard_tool
 from .field_checks import external_validation_tool, numerical_checks_tool
@@ -245,6 +246,8 @@ class SpecialistState(TypedDict, total=False):
     document_type: Required[str]
     messages: Annotated[list, add_messages]
     report: dict
+    # The feedback ids the specialist was shown, per tool (what each finding of that tool can say it applied).
+    feedback_shown: dict[str, list[str]]
 
 
 async def _pre_run(spec: Specialist, document_id: str) -> list:
@@ -332,6 +335,18 @@ def _make_agent_node(spec: Specialist):
                 file_contents=fence(render_file_facts(await detection_tools.file_facts(state["document_id"])), "file_facts"),
                 brief=state.get("brief") or "Review this document within your expertise.",
             )
+            # Officer feedback from other cases. Looking it up never stops a review: without it, the review goes on.
+            shown: dict[str, list[str]] = {}
+            try:
+                document = await detection_tools._document(state["document_id"])
+                if document is not None:
+                    items = await detection_feedback.feedback_for(
+                        [tool.name for tool in spec.tools], document.case_id, state.get("document_type"),
+                    )
+                    dynamic_text += detection_feedback.render(items)
+                    shown = detection_feedback.ids_by_tool(items)
+            except Exception:
+                logger.exception("Failed to look up feedback for document %s", state["document_id"])
             if spec.uses_field_catalogue:
                 fields = await detection_tools.document_fields(state["document_id"])
                 catalogue = render_field_catalogue(fields, state.get("document_type"))
@@ -355,7 +370,7 @@ def _make_agent_node(spec: Specialist):
             )
             telemetry.record_usage(span, response)
             _note_thinking(state["document_id"], spec.name, response)
-            return {"messages": [*seed, response]}
+            return {"messages": [*seed, response], "feedback_shown": shown}
 
     return agent_node
 
@@ -407,6 +422,12 @@ def _read_assessment(final: Any) -> tuple[SpecialistAssessment, str]:
         return salvaged.value, "salvaged"
     logger.warning("Specialist reply was not parseable (stop_reason=%s)", final.response_metadata.get("stop_reason"))
     return SpecialistAssessment(), "failed"
+
+
+def _applied(finding: dict, state: SpecialistState) -> dict:
+    """The feedback the specialist was shown for this finding's check, which the finding then says it applied."""
+    ids = (state.get("feedback_shown") or {}).get(finding.get("tool") or "")
+    return {"feedback_ids": ids} if ids else {}
 
 
 def _collect_node(state: SpecialistState) -> dict:
@@ -472,6 +493,7 @@ def _collect_node(state: SpecialistState) -> dict:
             # The whole finding, so the findings table keeps what the tool returned.
             dismissed.append({
                 **finding,
+                **_applied(finding, state),
                 "id": finding_id,
                 "reason": assessed.rationale or "Dismissed as a false positive.",
                 "confidence": assessed.confidence,
@@ -490,6 +512,7 @@ def _collect_node(state: SpecialistState) -> dict:
             rationale = f"Not dismissed: the check shows this value is impossible. Specialist's note: {rationale}"
         merged.append({
             **finding,
+            **_applied(finding, state),
             "severity": severity,
             "rationale": rationale,
             "ai_accepted": ai_accepted,

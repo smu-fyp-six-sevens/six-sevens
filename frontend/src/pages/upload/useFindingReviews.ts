@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CaseFindingReviews, FindingReview, ReviewScope, ReviewVerdict } from '../../services/uploadService';
+import type { CaseFindingReviews, FalseAlarmReason, FindingReview, ReviewScope, ReviewVerdict } from '../../services/uploadService';
 import {
   deleteFindingReview,
   getCaseFindingReviews,
@@ -78,19 +78,21 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     }
   }, [caseId]);
 
-  // One group's review: each row is correct (ticked) or wrong (not), and a row can stand for several identical
+  // One group's review: each row has the verdict the officer's tick gives it, and a row can stand for several identical
   // findings (same check and summary), so its verdict goes on each of them. One request for the whole group.
   const saveGroup = useCallback(
-    (key: string, rows: { members: ReviewTarget[]; verdict: ReviewVerdict }[]) =>
+    (key: string, rows: { members: ReviewTarget[]; verdict: ReviewVerdict; reason?: FalseAlarmReason | null; note?: string | null }[]) =>
       run(key, () =>
         setFindingVerdicts(
           caseId,
-          rows.flatMap(({ members, verdict }) =>
+          rows.flatMap(({ members, verdict, reason, note }) =>
             members.map((finding) => ({
               scope: findingScope(finding),
               documentId: reviewDocument(finding),
               fingerprint: finding.fingerprint,
               verdict,
+              reason,
+              note,
             })),
           ),
         ),

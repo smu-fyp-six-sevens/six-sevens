@@ -379,6 +379,8 @@ class ContributingFinding(BaseModel):
     # carry it. On the copies that score 0: the finding_id of the one that scored.
     also_on: int = 0
     repeat_of: str | None = None
+    # The officer feedback (finding_feedback ids) the specialist was shown for this finding's check.
+    feedback_ids: list[str] = []
 
 
 class DismissedFinding(BaseModel):
@@ -397,6 +399,8 @@ class DismissedFinding(BaseModel):
     reason: str
     category: str | None = None
     fingerprint: str
+    # The officer feedback (finding_feedback ids) the specialist was shown for this finding's check.
+    feedback_ids: list[str] = []
 
 
 class UnassessedCheck(BaseModel):
@@ -698,6 +702,10 @@ class UpdateNoteRequest(BaseModel):
 
 ReviewScope = Literal["document", "case"]
 ReviewVerdict = Literal["correct", "wrong"]
+# Why a finding is a false alarm, as the review offers them in one click.
+FalseAlarmReason = Literal[
+    "normal_for_document", "within_tolerance", "tool_misread", "explained_elsewhere", "not_relevant", "other",
+]
 MAX_REVIEW_NOTE_LENGTH = 1000
 
 
@@ -724,6 +732,8 @@ class FindingReview(BaseModel):
     agent_decision: Literal["accepted", "not_assessed", "overridden", "dismissed"] | None = None
     severity: str | None = None
     verdict: ReviewVerdict | None = None
+    # Why a finding marked wrong is a false alarm.
+    reason: FalseAlarmReason | None = None
     note: str | None = None
     reviewer: str
     created_at: datetime
@@ -748,6 +758,25 @@ class SetFindingVerdictRequest(_ReviewPlace):
 
     fingerprint: str = Field(min_length=1, max_length=100)
     verdict: ReviewVerdict | None = None
+    # A false alarm (wrong) always says why: one of the one-click reasons, and for "other" a note.
+    reason: FalseAlarmReason | None = None
+    note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_LENGTH)
+
+    @field_validator("note")
+    @classmethod
+    def blank_note_is_none(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value is not None else None
+
+    @model_validator(mode="after")
+    def a_false_alarm_says_why(self) -> "SetFindingVerdictRequest":
+        if self.verdict == "wrong":
+            if self.reason is None:
+                raise ValueError("A false alarm needs a reason")
+            if self.reason == "other" and self.note is None:
+                raise ValueError("Say what the reason was when it is 'other'")
+        elif self.reason is not None or self.note is not None:
+            raise ValueError("A reason and a note go with a false alarm only")
+        return self
 
 
 class SetFindingVerdictsRequest(BaseModel):

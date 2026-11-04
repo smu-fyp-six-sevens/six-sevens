@@ -119,14 +119,19 @@ def repos():
         patch("app.routers._dependencies.case_service") as case_service,
         patch("app.routers.finding_reviews.findings_repository") as findings_repo,
         patch("app.routers.finding_reviews.document_repository") as document_repo,
+        patch("app.routers.finding_reviews.feedback_repository") as feedback_repo,
         patch("app.routers.finding_reviews.push_case_snapshot", new=AsyncMock()),
     ):
+        feedback_repo.verdict_key.side_effect = lambda case_id, document_id, fingerprint: f"v:{fingerprint}"
+        feedback_repo.missed_key.side_effect = lambda row_id: f"m:{row_id}"
         case_service.get_case.side_effect = lambda case_id: _case(case_id) if case_id in (CASE_ID, OTHER_CASE_ID) else None
         document_repo.get_document.return_value = _document()
         findings_repo.list_reviews_for_case.return_value = [_review()]
         findings_repo.list_sign_offs.return_value = []
         # Every fingerprint names a current finding, whose row id is "row:<fingerprint>".
-        findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {"id": f"row:{fingerprint}"}
+        findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+            "id": f"row:{fingerprint}", "check_name": fingerprint.split(":")[0], "summary": "A finding",
+        }
         yield findings_repo, document_repo
 
 
@@ -140,12 +145,12 @@ _VERDICTS = f"/cases/{CASE_ID}/finding-reviews/verdicts"
 def test_a_group_review_saves_every_finding_signed_by_the_officer_and_returns_the_metrics(repos) -> None:
     findings_repo, _ = repos
     response = client.put(_VERDICTS, json={"verdicts": [
-        _VERDICT, {**_VERDICT, "fingerprint": "spelling_tool:1", "verdict": "wrong"},
+        _VERDICT, {**_VERDICT, "fingerprint": "spelling_tool:1", "verdict": "wrong", "reason": "tool_misread"},
     ]})
     assert response.status_code == 200
     assert [c.args for c in findings_repo.set_verdict.call_args_list] == [
-        ("row:numerical_checks_tool:PAY.NET:1", "correct", TEST_USER),
-        ("row:spelling_tool:1", "wrong", TEST_USER),
+        ("row:numerical_checks_tool:PAY.NET:1", "correct", TEST_USER, None, None),
+        ("row:spelling_tool:1", "wrong", TEST_USER, "tool_misread", None),
     ]
     findings_repo.find_current.assert_any_call(CASE_ID, "document", DOCUMENT_ID, "spelling_tool:1")
     assert response.json()["case"]["precision"] == 1.0
@@ -168,7 +173,7 @@ def test_a_null_verdict_clears_the_mark(repos) -> None:
     findings_repo, _ = repos
     response = client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": None}]})
     assert response.status_code == 200
-    findings_repo.set_verdict.assert_called_once_with("row:numerical_checks_tool:PAY.NET:1", None, TEST_USER)
+    findings_repo.set_verdict.assert_called_once_with("row:numerical_checks_tool:PAY.NET:1", None, TEST_USER, None, None)
 
 
 def test_a_review_must_name_a_document_in_the_case(repos) -> None:
@@ -293,8 +298,8 @@ def test_detection_metrics_pass_the_date_window_on(repos) -> None:
 def test_a_saved_review_is_recorded_per_document_with_the_officer(repos, published_events) -> None:
     response = client.put(_VERDICTS, json={"verdicts": [
         _VERDICT,
-        {**_VERDICT, "fingerprint": "spelling_tool:1", "verdict": "wrong"},
-        {**_VERDICT, "fingerprint": "metadata_tool:1", "verdict": "wrong"},
+        {**_VERDICT, "fingerprint": "spelling_tool:1", "verdict": "wrong", "reason": "not_relevant"},
+        {**_VERDICT, "fingerprint": "metadata_tool:1", "verdict": "wrong", "reason": "within_tolerance"},
         {"scope": "case", "fingerprint": "xd:1", "verdict": "correct"},
     ]})
     assert response.status_code == 200
@@ -320,7 +325,9 @@ def test_missed_issues_reported_edited_and_removed_are_recorded(repos, published
         "scope": "document", "document_id": DOCUMENT_ID, "check_name": "metadata_tool", "note": "Author was edited",
     })
     findings_repo.get_review.return_value = _review(kind="missed", verdict=None, fingerprint=None, check_name="metadata_tool")
-    client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={"check_name": "font_consistency_tool"})
+    client.patch(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}", json={
+        "check_name": "font_consistency_tool", "note": "Author was edited",
+    })
     client.delete(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}")
     assert [(event.type, event.document_id, event.actor) for event in published_events] == [
         ("finding_review.missed_reported", DOCUMENT_ID, TEST_USER),
@@ -352,3 +359,74 @@ def test_a_case_created_without_reviews_takes_none(repos, method, path, body) ->
     findings_repo.list_reviews_for_case.assert_not_called()
     findings_repo.set_verdict.assert_not_called()
     findings_repo.add_missed.assert_not_called()
+
+
+# --- feedback for the agents -----------------------------------------------------------------------------------
+
+
+def test_every_verdict_is_saved_as_feedback_and_clearing_one_withdraws_it(repos) -> None:
+    _, _ = repos
+    with patch("app.routers.finding_reviews.feedback_repository") as feedback_repo:
+        feedback_repo.verdict_key.side_effect = lambda case_id, document_id, fingerprint: f"v:{fingerprint}"
+        response = client.put(_VERDICTS, json={"verdicts": [
+            {**_VERDICT, "verdict": "wrong", "reason": "other", "note": "Stamp is a watermark"},
+            {**_VERDICT, "fingerprint": "spelling_tool:1", "verdict": "correct"},
+            {**_VERDICT, "fingerprint": "gone_tool:1", "verdict": None},
+        ]})
+    assert response.status_code == 200
+    saved = [c.kwargs for c in feedback_repo.save.call_args_list]
+    assert [(k["verdict"], k["reason"], k["note"], k["check_name"]) for k in saved] == [
+        ("wrong", "other", "Stamp is a watermark", "numerical_checks_tool"), ("correct", None, None, "spelling_tool"),
+    ]
+    feedback_repo.withdraw.assert_called_once_with("v:gone_tool:1")
+
+
+def test_a_reason_goes_with_a_false_alarm_only(repos) -> None:
+    assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "correct", "reason": "other"}]}).status_code == 422
+    assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "correct", "note": "x"}]}).status_code == 422
+    assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "wrong", "reason": "not_a_reason"}]}).status_code == 422
+
+
+def test_a_false_alarm_must_say_why_and_other_needs_a_note(repos) -> None:
+    findings_repo, _ = repos
+    wrong = {**_VERDICT, "verdict": "wrong"}
+    assert client.put(_VERDICTS, json={"verdicts": [wrong]}).status_code == 422
+    assert client.put(_VERDICTS, json={"verdicts": [{**wrong, "reason": "other"}]}).status_code == 422
+    assert client.put(_VERDICTS, json={"verdicts": [{**wrong, "reason": "other", "note": "   "}]}).status_code == 422
+    findings_repo.set_verdict.assert_not_called()
+    response = client.put(_VERDICTS, json={"verdicts": [{**wrong, "reason": "other", "note": "  Stamp is a watermark  "}]})
+    assert response.status_code == 200
+    assert findings_repo.set_verdict.call_args.args[3:] == ("other", "Stamp is a watermark")
+
+
+def test_a_missed_issue_needs_a_note_and_is_saved_as_feedback(repos) -> None:
+    findings_repo, _ = repos
+    findings_repo.add_missed.return_value = "row-1"
+    place = {"scope": "case", "check_name": "identity_entity_conflict"}
+    assert client.post(f"/cases/{CASE_ID}/finding-reviews/missed", json=place).status_code == 400
+    with patch("app.routers.finding_reviews.feedback_repository") as feedback_repo:
+        feedback_repo.missed_key.side_effect = lambda row_id: f"m:{row_id}"
+        assert client.post(f"/cases/{CASE_ID}/finding-reviews/missed", json={**place, "note": "NRIC differs"}).status_code == 201
+    [saved] = [c.kwargs for c in feedback_repo.save.call_args_list]
+    assert (saved["source_key"], saved["kind"], saved["note"]) == ("m:row-1", "missed", "NRIC differs")
+
+
+def test_deleting_a_missed_issue_or_clearing_a_verdict_withdraws_its_feedback(repos) -> None:
+    findings_repo, _ = repos
+    with patch("app.routers.finding_reviews.feedback_repository") as feedback_repo:
+        feedback_repo.missed_key.side_effect = lambda row_id: f"m:{row_id}"
+        feedback_repo.verdict_key.side_effect = lambda case_id, document_id, fingerprint: f"v:{fingerprint}"
+        findings_repo.get_review.return_value = _review(kind="missed", verdict=None, fingerprint=None)
+        client.delete(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}")
+        findings_repo.get_review.return_value = _review()
+        client.delete(f"/cases/{CASE_ID}/finding-reviews/{REVIEW_ID}")
+    assert [c.args[0] for c in feedback_repo.withdraw.call_args_list] == [
+        f"m:{REVIEW_ID}", "v:numerical_checks_tool:PAY.NET:1",
+    ]
+
+
+def test_feedback_that_fails_to_save_never_fails_the_review(repos) -> None:
+    with patch("app.routers.finding_reviews.feedback_repository") as feedback_repo:
+        feedback_repo.verdict_key.return_value = "v:x"
+        feedback_repo.save.side_effect = RuntimeError("db down")
+        assert client.put(_VERDICTS, json={"verdicts": [_VERDICT]}).status_code == 200

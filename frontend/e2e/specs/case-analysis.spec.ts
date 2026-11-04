@@ -371,7 +371,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
       dismissed_findings: [{
         finding_id: 'spelling_tool-1', fingerprint: 'spelling_tool:1', document_id: payslip.document_id,
         document_type: payslip.document_type, filename: payslip.filename, tool: 'spelling_tool', check_code: null,
-        category: null, summary: '"Pte" is not in the dictionary.', reason: 'A normal company suffix.',
+        category: null, summary: '"Pte" is not in the dictionary.', reason: 'A normal company suffix.', feedback_ids: [],
       }],
     };
     const theCase = makeCase({ greenlink_case_id: 'GLDB-4106', risk });
@@ -382,9 +382,87 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     const dialog = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
     await dialog.getByRole('checkbox', { name: 'Select all' }).check();
 
-    await expect(dialog.getByRole('checkbox', { name: /^Real issue: / })).toBeChecked();
-    await dialog.getByText(/^Set aside by the specialists/).click();
-    await expect(dialog.getByRole('checkbox', { name: /^Real issue \(set aside\): / })).not.toBeChecked();
+    await expect(dialog.getByRole('checkbox', { name: /^Agents got this wrong: / })).toBeChecked();
+    // Set-aside findings are listed with the others, not folded away.
+    await expect(dialog.getByRole('checkbox', { name: /^Agents got this wrong \(set aside, but real\): / })).not.toBeChecked();
+  });
+
+  test('a false alarm needs a reason before the review can be saved, and "Other" needs a note too', async ({ page, backend }) => {
+    const base = CASE_RISK['RS-006'].risk;
+    const payslip = base.contributing_findings.filter((finding) => finding.filename === 'C011_Payslip.pdf');
+    const theCase = makeCase({ greenlink_case_id: 'GLDB-4107', risk: base });
+    backend.cases.push(theCase);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+
+    await reviewCard(page).locator('.risk-document', { hasText: 'C011_Payslip.pdf' }).getByRole('button').click();
+    const dialog = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
+    await expect(dialog.getByText('tick the findings the agents got wrong. Unticked ones are saved as right.')).toBeVisible();
+    // No reasons until a finding is ticked.
+    await expect(dialog.getByRole('group', { name: 'Why is this a false alarm?' })).toHaveCount(0);
+    const save = dialog.getByRole('button', { name: 'Save review' });
+
+    await dialog.getByRole('checkbox', { name: /^Agents got this wrong: / }).first().check();
+    // Ticked without a reason: saving waits.
+    await expect(dialog.getByText('1 false alarm needs a reason')).toBeVisible();
+    await expect(save).toBeDisabled();
+
+    const reasons = dialog.getByRole('group', { name: 'Why is this a false alarm?' });
+    await reasons.getByRole('button', { name: 'Other' }).click();
+    // "Other" also needs a note.
+    await expect(save).toBeDisabled();
+    await dialog.getByRole('textbox', { name: 'What was the reason?' }).fill('The stamp is a watermark');
+    await expect(save).toBeEnabled();
+    await save.click();
+
+    await expect.poll(() => backend.verdictRequests.length).toBe(1);
+    const saved = backend.verdictRequests[0].verdicts;
+    expect(saved).toHaveLength(payslip.length);
+    expect(saved.filter((v) => v.verdict === 'wrong')).toEqual([
+      expect.objectContaining({ reason: 'other', note: 'The stamp is a watermark' }),
+    ]);
+    expect(saved.filter((v) => v.verdict === 'correct').every((v) => v.reason === null && v.note === null)).toBe(true);
+  });
+
+  test('a one-click reason is saved without a note', async ({ page, backend }) => {
+    const theCase = makeCase({ greenlink_case_id: 'GLDB-4109', risk: CASE_RISK['RS-006'].risk });
+    backend.cases.push(theCase);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+
+    await reviewCard(page).locator('.risk-document', { hasText: 'C011_Payslip.pdf' }).getByRole('button').click();
+    const dialog = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
+    await dialog.getByRole('checkbox', { name: /^Agents got this wrong: / }).first().check();
+    await dialog.getByRole('group', { name: 'Why is this a false alarm?' }).getByRole('button', { name: 'Tool misread it' }).click();
+    await expect(dialog.getByRole('textbox', { name: 'What was the reason?' })).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Save review' }).click();
+
+    await expect.poll(() => backend.verdictRequests.length).toBe(1);
+    expect(backend.verdictRequests[0].verdicts.filter((v) => v.verdict === 'wrong')).toEqual([
+      expect.objectContaining({ reason: 'tool_misread', note: null }),
+    ]);
+  });
+
+  test('a finding shows the feedback the agent applied, and each item opens the reason and the original case', async ({ page, backend }) => {
+    const base = CASE_RISK['RS-006'].risk;
+    const [first, ...rest] = base.contributing_findings;
+    const feedbackId = '00000000-0000-0000-0000-00000000000a';
+    const risk: CaseRisk = { ...base, contributing_findings: [{ ...first, feedback_ids: [feedbackId] }, ...rest] };
+    backend.feedback.push({
+      id: feedbackId, case_id: 'other-case', greenlink_case_id: 'GLDB-7', scope: 'document', kind: 'verdict',
+      check_name: first.tool, verdict: 'wrong', reason: 'tool_misread', reason_label: 'The tool misread the document',
+      summary: 'Author edited', note: 'The scan software wrote the author', reviewer: 'officer', updated_at: '2026-10-23T02:00:00Z',
+    });
+    const theCase = makeCase({ greenlink_case_id: 'GLDB-4108', risk });
+    backend.cases.push(theCase);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+
+    await reviewCard(page).locator('.risk-document', { hasText: first.filename }).getByRole('button').click();
+    const dialog = page.getByRole('dialog', { name: `Review findings on ${first.filename}` });
+    await dialog.getByText('Applied 1 piece of officer feedback from other cases').click();
+    await dialog.getByText('False alarm', { exact: true }).click();
+
+    await expect(dialog.getByText('The tool misread the document')).toBeVisible();
+    await expect(dialog.getByText('The scan software wrote the author')).toBeVisible();
+    await expect(dialog.getByRole('link', { name: 'GLDB-7' })).toHaveAttribute('href', '/cases/GLDB-7');
   });
 
   test('a group with no findings moves to Reviewed only once an officer saves it', async ({ page, backend }) => {

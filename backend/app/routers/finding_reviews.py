@@ -18,12 +18,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from .. import (
+    case_service,
     case_stage,
     detection_metrics,
     document_repository,
     events,
+    feedback_repository,
     findings_repository,
 )
+from ..feedback_scrub import names_in
 from ..auth import CurrentUser
 from ..events import officer_event, types
 from ..models import (
@@ -75,10 +78,36 @@ async def _document_in_case(case_id: str, document_id: UUID | None) -> str | Non
 def _check_fits(scope: str, check_name: str, note: str | None) -> None:
     if check_name not in detection_metrics.checks_by_scope()[scope]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"That check can't be reviewed on a {scope}.")
-    if check_name == detection_metrics.OTHER_CHECK and not note:
+    if not note:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Describe what was missed when it fits none of the checks.",
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Describe what was missed, so the agents can learn from it.",
         )
+
+
+async def _feedback_context(case: CaseRecord, document_id: str | None) -> tuple[str | None, list[str]]:
+    """The reviewed document's type, and the names to strip from its feedback: the case's company, and the names
+    the document itself holds."""
+    if document_id is None:
+        return None, names_in(None, [case.company_name])
+    document = await asyncio.to_thread(document_repository.get_document, document_id, include_fields=True)
+    if document is None:
+        return None, names_in(None, [case.company_name])
+    return document.document_type, names_in(document.extracted_fields, [case.company_name])
+
+
+async def _save_feedback(**values) -> None:
+    """Feedback is a copy for the agents: failing to save it never fails the officer's review."""
+    try:
+        await asyncio.to_thread(feedback_repository.save, **values)
+    except Exception:
+        logger.exception("Failed to save feedback %s", values.get("source_key"))
+
+
+async def _withdraw_feedback(source_key: str) -> None:
+    try:
+        await asyncio.to_thread(feedback_repository.withdraw, source_key)
+    except Exception:
+        logger.exception("Failed to withdraw feedback %s", source_key)
 
 
 async def _review_in_case(case_id: str, review_id: UUID) -> FindingReview:
@@ -110,6 +139,24 @@ async def _record_saved(case_id: str, verdicts: list[tuple[str, str | None, str 
     await push_case_snapshot(case_id)
 
 
+@router.get("/finding-feedback", response_model=list[feedback_repository.FeedbackDetail])
+async def get_finding_feedback(user: CurrentUser, ids: list[UUID] = Query(default=[], max_length=50)) -> list[feedback_repository.FeedbackDetail]:
+    """
+    Feedback items the agents applied to a finding, opened: the officer's reason and note (confidential details already
+    removed) and the original case. An item an officer has since withdrawn is no longer listed.
+    """
+    with bad_gateway_on_error("Failed to load the feedback. Check Supabase table access.", "Failed to load feedback %s", ids):
+        items = await asyncio.to_thread(feedback_repository.get_many, [str(i) for i in ids])
+        details: list[feedback_repository.FeedbackDetail] = []
+        for item in items:
+            case = await asyncio.to_thread(case_service.get_case, item.case_id)
+            details.append(feedback_repository.FeedbackDetail(
+                **item.model_dump(), reason_label=feedback_repository.REASON_LABELS.get(item.reason or ""),
+                greenlink_case_id=case.greenlink_case_id if case else None,
+            ))
+        return details
+
+
 @router.get("/cases/{case_id}/finding-reviews", response_model=CaseFindingReviews)
 async def get_case_finding_reviews(case_id: str, case: CaseRecord = Depends(_reviewed_case)) -> CaseFindingReviews:
     """Every review in the case, with precision and recall per document, across documents and for the case."""
@@ -128,6 +175,7 @@ async def set_finding_verdicts(
     Every finding is looked up before anything is written, so a bad entry saves nothing."""
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to save verdicts on case %s", case_id):
         targets: list[tuple[str, str | None, str]] = []
+        found: list[dict] = []
         for item in request.verdicts:
             document_id = await _document_in_case(case_id, item.document_id)
             row = await asyncio.to_thread(
@@ -139,8 +187,24 @@ async def set_finding_verdicts(
                     detail="A finding was replaced by a newer run. Reload the case and review again.",
                 )
             targets.append((item.scope, document_id, row["id"]))
+            found.append(row)
         for (_, _, row_id), item in zip(targets, request.verdicts):
-            await asyncio.to_thread(findings_repository.set_verdict, row_id, item.verdict, user)
+            await asyncio.to_thread(findings_repository.set_verdict, row_id, item.verdict, user, item.reason, item.note)
+        contexts: dict[str | None, tuple[str | None, list[str]]] = {}
+        for (scope, document_id, _), item, row in zip(targets, request.verdicts, found):
+            key = feedback_repository.verdict_key(case_id, document_id, item.fingerprint)
+            if item.verdict is None:
+                await _withdraw_feedback(key)
+                continue
+            if document_id not in contexts:
+                contexts[document_id] = await _feedback_context(case, document_id)
+            document_type, names = contexts[document_id]
+            await _save_feedback(
+                source_key=key, case_id=case_id, document_id=document_id, scope=scope, kind="verdict",
+                check_name=row["check_name"], check_code=row.get("check_code"), document_type=document_type,
+                verdict=item.verdict, reason=item.reason, summary=row.get("summary") or "", note=item.note, reviewer=user,
+                names=names,
+            )
         reviews = await _case_reviews(case_id)
     await _record_saved(
         case_id, [(scope, document_id, item.verdict) for (scope, document_id, _), item in zip(targets, request.verdicts)],
@@ -175,10 +239,17 @@ async def report_missed_issue(
     _check_fits(request.scope, request.check_name, request.note)
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to save a missed issue on case %s", case_id):
         document_id = await _document_in_case(case_id, request.document_id)
-        await asyncio.to_thread(
+        row_id = await asyncio.to_thread(
             findings_repository.add_missed,
             case_id=case_id, scope=request.scope, document_id=document_id, check_name=request.check_name,
             note=request.note, reviewer=user,
+        )
+        document_type, names = await _feedback_context(case, document_id)
+        await _save_feedback(
+            source_key=feedback_repository.missed_key(row_id), case_id=case_id, document_id=document_id,
+            scope=request.scope, kind="missed", check_name=request.check_name, check_code=None,
+            document_type=document_type, verdict=None, reason=None, summary="", note=request.note, reviewer=user,
+            names=names,
         )
         reviews = await _case_reviews(case_id)
     await events.record(officer_event(
@@ -204,6 +275,13 @@ async def update_missed_issue(
             findings_repository.update_missed, str(review_id),
             check_name=request.check_name, note=request.note, reviewer=user,
         )
+        document_type, names = await _feedback_context(case, review.document_id)
+        await _save_feedback(
+            source_key=feedback_repository.missed_key(str(review_id)), case_id=case_id, document_id=review.document_id,
+            scope=review.scope, kind="missed", check_name=request.check_name, check_code=None,
+            document_type=document_type, verdict=None, reason=None, summary="", note=request.note, reviewer=user,
+            names=names,
+        )
         reviews = await _case_reviews(case_id)
     await events.record(officer_event(
         types.MISSED_ISSUE_EDITED, case_id=case_id, document_id=review.document_id,
@@ -224,8 +302,11 @@ async def delete_finding_review(
         review = await _review_in_case(case_id, review_id)
         if review.kind == "missed":
             await asyncio.to_thread(findings_repository.delete_missed, str(review_id))
+            await _withdraw_feedback(feedback_repository.missed_key(str(review_id)))
         else:
             await asyncio.to_thread(findings_repository.set_verdict, str(review_id), None, user)
+            if review.fingerprint:
+                await _withdraw_feedback(feedback_repository.verdict_key(case_id, review.document_id, review.fingerprint))
         reviews = await _case_reviews(case_id)
     await events.record(officer_event(
         types.FINDING_REVIEW_REMOVED, case_id=case_id, document_id=review.document_id,

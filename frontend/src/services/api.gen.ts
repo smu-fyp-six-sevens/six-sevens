@@ -1319,6 +1319,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finding-feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Finding Feedback
+         * @description Feedback items the agents applied to a finding, opened: the officer's reason and note (confidential details already
+         *     removed) and the original case. An item an officer has since withdrawn is no longer listed.
+         */
+        get: operations["get_finding_feedback_finding_feedback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -2612,6 +2633,11 @@ export interface components {
             document_id: string;
             /** Document Type */
             document_type: string | null;
+            /**
+             * Feedback Ids
+             * @default []
+             */
+            feedback_ids: string[];
             /** Filename */
             filename: string;
             /** Finding Id */
@@ -2790,6 +2816,11 @@ export interface components {
             document_id: string;
             /** Document Type */
             document_type: string | null;
+            /**
+             * Feedback Ids
+             * @default []
+             */
+            feedback_ids: string[];
             /** Filename */
             filename: string;
             /** Finding Id */
@@ -3013,6 +3044,53 @@ export interface components {
             value: string;
         };
         /**
+         * FeedbackDetail
+         * @description A feedback item opened: what the officer said, with the case it came from.
+         */
+        FeedbackDetail: {
+            /** Case Id */
+            case_id: string;
+            /** Check Code */
+            check_code: string | null;
+            /** Check Name */
+            check_name: string;
+            /** Document Id */
+            document_id: string | null;
+            /** Document Type */
+            document_type: string | null;
+            /** Greenlink Case Id */
+            greenlink_case_id: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "verdict" | "missed";
+            /** Note */
+            note: string | null;
+            /** Reason */
+            reason: string | null;
+            /** Reason Label */
+            reason_label: string | null;
+            /** Reviewer */
+            reviewer: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "document" | "case";
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /** Updated At */
+            updated_at: string;
+            /** Verdict */
+            verdict: ("correct" | "wrong") | null;
+        };
+        /**
          * FieldComparison
          * @description One document-vs-case comparison — AC4's "what caused the mismatch".
          */
@@ -3076,6 +3154,8 @@ export interface components {
             kind: "verdict" | "missed";
             /** Note */
             note: string | null;
+            /** Reason */
+            reason: ("normal_for_document" | "within_tolerance" | "tool_misread" | "explained_elsewhere" | "not_relevant" | "other") | null;
             /** Reviewer */
             reviewer: string;
             /**
@@ -4026,6 +4106,10 @@ export interface components {
             document_id?: string | null;
             /** Fingerprint */
             fingerprint: string;
+            /** Note */
+            note?: string | null;
+            /** Reason */
+            reason?: ("normal_for_document" | "within_tolerance" | "tool_misread" | "explained_elsewhere" | "not_relevant" | "other") | null;
             /**
              * Scope
              * @enum {string}
@@ -6761,6 +6845,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_finding_feedback_finding_feedback_get: {
+        parameters: {
+            query?: {
+                ids?: string[];
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackDetail"][];
                 };
             };
             /** @description Validation Error */

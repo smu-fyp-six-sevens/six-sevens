@@ -335,6 +335,9 @@ export class MockBackend {
   notes: NoteRow[] = [];
   /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
   auditEvents: AuditEvent[] = [];
+  // The verdicts the page saved (PUT .../finding-reviews/verdicts), and the feedback items GET /finding-feedback opens.
+  verdictRequests: { verdicts: Record<string, unknown>[] }[] = [];
+  feedback: Record<string, unknown>[] = [];
   /** Each case's latest analysis run (GET /cases/:id/analysis); none = 404. POST .../analysis/run starts one. */
   analyses: Record<string, CaseAnalysis> = {};
   /** Per-filename upload results; files not listed here upload successfully. */
@@ -605,6 +608,14 @@ export class MockBackend {
       });
     if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {
       return reviews([]);
+    }
+    if (method === 'PUT' && /^\/cases\/[^/]+\/finding-reviews\/verdicts$/.test(path)) {
+      this.verdictRequests.push(body as { verdicts: Record<string, unknown>[] });
+      return reviews([]);
+    }
+    if (method === 'GET' && path === '/finding-feedback') {
+      const ids = url.searchParams.getAll('ids');
+      return json(this.feedback.filter((item) => ids.includes(item.id as string)));
     }
     if (method === 'PUT' && /^\/cases\/[^/]+\/finding-reviews\/sign-offs$/.test(path)) {
       return reviews([{ ...(body as object), reviewer: 'officer', updated_at: '2026-10-31T00:00:00Z' }]);

@@ -24,7 +24,7 @@ function contributing(overrides: Partial<CaseRiskFinding> & Pick<CaseRiskFinding
   return {
     filename: 'document.pdf', document_type: null, tool: null, check_code: null, severity: 'medium', summary: '',
     rationale: '', points: 0, unreviewed: false, fingerprint: `fp-${overrides.finding_id}`, category: null, source: 'document', repeat_of: null,
-    also_on: 0, ...overrides,
+    also_on: 0, feedback_ids: [], ...overrides,
   };
 }
 
