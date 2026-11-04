@@ -7,8 +7,8 @@
 .role-switch { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--slate-91); border-radius: 8px; background: var(--slate-97); }
 .role-switch button { padding: 6px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .role-switch button.selected { background: var(--white); }
-/* The case queue's width (.queue-view): 78% of the page less its 24px margins, centred; the full width below 1280px. */
-.dashboard-content { padding: 25px calc(11% + 18.72px); }
+/* The full window, at the same 24px margins as the toolbar above it. */
+.dashboard-content { padding: 25px 24px; }
 .dashboard-sticky-shell { position: sticky; top: var(--topbar-height); z-index: 19; background: var(--paper); }
 /* The toolbar spans the window at the app header's 24px margins, wider than the content column below. */
 .dashboard-sticky-content { padding: 4px 24px; }
