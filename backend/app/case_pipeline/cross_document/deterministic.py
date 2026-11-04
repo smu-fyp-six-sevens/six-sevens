@@ -175,10 +175,11 @@ def _previous_address(context: CaseContext, sides: list[tuple[object, list[str]]
     if len(sides) != 2:
         return None
     for (old_value, old_ids), (current_value, current_ids) in (sides, sides[::-1]):
-        old_dates = [_proof_date(context, i) for i in old_ids]
-        if not old_dates or any(d is None for d in old_dates):
+        old_dates = [d for i in old_ids if (d := _proof_date(context, i)) is not None]
+        if not old_dates or len(old_dates) != len(old_ids):
             continue
-        newer = [i for i in current_ids if (d := _proof_date(context, i)) is not None and d > max(old_dates)]
+        latest_old = max(old_dates)
+        newer = [i for i in current_ids if (d := _proof_date(context, i)) is not None and d > latest_old]
         if newer:
             return old_value, old_ids, current_value, newer
     return None
