@@ -86,14 +86,14 @@ SOFT = _hex(INK_SOFT)
 # The crimson risk scale, light to dark, so no level reads as "safe" (tokens.css --risk-*): (badge fill, badge
 # text, gauge band). Low's word is ink-soft, as on the case page.
 _RISK_LOW_TINT = colors.HexColor("#fdf3f5")
-_RISK_MEDIUM_TINT = colors.HexColor("#f8d7de")
-_RISK_MEDIUM_INK = colors.HexColor("#7a1530")
-_RISK_HIGH = colors.HexColor("#b4233c")
+_RISK_MEDIUM_TINT = colors.HexColor("#fbe3d5")
+_RISK_MEDIUM_INK = colors.HexColor("#8a3f20")
+_RISK_HIGH = colors.HexColor("#c4442a")
 RISK_COLOURS: dict[str, tuple[colors.Color, colors.Color, colors.Color]] = {
-    "Low": (_RISK_LOW_TINT, INK_SOFT, colors.HexColor("#e3a6b2")),
-    "Medium": (_RISK_MEDIUM_TINT, _RISK_MEDIUM_INK, colors.HexColor("#d9667f")),
+    "Low": (_RISK_LOW_TINT, INK_SOFT, colors.HexColor("#f6c9b0")),
+    "Medium": (_RISK_MEDIUM_TINT, _RISK_MEDIUM_INK, colors.HexColor("#ec9673")),
     "High": (_RISK_HIGH, colors.white, _RISK_HIGH),
-    "Critical": (colors.HexColor("#6b1024"), colors.white, colors.HexColor("#6b1024")),
+    "Critical": (colors.HexColor("#7f1414"), colors.white, colors.HexColor("#7f1414")),
 }
 # The 0-100 score's bands (case_risk.SCORE_BANDS).
 RISK_BANDS = [("Low", 0, 24), ("Medium", 25, 49), ("High", 50, 79), ("Critical", 80, 100)]
@@ -106,7 +106,7 @@ SEVERITY_COLOURS: dict[str, tuple[colors.Color, colors.Color]] = {
 }
 # A severity's mark on white (a list's dot), the scale's colour for that level.
 SEVERITY_MARKS: dict[str, colors.Color] = {
-    "high": _RISK_HIGH, "medium": colors.HexColor("#d9667f"), "low": colors.HexColor("#e3a6b2"),
+    "high": _RISK_HIGH, "medium": colors.HexColor("#ec9673"), "low": colors.HexColor("#f6c9b0"),
 }
 _SEVERITY_RANK = {"high": 3, "medium": 2, "low": 1}
 

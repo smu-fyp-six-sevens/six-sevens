@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { CaseRecord } from '../App';
 import {
@@ -23,9 +23,9 @@ import { CaseSectionNav } from './upload/CaseSectionNav';
 import { useCaseReportDownload } from './upload/useCaseReportDownload';
 import { CharacterCount } from '../components/CharacterCount';
 import { CaseStageCard } from './upload/CaseStageCard';
-import { caseSectionStatuses, isCaseSection, type CaseSection } from './upload/caseSections';
+import { isCaseSection, type CaseSection } from './upload/caseSections';
+import { sectionStatusesFrom } from './upload/caseNavStatuses';
 import { reviewReason } from './upload/reviewReason';
-import { missingRequirements as missingChecklist } from './upload/documentChecklist';
 import { NotesCard } from '../components/NotesCard';
 import AppHeader from '../components/AppHeader';
 import CaseHeader, { CaseTitle } from '../components/CaseHeader';
@@ -39,21 +39,8 @@ import KebabMenu from '../components/KebabMenu';
 import {
   MAX_COMPANY_NAME_LENGTH,
 } from '../utils/caseValidation';
-import { TERMINAL_DOCUMENT_STATUSES } from '../services/uploadService';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { Icon } from '../components/Icon';
-
-
-const NAV_COLLAPSED_KEY = 'caseNav.collapsed';
-
-// Per-browser, like the queue's filters; storage can throw (private mode), so it is only a convenience.
-function loadNavCollapsed(): boolean {
-  try {
-    return localStorage.getItem(NAV_COLLAPSED_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
 
 interface UploadPageProps {
   selectedCase: CaseRecord;
@@ -110,16 +97,8 @@ export default function UploadPage({
     setSearchParams(section === 'summary' ? {} : { section }, { replace: true });
   };
 
-  const [navCollapsed, setNavCollapsed] = useState(loadNavCollapsed);
   const [reportError, setReportError] = useState<string | null>(null);
   const report = useCaseReportDownload(selectedCase.id, selectedCase.caseNumber, setReportError);
-  useEffect(() => {
-    try {
-      localStorage.setItem(NAV_COLLAPSED_KEY, String(navCollapsed));
-    } catch {
-      // Not remembering the menu is fine.
-    }
-  }, [navCollapsed]);
 
   // Until the first snapshot arrives, the stage the queue row showed.
   const currentStage = snapshotLoaded ? stage : selectedCase.caseStatus;
@@ -127,8 +106,6 @@ export default function UploadPage({
 
   // For a case that enforces the checklist, the stage and the analysis wait for these to be approved.
   const missingRequirements = unapprovedRequirements.length;
-  // The required documents the Documents tab lists as missing, for its menu subtitle.
-  const missingRequirementsList = missingChecklist(fulfilledRequirements, { idDocument: idDocumentCoverage, proofOfAddress: proofOfAddressCoverage });
 
   const liveDocumentIds = useMemo(
     () => (snapshotLoaded ? new Set(documents.map((document) => document.id)) : null),
@@ -216,28 +193,21 @@ export default function UploadPage({
       <AppHeader />
 
       <CaseFrame
-        collapsed={navCollapsed}
         nav={
           <CaseSectionNav
-            collapsed={navCollapsed}
             statusesLoading={!snapshotLoaded}
-            onToggleCollapsed={() => setNavCollapsed((collapsed) => !collapsed)}
             activeSection={activeSection}
-            statuses={caseSectionStatuses({
-              documentCount: documents.length,
-              approvedCount: approvedDocuments.length,
-              detectedCount: approvedDocuments.filter((document) => document.status === 'detected').length,
-            missingCount: missingRequirementsList.length,
-              // Not yet approved or rejected, so still uploading or extracting (detection comes after approval).
-              processingCount: extractedDocuments.filter((document) => !TERMINAL_DOCUMENT_STATUSES.has(document.status)).length,
-              flaggedCount: flaggedDocuments.length,
-              toApproveCount: extractedDocuments.filter(
-                (document) => document.status === 'analyzed' && !flaggedDocuments.includes(document),
-              ).length,
+            statuses={sectionStatusesFrom({
+              approvedDocuments,
+              extractedDocuments,
+              flaggedDocuments,
+              fulfilledRequirements,
+              idDocumentCoverage,
+              proofOfAddressCoverage,
               analysisReady,
               analysisOverview,
               risk,
-              additionalDocumentCount: additionalDocuments?.items.length ?? 0,
+              additionalDocuments,
             })}
             onSelect={selectSection}
           />

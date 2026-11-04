@@ -122,7 +122,7 @@
 .flag-register { padding: 18px 0 0; }.flag-register > .panel-heading { padding: 0 19px; }
 .flag-table td { height: 57px; }.flag-table td:first-child strong { display: block; }
 .flag-severity { display: inline-block; min-width: 47px; padding: 4px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; text-align: center; }
-/* A flag's severity on the crimson risk scale (tokens.css --risk-*), like the Risk Summary's .risk-severity. */
+/* A flag's severity on the risk scale (tokens.css --risk-*), like the Risk Summary's .risk-severity. */
 .flag-severity { border: 1px solid transparent; }
 .flag-severity.high { background: var(--risk-high); color: var(--white); }
 .flag-severity.medium { border-color: var(--risk-medium-border); background: var(--risk-medium-tint); color: var(--risk-medium-ink); }
@@ -163,7 +163,7 @@
 .case-overview-table th:nth-child(5) { width: 36%; }
 .recommended-documents { color: var(--ink-soft); font-size: 12.5px; line-height: 1.4; }
 
-/* The crimson risk scale (tokens.css --risk-*), light to dark. */
+/* The risk scale (tokens.css --risk-*), light to dark. */
 .risk-critical .risk-marker,
 .risk-critical .risk-snapshot-track i { background: var(--risk-critical); }
 .risk-high .risk-marker,

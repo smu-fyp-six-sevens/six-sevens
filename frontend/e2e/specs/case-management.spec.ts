@@ -430,23 +430,40 @@ test.describe('Case page layout @SCRUM-299', () => {
     await expect(sectionNav(page).getByRole('button', { name: /^Case Summary/ })).toBeVisible();
   });
 
-  test('the section menu collapses to its icons, and stays collapsed after a reload', async ({ page, backend }) => {
+  test('the section menu is a rail of icons that opens over the page without moving it', async ({ page, backend }) => {
     backend.cases.push(makeCase({ id: 'case-nav', greenlink_case_id: 'GLDB-3002', company_name: 'Nav Co Pte Ltd' }));
     await page.goto('/cases/GLDB-3002');
-    await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
-
-    await page.getByRole('button', { name: 'Collapse menu' }).click();
-
+    // Closed: icons only, but every section is still reachable by name.
     await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
-    // Still reachable by name, and still works.
+    const content = page.locator('.case-frame-main');
+    const before = await content.boundingBox();
+
+    await page.getByRole('button', { name: 'Expand menu' }).click();
+
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
+    // Opened over the page: the content is exactly where it was.
+    expect(await content.boundingBox()).toEqual(before);
+
+    // Escape closes it again.
+    await page.keyboard.press('Escape');
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
+
+    // Choosing a section goes there and closes the menu.
+    await page.getByRole('button', { name: 'Expand menu' }).click();
     await sectionNav(page).getByRole('button', { name: /^Documents/ }).click();
     await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
+    await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
+  });
 
-    await page.reload();
+  test('a document page has the same menu, opening over the document', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    await page.goto(fixture.documentUrl(payslip));
 
-    await expect(page.getByRole('button', { name: 'Expand menu' })).toBeVisible();
     await page.getByRole('button', { name: 'Expand menu' }).click();
     await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
+    await sectionNav(page).getByRole('button', { name: /^Risk Summary/ }).click();
+    await expect(page).toHaveURL(/section=risk/);
   });
 
   test('the summary shows how long each stage took, from the recorded runs', async ({ page, backend }) => {

@@ -32,6 +32,7 @@ import { ExtractedInformationCard } from './document-details/ExtractedInformatio
 import { NotesCard } from '../components/NotesCard';
 import CaseFrame from '../components/CaseFrame';
 import { CaseSectionNav } from './upload/CaseSectionNav';
+import { useCaseNavStatuses } from './upload/caseNavStatuses';
 import FinalisedBanner from '../components/FinalisedBanner';
 import { useDetection } from './document-details/useDetection';
 import { useDocumentActions } from './document-details/useDocumentActions';
@@ -87,6 +88,8 @@ export default function DocumentDetailsPage({
   onDocumentDeleted,
 }: DocumentDetailsPageProps) {
   const navigate = useNavigate();
+  // The same live statuses the case page's menu shows.
+  const navStatuses = useCaseNavStatuses(selectedCase.id);
   const {
     document,
     setDocument,
@@ -493,16 +496,14 @@ export default function DocumentDetailsPage({
     </CaseHeader>
   );
 
-  // The case's section menu stays beside the document, collapsed to its icons: choosing one goes back to that section.
+  // The case's section menu stays beside the document, as its rail of icons (it opens over the page): choosing one goes back to that section.
   const framed = (content: ReactNode) => (
     <CaseFrame
-      collapsed
       nav={
         <CaseSectionNav
           activeSection={null}
-          statuses={{}}
-          statusesLoading={false}
-          collapsed
+          statuses={navStatuses.statuses}
+          statusesLoading={navStatuses.statusesLoading}
           onSelect={(section) => {
             const base = caseCrumb(selectedCase).to.split('?')[0];
             navigate(section === 'summary' ? base : `${base}?section=${section}`);

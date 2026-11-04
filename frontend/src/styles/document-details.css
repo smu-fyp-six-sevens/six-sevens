@@ -174,7 +174,7 @@
 .detection-empty { margin: 0; color: var(--ink-soft); font-size: 13.5px; }
 
 /* The verdict: the label is the panel's one block of colour, the summary beside it is plain text. Flagged takes
-   the risk scale's crimson; inconclusive is the officer's amber (it needs a look); clean is the success teal. */
+   the risk scale's red; inconclusive is the officer's amber (it needs a look); clean is the success teal. */
 .detection-verdict { display: flex; align-items: baseline; gap: 12px; }
 .detection-verdict-label { flex: none; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .detection-verdict-summary { margin: 0; color: var(--ink); font-size: 14.5px; line-height: 1.55; max-width: 70ch; }
@@ -939,8 +939,8 @@
   transition: box-shadow 0.15s, background 0.15s;
 }
 
-/* On the crimson risk scale (tokens.css --risk-*), one step stronger than the badges so a box reads against the
-   page; the tag's text turns dark where white would not pass on the lighter crimson. */
+/* On the risk scale (tokens.css --risk-*), one step stronger than the badges so a box reads against the
+   page; the tag's text turns dark where white would not pass on the lighter colour. */
 .finding-highlight--low { --highlight: var(--risk-medium); }
 .finding-highlight--medium { --highlight: var(--risk-high); }
 .finding-highlight--high { --highlight: var(--risk-critical); }

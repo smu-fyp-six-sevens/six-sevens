@@ -113,7 +113,6 @@ export function DocumentPageSkeleton() {
       <AppHeader />
 
       <CaseFrame
-        collapsed
         nav={
           <div className="skeleton-nav" aria-hidden="true">
             {Array.from({ length: 9 }, (_, index) => (

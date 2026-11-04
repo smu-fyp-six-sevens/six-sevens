@@ -164,17 +164,17 @@
   --blue-a10: rgba(23, 105, 209, 0.1);
   --red-a10: rgba(201, 75, 75, 0.1);
 
-  /* Risk level and finding severity: one crimson scale, light to dark, so a bigger problem looks louder and no
-     level reads as safe. Crimson, not orange, so it never reads as the amber "your turn" of a case's stage.
+  /* Risk level and finding severity: one scale from peach through orange to red and dark red, light to dark, so a
+     bigger problem looks louder and no level reads as safe.
      Low is an outline with its word in ink-soft; Medium a tint; High and Critical solid with white text.
      --risk-<level> is the level's mark (a dot, a bar, a card's edge); -tint, -border and -ink dress a badge;
      -text is the level's word on white. */
-  --risk-low: #e3a6b2;
-  --risk-medium: #d9667f;
-  --risk-medium-tint: #f8d7de;
-  --risk-medium-border: #eeb3c0;
-  --risk-medium-ink: #7a1530;
-  --risk-medium-text: #9f1d3a;
-  --risk-high: #b4233c;
-  --risk-critical: #6b1024;
+  --risk-low: #f6c9b0;
+  --risk-medium: #ec9673;
+  --risk-medium-tint: #fbe3d5;
+  --risk-medium-border: #f6c9b0;
+  --risk-medium-ink: #8a3f20;
+  --risk-medium-text: #a14a22;
+  --risk-high: #c4442a;
+  --risk-critical: #7f1414;
 }

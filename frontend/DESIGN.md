@@ -22,12 +22,12 @@ colors:
   stage-done: "#1f7a4d"
   stage-closed: "#34455f"
   stage-failed: "#b3402a"
-  risk-low: "#e3a6b2"
-  risk-medium: "#d9667f"
-  risk-medium-tint: "#f8d7de"
-  risk-medium-ink: "#7a1530"
-  risk-high: "#b4233c"
-  risk-critical: "#6b1024"
+  risk-low: "#f6c9b0"
+  risk-medium: "#ec9673"
+  risk-medium-tint: "#fbe3d5"
+  risk-medium-ink: "#8a3f20"
+  risk-high: "#c4442a"
+  risk-critical: "#7f1414"
 typography:
   headline:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
@@ -128,7 +128,7 @@ The system is light only. There is no dark theme.
 - Bright near-neutral paper, white cards, hairline stone-grey borders.
 - One accent, steel blue, for actions, links, focus and the current place.
 - Stage tones grouped by who acts next, each with its own shape, reserved for a case's stage.
-- One crimson scale for risk and severity, separate from the stage tones.
+- One peach-to-dark-red scale for risk and severity, separate from the stage tones.
 - One typeface, the system sans, with tabular figures for IDs and counts.
 - Flat surfaces. Shadows only on things that float.
 
@@ -166,7 +166,7 @@ A case's stage is coloured by **who acts next**, and each group also has its own
 Stage names read as a step in the flow: what is happening to the case, or what it waits for.
 
 ### Risk and severity
-A case's risk level and a finding's severity share one **crimson** scale, light to dark, so a bigger problem looks louder and no level reads as safe. Crimson, not orange, so it never reads as the amber "your turn". **Low** is an outline (risk-low border on white) with its word in ink-soft; **Medium** is a tint with crimson ink; **High** and **Critical** are solid with white text. A finding that was dismissed, or an issue reported as missed, is never scored, so it gets no severity colour: paper fill, line border and ink-soft text.
+A case's risk level and a finding's severity share one scale from **peach through orange to red and dark red**, light to dark, so a bigger problem looks louder and no level reads as safe. **Low** is an outline (risk-low border on white) with its word in ink-soft; **Medium** is a tint with dark orange ink; **High** and **Critical** are solid with white text. A finding that was dismissed, or an issue reported as missed, is never scored, so it gets no severity colour: paper fill, line border and ink-soft text.
 
 ### Named Rules
 **The One Accent Rule.** Steel is the only accent colour. Any other colour on screen must mean a stage, a severity or a status.
@@ -175,7 +175,7 @@ A case's risk level and a finding's severity share one **crimson** scale, light 
 
 **The Shape Carries the Stage Rule.** Every stage mark draws its group's shape, so the stage reads without its colour, for colour-blind officers too.
 
-**The Low Is Never Green Rule.** Risk and severity use only the crimson scale. Green never marks a level, because no level is safe.
+**The Low Is Never Green Rule.** Risk and severity use only this peach-to-dark-red scale. Green never marks a level, because no level is safe.
 
 **The Ink on Tint Rule.** Text on a tone uses that tone's ink on its tint. Never put white text on a light tone. Amber as text is orange-27, never the amber fill.
 

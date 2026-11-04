@@ -91,7 +91,6 @@ export function outOfDateMessage(overview: CaseAnalysisOverview): OutOfDateMessa
 }
 
 export function caseSectionStatuses({
-  documentCount,
   approvedCount,
   detectedCount,
   missingCount,
@@ -103,7 +102,6 @@ export function caseSectionStatuses({
   risk,
   additionalDocumentCount,
 }: {
-  documentCount: number;
   approvedCount: number;
   detectedCount: number;
   // Required documents the case still lacks (the Documents tab's Missing group).

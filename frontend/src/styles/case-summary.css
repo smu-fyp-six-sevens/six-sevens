@@ -146,7 +146,7 @@
   font-size: 12px;
 }
 
-/* The crimson risk scale (tokens.css --risk-*): outline, tint, then solid as the level rises, so no level reads as
+/* The risk scale (tokens.css --risk-*): outline, tint, then solid as the level rises, so no level reads as
    "safe". */
 .risk-badge--low {
   border-color: var(--risk-low);
@@ -419,7 +419,7 @@
   text-transform: uppercase;
 }
 
-/* A finding's severity on the same crimson scale as the case's risk (tokens.css --risk-*). */
+/* A finding's severity on the same scale as the case's risk (tokens.css --risk-*). */
 .risk-severity--low {
   border-color: var(--risk-low);
   background: var(--white);

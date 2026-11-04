@@ -167,32 +167,32 @@
       "risk-low": {
         "role": "risk",
         "displayName": "Risk Low",
-        "canonical": "#e3a6b2"
+        "canonical": "#f6c9b0"
       },
       "risk-medium": {
         "role": "risk",
         "displayName": "Risk Medium",
-        "canonical": "#d9667f"
+        "canonical": "#ec9673"
       },
       "risk-medium-tint": {
         "role": "risk",
         "displayName": "Risk Medium Tint",
-        "canonical": "#f8d7de"
+        "canonical": "#fbe3d5"
       },
       "risk-medium-ink": {
         "role": "risk",
         "displayName": "Risk Medium Ink",
-        "canonical": "#7a1530"
+        "canonical": "#8a3f20"
       },
       "risk-high": {
         "role": "risk",
         "displayName": "Risk High",
-        "canonical": "#b4233c"
+        "canonical": "#c4442a"
       },
       "risk-critical": {
         "role": "risk",
         "displayName": "Risk Critical",
-        "canonical": "#6b1024"
+        "canonical": "#7f1414"
       }
     },
     "typographyMeta": {
@@ -328,7 +328,7 @@
       "refersTo": "severity-tag",
       "description": "Fixed-width uppercase mono tag on the crimson scale: Low outlined with a grey word; set-aside findings get no colour.",
       "html": "<div class=\"ds-sev-row\"><span class=\"ds-sev ds-sev--high\">High</span><span class=\"ds-sev ds-sev--medium\">Medium</span><span class=\"ds-sev ds-sev--low\">Low</span><span class=\"ds-sev ds-sev--dismissed\">Dismissed</span></div>",
-      "css": ".ds-sev-row { display: flex; gap: 8px; } .ds-sev { flex: 0 0 58px; width: 58px; padding: 1px 0; border: 1px solid transparent; border-radius: 4px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; text-align: center; text-transform: uppercase; } .ds-sev--high { background: #b4233c; color: #fff; } .ds-sev--medium { background: #f8d7de; border-color: #eeb3c0; color: #7a1530; } .ds-sev--low { background: #fff; border-color: #e3a6b2; color: #5b6478; } .ds-sev--dismissed { width: auto; padding: 1px 6px; border-color: var(--line, #e3e2de); background: var(--paper, #f9f9f8); color: var(--ink-soft, #5b6478); }"
+      "css": ".ds-sev-row { display: flex; gap: 8px; } .ds-sev { flex: 0 0 58px; width: 58px; padding: 1px 0; border: 1px solid transparent; border-radius: 4px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; text-align: center; text-transform: uppercase; } .ds-sev--high { background: #c4442a; color: #fff; } .ds-sev--medium { background: #fbe3d5; border-color: #f6c9b0; color: #8a3f20; } .ds-sev--low { background: #fff; border-color: #f6c9b0; color: #5b6478; } .ds-sev--dismissed { width: auto; padding: 1px 6px; border-color: var(--line, #e3e2de); background: var(--paper, #f9f9f8); color: var(--ink-soft, #5b6478); }"
     },
     {
       "name": "Card",
