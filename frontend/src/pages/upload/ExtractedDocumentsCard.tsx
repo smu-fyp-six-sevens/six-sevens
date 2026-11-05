@@ -92,7 +92,7 @@ export function ExtractedDocumentsCard({
   const toggle = (id: GroupId) => setChosenGroup(openGroup === id ? null : id);
 
   const rowsFor = (documents: DocumentRecord[]) =>
-    documents.map((document) => {
+    [...documents].sort(byDocumentType).map((document) => {
       const group = documentGroup(document, reviewReasons?.has(document.id) ?? false);
       return (
         <ExtractedDocumentRow
@@ -286,7 +286,7 @@ export function ExtractedDocumentsCard({
           return (
             <div key={kind} className="checklist-decided">
               <GroupToggle id={kind} label={kind === 'approved' ? 'Approved' : 'Rejected'} count={decided.length} open={isOpen} onToggle={toggle} />
-              {isOpen && decided.map((document) => (
+              {isOpen && [...decided].sort(byDocumentType).map((document) => (
                 <DecidedRow key={document.id} document={document} kind={kind} onOpenDocument={onOpenDocument} />
               ))}
             </div>
@@ -295,6 +295,16 @@ export function ExtractedDocumentsCard({
       </div>
     </section>
   );
+}
+
+// A category's documents A to Z by the type as listed (so "NRIC" comes before "NRIC (Proof of Address)"), then by
+// filename. One not yet classified has no type to sort by, and goes last.
+function byDocumentType(a: DocumentRecord, b: DocumentRecord): number {
+  if (!a.document_type !== !b.document_type) return a.document_type ? -1 : 1;
+  const type = a.document_type
+    ? formatDocumentLabel(a).localeCompare(formatDocumentLabel(b), undefined, { sensitivity: 'base' })
+    : 0;
+  return type || a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: 'base' });
 }
 
 function statusPillClass(status: DocumentRecord['status'], isStuck: boolean, isTerminal: boolean): string {

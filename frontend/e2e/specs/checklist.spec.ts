@@ -312,3 +312,33 @@ test.describe('A document that stands as proof of address says so', () => {
     await expect(typeCell(page, 'new.pdf')).toHaveText('Not classified');
   });
 });
+
+test.describe('Documents are listed A to Z by type', () => {
+  test('within a category, by the type as listed, then filename; unclassified last', async ({ page, backend }) => {
+    const theCase = makeCase({ id: 'case-az', greenlink_case_id: 'GLDB-6003', company_name: 'Order Co' });
+    backend.cases.push(theCase);
+    const ready = {
+      case_id: theCase.id, status: 'analyzed', classification_confidence: 0.97, routing_status: 'accepted',
+      extracted_fields: { company_name: { id: 'field-1', value: 'Order Co', confidence: 0.98 } },
+    } as const;
+    backend.documents.push(
+      makeDocument({ ...ready, filename: 'z_nric.png', document_type: 'nric', fulfilled_requirements: ['id_document', 'proof_of_address'] }),
+      makeDocument({ ...ready, filename: 'b_fatca.pdf', document_type: 'fatca_crs_declaration', fulfilled_requirements: ['fatca_crs_declaration'] }),
+      makeDocument({ ...ready, filename: 'a_nric.png', document_type: 'nric', fulfilled_requirements: ['id_document'] }),
+      makeDocument({ ...ready, filename: 'c_statement.pdf', document_type: 'bank_statement', fulfilled_requirements: ['proof_of_address'] }),
+      makeDocument({ ...ready, filename: 'd_incumbency.pdf', document_type: 'certificate_of_incumbency', fulfilled_requirements: ['certificate_of_incumbency'] }),
+      makeDocument({ case_id: theCase.id, filename: 'e_new.pdf', status: 'extracting' }),
+    );
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=documents`);
+    await openGroup(page, 'Pending Approval');
+
+    await expect(card(page).locator('.documents-table-row .document-filename-line')).toHaveText([
+      'c_statement.pdf', // Bank Statement (Proof of Address)
+      'd_incumbency.pdf', // Certificate of Incumbency
+      'b_fatca.pdf', // FATCA/CRS Declaration
+      'a_nric.png', // NRIC
+      'z_nric.png', // NRIC (Proof of Address)
+      'e_new.pdf', // not classified yet
+    ]);
+  });
+});
