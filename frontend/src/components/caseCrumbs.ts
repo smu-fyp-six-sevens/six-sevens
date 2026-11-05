@@ -15,14 +15,15 @@ export const caseQueueCrumb: Breadcrumb = { label: 'Case Queue', to: '/cases' };
 // How many cases the switch-case menu lists at a time; "Load more cases" adds the next lot.
 const MENU_CASES = 50;
 
-// The case number: click it to switch to another case. The menu lists the newest cases, fetched when it opens.
+// The case number: click it to switch to another case. The menu lists the newest cases, fetched when it opens. `section`
+// is the case page's section the officer is on: switching case lands on the same section of the other case.
 export function caseCrumb(
   caseRecord: CaseRecord,
-  { current = false }: { current?: boolean } = {},
+  { current = false, section = 'summary' }: { current?: boolean; section?: string } = {},
 ): Breadcrumb {
   return {
     label: caseNumberLabel(caseRecord),
-    to: `${casePath(caseRecord)}?section=summary`,
+    to: `${casePath(caseRecord)}?section=${section}`,
     current,
     menuLabel: 'switch case',
     loadMoreLabel: 'Load more cases',
@@ -31,7 +32,7 @@ export function caseCrumb(
 
       const items = page.items.map(toCaseRecord).map((item) => ({
         key: item.id,
-        to: `${casePath(item)}?section=summary`,
+        to: `${casePath(item)}?section=${section}`,
         tag: caseNumberLabel(item),
         label: item.applicant,
         current: item.id === caseRecord.id,

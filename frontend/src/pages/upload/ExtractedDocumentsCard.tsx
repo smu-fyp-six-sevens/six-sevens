@@ -4,7 +4,7 @@ import {
   canCancelDocument,
   canRetryDocument,
   formatDocumentStatus,
-  formatDocumentType,
+  formatDocumentLabel,
   isDocumentStuckProcessing,
 } from '../../services/uploadService';
 import { LiveBadge } from './LiveBadge';
@@ -67,15 +67,6 @@ export function ExtractedDocumentsCard({
   const { approveError, cancelActionError, retryActionError, isApprovingSelected, handleApproveSelected } = rowActions;
 
   const requiredReceived = REQUIRED_DOCUMENT_TYPES.filter((requirement) => fulfilledRequirements.has(requirement.value)).length;
-  const [openGroups, setOpenGroups] = useState<Record<GroupId, boolean>>({
-    review: true,
-    missing: true,
-    processing: true,
-    pending: true,
-    additional: true,
-    approved: false,
-    rejected: false,
-  });
   const missing = missingRequirements(fulfilledRequirements, coverage);
   const optionalMissing = missingAdditional(fulfilledRequirements);
   const groups: Record<DocumentGroup, DocumentRecord[]> = { review: [], processing: [], pending: [] };
@@ -84,7 +75,21 @@ export function ExtractedDocumentsCard({
   // Documents still being worked on wait for approval too: they sit first under Pending Approval, with a spinner.
   const pendingDocuments = [...groups.processing, ...groups.pending];
 
-  const toggle = (id: GroupId) => setOpenGroups((open) => ({ ...open, [id]: !open[id] }));
+  // Only one category is open at a time. Until the officer picks one, the first category that has rows is open, other
+  // than Additional (optional documents aren't what the officer came to do). Opening one closes the rest; opening
+  // the open one closes it. A choice whose category has since emptied falls back to that first one.
+  const present: GroupId[] = [
+    missing.length > 0 && 'missing',
+    optionalMissing.length > 0 && 'additional',
+    groups.review.length > 0 && 'review',
+    pendingDocuments.length > 0 && 'pending',
+    approvedDocuments.length > 0 && 'approved',
+    rejectedDocuments.length > 0 && 'rejected',
+  ].filter((id): id is GroupId => id !== false);
+  const defaultGroup = present.find((id) => id !== 'additional') ?? null;
+  const [chosenGroup, setChosenGroup] = useState<GroupId | null | undefined>(undefined);
+  const openGroup = chosenGroup === undefined || (chosenGroup !== null && !present.includes(chosenGroup)) ? defaultGroup : chosenGroup;
+  const toggle = (id: GroupId) => setChosenGroup(openGroup === id ? null : id);
 
   const rowsFor = (documents: DocumentRecord[]) =>
     documents.map((document) => {
@@ -222,8 +227,8 @@ export function ExtractedDocumentsCard({
 
         {missing.length > 0 && (
           <>
-            <GroupToggle id="missing" label="Missing" count={missing.length} open={openGroups.missing} onToggle={toggle} />
-            {openGroups.missing && missing.map((requirement) => (
+            <GroupToggle id="missing" label="Missing" count={missing.length} open={openGroup === 'missing'} onToggle={toggle} />
+            {openGroup === 'missing' && missing.map((requirement) => (
               <div key={requirement.value} className="checklist-missing-row">
                 <span className="document-select-cell" aria-hidden="true">
                   <span className="row-mark row-mark--missing" />
@@ -242,8 +247,8 @@ export function ExtractedDocumentsCard({
 
         {optionalMissing.length > 0 && (
           <div className="checklist-additional">
-            <GroupToggle id="additional" label="Additional" count={optionalMissing.length} note="only if the case needs them" open={openGroups.additional} onToggle={toggle} />
-            {openGroups.additional && optionalMissing.map((label) => (
+            <GroupToggle id="additional" label="Additional" count={optionalMissing.length} note="only if the case needs them" open={openGroup === 'additional'} onToggle={toggle} />
+            {openGroup === 'additional' && optionalMissing.map((label) => (
               <div key={label} className="checklist-missing-row checklist-optional-row">
                 <span className="document-select-cell" aria-hidden="true">
                   <span className="row-mark row-mark--missing" />
@@ -262,22 +267,22 @@ export function ExtractedDocumentsCard({
 
         {groups.review.length > 0 && (
           <>
-            <GroupToggle id="review" label="Needs Review" count={groups.review.length} open={openGroups.review} onToggle={toggle} tone="review" />
-            {openGroups.review && rowsFor(groups.review)}
+            <GroupToggle id="review" label="Needs Review" count={groups.review.length} open={openGroup === 'review'} onToggle={toggle} />
+            {openGroup === 'review' && rowsFor(groups.review)}
           </>
         )}
 
         {pendingDocuments.length > 0 && (
           <>
-            <GroupToggle id="pending" label="Pending Approval" count={pendingDocuments.length} open={openGroups.pending} onToggle={toggle} />
-            {openGroups.pending && rowsFor(pendingDocuments)}
+            <GroupToggle id="pending" label="Pending Approval" count={pendingDocuments.length} open={openGroup === 'pending'} onToggle={toggle} />
+            {openGroup === 'pending' && rowsFor(pendingDocuments)}
           </>
         )}
 
         {(['approved', 'rejected'] as const).map((kind) => {
           const decided = kind === 'approved' ? approvedDocuments : rejectedDocuments;
           if (decided.length === 0) return null;
-          const isOpen = openGroups[kind];
+          const isOpen = openGroup === kind;
           return (
             <div key={kind} className="checklist-decided">
               <GroupToggle id={kind} label={kind === 'approved' ? 'Approved' : 'Rejected'} count={decided.length} open={isOpen} onToggle={toggle} />
@@ -368,7 +373,7 @@ function ExtractedDocumentRow({
       </label>
 
       <span className="document-type-cell">
-        {document.document_type ? formatDocumentType(document.document_type, document.classification_confidence) : 'Not classified'}
+        {document.document_type ? formatDocumentLabel(document) : 'Not classified'}
       </span>
 
       <span className="document-filename">
@@ -454,12 +459,12 @@ function DecidedRow({
       }}
     >
       <span className="document-select-cell" aria-hidden="true">
-        <span className={`row-mark row-mark--${kind === 'approved' ? 'pending' : 'rejected'}`}>
+        <span className={`row-mark row-mark--${kind}`}>
           <Icon name={kind === 'approved' ? 'check' : 'x'} size={11} />
         </span>
       </span>
       <span className="document-type-cell">
-        {document.document_type ? formatDocumentType(document.document_type, document.classification_confidence) : 'Not classified'}
+        {document.document_type ? formatDocumentLabel(document) : 'Not classified'}
       </span>
       <span className="document-filename">
         <span className="document-filename-line">{document.filename}</span>
@@ -475,7 +480,8 @@ function DecidedRow({
 
 type GroupId = DocumentGroup | 'missing' | 'additional' | 'approved' | 'rejected';
 
-// A group's label as a button that folds and unfolds it; the chevron sits in the first column, over the marks.
+// A group's label as a button that folds and unfolds it; the chevron sits in the first column, over the marks. The group's
+// colour (documents-table.css, by id) is how a category reads at a glance.
 function GroupToggle({
   id,
   label,
@@ -483,7 +489,6 @@ function GroupToggle({
   note,
   open,
   onToggle,
-  tone,
 }: {
   id: GroupId;
   label: string;
@@ -491,12 +496,11 @@ function GroupToggle({
   note?: string;
   open: boolean;
   onToggle: (id: GroupId) => void;
-  tone?: 'review';
 }) {
   return (
     <button
       type="button"
-      className={`documents-table-group documents-table-group--toggle${tone === 'review' ? ' documents-table-group--review' : ''}`}
+      className={`documents-table-group documents-table-group--toggle documents-table-group--${id}`}
       aria-expanded={open}
       onClick={() => onToggle(id)}
     >

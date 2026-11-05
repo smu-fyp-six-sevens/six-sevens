@@ -729,3 +729,63 @@
 @media (prefers-reduced-motion: reduce) {
   .row-mark--processing { animation: none; }
 }
+
+/* Each category has its own colour, so what is what reads at a glance: Missing steel, Additional grey, Needs Review red,
+   Pending Approval yellow, Approved green, Rejected slate. The band carries it as a bar down its left edge, its label
+   and its count; the rows' marks carry it into the list. */
+.documents-table-group--missing { --group-ink: var(--steel-dark); --group-bg: var(--steel-a10); --group-edge: var(--steel); }
+.documents-table-group--additional { --group-ink: var(--ink-soft); --group-bg: var(--stone-94); --group-edge: var(--slate-86); }
+.documents-table-group--review { --group-ink: var(--red); --group-bg: var(--red-bg); --group-edge: var(--red-53); }
+.documents-table-group--pending { --group-ink: var(--orange-27); --group-bg: var(--amber-bg); --group-edge: var(--amber); }
+.documents-table-group--approved { --group-ink: var(--teal); --group-bg: var(--teal-bg); --group-edge: var(--teal); }
+.documents-table-group--rejected { --group-ink: var(--slate-34); --group-bg: var(--slate-94); --group-edge: var(--slate-46); }
+
+.documents-table-group--toggle {
+  background: color-mix(in srgb, var(--group-bg) 45%, var(--stone-98));
+  box-shadow: inset 4px 0 0 var(--group-edge);
+  color: var(--group-ink);
+}
+
+.documents-table-group--toggle:hover {
+  background: color-mix(in srgb, var(--group-bg) 100%, var(--stone-98));
+}
+
+.documents-table-group--toggle:focus-visible {
+  box-shadow: inset 4px 0 0 var(--group-edge), inset 0 0 0 2px var(--steel);
+}
+
+.documents-table-group--toggle .num {
+  border-color: transparent;
+  background: var(--group-bg);
+  color: var(--group-ink);
+}
+
+.documents-table-group--toggle .muted-note {
+  color: var(--text-muted);
+}
+
+/* The marks: a document ready for approval is a yellow tick, an approved one a green tick, a missing one a dashed steel
+   ring (and an optional one a dashed grey ring). */
+.row-mark--pending {
+  border-color: var(--amber);
+  background: var(--amber);
+}
+
+.row-mark--approved {
+  border-color: var(--teal);
+  background: var(--teal);
+}
+
+.row-mark--missing {
+  border-style: dashed;
+  border-color: var(--steel);
+}
+
+.checklist-optional-row .row-mark--missing {
+  border-color: var(--slate-86);
+}
+
+.checklist-missing-row:not(.checklist-optional-row) .status-pill {
+  background: var(--steel-a10);
+  color: var(--steel-dark);
+}

@@ -74,6 +74,20 @@ export const ADDITIONAL_DOCUMENT_TYPES = [
   'source_of_personal_wealth',
 ].map(requirement);
 
+// A document's type as listed, with "(Proof of Address)" after it when the document stands as someone's proof of address:
+// an NRIC or a personal bank statement that shows an address, say. The backend decides that once the document is
+// classified and its fields are read (fulfilled_requirements); until then, or for any other document, it is just the
+// type. A document typed Proof of Address already says so.
+export function formatDocumentLabel(
+  document: Pick<DocumentRecord, 'document_type' | 'classification_confidence' | 'fulfilled_requirements'>,
+): string {
+  const label = formatDocumentType(document.document_type, document.classification_confidence);
+  const standsAsAddressProof =
+    document.document_type !== 'proof_of_address' && (document.fulfilled_requirements ?? []).includes('proof_of_address');
+
+  return standsAsAddressProof ? `${label} (Proof of Address)` : label;
+}
+
 // 'unrecognised' starts out as the classifier's "couldn't tell" result and only becomes "Other" once.
 export function isConfirmedOther(
   document: Pick<DocumentRecord, 'document_type' | 'classification_confidence'>,

@@ -207,20 +207,13 @@
   background: var(--steel-a08);
 }
 
-/* Case queue: the cases as table rows, centred at about three quarters of the page. */
+/* Case queue: the cases as table rows, across the whole window at the same 24px margins as the dashboard. */
 .shell--queue {
   width: calc(100% - 48px);
 }
 
 .queue-view {
-  width: 78%;
-  margin: 0 auto;
-}
-
-@media (max-width: 1280px) {
-  .queue-view {
-    width: 100%;
-  }
+  width: 100%;
 }
 
 .case-status-dot {
