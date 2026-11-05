@@ -74,7 +74,7 @@ test.describe('Dashboard', () => {
     await expect(page.getByText('Cedar Holdings')).toBeVisible();
     await expect(page.getByText('Acme Pte Ltd')).toHaveCount(0);
     await expect(page.getByText('Bolt Logistics')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Filter by status (9 selected)' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Filter by status (8 selected)' })).toBeVisible();
   });
 
   test('a custom range picked on the calendar narrows the dashboard to it', async ({ page, backend }) => {

@@ -124,7 +124,8 @@ class _Tracer:
                 _step.reset(step_token)
                 step["duration_s"] = round(time.perf_counter() - started, 3)
                 try:
-                    sink("span", **step)  # type: ignore[misc]
+                    if sink is not None:
+                        sink("span", **step)
                 except Exception:
                     logger.debug("Failed to record span %s on the run's trace", name, exc_info=True)
 

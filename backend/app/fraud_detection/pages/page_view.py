@@ -96,16 +96,30 @@ def text_lines(page: pymupdf.Page) -> list[dict[str, Any]]:
     return [line for block in layout["blocks"] if block.get("type") == 0 for line in block["lines"]]
 
 
-def _page_view(page: pymupdf.Page, number: int, ocr_text: str | None = None) -> PageView:
+def _block_text(block: dict[str, Any]) -> str:
+    return "\n".join(
+        "".join(str(span.get("text") or "") for span in line.get("spans", []))
+        for line in block.get("lines", [])
+    )
+
+
+def _page_view(
+    page: pymupdf.Page,
+    number: int,
+    ocr_text: str | None = None,
+    layout: dict[str, Any] | None = None,
+) -> PageView:
     rect = page.rect
     area = max(rect.width * rect.height, 1.0)
-    native = page_text(page)
+    layout = layout or cast(dict, page.get_text("dict"))
+    blocks = cast(list, layout["blocks"])
+    native = "\n".join(_block_text(block) for block in blocks if block.get("type") == 0)
     source = ocr_text if ocr_text is not None else native
     lines = tuple(line for line in (collapse(raw) for raw in source.splitlines()) if line)
     placed: tuple[PlacedLine, ...] = ()
     font_chars: Counter[str] = Counter()
     if ocr_text is None:
-        layout_lines = text_lines(page)
+        layout_lines = [line for block in blocks if block.get("type") == 0 for line in block["lines"]]
         placed = tuple(
             PlacedLine(joined, *line["bbox"])
             for line in layout_lines
@@ -117,8 +131,12 @@ def _page_view(page: pymupdf.Page, number: int, ocr_text: str | None = None) -> 
                     font_chars[_font_family(span["font"])] += chars
         band_height = rect.height * PAGE_BAND_FRACTION
         band = [
-            str(block[4]) for block in cast(list, page.get_text("blocks"))
-            if block[3] <= rect.y0 + band_height or block[1] >= rect.y1 - band_height
+            _block_text(block) for block in blocks
+            if block.get("type") == 0
+            and (
+                block["bbox"][3] <= rect.y0 + band_height
+                or block["bbox"][1] >= rect.y1 - band_height
+            )
         ]
         band_text = collapse(" ".join(band))
     else:
@@ -140,11 +158,19 @@ def read_pages(file_bytes: bytes, filename: str) -> list[PageView]:
     signal (see source.py)."""
     with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
         pages = list(_pdf_pages(doc))
-        if any(page_text(page).strip() for page in pages):
-            return [_page_view(page, index + 1) for index, page in enumerate(pages)]
+        layouts = [cast(dict, page.get_text("dict")) for page in pages]
+        if any(
+            block.get("type") == 0 and _block_text(block).strip()
+            for layout in layouts
+            for block in cast(list, layout["blocks"])
+        ):
+            return [_page_view(page, index + 1, layout=layouts[index]) for index, page in enumerate(pages)]
         ocr = ingest_document(file_bytes, filename, "application/pdf", with_metadata=False)["pages"]
         texts = {int(p.get("page_number", 0)): str(p.get("text") or "") for p in ocr}
-        return [_page_view(page, index + 1, texts.get(index + 1, "")) for index, page in enumerate(pages)]
+        return [
+            _page_view(page, index + 1, texts.get(index + 1, ""), layouts[index])
+            for index, page in enumerate(pages)
+        ]
 
 
 def _money_strings(value: float) -> tuple[str, ...]:

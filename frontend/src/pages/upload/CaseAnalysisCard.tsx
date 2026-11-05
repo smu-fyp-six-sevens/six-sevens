@@ -104,8 +104,8 @@ export function CaseAnalysisCard({
   }, [runId]);
 
   useEffect(() => {
-    if (traceOpen && hasOverview) void load();
-  }, [traceOpen, hasOverview, load]);
+    if (traceOpen) void load();
+  }, [traceOpen, load]);
 
   // A failed run's stored error is an exception's text: the console has it, the card says to run it again.
   const failedError = analysis?.status === 'failed' ? analysis.error : null;
