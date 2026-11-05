@@ -42,10 +42,10 @@ const traceRow = (page: Page, label: string) =>
   page.getByRole('dialog', { name: 'Case analysis trace' }).locator('.trace-row-main', {
     has: page.locator('.trace-row-label', { hasText: label }),
   });
-// The scored findings, in the details of the trace's Scoring step.
+// The scored findings, in the details of the trace's Risk score step.
 async function scoredFindings(page: Page) {
   const trace = await openTracePanel(page);
-  await traceRow(page, 'Scoring').click();
+  await traceRow(page, 'Risk score').click();
   return trace.locator('.trace-table tbody tr');
 }
 const riskCard = (page: Page) =>
@@ -225,7 +225,7 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
 
     await expect((await openTracePanel(page)).getByRole('treeitem')).toHaveCount(3);
     await expect(traceRow(page, 'Deterministic')).toBeVisible();
-    await expect(traceRow(page, 'Scoring')).toHaveCount(0);
+    await expect(traceRow(page, 'Risk score')).toHaveCount(0);
   });
 
   test('MA-020 / MA-021 after the check, the scoring includes the cross-document findings @MA-020 @MA-021', async ({ page, backend }) => {
@@ -243,7 +243,7 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
     await expect(caseRow).toHaveCount(1);
     await expect(caseRow.locator('td').nth(2)).toHaveText('cross_document_variance');
     await expect(caseRow.locator('td').nth(3)).toHaveText('cross_document_analysis');
-    await trace.getByRole('tab', { name: 'Attributes' }).click();
+    await trace.getByRole('button', { name: 'Attributes' }).click();
     await expect(trace).toContainText('"score_without_cross_document": 87');
   });
 
@@ -265,7 +265,7 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
     await expect.poll(() => errors.join('\n')).toContain('RuntimeError: cross-document check failed');
     await openTracePanel(page);
     await expect(traceRow(page, 'Error')).toContainText('RuntimeError: cross-document check failed');
-    await expect(traceRow(page, 'Scoring')).toHaveCount(0);
+    await expect(traceRow(page, 'Risk score')).toHaveCount(0);
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
     await expect(riskCard(page)).toContainText('Not scored yet.');
     await expect(riskCard(page).locator('.risk-badge')).toHaveCount(0);

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { KIND_LABELS, type LlmCall, type TraceNode, type TraceStep, type ValidationFailure } from './buildTrace';
+import { KIND_LABELS, toolLabel, type LlmCall, type TraceNode, type TraceStep, type ValidationFailure } from './buildTrace';
 import { KindIcon } from './KindIcon';
 import { formatCost, formatSeconds, formatTokens, prettyJson } from './format';
 
@@ -9,7 +9,7 @@ const SHOWN_FIELDS = new Set([
   'validation_failures', 'output_repairs', 'input', 'output', 'brief', 'summary', 'tool_calls', 'tool',
 ]);
 
-type Tab = 'overview' | 'reasoning' | 'calls' | 'validation' | 'attributes';
+type SectionId = 'overview' | 'reasoning' | 'calls' | 'validation' | 'attributes';
 
 function Code({ value }: { value: unknown }) {
   return <pre className="trace-code">{prettyJson(value)}</pre>;
@@ -49,13 +49,18 @@ function ScoredFindings({ step }: { step: TraceStep }) {
   );
 }
 
+function hasOverview(node: TraceNode): boolean {
+  const { step } = node;
+  return Boolean(node.error || (node.kind === 'event' && node.subtitle))
+    || ['brief', 'input', 'output', 'summary'].some((field) => typeof step[field] === 'string')
+    || (node.kind === 'agent' && Array.isArray(step.tool_calls))
+    || (step.step === 'scoring' && Array.isArray(step.findings) && step.findings.length > 0);
+}
+
 function Overview({ node }: { node: TraceNode }) {
   const step = node.step;
   const toolCalls = Array.isArray(step.tool_calls) ? (step.tool_calls as Array<{ name?: string; args?: unknown }>) : null;
   const hasArgs = (args: unknown) => typeof args === 'object' && args !== null && Object.keys(args).length > 0;
-  const empty =
-    !node.error && !node.subtitle && typeof step.brief !== 'string' && typeof step.summary !== 'string'
-    && typeof step.input !== 'string' && typeof step.output !== 'string' && !toolCalls && step.step !== 'scoring';
   return (
     <>
       {node.error && <p className="trace-error">{node.error}</p>}
@@ -72,7 +77,7 @@ function Overview({ node }: { node: TraceNode }) {
             <ol className="trace-tool-calls">
               {toolCalls.map((call, index) => (
                 <li key={index}>
-                  <code>{call.name}</code>
+                  <span>{toolLabel(String(call.name))}</span>
                   {hasArgs(call.args) ? <Code value={call.args} /> : null}
                 </li>
               ))}
@@ -81,7 +86,6 @@ function Overview({ node }: { node: TraceNode }) {
         </Block>
       )}
       <ScoredFindings step={step} />
-      {empty && <p className="trace-muted">Nothing more was recorded for this step. See Attributes.</p>}
     </>
   );
 }
@@ -133,19 +137,52 @@ function Failures({ failures }: { failures: ValidationFailure[] }) {
   );
 }
 
+function Section({
+  title, count, open, onToggle, children,
+}: {
+  title: string;
+  count?: number;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className="trace-section">
+      <button type="button" className="trace-section-head" aria-expanded={open} onClick={onToggle}>
+        <span className="trace-section-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
+        {title}
+        {count ? <span className="trace-count">{count}</span> : null}
+      </button>
+      {open && <div className="trace-section-body">{children}</div>}
+    </section>
+  );
+}
+
 export function TraceDetails({ node, root }: { node: TraceNode; root: TraceNode }) {
-  const [chosen, setChosen] = useState<Tab>('overview');
+  const [open, setOpen] = useState<Set<SectionId>>(new Set(['overview']));
   const thinking = node.calls.flatMap((call) => call.thinking ?? []);
   const attributes = Object.fromEntries(Object.entries(node.step).filter(([key]) => !SHOWN_FIELDS.has(key)));
-  const tabs: Array<{ id: Tab; label: string; count?: number; show: boolean }> = [
-    { id: 'overview', label: 'Overview', show: true },
-    { id: 'reasoning', label: 'Reasoning', count: thinking.length, show: thinking.length > 0 },
-    { id: 'calls', label: 'Claude calls', count: node.calls.length, show: node.calls.length > 0 },
-    { id: 'validation', label: 'Failed validation', count: node.failures.length, show: node.failures.length > 0 },
-    { id: 'attributes', label: 'Attributes', show: Object.keys(attributes).length > 0 },
+  const sections: Array<{ id: SectionId; title: string; count?: number; show: boolean; body: () => ReactNode }> = [
+    { id: 'overview', title: 'Overview', show: hasOverview(node), body: () => <Overview node={node} /> },
+    {
+      id: 'reasoning', title: 'Reasoning', count: thinking.length, show: thinking.length > 0,
+      body: () => thinking.map((text, index) => <p key={index} className="trace-reasoning">{text}</p>),
+    },
+    { id: 'calls', title: 'Claude calls', count: node.calls.length, show: node.calls.length > 0, body: () => <Calls calls={node.calls} /> },
+    {
+      id: 'validation', title: 'Failed validation', count: node.failures.length, show: node.failures.length > 0,
+      body: () => <Failures failures={node.failures} />,
+    },
+    { id: 'attributes', title: 'Attributes', show: Object.keys(attributes).length > 0, body: () => <Code value={attributes} /> },
   ];
-  const shown = tabs.filter((tab) => tab.show);
-  const tab = shown.some((t) => t.id === chosen) ? chosen : 'overview';
+  const shown = sections.filter((section) => section.show);
+  const toggle = (id: SectionId) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const tokens = node.totals.inputTokens + node.totals.outputTokens;
 
   return (
@@ -161,32 +198,28 @@ export function TraceDetails({ node, root }: { node: TraceNode; root: TraceNode 
           <div><dt>Status</dt><dd className={node.error ? 'trace-error-text' : 'trace-ok-text'}>{node.error ? '✕ Error' : '✓ OK'}</dd></div>
           <div><dt>Starts</dt><dd>+{formatSeconds(Math.max(node.start - root.start, 0))}</dd></div>
           {node.kind !== 'event' && <div><dt>Took</dt><dd>{formatSeconds(node.end - node.start)}</dd></div>}
+          {node.elapsed !== undefined && <div><dt>Since the step before</dt><dd>{formatSeconds(node.elapsed)}</dd></div>}
           {tokens > 0 && <div><dt>Tokens</dt><dd>{formatTokens(node.totals.inputTokens)} in · {formatTokens(node.totals.outputTokens)} out</dd></div>}
           {node.totals.cost > 0 && <div><dt>Cost</dt><dd>{formatCost(node.totals.cost)}</dd></div>}
         </dl>
       </header>
-      <div className="trace-tabs" role="tablist" aria-label="Span details">
-        {shown.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            className={`trace-tab${tab === t.id ? ' trace-tab--active' : ''}`}
-            onClick={() => setChosen(t.id)}
-          >
-            {t.label}
-            {t.count ? <span className="trace-tab-count">{t.count}</span> : null}
-          </button>
-        ))}
-      </div>
-      <div className="trace-tab-panel" role="tabpanel">
-        {tab === 'overview' && <Overview node={node} />}
-        {tab === 'reasoning' && thinking.map((text, index) => <p key={index} className="trace-reasoning">{text}</p>)}
-        {tab === 'calls' && <Calls calls={node.calls} />}
-        {tab === 'validation' && <Failures failures={node.failures} />}
-        {tab === 'attributes' && <Code value={attributes} />}
-      </div>
+      {shown.length === 0 ? (
+        <p className="trace-muted trace-empty">Nothing more was recorded for this step.</p>
+      ) : (
+        <div className="trace-sections">
+          {shown.map((section) => (
+            <Section
+              key={section.id}
+              title={section.title}
+              count={section.count}
+              open={open.has(section.id)}
+              onToggle={() => toggle(section.id)}
+            >
+              {section.body()}
+            </Section>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

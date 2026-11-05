@@ -82,14 +82,14 @@ test.describe('Trace agent runs @SCRUM-59', () => {
     await expect(run).toContainText('⚠ 1');
     await run.click();
 
-    await expect(row(page, 'Lead investigator · plan')).toBeVisible();
+    await expect(row(page, 'Lead agent: plan')).toBeVisible();
     await expect(row(page, 'Layout specialist')).toBeVisible();
-    await expect(panel(page).locator('.trace-row-main', { hasText: 'font_consistency_tool' })).toContainText('1 finding(s)');
+    await expect(panel(page).locator('.trace-row-main', { hasText: 'Font consistency check' })).toContainText('1 finding(s)');
     const totals = panel(page).locator('.trace-drawer-head');
     await expect(totals).toContainText('Claude calls2');
     await expect(totals).toContainText('Failed validations1');
     // The tool ran inside the layout specialist's review.
-    const tool = panel(page).getByRole('treeitem').filter({ hasText: 'font_consistency_tool' });
+    const tool = panel(page).getByRole('treeitem').filter({ hasText: 'Font consistency check' });
     await expect(tool).toHaveAttribute('aria-level', '3');
 
     await panel(page).getByRole('button', { name: 'Close trace' }).click();
@@ -100,7 +100,7 @@ test.describe('Trace agent runs @SCRUM-59', () => {
     await openTrace(page, backend);
 
     await row(page, 'Layout specialist').click();
-    await expect(details(page).locator('.trace-tool-calls li')).toHaveText(['font_consistency_tool']);
+    await expect(details(page).locator('.trace-tool-calls li')).toHaveText(['Font consistency check']);
 
     await row(page, 'Authenticity specialist').click();
     await expect(details(page)).toContainText('No tools were called.');
@@ -109,13 +109,13 @@ test.describe('Trace agent runs @SCRUM-59', () => {
   test("a Claude call shows the model's reasoning, tokens and cost", async ({ page, backend }) => {
     await openTrace(page, backend);
 
-    await row(page, 'Lead investigator · plan').click();
+    await row(page, 'Lead agent: plan').click();
 
-    await details(page).getByRole('tab', { name: /Reasoning/ }).click();
+    await details(page).getByRole('button', { name: /Reasoning/ }).click();
     await expect(details(page).locator('.trace-reasoning')).toHaveText(
       'The payslip carries the income, so the content specialist should check the net pay first.',
     );
-    await details(page).getByRole('tab', { name: /Claude calls/ }).click();
+    await details(page).getByRole('button', { name: /Claude calls/ }).click();
     await expect(details(page).locator('.trace-table')).toContainText('claude-sonnet-5-5');
     await expect(details(page)).toContainText('$0.0061');
   });
@@ -123,15 +123,78 @@ test.describe('Trace agent runs @SCRUM-59', () => {
   test('a reply that failed validation keeps its raw payload, agent and time', async ({ page, backend }) => {
     await openTrace(page, backend);
 
-    await expect(row(page, 'Layout specialist · turn')).toContainText('⚠ 1');
-    await row(page, 'Layout specialist · turn').click();
-    await details(page).getByRole('tab', { name: /Failed validation/ }).click();
+    await expect(row(page, 'Layout specialist: Claude call')).toContainText('⚠ 1');
+    await row(page, 'Layout specialist: Claude call').click();
+    await details(page).getByRole('button', { name: /Failed validation/ }).click();
 
     const failure = details(page).locator('.trace-failure');
     await expect(failure).toContainText('specialist assessment');
     await expect(failure).toContainText('detection.specialist.layout');
     await expect(failure.locator('time')).toHaveAttribute('datetime', FAILURE.at);
     await expect(failure).toContainText('"confidence": "high"');
+  });
+
+  test('every row with Claude calls shows its tokens and cost, and steps show under their span', async ({ page, backend }) => {
+    await openTrace(page, backend);
+
+    await expect(row(page, 'Lead agent: plan')).toContainText('4.0k tokens · $0.0061');
+    // The run adds up what happened in it.
+    await expect(row(page, 'Fraud detection')).toContainText('4.7k tokens · $0.0073');
+    await expect(panel(page).locator('.trace-row-main', { hasText: 'Investigation plan' })).toContainText('briefs for 2 specialists');
+
+    // A step shows its time since the step before; the run's duration is the run's, not the trace's.
+    await expect(panel(page).locator('.trace-row-main', { hasText: 'Investigation plan' })).toContainText('100 ms');
+    await expect(panel(page).locator('.trace-drawer-head')).toContainText('Duration7.00s');
+    await expect(panel(page).locator('.trace-notice')).toHaveCount(0);
+
+    await expect(panel(page).getByLabel('Show steps')).toHaveCount(0);
+    await expect(panel(page).getByRole('tab')).toHaveCount(0);
+  });
+
+  test('the details are rows that open and close, and stay open from one step to the next', async ({ page, backend }) => {
+    await openTrace(page, backend);
+
+    await panel(page).locator('.trace-row-main', { hasText: 'Investigation plan' }).click();
+    const overview = details(page).getByRole('button', { name: 'Overview' });
+    const attributes = details(page).getByRole('button', { name: 'Attributes' });
+    await expect(overview).toHaveAttribute('aria-expanded', 'true');
+    await expect(details(page)).toContainText('briefs for 2 specialists');
+    await expect(attributes).toHaveAttribute('aria-expanded', 'false');
+    await expect(details(page)).not.toContainText('detection_briefs');
+
+    await attributes.click();
+    await expect(details(page)).toContainText('detection_briefs');
+    await overview.click();
+    await expect(details(page)).not.toContainText('briefs for 2 specialists');
+
+    await panel(page).locator('.trace-row-main', { hasText: 'Detection started' }).click();
+    await expect(details(page).getByRole('heading', { name: 'Detection started' })).toBeVisible();
+    await panel(page).locator('.trace-row-main', { hasText: 'Run audit' }).click();
+    await expect(details(page).getByRole('button', { name: 'Attributes' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  test("a trace with no spans says its Claude usage wasn't recorded, rather than zero", async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const document = fixture.document('Credit_Bureau_Report');
+    backend.traces[document.id] = { document_id: document.id, started_at: 0, steps: [
+      { step: 'ingest', at: 1 },
+      { step: 'agent_call', at: 3, tool_calls: [] },
+      // An hour later, once an officer approved it: the wait isn't time worked.
+      { step: 'detection_start', at: 3603 },
+      { step: 'detection_done', at: 3607, detection_verdict: 'CLEAN' },
+    ] };
+    await page.goto(fixture.documentUrl(document));
+    await card(page).getByRole('button', { name: 'Open trace' }).click();
+
+    await expect(panel(page).locator('.trace-row-main', { hasText: 'Classifier decision' })).toContainText('decided without using a tool');
+    const totals = panel(page).locator('.trace-drawer-head');
+    await expect(totals).toContainText('TokensNot recorded');
+    await expect(totals).toContainText('CostNot recorded');
+    await expect(totals).not.toContainText('$0');
+    await expect(totals).toContainText('Duration6.00s');
+    await expect(panel(page).locator('.trace-row-main', { hasText: 'Classifier decision' })).toContainText('2.00s');
+    await expect(panel(page).locator('.trace-row-main', { hasText: 'Detection started' }).locator('.trace-duration')).toHaveCount(0);
+    await expect(panel(page).locator('.trace-notice')).toContainText('Claude Cost tab');
   });
 
   test('a document with no trace says so', async ({ page, backend }) => {

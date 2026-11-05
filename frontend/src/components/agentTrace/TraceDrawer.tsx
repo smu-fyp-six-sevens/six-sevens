@@ -1,49 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  hasVisibleChildren,
   rootOf,
   visibleRows,
   type BuiltTrace,
-  type TraceNode,
   type TraceRow,
 } from './buildTrace';
 import { KindIcon } from './KindIcon';
 import { TraceDetails } from './TraceDetails';
 import { durationTone, formatCost, formatSeconds, formatTokens } from './format';
 
-type View = 'tree' | 'timeline';
-
-function TimelineBar({ node, root }: { node: TraceNode; root: TraceNode }) {
-  const span = Math.max(root.end - root.start, 0.001);
-  const left = Math.min(Math.max(((node.start - root.start) / span) * 100, 0), 100);
-  if (node.kind === 'event') {
-    return (
-      <span className="trace-timeline" aria-hidden="true">
-        <span className="trace-timeline-dot" style={{ left: `${left}%` }} />
-      </span>
-    );
-  }
-  const width = Math.max(((node.end - node.start) / span) * 100, 0.8);
-  return (
-    <span className="trace-timeline" aria-hidden="true">
-      <span className={`trace-timeline-bar trace-timeline-bar--${node.kind}`} style={{ left: `${left}%`, width: `${Math.min(width, 100 - left)}%` }} />
-    </span>
-  );
-}
-
 function Row({
-  row, view, selected, expanded, expandable, root, onSelect, onToggle,
+  row, selected, expanded, expandable, onSelect, onToggle,
 }: {
   row: TraceRow;
-  view: View;
   selected: boolean;
   expanded: boolean;
   expandable: boolean;
-  root: TraceNode;
   onSelect: () => void;
   onToggle: () => void;
 }) {
   const { node } = row;
+  const { cost } = node.totals;
   const seconds = node.end - node.start;
   const tokens = node.totals.inputTokens + node.totals.outputTokens;
   // A run counts its audit's failed validations; any other span, the ones that happened in it.
@@ -66,17 +43,18 @@ function Row({
           {node.label}
           {node.subtitle && <span className="trace-row-subtitle">{node.subtitle}</span>}
         </span>
-        {view === 'tree' ? (
-          <span className="trace-row-figures">
-            {failures > 0 && <span className="trace-chip trace-chip--warn" title="Failed validations">⚠ {failures}</span>}
-            {tokens > 0 && node.kind !== 'run' && (
-              <span className="trace-chip" title={`${node.totals.inputTokens} in, ${node.totals.outputTokens} out`}>◎ {formatTokens(tokens)}</span>
-            )}
-            {node.kind !== 'event' && <span className={`trace-duration trace-duration--${durationTone(seconds)}`}>{formatSeconds(seconds)}</span>}
-          </span>
-        ) : (
-          <TimelineBar node={node} root={root} />
-        )}
+        <span className="trace-row-figures">
+          {failures > 0 && <span className="trace-chip trace-chip--warn" title="Failed validations">⚠ {failures}</span>}
+          {tokens > 0 && (
+            <span className="trace-chip" title={`${node.totals.inputTokens} in, ${node.totals.outputTokens} out`}>
+              {formatTokens(tokens)} tokens{cost > 0 ? ` · ${formatCost(cost)}` : ''}
+            </span>
+          )}
+          {node.kind !== 'event' && <span className={`trace-duration trace-duration--${durationTone(seconds)}`}>{formatSeconds(seconds)}</span>}
+          {node.elapsed !== undefined && (
+            <span className={`trace-duration trace-duration--${durationTone(node.elapsed)}`} title="Since the step before">{formatSeconds(node.elapsed)}</span>
+          )}
+        </span>
       </button>
       {expandable ? (
         <button
@@ -102,10 +80,7 @@ export function TraceDrawer({
   initialKey: string;
   onClose: () => void;
 }) {
-  const [view, setView] = useState<View>('tree');
   const [search, setSearch] = useState('');
-  // Steps (ingest, scoring, ...) are what an old trace is made of, so they show when there are no spans.
-  const [showSteps, setShowSteps] = useState(!trace.hasSpans);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedKey, setSelectedKey] = useState(initialKey);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -119,8 +94,8 @@ export function TraceDrawer({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const rows = visibleRows(trace.roots, { collapsed, showSteps, search });
-  const all = visibleRows(trace.roots, { collapsed: new Set(), showSteps: true, search: '' });
+  const rows = visibleRows(trace.roots, { collapsed, search });
+  const all = visibleRows(trace.roots, { collapsed: new Set(), search: '' });
   const selected = all.find((row) => row.node.key === selectedKey)?.node ?? trace.roots[0];
   const toggle = (key: string) =>
     setCollapsed((current) => {
@@ -130,7 +105,10 @@ export function TraceDrawer({
       return next;
     });
   const totals = trace.totals;
-  const spanCount = all.filter((row) => row.node.kind !== 'event').length;
+  // Claude calls are recorded on spans, so a trace with none has no figures: not the same as a run that used none.
+  const unrecorded = (
+    <dd className="trace-muted" title="This trace has no spans, so its Claude usage wasn't recorded.">Not recorded</dd>
+  );
 
   return (
     <div className="trace-overlay" onClick={onClose}>
@@ -150,10 +128,10 @@ export function TraceDrawer({
                 {totals.errors ? `✕ ${totals.errors} error${totals.errors === 1 ? '' : 's'}` : '✓ OK'}
               </dd>
             </div>
-            <div><dt>Duration</dt><dd>{formatSeconds(trace.end - trace.start)}</dd></div>
-            <div><dt>Claude calls</dt><dd>{totals.calls}</dd></div>
-            <div><dt>Tokens</dt><dd>{formatTokens(totals.inputTokens)} in · {formatTokens(totals.outputTokens)} out</dd></div>
-            <div><dt>Cost</dt><dd>{formatCost(totals.cost)}</dd></div>
+            <div><dt>Duration</dt><dd>{formatSeconds(trace.seconds)}</dd></div>
+            <div><dt>Claude calls</dt>{trace.hasSpans ? <dd>{totals.calls}</dd> : unrecorded}</div>
+            <div><dt>Tokens</dt>{trace.hasSpans ? <dd>{formatTokens(totals.inputTokens)} in · {formatTokens(totals.outputTokens)} out</dd> : unrecorded}</div>
+            <div><dt>Cost</dt>{trace.hasSpans ? <dd>{formatCost(totals.cost)}</dd> : unrecorded}</div>
             <div>
               <dt>Failed validations</dt>
               <dd className={totals.failures ? 'trace-warn-text' : undefined}>{totals.failures}</dd>
@@ -161,56 +139,41 @@ export function TraceDrawer({
           </dl>
           <button ref={closeRef} type="button" className="trace-close" aria-label="Close trace" onClick={onClose}>✕</button>
         </header>
+        {!trace.hasSpans && (
+          <p className="trace-notice">
+            This run has no per-step Claude figures, because it was processed before they were recorded. Its cost is on
+            the case's Claude Cost tab. Runs from now on show tokens and cost on each step.
+          </p>
+        )}
 
         <div className="trace-drawer-body">
           <div className="trace-tree-pane">
-            <div className="trace-tabs" role="tablist" aria-label="Trace views">
-              {(['tree', 'timeline'] as View[]).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  role="tab"
-                  aria-selected={view === v}
-                  className={`trace-tab${view === v ? ' trace-tab--active' : ''}`}
-                  onClick={() => setView(v)}
-                >
-                  {v === 'tree' ? 'Trace tree' : 'Timeline'}
-                  {v === 'tree' && <span className="trace-tab-count">{spanCount}</span>}
-                </button>
-              ))}
-            </div>
             <div className="trace-tree-tools">
               <input
                 type="search"
                 className="trace-search"
-                placeholder="Search by span name"
-                aria-label="Search by span name"
+                placeholder="Search steps"
+                aria-label="Search steps"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
-              <label className="trace-toggle">
-                <input type="checkbox" checked={showSteps} onChange={(event) => setShowSteps(event.target.checked)} />
-                Show steps
-              </label>
             </div>
-            <div className="trace-tree" role="tree" aria-label={`${title} spans`}>
-              {rows.length === 0 && <p className="trace-muted trace-empty">No span matches “{search}”.</p>}
+            <div className="trace-tree" role="tree" aria-label={`${title} steps`}>
+              {rows.length === 0 && <p className="trace-muted trace-empty">No step matches “{search}”.</p>}
               {rows.map((row) => (
                 <Row
                   key={row.node.key}
                   row={row}
-                  view={view}
                   selected={selected?.key === row.node.key}
                   expanded={!collapsed.has(row.node.key)}
-                  expandable={hasVisibleChildren(row.node, showSteps)}
-                  root={rootOf(row.node, trace.roots)}
+                  expandable={row.node.children.length > 0}
                   onSelect={() => setSelectedKey(row.node.key)}
                   onToggle={() => toggle(row.node.key)}
                 />
               ))}
             </div>
           </div>
-          {selected && <TraceDetails key={selected.key} node={selected} root={rootOf(selected, trace.roots)} />}
+          {selected && <TraceDetails node={selected} root={rootOf(selected, trace.roots)} />}
         </div>
       </div>
     </div>

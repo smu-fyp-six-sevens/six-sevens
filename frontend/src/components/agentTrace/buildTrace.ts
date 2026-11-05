@@ -14,7 +14,7 @@ export type TraceNodeKind = 'run' | 'agent' | 'llm' | 'tool' | 'chain' | 'event'
 export const KIND_LABELS: Record<TraceNodeKind, string> = {
   run: 'Run',
   agent: 'Agent',
-  llm: 'LLM',
+  llm: 'Claude call',
   tool: 'Tool',
   chain: 'Step',
   event: 'Step',
@@ -62,6 +62,8 @@ export interface TraceNode {
   // Seconds since the trace started.
   start: number;
   end: number;
+  // A step's time since the step before it; unset when it starts a run, or follows a wait between runs.
+  elapsed?: number;
   error?: string;
   step: TraceStep;
   calls: LlmCall[];
@@ -73,8 +75,8 @@ export interface TraceNode {
 export interface BuiltTrace {
   roots: TraceNode[];
   totals: TraceTotals;
-  start: number;
-  end: number;
+  // Time spent working: a document's runs can be hours apart, waiting for an officer.
+  seconds: number;
   hasSpans: boolean;
 }
 
@@ -93,19 +95,76 @@ const SPAN_LABELS: Record<string, string> = {
   'detection.run': 'Fraud detection',
   'case_pipeline.run': 'Case analysis',
   'classify.agent_call': 'Classifier',
-  'extract.run_extraction': 'Extraction',
-  'detection.lead_plan': 'Lead investigator · plan',
-  'detection.lead_review': 'Lead investigator · review',
-  'detection.numerical_binder': 'Numerical binder',
+  'extract.run_extraction': 'Field extraction',
+  'detection.lead_plan': 'Lead agent: plan',
+  'detection.lead_review': 'Lead agent: review',
+  'detection.numerical_binder': 'Matching figures to checks',
+  'case_pipeline.hypothesise': 'Hypothesis planner',
+  'case_pipeline.adjudicate': 'Hypothesis judge',
   'case_pipeline.evidence_requests': 'Evidence requests',
   'case_pipeline.summary': 'Summary writer',
 };
 
+const SPECIALIST_LABELS: Record<string, string> = {
+  layout_rendering: 'Layout & Rendering',
+  content_validation: 'Content Validation',
+  digital_authenticity: 'Digital Authenticity',
+};
+
+const STEP_LABELS: Record<string, string> = {
+  run_start: 'Run started',
+  ingest: 'Document read',
+  content_guard: 'Content safety check',
+  rule_classify: 'Rule-based type check',
+  agent_call: 'Classifier decision',
+  llm_classify_tool: 'Claude read the text',
+  vision_llm: 'Claude read the page images',
+  validate: 'Classification checked',
+  reclassify: 'Type checked again',
+  record_escalation: 'Sent for officer review',
+  classification_finalised: 'Document type decided',
+  extraction: 'Fields extracted',
+  detection_start: 'Detection started',
+  detection_plan: 'Investigation plan',
+  detection_second_look: 'Second look requested',
+  detection_specialist: 'Specialist finished',
+  detection_done: 'Detection finished',
+  detection_error: 'Detection failed',
+  findings_error: 'Findings not saved',
+  dossier: 'Case file prepared',
+  deterministic: 'Deterministic comparisons',
+  hypotheses: 'Hypotheses proposed',
+  tool_call: 'Evidence gathered',
+  judge_reply: 'Judge decision',
+  verify: 'Verdict checked',
+  scoring: 'Risk score',
+  evidence_requests: 'Evidence requests',
+  outlook: 'Risk outlook',
+  additional_documents: 'Additional documents',
+  summary: 'Case summary',
+  run_audit: 'Run audit',
+  done: 'Finished',
+};
+
+const TOOL_LABELS: Record<string, string> = {
+  llm_classify_tool: 'Text classification',
+  vision_llm: 'Page image reading',
+  numerical_checks_tool: 'Numerical checks',
+  external_validation_tool: 'Public record checks',
+  metadata_tool: 'File metadata check',
+};
+
+export function toolLabel(name: string): string {
+  return TOOL_LABELS[name] ?? `${humanize(name.replace(/_tool$/, ''))} check`;
+}
+
+const specialist = (name: string) => SPECIALIST_LABELS[name] ?? humanize(name);
+
 function spanLabel(step: TraceStep, name: string): string {
   if (SPAN_LABELS[name]) return SPAN_LABELS[name];
-  if (name.startsWith('tool.')) return name.slice(5);
-  if (name.startsWith('detection.review.')) return `${humanize(name.slice(17))} specialist`;
-  if (name.startsWith('detection.specialist.')) return `${humanize(name.slice(21))} specialist · turn`;
+  if (name.startsWith('tool.')) return toolLabel(name.slice(5));
+  if (name.startsWith('detection.review.')) return `${specialist(name.slice(17))} specialist`;
+  if (name.startsWith('detection.specialist.')) return `${specialist(name.slice(21))} specialist: Claude call`;
   return str(step.run) ?? humanize(name.replace(/^case_pipeline\.|^cross_document\./, ''));
 }
 
@@ -126,8 +185,8 @@ export function describeStep(step: TraceStep): string | undefined {
     case 'rule_classify':
       return step.rule_top_type ? `${String(step.rule_top_type)} (${String(step.rule_top_strength ?? '—')})` : 'no rule match';
     case 'agent_call': {
-      const calls = list(step.tool_calls).map(String);
-      return calls.length ? `calls ${calls.join(', ')}` : 'answers without a tool';
+      const calls = list(step.tool_calls).map((call) => toolLabel(String(call)));
+      return calls.length ? `uses ${calls.join(', ')}` : 'decided without using a tool';
     }
     case 'classification_finalised':
       return `${String(step.document_type ?? 'no type')} · confidence ${String(step.confidence ?? '—')}`;
@@ -136,7 +195,7 @@ export function describeStep(step: TraceStep): string | undefined {
     case 'detection_plan':
       return `briefs for ${Object.keys((step.detection_briefs as object | undefined) ?? {}).length} specialists`;
     case 'detection_specialist': {
-      const tools = list(step.tools_called).map(String);
+      const tools = list(step.tools_called).map((tool) => toolLabel(String(tool)));
       return `${num(step.finding_count)} finding(s) · tools: ${tools.length ? tools.join(', ') : 'none'}`;
     }
     case 'detection_done':
@@ -144,7 +203,7 @@ export function describeStep(step: TraceStep): string | undefined {
     case 'hypotheses':
       return `${list(step.proposed).length} hypothesis(es) proposed`;
     case 'tool_call':
-      return `${String(step.tool)} for ${String(step.hypothesis)}`;
+      return `${toolLabel(String(step.tool))} for ${String(step.hypothesis)}`;
     case 'verify':
       return step.kept ? `${String(step.hypothesis)} kept` : `${String(step.hypothesis)} dropped${step.reason ? `: ${String(step.reason)}` : ''}`;
     case 'scoring':
@@ -159,6 +218,16 @@ export function describeStep(step: TraceStep): string | undefined {
     default:
       return undefined;
   }
+}
+
+const START_STEPS = new Set(['run_start', 'ingest', 'detection_start']);
+// Longer than any one step takes, so a gap this long is a wait between runs (an on-demand check, say).
+const MAX_STEP_SECONDS = 600;
+
+function elapsedSince(previous: TraceStep | undefined, step: TraceStep): number | undefined {
+  if (!previous || START_STEPS.has(step.step)) return undefined;
+  const seconds = num(step.at) - num(previous.at);
+  return seconds >= 0 && seconds <= MAX_STEP_SECONDS ? seconds : undefined;
 }
 
 function emptyTotals(): TraceTotals {
@@ -219,11 +288,12 @@ export function buildTrace(steps: TraceStep[]): BuiltTrace {
     const node: TraceNode = {
       key: `step-${index}`,
       kind: 'event',
-      label: humanize(step.step),
+      label: STEP_LABELS[step.step] ?? humanize(step.step),
       name: step.step,
       subtitle: describeStep(step),
       start: at,
       end: at,
+      elapsed: elapsedSince(steps[index - 1], step),
       error,
       step,
       calls: [],
@@ -258,8 +328,7 @@ export function buildTrace(steps: TraceStep[]): BuiltTrace {
   return {
     roots: top,
     totals,
-    start: top.length ? Math.min(...top.map((n) => n.start)) : 0,
-    end: top.length ? Math.max(...top.map((n) => n.end)) : 0,
+    seconds: top.reduce((sum, node) => sum + (node.kind === 'event' ? node.elapsed ?? 0 : node.end - node.start), 0),
     hasSpans: spans.size > 0,
   };
 }
@@ -272,18 +341,17 @@ export interface TraceRow {
   last: boolean;
 }
 
-// The rows the tree shows, depth first. Steps are left out unless asked for; a search keeps matching rows and
-// their ancestors.
+// The rows the tree shows, depth first. A search keeps matching rows and their ancestors.
 export function visibleRows(
   roots: TraceNode[],
-  { collapsed, showSteps, search }: { collapsed: Set<string>; showSteps: boolean; search: string },
+  { collapsed, search }: { collapsed: Set<string>; search: string },
 ): TraceRow[] {
   const query = search.trim().toLowerCase();
   const matches = (node: TraceNode): boolean =>
     !query || `${node.label} ${node.name}`.toLowerCase().includes(query) || node.children.some(matches);
   const rows: TraceRow[] = [];
   const walk = (nodes: TraceNode[], depth: number, guides: boolean[]) => {
-    const shown = nodes.filter((node) => (showSteps || node.kind !== 'event') && matches(node));
+    const shown = nodes.filter(matches);
     shown.forEach((node, index) => {
       const last = index === shown.length - 1;
       rows.push({ node, depth, guides, last });
@@ -292,10 +360,6 @@ export function visibleRows(
   };
   walk(roots, 0, []);
   return rows;
-}
-
-export function hasVisibleChildren(node: TraceNode, showSteps: boolean): boolean {
-  return node.children.some((child) => showSteps || child.kind !== 'event');
 }
 
 export function rootOf(node: TraceNode, roots: TraceNode[]): TraceNode {
