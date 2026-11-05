@@ -45,6 +45,7 @@ const traceRow = (page: Page, label: string) =>
 // The scored findings, in the details of the trace's Risk score step.
 async function scoredFindings(page: Page) {
   const trace = await openTracePanel(page);
+  await trace.getByRole('button', { name: 'Expand Risk and outlook' }).click();
   await traceRow(page, 'Risk score').click();
   return trace.locator('.trace-table tbody tr');
 }
@@ -223,7 +224,10 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
 
     await tracePanel(page).getByRole('button', { name: 'Refresh case analysis trace' }).click();
 
-    await expect((await openTracePanel(page)).getByRole('treeitem')).toHaveCount(3);
+    const trace = await openTracePanel(page);
+    await expect(trace.getByRole('treeitem')).toHaveCount(2);
+    await trace.getByRole('button', { name: 'Expand Case file' }).click();
+    await expect(trace.getByRole('treeitem')).toHaveCount(4);
     await expect(traceRow(page, 'Deterministic')).toBeVisible();
     await expect(traceRow(page, 'Risk score')).toHaveCount(0);
   });

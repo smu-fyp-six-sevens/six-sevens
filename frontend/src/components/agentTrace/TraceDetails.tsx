@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { KIND_LABELS, toolLabel, type LlmCall, type TraceNode, type TraceStep, type ValidationFailure } from './buildTrace';
+import { Chevron } from './Chevron';
 import { KindIcon } from './KindIcon';
 import { formatCost, formatSeconds, formatTokens, prettyJson } from './format';
 
@@ -149,7 +150,7 @@ function Section({
   return (
     <section className="trace-section">
       <button type="button" className="trace-section-head" aria-expanded={open} onClick={onToggle}>
-        <span className="trace-section-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
+        <span className={`document-row-action-icon collapse-toggle${open ? '' : ' is-collapsed'}`}><Chevron /></span>
         {title}
         {count ? <span className="trace-count">{count}</span> : null}
       </button>
@@ -184,27 +185,28 @@ export function TraceDetails({ node, root }: { node: TraceNode; root: TraceNode 
       return next;
     });
   const tokens = node.totals.inputTokens + node.totals.outputTokens;
+  const failed = Boolean(node.error) || (node.group && node.totals.errors > 0);
 
   return (
     <div className="trace-details">
       <header className="trace-details-head">
         <div className="trace-details-title">
           <KindIcon kind={node.kind} />
-          <span className="trace-kind-name">{KIND_LABELS[node.kind]}</span>
+          {KIND_LABELS[node.kind] && <span className="trace-kind-name">{KIND_LABELS[node.kind]}</span>}
           <h3>{node.label}</h3>
         </div>
-        <code className="trace-details-name">{node.name}</code>
+        {node.group ? <div className="trace-details-name" /> : <code className="trace-details-name">{node.name}</code>}
         <dl className="trace-stats trace-stats--small">
-          <div><dt>Status</dt><dd className={node.error ? 'trace-error-text' : 'trace-ok-text'}>{node.error ? '✕ Error' : '✓ OK'}</dd></div>
-          <div><dt>Starts</dt><dd>+{formatSeconds(Math.max(node.start - root.start, 0))}</dd></div>
-          {node.kind !== 'event' && <div><dt>Took</dt><dd>{formatSeconds(node.end - node.start)}</dd></div>}
+          <div><dt>Status</dt><dd className={failed ? 'trace-error-text' : 'trace-ok-text'}>{failed ? '✕ Error' : '✓ OK'}</dd></div>
+          {node !== root && <div><dt>Starts</dt><dd>+{formatSeconds(Math.max(node.start - root.start, 0))}</dd></div>}
+          {node.kind !== 'event' && <div><dt>Took</dt><dd>{formatSeconds(node.seconds ?? node.end - node.start)}</dd></div>}
           {node.elapsed !== undefined && <div><dt>Since the step before</dt><dd>{formatSeconds(node.elapsed)}</dd></div>}
           {tokens > 0 && <div><dt>Tokens</dt><dd>{formatTokens(node.totals.inputTokens)} in · {formatTokens(node.totals.outputTokens)} out</dd></div>}
           {node.totals.cost > 0 && <div><dt>Cost</dt><dd>{formatCost(node.totals.cost)}</dd></div>}
         </dl>
       </header>
       {shown.length === 0 ? (
-        <p className="trace-muted trace-empty">Nothing more was recorded for this step.</p>
+        <p className="trace-muted trace-empty">{node.group ? 'Open a step below this heading for its details.' : 'Nothing more was recorded for this step.'}</p>
       ) : (
         <div className="trace-sections">
           {shown.map((section) => (

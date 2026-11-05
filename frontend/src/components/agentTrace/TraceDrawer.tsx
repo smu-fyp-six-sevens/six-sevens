@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  groupKeys,
   rootOf,
   visibleRows,
   type BuiltTrace,
   type TraceRow,
 } from './buildTrace';
+import { Chevron } from './Chevron';
 import { KindIcon } from './KindIcon';
 import { TraceDetails } from './TraceDetails';
 import { durationTone, formatCost, formatSeconds, formatTokens } from './format';
@@ -21,17 +23,17 @@ function Row({
 }) {
   const { node } = row;
   const { cost } = node.totals;
-  const seconds = node.end - node.start;
+  const seconds = node.seconds ?? node.end - node.start;
   const tokens = node.totals.inputTokens + node.totals.outputTokens;
   // A run counts its audit's failed validations; any other span, the ones that happened in it.
-  const failures = node.kind === 'run' ? node.totals.failures : node.kind === 'event' ? 0 : node.failures.length;
+  const failures = node.kind === 'run' || node.group ? node.totals.failures : node.kind === 'event' ? 0 : node.failures.length;
   return (
     <div
       role="treeitem"
       aria-level={row.depth + 1}
       aria-selected={selected}
       aria-expanded={expandable ? expanded : undefined}
-      className={`trace-row${selected ? ' trace-row--selected' : ''}${node.error ? ' trace-row--error' : ''}${node.kind === 'event' ? ' trace-row--step' : ''}`}
+      className={`trace-row${selected ? ' trace-row--selected' : ''}${node.error ? ' trace-row--error' : ''}${node.kind === 'event' ? ' trace-row--step' : ''}${node.group ? ' trace-row--group' : ''}`}
     >
       {row.guides.map((more, index) => (
         <span key={index} className={`trace-guide${more ? ' trace-guide--line' : ''}`} aria-hidden="true" />
@@ -59,11 +61,11 @@ function Row({
       {expandable ? (
         <button
           type="button"
-          className="trace-caret"
+          className={`document-row-action-icon collapse-toggle trace-caret${expanded ? '' : ' is-collapsed'}`}
           aria-label={`${expanded ? 'Collapse' : 'Expand'} ${node.label}`}
           onClick={onToggle}
         >
-          {expanded ? '▾' : '▸'}
+          <Chevron />
         </button>
       ) : (
         <span className="trace-caret" aria-hidden="true" />
@@ -81,7 +83,8 @@ export function TraceDrawer({
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // The groups start folded, so a run reads as its stages.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(groupKeys(trace.roots)));
   const [selectedKey, setSelectedKey] = useState(initialKey);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -167,7 +170,10 @@ export function TraceDrawer({
                   selected={selected?.key === row.node.key}
                   expanded={!collapsed.has(row.node.key)}
                   expandable={row.node.children.length > 0}
-                  onSelect={() => setSelectedKey(row.node.key)}
+                  onSelect={() => {
+                    setSelectedKey(row.node.key);
+                    if (row.node.group) toggle(row.node.key);
+                  }}
                   onToggle={() => toggle(row.node.key)}
                 />
               ))}

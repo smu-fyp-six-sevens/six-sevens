@@ -16,8 +16,8 @@ export const KIND_LABELS: Record<TraceNodeKind, string> = {
   agent: 'Agent',
   llm: 'Claude call',
   tool: 'Tool',
-  chain: 'Step',
-  event: 'Step',
+  chain: '',
+  event: '',
 };
 
 export interface LlmCall {
@@ -62,8 +62,12 @@ export interface TraceNode {
   // Seconds since the trace started.
   start: number;
   end: number;
-  // A step's time since the step before it; unset when it starts a run, or follows a wait between runs.
+  // A step's time since the step before it in the same span; unset when it starts a run, or follows a wait.
   elapsed?: number;
+  // A heading over a run's steps (Classifier, Extractor, ...), not something recorded.
+  group?: boolean;
+  // A group of steps' time worked, where first to last could include a wait.
+  seconds?: number;
   error?: string;
   step: TraceStep;
   calls: LlmCall[];
@@ -94,15 +98,15 @@ const SPAN_LABELS: Record<string, string> = {
   'langgraph.rerun_extraction': 'Extraction rerun',
   'detection.run': 'Fraud detection',
   'case_pipeline.run': 'Case analysis',
-  'classify.agent_call': 'Classifier',
-  'extract.run_extraction': 'Field extraction',
-  'detection.lead_plan': 'Lead agent: plan',
-  'detection.lead_review': 'Lead agent: review',
+  'classify.agent_call': 'Deciding the type',
+  'extract.run_extraction': 'Reading the fields',
+  'detection.lead_plan': 'Plan',
+  'detection.lead_review': 'Review',
   'detection.numerical_binder': 'Matching figures to checks',
-  'case_pipeline.hypothesise': 'Hypothesis planner',
-  'case_pipeline.adjudicate': 'Hypothesis judge',
-  'case_pipeline.evidence_requests': 'Evidence requests',
-  'case_pipeline.summary': 'Summary writer',
+  'case_pipeline.hypothesise': 'Proposing hypotheses',
+  'case_pipeline.adjudicate': 'Judging hypotheses',
+  'case_pipeline.evidence_requests': 'Drafting evidence requests',
+  'case_pipeline.summary': 'Writing the summary',
 };
 
 const SPECIALIST_LABELS: Record<string, string> = {
@@ -116,7 +120,7 @@ const STEP_LABELS: Record<string, string> = {
   ingest: 'Document read',
   content_guard: 'Content safety check',
   rule_classify: 'Rule-based type check',
-  agent_call: 'Classifier decision',
+  agent_call: 'Type decision',
   llm_classify_tool: 'Claude read the text',
   vision_llm: 'Claude read the page images',
   validate: 'Classification checked',
@@ -164,7 +168,7 @@ function spanLabel(step: TraceStep, name: string): string {
   if (SPAN_LABELS[name]) return SPAN_LABELS[name];
   if (name.startsWith('tool.')) return toolLabel(name.slice(5));
   if (name.startsWith('detection.review.')) return `${specialist(name.slice(17))} specialist`;
-  if (name.startsWith('detection.specialist.')) return `${specialist(name.slice(21))} specialist: Claude call`;
+  if (name.startsWith('detection.specialist.')) return specialist(name.slice(21));
   return str(step.run) ?? humanize(name.replace(/^case_pipeline\.|^cross_document\./, ''));
 }
 
@@ -224,11 +228,40 @@ const START_STEPS = new Set(['run_start', 'ingest', 'detection_start']);
 // Longer than any one step takes, so a gap this long is a wait between runs (an on-demand check, say).
 const MAX_STEP_SECONDS = 600;
 
-function elapsedSince(previous: TraceStep | undefined, step: TraceStep): number | undefined {
-  if (!previous || START_STEPS.has(step.step)) return undefined;
-  const seconds = num(step.at) - num(previous.at);
+function elapsedSince(previous: number | undefined, node: TraceNode): number | undefined {
+  if (previous === undefined || START_STEPS.has(node.name)) return undefined;
+  const seconds = node.start - previous;
   return seconds >= 0 && seconds <= MAX_STEP_SECONDS ? seconds : undefined;
 }
+
+// Each step against what came before it among its siblings, so a specialist running alongside doesn't count.
+function assignElapsed(siblings: TraceNode[], from?: number): void {
+  let previous = from;
+  for (const node of siblings) {
+    if (node.kind === 'event') node.elapsed = elapsedSince(previous, node);
+    previous = Math.max(previous ?? node.end, node.end);
+  }
+}
+
+const GROUP_MEMBERS: Record<string, string[]> = {
+  'Document intake': ['ingest', 'content_guard'],
+  Classifier: [
+    'rule_classify', 'classify.agent_call', 'agent_call', 'llm_classify_tool', 'vision_llm', 'tool.llm_classify_tool',
+    'tool.vision_llm', 'validate', 'reclassify', 'record_escalation', 'classification_finalised',
+  ],
+  Extractor: ['extract.run_extraction', 'extraction'],
+  'Lead agent': ['detection.lead_plan', 'detection_plan', 'detection_second_look', 'detection.lead_review'],
+  Specialists: ['detection_specialist'],
+  'Case file': ['dossier', 'deterministic'],
+  'Hypothesis planner': ['case_pipeline.hypothesise', 'hypotheses'],
+  Evidence: ['tool_call'],
+  'Hypothesis judge': ['case_pipeline.adjudicate', 'judge_reply', 'verify'],
+  'Risk and outlook': ['scoring', 'case_pipeline.evidence_requests', 'evidence_requests', 'outlook', 'additional_documents'],
+  'Summary writer': ['case_pipeline.summary', 'summary'],
+};
+const GROUP_OF = new Map(Object.entries(GROUP_MEMBERS).flatMap(([group, names]) => names.map((name) => [name, group] as const)));
+
+const groupOf = (name: string) => (name.startsWith('detection.review.') ? 'Specialists' : GROUP_OF.get(name));
 
 function emptyTotals(): TraceTotals {
   return { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0, failures: 0, errors: 0 };
@@ -241,6 +274,37 @@ function addTotals(into: TraceTotals, from: TraceTotals): void {
   into.cost += from.cost;
   into.failures += from.failures;
   into.errors += from.errors;
+}
+
+// A run's children under their headings; what belongs to none (its start, its audit, an error) stays beside them.
+function withGroups(parentKey: string, nodes: TraceNode[]): TraceNode[] {
+  const groups = new Map<string, TraceNode>();
+  const rest: TraceNode[] = [];
+  for (const node of nodes) {
+    const label = groupOf(node.name);
+    if (!label) {
+      rest.push(node);
+      continue;
+    }
+    let group = groups.get(label);
+    if (!group) {
+      group = {
+        key: `${parentKey}/${label}`, kind: 'chain', group: true, label, name: label, start: node.start, end: node.end,
+        step: { step: 'group', at: node.start }, calls: [], failures: [], children: [], totals: emptyTotals(),
+      };
+      groups.set(label, group);
+    }
+    group.children.push(node);
+    group.start = Math.min(group.start, node.start);
+    group.end = Math.max(group.end, node.end);
+    addTotals(group.totals, node.totals);
+  }
+  for (const group of groups.values()) {
+    if (group.children.every((child) => child.kind === 'event')) {
+      group.seconds = group.children.reduce((sum, child) => sum + (child.elapsed ?? 0), 0);
+    }
+  }
+  return [...rest, ...groups.values()].sort((a, c) => a.start - c.start || a.end - c.end);
 }
 
 function toolOutcome(step: TraceStep): string | undefined {
@@ -293,7 +357,6 @@ export function buildTrace(steps: TraceStep[]): BuiltTrace {
       subtitle: describeStep(step),
       start: at,
       end: at,
-      elapsed: elapsedSince(steps[index - 1], step),
       error,
       step,
       calls: [],
@@ -311,6 +374,8 @@ export function buildTrace(steps: TraceStep[]): BuiltTrace {
   const finish = (node: TraceNode): void => {
     node.children.forEach(finish);
     node.children.sort((a, b) => a.start - b.start || a.end - b.end);
+    assignElapsed(node.children, node.start);
+    if (node.kind === 'run') node.children = withGroups(node.key, node.children);
     for (const call of node.calls) {
       node.totals.calls += 1;
       node.totals.inputTokens += num(call.input_tokens) + num(call.cache_read_tokens) + num(call.cache_write_tokens);
@@ -322,13 +387,16 @@ export function buildTrace(steps: TraceStep[]): BuiltTrace {
   };
   top.forEach(finish);
   top.sort((a, b) => a.start - b.start);
+  assignElapsed(top);
+  const seconds = top.reduce((sum, node) => sum + (node.kind === 'event' ? node.elapsed ?? 0 : node.end - node.start), 0);
+  const roots = withGroups('top', top);
 
   const totals = emptyTotals();
-  top.forEach((node) => addTotals(totals, node.totals));
+  roots.forEach((node) => addTotals(totals, node.totals));
   return {
-    roots: top,
+    roots,
     totals,
-    seconds: top.reduce((sum, node) => sum + (node.kind === 'event' ? node.elapsed ?? 0 : node.end - node.start), 0),
+    seconds,
     hasSpans: spans.size > 0,
   };
 }
@@ -360,6 +428,10 @@ export function visibleRows(
   };
   walk(roots, 0, []);
   return rows;
+}
+
+export function groupKeys(nodes: TraceNode[]): string[] {
+  return nodes.flatMap((node) => [...(node.group ? [node.key] : []), ...groupKeys(node.children)]);
 }
 
 export function rootOf(node: TraceNode, roots: TraceNode[]): TraceNode {

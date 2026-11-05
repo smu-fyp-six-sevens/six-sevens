@@ -11,7 +11,7 @@ const GLYPHS: Record<Exclude<TraceNodeKind, 'event'>, string> = {
 export function KindIcon({ kind }: { kind: TraceNodeKind }) {
   if (kind === 'event') return null;
   return (
-    <span className={`trace-icon trace-icon--${kind}`} title={KIND_LABELS[kind]} aria-hidden="true">
+    <span className={`trace-icon trace-icon--${kind}`} title={KIND_LABELS[kind] || undefined} aria-hidden="true">
       {GLYPHS[kind]}
     </span>
   );

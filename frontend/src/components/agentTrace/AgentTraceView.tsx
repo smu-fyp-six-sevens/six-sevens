@@ -23,7 +23,7 @@ export function AgentTraceView({
   const trace = useMemo(() => buildTrace(steps ?? []), [steps]);
   const [openKey, setOpenKey] = useState<string | null>(null);
   // A trace with no spans (from before they were recorded) is one list of steps.
-  const runs = trace.hasSpans ? trace.roots.filter((node) => node.kind !== 'event') : [];
+  const runs = trace.hasSpans ? trace.roots.filter((node) => node.kind !== 'event' && !node.group) : [];
 
   return (
     <section className="details-card trace-card" aria-label={title}>
@@ -39,7 +39,7 @@ export function AgentTraceView({
       {trace.roots.length === 0 ? (
         <p className="trace-muted">{emptyText}</p>
       ) : runs.length === 0 ? (
-        <p className="trace-muted">{trace.roots.length} step(s) recorded. Open the trace to see them.</p>
+        <p className="trace-muted">Steps recorded. Open the trace to see them.</p>
       ) : (
         <ul className="trace-runs">
           {runs.map((run) => {

@@ -166,6 +166,7 @@
 .trace-row--selected { background: var(--blue-95); box-shadow: inset 3px 0 0 var(--steel); }
 .trace-row--error .trace-row-label { color: var(--red); }
 .trace-row--step .trace-row-label { color: var(--ink-soft); font-size: 0.84rem; }
+.trace-row--group .trace-row-label { font-weight: 600; }
 
 /* Guide lines: one column per level, a line where that level still has rows below. */
 .trace-guide,
@@ -215,15 +216,8 @@
 .trace-row-subtitle { margin-left: 8px; font-size: 0.78rem; color: var(--ink-soft); }
 .trace-row-figures { display: inline-flex; align-items: center; gap: 6px; }
 
-.trace-caret {
-  flex: 0 0 28px;
-  border: none;
-  background: none;
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-span.trace-caret { cursor: default; }
+.trace-caret { flex: 0 0 28px; align-self: center; margin-right: 2px; }
+.trace-caret svg { width: 15px; height: 15px; }
 
 /* --- the selected span --- */
 
@@ -260,7 +254,7 @@ span.trace-caret { cursor: default; }
 }
 .trace-section-head:hover { background: var(--slate-97); }
 .trace-section-head:focus-visible { outline: 2px solid var(--steel); outline-offset: -2px; }
-.trace-section-caret { width: 12px; font-size: 0.85rem; color: var(--ink-soft); }
+.trace-section-head .collapse-toggle svg { width: 15px; height: 15px; }
 .trace-section-body { padding: 4px 20px 18px; }
 
 .trace-lead { margin: 0 0 12px; font-size: 0.95rem; }
