@@ -47,7 +47,6 @@ const WAITING_ON_OFFICER: Record<string, string> = {
   [caseStageLabel('failed')]: 'Failed: open it to see what to fix',
   [caseStageLabel('pending_review')]: 'Documents waiting for review',
   [caseStageLabel('documents_incomplete')]: 'Required documents missing',
-  [caseStageLabel('ready_for_analysis')]: 'Ready for the case analysis',
   [caseStageLabel('pending_evaluation')]: 'Findings waiting for review',
   [caseStageLabel('case_analysed')]: 'Analysed: ready to finalise',
   [caseStageLabel('open')]: 'No documents uploaded yet',

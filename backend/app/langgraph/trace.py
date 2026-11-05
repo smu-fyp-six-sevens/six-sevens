@@ -21,6 +21,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
 
+from .. import telemetry
 from ..supabase_client import supabase_client
 
 logger = logging.getLogger("classifier_pipeline.langgraph.trace")
@@ -69,10 +70,17 @@ def _trace(document_id: str) -> dict[str, Any]:
 
 
 def record(document_id: str, step: str, **fields: Any) -> None:
+    """A step, at seconds since the trace started. A span step (telemetry.steps_into) is recorded when it ends."""
+    if step != "span" and (in_span := telemetry.current_step_id()) is not None:
+        fields = {"in_span": in_span, **fields}
     with _lock:
         trace = _trace(document_id)
         trace["steps"].append({"step": step, "at": round(time.time() - trace["started_at"], 3), **fields})
-        trace.update(fields)  # also flatten onto the top level for easy reading
+
+
+def steps_into(document_id: str):
+    """Spans opened inside are recorded on this document's trace (telemetry.steps_into)."""
+    return telemetry.steps_into(lambda step, **fields: record(document_id, step, **fields))
 
 
 def flush(document_id: str) -> None:

@@ -32,8 +32,26 @@ function consoleErrors(page: Page): string[] {
 const runButton = (page: Page) => page.getByRole('button', { name: /^(Run case analysis|Run again|Analysing…)$/ });
 const analysisCard = (page: Page) =>
   page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Case Analysis' }) });
-const tracePanel = (page: Page) =>
-  page.locator('.debug-card', { has: page.getByRole('heading', { name: 'Case analysis trace (debug)' }) });
+const tracePanel = (page: Page) => page.getByRole('dialog', { name: 'Case analysis trace' });
+const showTrace = (page: Page) =>
+  page.getByRole('button', { name: 'Case actions' }).click().then(() =>
+    page.getByRole('menuitem', { name: 'Case analysis trace' }).click(),
+  );
+async function openTracePanel(page: Page) {
+  await showTrace(page);
+  return tracePanel(page);
+}
+const traceRow = (page: Page, label: string) =>
+  page.getByRole('dialog', { name: 'Case analysis trace' }).locator('.trace-row-main', {
+    has: page.locator('.trace-row-label', { hasText: label }),
+  });
+// The scored findings, in the details of the trace's Risk score step.
+async function scoredFindings(page: Page) {
+  const trace = await openTracePanel(page);
+  await trace.getByRole('button', { name: 'Expand Risk and outlook' }).click();
+  await traceRow(page, 'Risk score').click();
+  return trace.locator('.trace-table tbody tr');
+}
 const riskCard = (page: Page) =>
   page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
 const reviewCard = (page: Page) =>
@@ -104,9 +122,9 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
 
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=analysis`);
 
-    await expect(analysisCard(page)).toContainText('Not ready yet.');
+    await expect(analysisCard(page)).toContainText('Not started yet.');
     await expect(runButton(page)).toHaveCount(0);
-    await expect(sectionStatus(page, 'Case Analysis')).toContainText('Not Ready');
+    await expect(sectionStatus(page, 'Case Analysis')).toContainText('Waiting');
   });
 
   test('MA-014 the Run Case Analysis button shows once every document has been scanned @MA-014', async ({ page, backend }) => {
@@ -116,7 +134,7 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
 
     await expect(runButton(page)).toHaveText('Run case analysis');
     await expect(runButton(page)).toBeEnabled();
-    await expect(sectionStatus(page, 'Case Analysis')).toContainText('Ready to Run');
+    await expect(sectionStatus(page, 'Case Analysis')).toContainText('Starting');
   });
 
   test('MA-015 clicking Run Case Analysis starts the analysis for this case @MA-015', async ({ page, backend }) => {
@@ -132,8 +150,8 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
     await expect(analysisCard(page).getByRole('status')).toContainText('Analysing this case…');
     await expect(page.locator('.analysis-spinner')).toBeVisible();
     await expect(sectionStatus(page, 'Case Analysis')).toContainText('Running');
-    await expect(tracePanel(page)).toContainText(`run_id: ${backend.analyses[theCase.id].run_id}`);
-    await expect(tracePanel(page)).toContainText('status: running');
+    await showTrace(page);
+    await expect(tracePanel(page)).toContainText('No steps recorded yet.');
   });
 
   test('MA-016 the button cannot start a second run while one is going @MA-016', async ({ page, backend }) => {
@@ -182,7 +200,6 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
     await expect.poll(() => errors.join('\n')).toContain('RuntimeError: scoring unavailable');
     await expect(sectionStatus(page, 'Case Analysis')).toContainText('Did Not Finish');
     await expect(runButton(page)).toHaveText('Run again');
-    await expect(tracePanel(page)).toContainText('status: failed');
   });
   test('a run whose documents changed since it ran says it is out of date and offers to run again @SCRUM-52', async ({ page, backend }) => {
     const theCase = c001Case(backend);
@@ -195,10 +212,9 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=analysis`);
 
     await expect(analysisCard(page)).toContainText('Out of date.');
-    await expect(analysisCard(page)).toContainText('The documents changed since the last run: run again to update the score.');
+    await expect(analysisCard(page)).toContainText('The documents changed since the last run. A new run starts on its own; if none has, run it again.');
     await expect(sectionStatus(page, 'Case Analysis')).toContainText('Out of Date');
     await expect(runButton(page)).toHaveText('Run again');
-    await expect(tracePanel(page)).toContainText('status: complete (stale)');
   });
 });
 
@@ -210,11 +226,12 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
     await expect.poll(() => backend.requestsTo('POST', `/cases/${theCase.id}/analysis/run`).length).toBe(1);
     backend.analyses[theCase.id].trace = [{ step: 'run_start', at: 0 }, { step: 'dossier', at: 0.01 }, { step: 'deterministic', at: 0.02 }];
 
-    await tracePanel(page).getByRole('button', { name: 'Refresh case analysis trace' }).click();
-
-    await expect(tracePanel(page)).toContainText('status: running');
-    await expect(tracePanel(page)).toContainText('finished_at: —');
-    await expect(tracePanel(page).getByText('Scoring', { exact: true })).toHaveCount(0);
+    const trace = await openTracePanel(page);
+    await expect(trace.getByRole('treeitem')).toHaveCount(2);
+    await trace.getByRole('button', { name: 'Expand Case file' }).click();
+    await expect(trace.getByRole('treeitem')).toHaveCount(4);
+    await expect(traceRow(page, 'Deterministic')).toBeVisible();
+    await expect(traceRow(page, 'Risk score')).toHaveCount(0);
   });
 
   test('MA-020 / MA-021 after the check, the scoring includes the cross-document findings @MA-020 @MA-021', async ({ page, backend }) => {
@@ -225,15 +242,15 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
 
     finishRun(backend, theCase, { risk: CASE_RISK['RS-003'].risk, trace: scoringTrace('RS-003') });
 
-    const trace = tracePanel(page);
-    await expect(trace).toContainText('status: complete');
     // The live run's figures (RS-003): the cross-document finding is scored with the rest, marked "(case)".
+    const caseRow = (await scoredFindings(page)).filter({ hasText: '(case)' });
+    const trace = page.getByRole('dialog', { name: 'Case analysis trace' });
     await expect(trace).toContainText('Critical · score 89/100 · 60 points from 7 finding(s) on 5/5 documents');
-    await expect(trace).toContainText('without cross-document findings: Critical · 87 (1 added)');
-    const caseRow = trace.locator('.debug-table tbody tr', { hasText: '(case)' });
     await expect(caseRow).toHaveCount(1);
     await expect(caseRow.locator('td').nth(2)).toHaveText('cross_document_variance');
     await expect(caseRow.locator('td').nth(3)).toHaveText('cross_document_analysis');
+    await trace.getByRole('button', { name: 'Attributes' }).click();
+    await expect(trace).toContainText('"score_without_cross_document": 87');
   });
 
   test('MA-023 a failed cross-document check is shown, and the case is not scored @MA-023', async ({ page, backend }) => {
@@ -252,7 +269,9 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
     await expect(analysisCard(page)).toContainText('The analysis did not finish.');
     await expect(analysisCard(page)).not.toContainText('RuntimeError');
     await expect.poll(() => errors.join('\n')).toContain('RuntimeError: cross-document check failed');
-    await expect(tracePanel(page).getByText('Scoring', { exact: true })).toHaveCount(0);
+    await openTracePanel(page);
+    await expect(traceRow(page, 'Error')).toContainText('RuntimeError: cross-document check failed');
+    await expect(traceRow(page, 'Risk score')).toHaveCount(0);
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
     await expect(riskCard(page)).toContainText('Not scored yet.');
     await expect(riskCard(page).locator('.risk-badge')).toHaveCount(0);
@@ -315,7 +334,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await expect(card.locator('.risk-score-level')).toHaveText('Medium Risk · 25–49');
     await expect(card).toContainText('1 medium');
     await openTrace(page, theCase);
-    const row = tracePanel(page).locator('.debug-table tbody tr');
+    const row = await scoredFindings(page);
     await expect(row).toHaveCount(1);
     await expect(row.locator('td')).toHaveText(['3', 'medium', 'tampering_forensic', 'layout_anomalies_tool', 'TanAhKow_NRIC.pdf']);
   });
@@ -344,7 +363,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     );
     // Points are listed per finding in the case analysis trace's scoring table.
     await openTrace(page, theCase);
-    await expect(tracePanel(page).locator('.debug-table tbody tr').first().locator('td')).toHaveText([
+    await expect((await scoredFindings(page)).first().locator('td')).toHaveText([
       '8', 'high', 'tampering_forensic', 'font_consistency_tool', 'C011_Payslip.pdf',
     ]);
   });
@@ -360,7 +379,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     ]);
     await expect(documents.locator('.risk-document-meta .risk-severity')).toHaveText(['1 high', '1 medium', '1 low']);
     await openTrace(page, theCase);
-    await expect(tracePanel(page).locator('.debug-table tbody tr td:first-child')).toHaveText(['8', '3', '1']);
+    await expect((await scoredFindings(page)).locator('td:first-child')).toHaveText(['8', '3', '1']);
   });
 
   test('Select all ticks the scored findings, not the ones the specialists set aside', async ({ page, backend }) => {
@@ -409,7 +428,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     const card = riskCard(page);
     await expect(card).toContainText('Not scored yet.');
     await expect(card.locator('.risk-badge')).toHaveCount(0);
-    await expect(card).toContainText('Run the case analysis once every approved document has been scanned.');
+    await expect(card).toContainText('The case analysis scores the case once every approved document has been scanned.');
     await expect(card.locator('.severity-gauge-value')).toHaveCount(0);
     await expect(card.locator('.risk-document')).toHaveCount(0);
   });

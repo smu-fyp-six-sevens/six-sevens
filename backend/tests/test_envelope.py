@@ -130,7 +130,7 @@ async def test_the_detection_lead_fences_the_document_context() -> None:
     with patch("app.langgraph._anthropic.build_chat_anthropic", return_value=model):
         await detection_graph._ask_lead(
             detection_graph._PLAN_SYSTEM_PROMPT, {"document_type": "payslip", "fields": {"employer": CANARY}},
-            LeadPlan, span_name="detection.lead_plan", cache_key="test-envelope-lead", document_id="doc-1",
+            LeadPlan, span_name="detection.lead_plan", cache_key="test-envelope-lead",
         )
     _assert_fenced(_sent(model))
 

@@ -71,8 +71,8 @@ def set_info(roles: Iterable[str]) -> None:
 def record_llm(
     agent: str, model: str, uncached_input: int, output: int, cache_read: int, cache_write: int, seconds: float | None,
     *, cache_write_1h: int = 0,
-) -> float:
-    """Counts one finished call; returns its cost in USD."""
+) -> pricing.Cost:
+    """Counts one finished call; returns its cost."""
     llm_calls.labels(agent, model, "ok").inc()
     tokens = (
         ("input", uncached_input), ("output", output), ("cache_read", cache_read),
@@ -86,7 +86,7 @@ def record_llm(
     llm_cache_savings.labels(agent, model).inc(cost.saved_by_cache_usd)
     if seconds is not None:
         llm_latency.labels(agent, model).observe(seconds)
-    return cost.usd
+    return cost
 
 
 def record_work(work: str, cost_usd: float, calls: int, input_tokens: int, cache_read: int) -> None:

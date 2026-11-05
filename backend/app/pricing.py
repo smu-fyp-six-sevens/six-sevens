@@ -91,6 +91,11 @@ def price_for(model: str, prompt_tokens: int = 0) -> Price | None:
 class Cost(NamedTuple):
     usd: float
     saved_by_cache_usd: float  # what the cache reads would have cost as plain input, minus what they cost
+    cache_write_extra_usd: float = 0.0  # what the cache writes cost above plain input
+
+    @property
+    def net_cache_saving_usd(self) -> float:
+        return self.saved_by_cache_usd - self.cache_write_extra_usd
 
 
 def cost(
@@ -103,4 +108,8 @@ def cost(
         uncached_input * price.input + output * price.output + cache_read * price.cache_read
         + cache_write * price.cache_write + cache_write_1h * price.cache_write_1h
     ) / 1_000_000
-    return Cost(usd, cache_read * (price.input - price.cache_read) / 1_000_000)
+    return Cost(
+        usd,
+        cache_read * (price.input - price.cache_read) / 1_000_000,
+        (cache_write * (price.cache_write - price.input) + cache_write_1h * (price.cache_write_1h - price.input)) / 1_000_000,
+    )

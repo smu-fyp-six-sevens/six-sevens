@@ -241,7 +241,11 @@ async def run(document_id: str) -> None:
 
 
 def steps(document_id: str) -> list[str]:
-    return [s["step"] for s in (trace.get(document_id) or {}).get("steps", [])]
+    return [
+        s["step"]
+        for s in (trace.get(document_id) or {}).get("steps", [])
+        if s["step"] != "span"
+    ]
 
 
 # --- SCRUM-17 Auto-trigger classification ---------------------------------------
@@ -778,4 +782,3 @@ async def test_a_low_confidence_named_type_is_extracted_with_the_generic_schema(
     assert store.classifications[document_id]["routing_status"] == "manual_review"
     extract_prompt = str(ai.calls[-1][1])
     assert "net_pay" not in extract_prompt
-

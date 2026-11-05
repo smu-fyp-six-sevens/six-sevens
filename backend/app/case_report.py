@@ -144,7 +144,6 @@ CASE_STAGE_LABELS = {
     "pending_review": "Pending Review",
     "documents_incomplete": "Missing Documents",
     "fraud_detection": "Detecting Fraud",
-    "ready_for_analysis": "Ready to Analyse",
     "pending_evaluation": "Pending Evaluation",
     "case_analysed": "Ready to Finalise",
     "finalised": "Finalised",
@@ -158,7 +157,7 @@ _TONES = {
 }
 _STAGE_TONES = {
     "open": "idle", "processing_documents": "system", "fraud_detection": "system", "pending_review": "officer",
-    "documents_incomplete": "officer", "ready_for_analysis": "officer", "pending_evaluation": "officer",
+    "documents_incomplete": "officer", "pending_evaluation": "officer",
     "case_analysed": "done", "finalised": "closed", "failed": "failed",
 }
 CASE_STAGE_COLOURS: dict[str, tuple[colors.Color, colors.Color]] = {

@@ -12,10 +12,12 @@ import re
 from dataclasses import dataclass, field
 from collections.abc import Callable
 from contextvars import ContextVar
+from datetime import datetime, timezone
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, BeforeValidator, ValidationError
 
+from . import telemetry
 from .run_context import record_repair
 
 logger = logging.getLogger("classifier_pipeline.llm_io")
@@ -306,11 +308,15 @@ _AUDIT_CHARS = 4000
 def _checked(site: str, raw: str | None, checked: Checked) -> Checked:
     if checked.status != "ok":
         logger.warning("Output of %s was %s: %s", site or "a model call", checked.status, "; ".join(checked.issues))
-        record_repair({
+        entry = {
             "site": site or "a model call",
+            "agent": telemetry.current_agent(),
+            "at": datetime.now(timezone.utc).isoformat(),
             "status": checked.status,
             "issues": checked.issues,
             "raw": (raw or "")[:_AUDIT_CHARS],
             "used": json.dumps(checked.value.model_dump(), default=str)[:_AUDIT_CHARS] if checked.value else None,
-        })
+        }
+        record_repair(entry)
+        telemetry.add_validation_failure(entry)
     return checked

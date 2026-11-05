@@ -121,7 +121,7 @@ export function SeverityCard({ risk }: { risk: CaseRisk | null }) {
         <SeverityGauge score={scored && risk.score != null ? risk.score : null} level={scored ? risk.level : null} />
         <div className="case-overview-risk-copy">
           <strong>{scored ? `${risk.level} Risk` : risk?.state === 'pending' ? 'Assessment in progress' : 'Not scored yet'}</strong>
-          <span>{scored ? 'Based on completed document checks' : risk?.state === 'failed' ? 'A document check failed to complete' : 'Run case analysis after documents are approved and scanned'}</span>
+          <span>{scored ? 'Based on completed document checks' : risk?.state === 'failed' ? 'A document check failed to complete' : 'Scored once documents are approved and scanned'}</span>
           <SeverityLegend level={scored ? risk.level : null} />
         </div>
       </div>

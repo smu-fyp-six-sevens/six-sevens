@@ -48,12 +48,12 @@ import { ErrorMessage } from '../components/ErrorMessage';
 import { LoadErrorState } from '../components/LoadErrorState';
 import { Icon } from '../components/Icon';
 
-// Developer-only panels, so they load on demand.
+// Developer-facing panels, so they load on demand.
 const DetectionPanel = lazy(() =>
   import('./document-details/DetectionPanel').then((m) => ({ default: m.DetectionPanel })),
 );
-const LangGraphTracePanel = lazy(() =>
-  import('./document-details/LangGraphTracePanel').then((m) => ({ default: m.LangGraphTracePanel })),
+const AgentTraceView = lazy(() =>
+  import('../components/agentTrace/AgentTraceView').then((m) => ({ default: m.AgentTraceView })),
 );
 
 // Whether the side-by-side preview is shown, remembered per browser. Storage can throw (private mode,
@@ -88,6 +88,7 @@ export default function DocumentDetailsPage({
   onDocumentDeleted,
 }: DocumentDetailsPageProps) {
   const navigate = useNavigate();
+  const [isTraceOpen, setIsTraceOpen] = useState(false);
   // The same live statuses the case page's menu shows.
   const navStatuses = useCaseNavStatuses(selectedCase.id);
   const {
@@ -496,7 +497,7 @@ export default function DocumentDetailsPage({
     </CaseHeader>
   );
 
-  // The case's section menu stays beside the document, as its rail of icons (it opens over the page): choosing one goes back to that section.
+  // The case's section menu stays beside the document, as its rail of icons (it opens over the page).
   const framed = (content: ReactNode) => (
     <CaseFrame
       nav={
@@ -582,6 +583,14 @@ export default function DocumentDetailsPage({
                   label: 'Full-screen preview',
                   onSelect: () => setIsPreviewOpen(true),
                 },
+                {
+                  id: 'trace',
+                  label: 'Agent trace',
+                  onSelect: () => {
+                    setIsTraceOpen(true);
+                    void refreshLangGraphTrace();
+                  },
+                },
                 ...(!hasBeenApproved(document.status) && !isInFlight && !caseFinalised
                   ? [
                       {
@@ -658,19 +667,23 @@ export default function DocumentDetailsPage({
 
         {/* No extracted card to hold the decision (an unreadable file): it stands alone. */}
         {isUnreadableFile && decisionBar}
+        </div>
+        </div>
+      </div>
+      ,
+      )}
 
-        {/* LangGraph trace (debug): last, out of the officer's way. */}
-
+      {isTraceOpen && (
         <Suspense fallback={null}>
-          <LangGraphTracePanel
-            langGraphTrace={langGraphTrace}
-            isRefreshingTrace={isRefreshingTrace}
-            refreshLangGraphTrace={refreshLangGraphTrace}
+          <AgentTraceView
+            title="Agent trace"
+            steps={langGraphTrace?.steps ?? null}
+            emptyText="No trace yet: this document hasn't been processed."
+            isRefreshing={isRefreshingTrace}
+            onRefresh={refreshLangGraphTrace}
+            onClose={() => setIsTraceOpen(false)}
           />
         </Suspense>
-        </div>
-        </div>
-      </div>,
       )}
 
       {deleteConfirmOpen && document && (

@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from .. import audit, detection_results, document_repository, events, metrics, query_stats
+from ..case_pipeline import service as analysis_service
 from ..config import settings
 from ..events import Event, Stopwatch, types
 from ..events.envelope import Outcome, officer_of
@@ -72,6 +73,8 @@ async def run(document_id: str, case_id: str | None, requested_by: str | None = 
             # Every ending writes the document's status last, which Realtime reports.
             await push_case_snapshot(case_id, realtime_covers=True)
     await _record_end(document_id, case_id, requested_by, timer, outcome, detail, usage)
+    # The last approved document scanned starts the case analysis.
+    await analysis_service.start_if_due(case_id)
 
 
 async def _record_end(

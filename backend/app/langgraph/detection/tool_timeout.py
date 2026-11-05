@@ -20,6 +20,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 
 from ...config import settings
 from ...cpu_pool import queue_clock
+from ..tool_spans import traced_tool_call
 from .tools import _result
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.tool_timeout")
@@ -87,6 +88,9 @@ def guard_tool(tool: BaseTool) -> BaseTool:
 
     @functools.wraps(original)
     async def limited(*args, **kwargs):
+        return await traced_tool_call(tool.name, kwargs, lambda: _limited(*args, **kwargs))
+
+    async def _limited(*args, **kwargs):
         clock: _ToolClock | None = None
         try:
             async with asyncio.timeout(seconds) as scope:

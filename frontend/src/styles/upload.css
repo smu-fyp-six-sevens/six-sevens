@@ -250,6 +250,14 @@
   padding-bottom: 24px;
 }
 
+.document-details-page {
+  padding-bottom: 0;
+}
+
+.case-page {
+  padding-bottom: 0;
+}
+
 /* Case pages (components/CaseFrame.tsx): the section menu down the left from under the top bar, the page's header and
    content in the column beside it. The menu is a rail of icons that opens over the page. */
 .case-frame {

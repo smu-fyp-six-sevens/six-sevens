@@ -42,7 +42,7 @@ _REFUSAL_STATUS = {
     "conflict": status.HTTP_409_CONFLICT,
     "invalid": status.HTTP_400_BAD_REQUEST,
     "not_found": status.HTTP_404_NOT_FOUND,
-    "unprocessable": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "unprocessable": status.HTTP_422_UNPROCESSABLE_CONTENT,
 }
 
 

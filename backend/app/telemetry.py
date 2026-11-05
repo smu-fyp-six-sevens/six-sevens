@@ -9,13 +9,20 @@ adapter continues it, so one upload is one trace through api, doc-worker and det
 
 get_tracer() is what the rest of the codebase uses, never `opentelemetry.trace` directly. Its spans also name
 the agent a Claude call is made in (current_agent), which labels the LLM metrics.
+
+Inside steps_into(sink), each span is also written to the run's own trace (a document's langgraph trace or a
+case run's trace) as a "span" step: its parent, duration, the Claude calls made in it (tokens, cost, reasoning),
+anything annotate() added and any reply that failed validation. The app's trace view draws the tree from these.
+Whether or not OTEL_ENABLED is set: the steps never leave the app's own database.
 """
 
 from __future__ import annotations
 
 import contextvars
 import logging
-from collections.abc import Iterator, Mapping
+import time
+import uuid
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any
 
@@ -35,6 +42,10 @@ _TRACER_NAME = "six-sevens-backend"
 _initialised = False
 _provider: TracerProvider | None = None
 _agent: contextvars.ContextVar[str] = contextvars.ContextVar("telemetry_agent", default="unattributed")
+# Where span steps go during a run (see steps_into), and the step of the span now open.
+_sink: contextvars.ContextVar[Callable[..., None] | None] = contextvars.ContextVar("telemetry_sink", default=None)
+_step: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("telemetry_step", default=None)
+_STEP_CHARS = 1500
 
 
 def _exporter() -> Any:
@@ -64,7 +75,8 @@ def setup(app=None) -> None:
         return
     _initialised = True
     if not settings.OTEL_ENABLED:
-        logger.info("OpenTelemetry disabled (OTEL_ENABLED=false); spans are no-ops")
+        # Spans still reach the runs' own traces (steps_into); only the export is off.
+        logger.debug("OpenTelemetry export off (OTEL_ENABLED=false)")
         return
 
     resource = Resource.create({
@@ -89,16 +101,33 @@ def shutdown() -> None:
 
 
 class _Tracer:
-    """OTel's tracer, plus the agent name the span stands for."""
+    """OTel's tracer, plus the agent name the span stands for and, inside steps_into, the span's trace step."""
 
     @contextmanager
     def start_as_current_span(self, name: str, **kwargs: Any) -> Iterator[trace.Span]:
         token = _agent.set(name)
+        sink = _sink.get()
+        parent = _step.get()
+        step = {"name": name, "id": uuid.uuid4().hex[:12], "parent": parent["id"] if parent else None} if sink else None
+        step_token = _step.set(step) if step is not None else None
+        started = time.perf_counter()
         try:
             with trace.get_tracer(_TRACER_NAME).start_as_current_span(name, **kwargs) as span:
                 yield span
+        except BaseException as exc:
+            if step is not None:
+                step["error"] = f"{type(exc).__name__}: {exc}"[:300]
+            raise
         finally:
             _agent.reset(token)
+            if step is not None and step_token is not None:
+                _step.reset(step_token)
+                step["duration_s"] = round(time.perf_counter() - started, 3)
+                try:
+                    if sink is not None:
+                        sink("span", **step)
+                except Exception:
+                    logger.debug("Failed to record span %s on the run's trace", name, exc_info=True)
 
 
 _tracer = _Tracer()
@@ -110,6 +139,53 @@ def get_tracer() -> _Tracer:
 
 def current_agent() -> str:
     return _agent.get()
+
+
+@contextmanager
+def steps_into(sink: Callable[..., None]) -> Iterator[None]:
+    """Spans opened inside also go to `sink(step, **fields)` as "span" steps: a run's own trace."""
+    token = _sink.set(sink)
+    try:
+        yield
+    finally:
+        _sink.reset(token)
+
+
+def current_step_id() -> str | None:
+    """The id of the open span's step, which a trace event recorded now belongs under."""
+    step = _step.get()
+    return step["id"] if step else None
+
+
+def short(value: Any) -> str:
+    """A value as compact JSON, cut to fit a trace step."""
+    import json
+
+    text = value if isinstance(value, str) else json.dumps(value, default=str)
+    return text if len(text) <= _STEP_CHARS else text[:_STEP_CHARS] + "…"
+
+
+def annotate(**fields: Any) -> None:
+    """Adds fields to the open span's trace step (never sent to Cloud Trace)."""
+    step = _step.get()
+    if step is not None:
+        step.update(fields)
+
+
+def _append(key: str, entry: dict[str, Any]) -> None:
+    step = _step.get()
+    if step is not None:
+        step.setdefault(key, []).append(entry)
+
+
+def add_llm_call(entry: dict[str, Any]) -> None:
+    """One Claude call made inside the open span: model, tokens, cost, seconds, reasoning summaries."""
+    _append("llm_calls", entry)
+
+
+def add_validation_failure(entry: dict[str, Any]) -> None:
+    """A reply that failed validation inside the open span, with the raw payload."""
+    _append("validation_failures", entry)
 
 
 def inject() -> dict[str, str]:

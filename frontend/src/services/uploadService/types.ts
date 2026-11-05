@@ -202,6 +202,7 @@ export interface CaseAnalysisTraceStep {
 // GET /audit/cases/{id}/cost: Claude spend at list price, from the audit trail's end-of-run events.
 export type CaseCost = Schemas['CaseCost'];
 export type CaseCostRun = Schemas['CaseCostRun'];
+export type CacheUse = Schemas['CacheUse'];
 // A finished run and how long it took (success only; document.analyzed, document.detected, case.analysis.completed).
 export type CaseCostTiming = Schemas['CaseCostTiming'];
 

@@ -45,12 +45,13 @@ from .rule_classify import classify_by_rules
 from .state import DocumentGraphState
 from .vision_tool import vision_llm
 from ..config import settings
-from ..llm_io import message_text, thinking_summaries
+from ..llm_io import message_text
 from ..run_context import spend_model_call
+from .tool_spans import trace_tool
 
 logger = logging.getLogger("classifier_pipeline.langgraph.classify")
 
-_TOOLS = [llm_classify_tool, vision_llm]
+_TOOLS = [trace_tool(llm_classify_tool), trace_tool(vision_llm)]
 
 
 def _raw_text(state: DocumentGraphState) -> str:
@@ -170,7 +171,6 @@ async def agent_node(state: DocumentGraphState) -> dict:
                 state["document_id"], "agent_call",
                 offered_tools=offered,
                 tool_calls=[tc["name"] for tc in (response.tool_calls or [])],
-                thinking=thinking_summaries(response),
             )
             return {"agent_messages": [response]}
 
@@ -193,7 +193,6 @@ async def agent_node(state: DocumentGraphState) -> dict:
             state["document_id"], "agent_call",
             offered_tools=offered,
             tool_calls=[tc["name"] for tc in (response.tool_calls or [])],
-            thinking=thinking_summaries(response),
         )
         # agent_messages uses the add_messages reducer (see state.py), which
         # appends — only the messages new to this call are returned, not the

@@ -43,8 +43,8 @@ terraform apply
 - **Traces:** Cloud Console → Trace → Trace explorer; one upload is one trace across api, doc-worker and detection-worker, and Claude spans carry the model, tokens and `llm.cost_usd`.
 - **Alerts** (`monitoring.tf`): events dead-lettered (last 10 min); API 5xx above 5% for 10 min with traffic; Claude spend over `alert_daily_claude_usd` (default 10) in 24 h; stuck work that couldn't be recovered (last 30 min). Each closes 30 minutes after its condition clears.
 - **Claude cost per document and case:** each end-of-run event (`document.analyzed`/`failed`, `document.detected`, `detection.failed`, `case.analysis.completed`) carries `detail.llm_cost_usd`, `llm_calls`, token counts and `run`.
-  - In the app: the case page's **Claude Cost** tab (placeholder design).
-  - One case: `GET <Kong URL>/audit/cases/<case_id>/cost` (with your token): total, per document, case analysis, every run.
+  - In the app: the case page's **Claude Cost** tab (placeholder design), including how much input came from the prompt cache and what it saved.
+  - One case: `GET <Kong URL>/audit/cases/<case_id>/cost` (with your token): total, per document, case analysis, every run, and `cache` / `cache_by_run`.
   - Across cases (Supabase SQL editor): `select case_id, round(sum((detail->>'llm_cost_usd')::numeric), 4) as usd, count(*) as runs from audit_events where detail ? 'llm_cost_usd' group by case_id order by usd desc;`
   - Claude isn't billed through Google: the dashboard's Claude figures are the app's own count at list prices (`backend/app/pricing.py`); the Anthropic console has the invoice.
 - **The sweeper** runs in audit-metrics on Cloud Scheduler's tick every 5 minutes. Pause with `gcloud scheduler jobs pause sweep --location asia-southeast1` (`resume` the same way). To see it work: the Pipeline dashboard's "Stuck work and recovery" row, or `GET <Kong URL>/audit/events?case_id=<id>`.
