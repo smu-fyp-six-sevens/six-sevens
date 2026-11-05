@@ -199,7 +199,7 @@ export function TraceDetails({ node, root }: { node: TraceNode; root: TraceNode 
         <dl className="trace-stats trace-stats--small">
           <div><dt>Status</dt><dd className={failed ? 'trace-error-text' : 'trace-ok-text'}>{failed ? '✕ Error' : '✓ OK'}</dd></div>
           {node !== root && <div><dt>Starts</dt><dd>+{formatSeconds(Math.max(node.start - root.start, 0))}</dd></div>}
-          {node.kind !== 'event' && <div><dt>Took</dt><dd>{formatSeconds(node.seconds ?? node.end - node.start)}</dd></div>}
+          {node.kind !== 'event' && node.seconds !== 0 && <div><dt>Took</dt><dd>{formatSeconds(node.seconds ?? node.end - node.start)}</dd></div>}
           {node.elapsed !== undefined && <div><dt>Since the step before</dt><dd>{formatSeconds(node.elapsed)}</dd></div>}
           {tokens > 0 && <div><dt>Tokens</dt><dd>{formatTokens(node.totals.inputTokens)} in · {formatTokens(node.totals.outputTokens)} out</dd></div>}
           {node.totals.cost > 0 && <div><dt>Cost</dt><dd>{formatCost(node.totals.cost)}</dd></div>}

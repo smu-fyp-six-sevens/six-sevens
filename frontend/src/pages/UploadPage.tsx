@@ -23,6 +23,7 @@ import { CaseSectionNav } from './upload/CaseSectionNav';
 import { useCaseReportDownload } from './upload/useCaseReportDownload';
 import { CharacterCount } from '../components/CharacterCount';
 import { CaseStageCard } from './upload/CaseStageCard';
+import { CaseTraceCard } from './upload/CaseTraceCard';
 import { isCaseSection, type CaseSection } from './upload/caseSections';
 import { sectionStatusesFrom } from './upload/caseNavStatuses';
 import { reviewReason } from './upload/reviewReason';
@@ -461,6 +462,8 @@ export default function UploadPage({
           {activeSection === 'notes' && <NotesCard finalised={isFinalised} caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 
           {activeSection === 'audit' && <AuditTrailCard caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
+
+          {activeSection === 'trace' && <CaseTraceCard caseId={selectedCase.id} overview={analysisOverview} />}
 
           {activeSection === 'cost' && <CaseCostCard caseId={selectedCase.id} documents={documents} />}
         </div>

@@ -12,7 +12,7 @@ export function CaseSectionNav({
   statusesLoading,
   onSelect,
 }: {
-  // None on a document page, which belongs to the case rather than to one section.
+  // On a document page, none unless its own trace is open: the page belongs to the case rather than to one section.
   activeSection: CaseSection | null;
   // The snapshot hasn't arrived, so the status lines show a placeholder instead of a wrong "None Uploaded".
   statusesLoading: boolean;

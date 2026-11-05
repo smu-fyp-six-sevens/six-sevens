@@ -33,8 +33,11 @@ const runButton = (page: Page) => page.getByRole('button', { name: /^(Run case a
 const analysisCard = (page: Page) =>
   page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Case Analysis' }) });
 const tracePanel = (page: Page) => page.getByRole('region', { name: 'Case analysis trace' });
-// The trace opens from its card in a panel of its own.
+const showTrace = (page: Page) =>
+  page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: 'Agent Trace' }).click();
+// The trace opens from its card, under the menu's Agent Trace, in a panel of its own.
 async function openTracePanel(page: Page) {
+  await showTrace(page);
   await tracePanel(page).getByRole('button', { name: 'Open trace' }).click();
   return page.getByRole('dialog', { name: 'Case analysis trace' });
 }
@@ -147,6 +150,7 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
     await expect(analysisCard(page).getByRole('status')).toContainText('Analysing this case…');
     await expect(page.locator('.analysis-spinner')).toBeVisible();
     await expect(sectionStatus(page, 'Case Analysis')).toContainText('Running');
+    await showTrace(page);
     await expect(tracePanel(page)).toContainText('No steps recorded yet.');
   });
 
@@ -222,6 +226,7 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
     await expect.poll(() => backend.requestsTo('POST', `/cases/${theCase.id}/analysis/run`).length).toBe(1);
     backend.analyses[theCase.id].trace = [{ step: 'run_start', at: 0 }, { step: 'dossier', at: 0.01 }, { step: 'deterministic', at: 0.02 }];
 
+    await showTrace(page);
     await tracePanel(page).getByRole('button', { name: 'Refresh case analysis trace' }).click();
 
     const trace = await openTracePanel(page);

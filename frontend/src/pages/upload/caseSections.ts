@@ -10,6 +10,7 @@ export type CaseSection =
   | 'additional'
   | 'notes'
   | 'audit'
+  | 'trace'
   | 'cost';
 
 export const CASE_SECTIONS: { id: CaseSection; label: string; short: string; icon: IconName }[] = [
@@ -20,6 +21,7 @@ export const CASE_SECTIONS: { id: CaseSection; label: string; short: string; ico
   { id: 'additional', label: 'Additional Documents', short: 'Additional', icon: 'additional' },
   { id: 'notes', label: 'Notes', short: 'Notes', icon: 'notes' },
   { id: 'audit', label: 'Audit Trail', short: 'Audit', icon: 'audit' },
+  { id: 'trace', label: 'Agent Trace', short: 'Trace', icon: 'trace' },
   { id: 'cost', label: 'Claude Cost', short: 'Cost', icon: 'cost' },
 ];
 

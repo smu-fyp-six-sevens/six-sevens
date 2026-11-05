@@ -52,7 +52,7 @@ function Row({
               {formatTokens(tokens)} tokens{cost > 0 ? ` · ${formatCost(cost)}` : ''}
             </span>
           )}
-          {node.kind !== 'event' && <span className={`trace-duration trace-duration--${durationTone(seconds)}`}>{formatSeconds(seconds)}</span>}
+          {node.kind !== 'event' && node.seconds !== 0 && <span className={`trace-duration trace-duration--${durationTone(seconds)}`}>{formatSeconds(seconds)}</span>}
           {node.elapsed !== undefined && (
             <span className={`trace-duration trace-duration--${durationTone(node.elapsed)}`} title="Since the step before">{formatSeconds(node.elapsed)}</span>
           )}

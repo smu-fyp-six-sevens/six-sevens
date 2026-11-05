@@ -69,6 +69,13 @@ const PATHS = {
       <path d="M12 7.5V12l3 2" />
     </>
   ),
+  trace: (
+    <>
+      <path d="M6.5 3.5v13a2 2 0 0 0 2 2h3M6.5 9h5" />
+      <circle cx="14" cy="9" r="2.5" />
+      <circle cx="14" cy="18.5" r="2.5" />
+    </>
+  ),
   cost: (
     <>
       <path d="M12 4v16" />

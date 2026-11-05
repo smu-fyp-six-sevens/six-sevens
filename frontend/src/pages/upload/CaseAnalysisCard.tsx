@@ -5,7 +5,6 @@ import { getCaseAnalysis, getCaseAnalysisRun, listCaseAnalysisRuns, runCaseAnaly
 import { AnalysisSummaryBlock } from './AnalysisSummaryBlock';
 import { analysisFindingAnchor } from './analysisSummary';
 import { PreviousRuns } from './PreviousRuns';
-import { AgentTraceView } from '../../components/agentTrace/AgentTraceView';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { missingRequirementsText, outOfDateMessage } from './caseSections';
 import { Icon } from '../../components/Icon';
@@ -37,20 +36,16 @@ export function CaseAnalysisCard({
   const [analysis, setAnalysis] = useState<CaseAnalysis | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [runs, setRuns] = useState<CaseAnalysisRunItem[]>([]);
   // An earlier run opened read-only; the latest is shown when null.
   const [viewing, setViewing] = useState<CaseAnalysis | null>(null);
   const [openingRunId, setOpeningRunId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setIsRefreshing(true);
     try {
       setAnalysis(await getCaseAnalysis(caseId));
     } catch {
       // The card still shows the overview; a failed detail fetch isn't worth an error banner.
-    } finally {
-      setIsRefreshing(false);
     }
   }, [caseId]);
 
@@ -127,7 +122,6 @@ export function CaseAnalysisCard({
   const showResult = shown?.status === 'complete';
 
   return (
-    <>
     <section className="summary-card">
       <div className="summary-card-header">
         <div className="summary-card-title">
@@ -250,13 +244,5 @@ export function CaseAnalysisCard({
         />
       )}
     </section>
-    <AgentTraceView
-      title="Case analysis trace"
-      steps={shown?.trace ?? null}
-      emptyText={shown ? 'No steps recorded yet.' : 'No analysis has been run for this case yet.'}
-      isRefreshing={isRefreshing}
-      onRefresh={load}
-    />
-    </>
   );
 }

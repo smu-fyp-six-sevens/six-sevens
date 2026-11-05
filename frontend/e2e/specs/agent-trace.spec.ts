@@ -68,7 +68,7 @@ test.describe('Trace agent runs @SCRUM-59', () => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const document = fixture.document('Credit_Bureau_Report');
     backend.traces[document.id] = { document_id: document.id, started_at: 0, steps: DETECTION_STEPS };
-    await page.goto(fixture.documentUrl(document));
+    await page.goto(`${fixture.documentUrl(document)}?section=trace`);
     await card(page).locator('.trace-run', { hasText: 'Fraud detection' }).click();
     await expand(page, 'Lead agent');
     await expand(page, 'Specialists');
@@ -78,7 +78,7 @@ test.describe('Trace agent runs @SCRUM-59', () => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const document = fixture.document('Credit_Bureau_Report');
     backend.traces[document.id] = { document_id: document.id, started_at: 0, steps: DETECTION_STEPS };
-    await page.goto(fixture.documentUrl(document));
+    await page.goto(`${fixture.documentUrl(document)}?section=trace`);
 
     const run = card(page).locator('.trace-run');
     await expect(run).toHaveCount(1);
@@ -91,12 +91,12 @@ test.describe('Trace agent runs @SCRUM-59', () => {
 
     await expect(row(page, 'Plan')).toBeVisible();
     await expect(row(page, 'Layout specialist')).toBeVisible();
-    await expect(panel(page).locator('.trace-row-main', { hasText: 'Font consistency check' })).toContainText('1 finding(s)');
+    await expect(panel(page).locator('.trace-row-main', { hasText: 'Font consistency check' }).first()).toContainText('1 finding(s)');
     const totals = panel(page).locator('.trace-drawer-head');
     await expect(totals).toContainText('Claude calls2');
     await expect(totals).toContainText('Failed validations1');
     // Run, Specialists, the layout specialist's review, then the tool it ran.
-    const tool = panel(page).getByRole('treeitem').filter({ hasText: 'Font consistency check' });
+    const tool = panel(page).getByRole('treeitem').filter({ hasText: 'Font consistency check' }).first();
     await expect(tool).toHaveAttribute('aria-level', '4');
 
     await panel(page).getByRole('button', { name: 'Close trace' }).click();
@@ -162,7 +162,7 @@ test.describe('Trace agent runs @SCRUM-59', () => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const document = fixture.document('Credit_Bureau_Report');
     backend.traces[document.id] = { document_id: document.id, started_at: 0, steps: DETECTION_STEPS };
-    await page.goto(fixture.documentUrl(document));
+    await page.goto(`${fixture.documentUrl(document)}?section=trace`);
     await card(page).locator('.trace-run').click();
 
     await expect(row(page, 'Lead agent')).toBeVisible();
@@ -218,7 +218,7 @@ test.describe('Trace agent runs @SCRUM-59', () => {
       { step: 'detection_start', at: 3603 },
       { step: 'detection_done', at: 3607, detection_verdict: 'CLEAN' },
     ] };
-    await page.goto(fixture.documentUrl(document));
+    await page.goto(`${fixture.documentUrl(document)}?section=trace`);
     await card(page).getByRole('button', { name: 'Open trace' }).click();
 
     await expand(page, 'Classifier');
@@ -233,9 +233,34 @@ test.describe('Trace agent runs @SCRUM-59', () => {
     await expect(panel(page).locator('.trace-notice')).toContainText('Claude Cost tab');
   });
 
+  test('Agent Trace in the menu shows the document\'s trace on a document, and the analysis\'s on a case', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const document = fixture.document('Credit_Bureau_Report');
+    backend.traces[document.id] = { document_id: document.id, started_at: 0, steps: DETECTION_STEPS };
+    await page.goto(fixture.documentUrl(document));
+    const menu = page.getByRole('navigation', { name: 'Case sections' });
+    await expect(page.locator('.document-details-body')).toBeVisible();
+    await expect(card(page)).toHaveCount(0);
+
+    await menu.getByRole('button', { name: 'Agent Trace' }).click();
+    await expect(card(page).locator('.trace-run')).toContainText('Fraud detection');
+    await expect(menu.getByRole('button', { name: 'Agent Trace' })).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('.document-details-body')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Back to the document' }).click();
+    await expect(page.locator('.document-details-body')).toBeVisible();
+
+    // Every other item still goes to the case; there, Agent Trace is the case analysis's.
+    await menu.getByRole('button', { name: 'Notes' }).click();
+    await expect(page).toHaveURL(/\/cases\/[^/]+\?section=notes$/);
+    await menu.getByRole('button', { name: 'Agent Trace' }).click();
+    await expect(page).toHaveURL(/\/cases\/[^/]+\?section=trace$/);
+    await expect(page.getByRole('region', { name: 'Case analysis trace' })).toBeVisible();
+  });
+
   test('a document with no trace says so', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
-    await page.goto(fixture.documentUrl(fixture.document('Credit_Bureau_Report')));
+    await page.goto(`${fixture.documentUrl(fixture.document('Credit_Bureau_Report'))}?section=trace`);
 
     await expect(card(page)).toContainText("No trace yet: this document hasn't been processed.");
     await expect(card(page).getByRole('button', { name: 'Open trace' })).toHaveCount(0);

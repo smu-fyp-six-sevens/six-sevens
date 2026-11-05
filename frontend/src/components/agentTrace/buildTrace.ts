@@ -228,8 +228,9 @@ const START_STEPS = new Set(['run_start', 'ingest', 'detection_start']);
 // Longer than any one step takes, so a gap this long is a wait between runs (an on-demand check, say).
 const MAX_STEP_SECONDS = 600;
 
-function elapsedSince(previous: number | undefined, node: TraceNode): number | undefined {
-  if (previous === undefined || START_STEPS.has(node.name)) return undefined;
+function elapsedSince(previous: number | undefined, node: TraceNode, inSpan: boolean): number | undefined {
+  // Inside a span, a run's first step is timed from the span's start; outside one, it follows a wait.
+  if (previous === undefined || (!inSpan && START_STEPS.has(node.name))) return undefined;
   const seconds = node.start - previous;
   return seconds >= 0 && seconds <= MAX_STEP_SECONDS ? seconds : undefined;
 }
@@ -238,7 +239,7 @@ function elapsedSince(previous: number | undefined, node: TraceNode): number | u
 function assignElapsed(siblings: TraceNode[], from?: number): void {
   let previous = from;
   for (const node of siblings) {
-    if (node.kind === 'event') node.elapsed = elapsedSince(previous, node);
+    if (node.kind === 'event') node.elapsed = elapsedSince(previous, node, from !== undefined);
     previous = Math.max(previous ?? node.end, node.end);
   }
 }
