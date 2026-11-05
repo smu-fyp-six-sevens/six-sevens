@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-
 /* Order matters: later files override earlier ones. */
 @import './styles/tokens.css';
 @import './styles/base.css';
@@ -20,3 +18,4 @@
 @import './styles/notes.css';
 @import './styles/audit.css';
 @import './styles/switch.css';
+@import './styles/agent-directory.css';

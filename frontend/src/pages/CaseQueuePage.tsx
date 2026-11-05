@@ -9,12 +9,14 @@ import type { FilterOption } from '../components/HeaderFilter';
 import Pagination from '../components/Pagination';
 import { deleteCase } from '../services/uploadService';
 import type { CaseRiskFilter, CaseSort, CaseStage } from '../services/uploadService';
-import type { CaseRecord } from '../App';
-import { CASE_STAGES, caseStageLabel, caseStageTone, isCaseStage } from '../utils/caseStages';
+import type { CaseRecord } from '../utils/caseRecord';
+import { CASE_STAGES, caseStageLabel, isCaseStage } from '../utils/caseStages';
+import { StageMark } from '../components/StageMark';
 import { caseNumberLabel } from '../utils/caseSearch';
 import { useCaseQueue } from './useCaseQueue';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { LoadErrorState } from '../components/LoadErrorState';
+import { Icon } from '../components/Icon';
 
 interface CaseQueuePageProps {
   onOpenCase: (caseRecord: CaseRecord) => void;
@@ -246,7 +248,7 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
     count: counts?.get(status) ?? 0,
     label: (
       <>
-        <span className={`case-status-dot tone-${caseStageTone(status)}`} aria-hidden="true" />
+        <StageMark stage={status} />
         {caseStageLabel(status)}
       </>
     ),
@@ -324,7 +326,7 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
                   setSearchParams(params, { replace: true });
                 }}
               >
-                ✕
+                <Icon name="x" size={13} />
               </button>
             </span>
           )}

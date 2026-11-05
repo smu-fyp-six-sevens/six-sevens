@@ -1,5 +1,6 @@
 import { assertOk } from './request';
 import { authFetch } from '../../lib/api';
+import { addDays, parseDay } from '../../utils/dateRange';
 import type { CaseFindingReviews, CaseStage, DetectionMetrics, ReviewScope, ReviewVerdict } from './types';
 
 // Every review in the case, with precision and recall per document, across documents and for the case.
@@ -103,16 +104,24 @@ export async function deleteFindingReview(caseId: string, reviewId: string): Pro
   return (await response.json()) as CaseFindingReviews;
 }
 
-// The dashboard's filters for the metrics: cases created on or after `since` (YYYY-MM-DD), in these statuses.
+// The dashboard's filters for the metrics: cases created from `since` to `until` (local YYYY-MM-DD days,
+// inclusive), in these statuses.
 export interface DetectionMetricsFilters {
   since?: string | null;
+  until?: string | null;
   statuses?: CaseStage[];
 }
+
+// The start of a local day as a UTC instant, so the backend counts a case on the officer's day, as the dashboard's
+// case counts do, not on UTC's.
+const startOfDay = (day: string) => parseDay(day).toISOString();
 
 // Precision and recall per check across every reviewed case matching the filters (the dashboard).
 export async function getDetectionMetrics(filters: DetectionMetricsFilters = {}): Promise<DetectionMetrics> {
   const params = new URLSearchParams();
-  if (filters.since) params.set('since', filters.since);
+  if (filters.since) params.set('since', startOfDay(filters.since));
+  // Up to the start of the next day, so all of the last one counts.
+  if (filters.until) params.set('before', startOfDay(addDays(filters.until, 1)));
   for (const status of filters.statuses ?? []) params.append('status', status);
   const query = params.toString();
   const response = await authFetch(`/detection-metrics${query ? `?${query}` : ''}`);

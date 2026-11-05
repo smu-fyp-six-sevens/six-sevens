@@ -47,8 +47,9 @@
   color: var(--steel);
 }
 
+/* Documents waiting for the officer's review: the officer's turn, so amber, not an error's red. */
 .summary-icon--warning {
-  color: var(--red-53);
+  color: var(--amber);
 }
 
 .summary-icon--audit {
@@ -60,10 +61,10 @@
   align-items: center;
   padding: 4px 9px;
   border-radius: 999px;
-  background: var(--red-97);
-  color: var(--red-44);
-  font-family: var(--mono);
-  font-size: 10px;
+  background: var(--amber-bg);
+  color: var(--orange-27);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -132,6 +133,7 @@
   align-items: center;
   margin-left: 8px;
   padding: 2px 8px;
+  border: 1px solid transparent;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
@@ -144,52 +146,37 @@
   font-size: 12px;
 }
 
-/* One hue, light to dark, so no level reads as "safe". Badges also go from tint to solid as the level rises. */
+/* The risk scale (tokens.css --risk-*): outline, tint, then solid as the level rises, so no level reads as
+   "safe". */
 .risk-badge--low {
-  background: var(--orange-96);
-  color: var(--orange-40);
+  border-color: var(--risk-low);
+  background: var(--white);
+  color: var(--ink-soft);
 }
 
 .risk-badge--medium {
-  background: var(--orange-83);
-  color: var(--orange-29);
+  border-color: var(--risk-medium-border);
+  background: var(--risk-medium-tint);
+  color: var(--risk-medium-ink);
 }
 
 .risk-badge--high {
-  background: var(--red-47);
+  background: var(--risk-high);
   color: var(--white);
 }
 
 .risk-badge--critical {
-  background: var(--red-29);
+  background: var(--risk-critical);
   color: var(--white);
 }
 
+/* The score on the dial, its level and the score bands beside it. */
 .risk-score {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 24px;
+  gap: 12px 28px;
   margin: 0 20px 14px;
-}
-
-.risk-score-figure {
-  display: flex;
-  align-items: baseline;
-  gap: 2px;
-}
-
-.risk-score-value {
-  font-size: 44px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.risk-score-scale {
-  font-size: 15px;
-  color: var(--ink-soft);
 }
 
 .risk-score-detail {
@@ -199,63 +186,23 @@
 
 .risk-score-level {
   display: block;
-  margin-bottom: 8px;
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 700;
+  line-height: 1.25;
 }
 
-.risk-score-level--low { color: var(--orange-40); }
-.risk-score-level--medium { color: var(--orange-34); }
-.risk-score-level--high { color: var(--red-43); }
-.risk-score-level--critical { color: var(--red-29); }
+.risk-score-level--low { color: var(--ink-soft); }
+.risk-score-level--medium { color: var(--risk-medium-text); }
+.risk-score-level--high { color: var(--risk-high); }
+.risk-score-level--critical { color: var(--risk-critical); }
 
-.risk-gauge {
-  position: relative;
-  display: flex;
-  gap: 2px;
-  height: 10px;
-}
+/* --band is each level's colour for the severity dial (SVG strokes), its legend swatches and the dashboard's bars. */
+.risk-gauge-band--low { --band: var(--risk-low); background: var(--band); }
+.risk-gauge-band--medium { --band: var(--risk-medium); background: var(--band); }
+.risk-gauge-band--high { --band: var(--risk-high); background: var(--band); }
+.risk-gauge-band--critical { --band: var(--risk-critical); background: var(--band); }
 
-.risk-gauge-band {
-  flex-basis: 0;
-  border-radius: 2px;
-  opacity: 0.35;
-}
-
-.risk-gauge-band--current {
-  opacity: 1;
-}
-
-.risk-gauge-band--low { background: var(--orange-83); }
-.risk-gauge-band--medium { background: var(--orange-69); }
-.risk-gauge-band--high { background: var(--red-47); }
-.risk-gauge-band--critical { background: var(--red-29); }
-
-.risk-gauge-marker {
-  position: absolute;
-  top: -4px;
-  width: 3px;
-  height: 18px;
-  margin-left: -1.5px;
-  border-radius: 2px;
-  background: var(--ink);
-  box-shadow: 0 0 0 2px var(--white);
-}
-
-.risk-gauge-labels {
-  display: flex;
-  gap: 2px;
-  margin-top: 6px;
-  font-size: 10px;
-  color: var(--ink-soft);
-}
-
-.risk-gauge-labels span {
-  flex-basis: 0;
-  text-align: center;
-}
-
-.risk-overview {
+.risk-facts {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 16px;
@@ -264,7 +211,7 @@
   color: var(--ink-soft);
 }
 
-.risk-overview strong {
+.risk-facts strong {
   color: var(--ink);
 }
 
@@ -295,7 +242,7 @@
 }
 
 .risk-document-toggle:hover {
-  background: var(--orange-97);
+  background: var(--stone-98);
 }
 
 .risk-document-toggle:focus-visible {
@@ -330,7 +277,9 @@
 
 .risk-document-meta .risk-severity {
   flex: 0 0 auto;
-  padding: 2px 7px;
+  padding: 0 6px;
+  font-weight: 600;
+  line-height: 16px;
 }
 
 .risk-document-preview {
@@ -359,8 +308,8 @@
   padding: 0 6px;
   border-radius: 999px;
   background: var(--slate-97a);
-  font-family: var(--mono);
-  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   font-weight: 700;
   color: var(--slate-46a);
 }
@@ -389,8 +338,8 @@
   margin: 0 -10px;
   padding: 9px 10px;
   border-radius: 6px;
-  background: var(--orange-91);
-  box-shadow: inset 3px 0 0 var(--orange-53);
+  background: var(--steel-a10);
+  box-shadow: inset 0 0 0 1px var(--steel-a20);
 }
 
 .risk-finding-locate {
@@ -412,6 +361,46 @@
   background: var(--blue-97);
 }
 
+/* A row's places on the document, stepped through while the row is the one shown. */
+.risk-finding-places {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 1px;
+  border: 1px solid var(--steel-a20);
+  border-radius: 5px;
+  background: var(--steel-a10);
+  color: var(--steel-dark);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.risk-finding-places button {
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.risk-finding-places button:hover {
+  background: var(--white);
+}
+
+.risk-finding-places button:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
 .risk-finding-unplaced {
   margin-top: 4px;
   color: var(--ink-soft);
@@ -421,34 +410,38 @@
 
 .risk-severity {
   flex: 0 0 58px;
-  padding: 2px 0;
+  padding: 1px 0;
+  border: 1px solid transparent;
   border-radius: 4px;
-  font-family: var(--mono);
-  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   font-weight: 700;
   text-align: center;
   text-transform: uppercase;
 }
 
+/* A finding's severity on the same scale as the case's risk (tokens.css --risk-*). */
 .risk-severity--low {
-  background: var(--orange-91);
-  color: var(--orange-33);
+  border-color: var(--risk-low);
+  background: var(--white);
+  color: var(--ink-soft);
 }
 
 .risk-severity--medium {
-  background: var(--orange-74);
-  color: var(--orange-16);
+  border-color: var(--risk-medium-border);
+  background: var(--risk-medium-tint);
+  color: var(--risk-medium-ink);
 }
 
-/* Darker than the gauge's band so the white label stays readable. */
 .risk-severity--high {
-  background: var(--red-43);
+  background: var(--risk-high);
   color: var(--white);
 }
 
 /* A finding the specialists set aside, or an issue an officer reported as missed: never scored, so no severity
    colour. */
 .risk-severity--dismissed,
+.risk-severity--info,
 .risk-severity--missed {
   border: 1px solid var(--line);
   background: var(--paper);
@@ -484,7 +477,7 @@
 .risk-finding-check {
   display: block;
   margin-bottom: 1px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -588,8 +581,8 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 5px;
-  font-family: var(--mono);
-  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   color: var(--ink-soft);
 }
 
@@ -648,8 +641,8 @@
 
 .supporting-document-breakdown thead th {
   border-bottom: 1px solid var(--line);
-  font-family: var(--mono);
-  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   color: var(--ink-soft);
 }
 
@@ -691,10 +684,9 @@
   gap: 12px;
 }
 
+/* A document waiting for the officer's review: the pinkish red of a review. */
 .document-manual-review-icon {
   color: var(--red-51);
-  font-size: 16px;
-  font-weight: 700;
   margin-right: 7px;
   display: inline-block;
 }
@@ -803,8 +795,8 @@
 
 .review-metrics-line {
   color: var(--steel-dark);
-  font-family: var(--mono);
-  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -814,8 +806,8 @@
   border-radius: 4px;
   background: var(--teal-bg);
   color: var(--teal);
-  font-family: var(--mono);
-  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -863,8 +855,8 @@
   border-radius: 4px;
   background: var(--orange-92);
   color: var(--orange-27);
-  font-family: var(--mono);
-  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   font-weight: 700;
   text-align: center;
   text-transform: uppercase;
@@ -882,7 +874,7 @@
 }
 
 .missed-issue-remove:hover {
-  background: var(--sand-92);
+  background: var(--stone-94);
   color: var(--ink);
 }
 
@@ -908,7 +900,7 @@
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--orange-97);
+  background: var(--stone-98);
 }
 
 .missed-issue-form label {
@@ -1066,7 +1058,7 @@
   border-radius: 50%;
   background: var(--slate-94a);
   color: var(--steel);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -1238,7 +1230,7 @@
 .risk-review-tag {
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
 }

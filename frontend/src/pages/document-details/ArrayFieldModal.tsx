@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { arrayTableColumns, formatCellValue } from './fieldDisplay';
 import { humanizeFieldKey } from '../../utils/fieldLabels';
+import { Icon } from '../../components/Icon';
 
 // Matches the width at which the document page shows the preview beside the fields (document-details.css).
 const SIDE_BY_SIDE_QUERY = '(min-width: 1101px)';
@@ -117,7 +118,7 @@ export function ArrayFieldModal({
         <div className="array-modal-header">
           <h3>{title}</h3>
           <button type="button" className="array-modal-close" onClick={onClose} aria-label="Close">
-            ✕
+            <Icon name="x" size={16} />
           </button>
         </div>
 
@@ -155,7 +156,7 @@ export function ArrayFieldModal({
                         aria-label="Remove row"
                         onClick={() => removeRow(rowIndex)}
                       >
-                        ✕
+                        <Icon name="x" size={14} />
                       </button>
                     </td>
                   )}

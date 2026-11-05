@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import date
 
 from ...identifiers import uen_key
+from ...fraud_detection.dates.date_parsing import parse_date
 from ...fraud_detection.shared.field_values import decode_field_value
+from ...models import counts_as_address_proof
 from ..models import CrossDocFinding, FindingCategory
 from .address_matching import find_address_mismatches, normalize_address
 from .bias import has_protected_text
@@ -37,6 +40,9 @@ _WHY = {
             "to another company or was altered.",
     "address": "A company's address should be the same on every document unless it has formally changed. Check "
                "whether a change of address is on file.",
+    "personal_address": "A person's address should be the same on every document unless they have moved. A recent "
+                        "proof of address (a bank statement or utility bill dated after the document with the other "
+                        "address) showing the current address settles it.",
     "person": "Details for one person should agree across their documents. A difference can mean a document belongs "
               "to someone else or was altered.",
 }
@@ -141,21 +147,74 @@ def _company_names(context: CaseContext, out: DeterministicResult, add) -> None:
         out.consistent.append(f"Company name is the same across {compared} documents")
 
 
+# The date a proof of address speaks for: a statement's or bill's period end, its own date, an NRIC's issue date.
+_PROOF_DATE_FIELDS = (
+    "statement_period_end", "billing_period_end", "bill_date", "statement_date", "document_date", "date_of_issue",
+)
+
+
+def _proof_date(context: CaseContext, document_id: str) -> date | None:
+    """When a document that counts as personal proof of address was issued, or None (not a proof, or undated)."""
+    view = context.by_id(document_id)
+    if view is None or not counts_as_address_proof(view.document_type, view.fields):
+        return None
+    for name in _PROOF_DATE_FIELDS:
+        dated = parse_date(decode_field_value(view.fields.get(name)))
+        if dated is not None:
+            return dated
+    return None
+
+
+def _previous_address(context: CaseContext, sides: list[tuple[object, list[str]]]) -> tuple | None:
+    """
+    (old address, its documents, current address, the newer documents) when a person's two addresses read as a
+    move rather than a conflict: every document with the old address is a dated proof of address, and a proof of
+    address dated after all of them shows the other one. Any doubt (an undated document, a non-proof such as a
+    credit report carrying the old address, no newer proof) keeps the difference a finding.
+    """
+    if len(sides) != 2:
+        return None
+    for (old_value, old_ids), (current_value, current_ids) in (sides, sides[::-1]):
+        old_dates = [d for i in old_ids if (d := _proof_date(context, i)) is not None]
+        if not old_dates or len(old_dates) != len(old_ids):
+            continue
+        latest_old = max(old_dates)
+        newer = [i for i in current_ids if (d := _proof_date(context, i)) is not None and d > latest_old]
+        if newer:
+            return old_value, old_ids, current_value, newer
+    return None
+
+
 def _addresses(context: CaseContext, out: DeterministicResult, add) -> None:
     mismatches = find_address_mismatches(r for r in context.records if r.extracted_fields)
     # One finding per pair of differing addresses (ignoring case, punctuation and abbreviations).
     pairs: dict[tuple, dict] = {}
     for m in mismatches:
         key = (m.first.field_name.split("_")[0] == "company", frozenset({normalize_address(m.first.value), normalize_address(m.second.value)}))
-        entry = pairs.setdefault(key, {"company": key[0], "sides": {}, "fields": []})
+        entry = pairs.setdefault(key, {"company": key[0], "sides": {}, "fields": [], "holders": []})
         for record in (m.first, m.second):
             side = entry["sides"].setdefault(normalize_address(record.value), (record.value, []))
             if record.document_id not in side[1]:
                 side[1].append(record.document_id)
             entry["fields"].append((record.document_id, record.field_name, record.value))
+            if record.holder:
+                entry["holders"].append(record.holder)
     for entry in pairs.values():
-        what = "The company's address" if entry["company"] else "The address"
-        add(_sentence(context, what, list(entry["sides"].values())), _WHY["address"], _VARIANCE["address"], entry["fields"])
+        # Name whose address it is, so neither the officer nor the evidence request reads it as the company's.
+        # The name as printed in mixed case where a document has it, rather than a block-capital copy.
+        holder = next((h for h in entry["holders"] if not h.isupper()), entry["holders"][0] if entry["holders"] else "")
+        what = "The company's address" if entry["company"] else (f"{_text(holder)}'s address" if holder else "The address")
+        if not entry["company"]:
+            moved = _previous_address(context, list(entry["sides"].values()))
+            if moved is not None:
+                old_value, old_ids, current_value, newer_ids = moved
+                out.consistent.append(
+                    f'{what} "{_text(old_value)}" on {_names(context, old_ids)} is a previous address: '
+                    f'{_names(context, newer_ids)}, dated later, shows "{_text(current_value)}"'
+                )
+                continue
+        why = _WHY["address"] if entry["company"] else _WHY["personal_address"]
+        add(_sentence(context, what, list(entry["sides"].values())), why, _VARIANCE["address"], entry["fields"])
     if not mismatches and len(context.records) >= 2:
         out.consistent.append("No address differs between documents for the same person or company")
 

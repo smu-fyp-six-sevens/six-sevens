@@ -761,6 +761,136 @@
         "title": "AgentDecision",
         "type": "object"
       },
+      "AgentPrompt": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "document_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Type"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/PromptSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_id",
+          "document_type",
+          "note",
+          "sections"
+        ],
+        "title": "AgentPrompt",
+        "type": "object"
+      },
+      "AgentRecord": {
+        "properties": {
+          "access_summary": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Access Summary",
+            "type": "array"
+          },
+          "call_budget": {
+            "title": "Call Budget",
+            "type": "string"
+          },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "limitations": {
+            "title": "Limitations",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "prompt_options": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Prompt Options",
+            "type": "array"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "group",
+          "purpose",
+          "limitations",
+          "model",
+          "prompt_version",
+          "tools",
+          "access_summary",
+          "call_budget",
+          "owner",
+          "prompt_options"
+        ],
+        "title": "AgentRecord",
+        "type": "object"
+      },
       "AnalysisAudit": {
         "description": "What produced a result, so a past run can be reconstructed.",
         "properties": {
@@ -6397,6 +6527,14 @@
             "title": "Pages",
             "type": "array"
           },
+          "places": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Place"
+            },
+            "title": "Places",
+            "type": "array"
+          },
           "severity": {
             "enum": [
               "impossible",
@@ -6431,7 +6569,8 @@
           "summary",
           "stated",
           "expected",
-          "evidence"
+          "evidence",
+          "places"
         ],
         "title": "PageFinding",
         "type": "object"
@@ -6479,6 +6618,46 @@
         "title": "PageMargins",
         "type": "object"
       },
+      "Place": {
+        "description": "Where on a page the evidence is printed, for the preview to box (points, origin top-left).",
+        "properties": {
+          "bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Bbox",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page",
+          "bbox",
+          "text"
+        ],
+        "title": "Place",
+        "type": "object"
+      },
       "ProcessingErrorEntry": {
         "properties": {
           "document_id": {
@@ -6501,6 +6680,24 @@
           "occurred_at"
         ],
         "title": "ProcessingErrorEntry",
+        "type": "object"
+      },
+      "PromptSection": {
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "text"
+        ],
+        "title": "PromptSection",
         "type": "object"
       },
       "ProofOfAddressCoverage": {
@@ -7542,6 +7739,135 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/agents": {
+      "get": {
+        "description": "Read-only snapshot of configured agents and the limits currently applied to their pipelines.",
+        "operationId": "get_agent_registry_agents_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentRecord"
+                  },
+                  "title": "Response Get Agent Registry Agents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Registry",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/agents/{agent_id}/prompt": {
+      "get": {
+        "description": "Return source prompt templates for one role, with per-run inputs marked as placeholders.",
+        "operationId": "get_agent_prompt_view_agents__agent_id__prompt_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "document_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Document Type"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPrompt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Prompt View",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/api/dev/documents": {
       "get": {
         "description": "Template ids accepted by /inject (slugs, not original filenames).",
@@ -7773,6 +8099,74 @@
           }
         },
         "summary": "Get Case Cost",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/audit/costs": {
+      "get": {
+        "description": "Claude spend at list price for each of these cases (repeat case_id), from the audit trail: the dashboard's\ntotals. A case with no costed run is absent. Runs a document had before being moved into a case are counted\nwith its old case; GET /audit/cases/{case_id}/cost has a case's exact breakdown.",
+        "operationId": "get_case_costs_audit_costs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "case_id",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 500,
+              "title": "Case Id",
+              "type": "array"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "title": "Response Get Case Costs Audit Costs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Case Costs",
         "tags": [
           "audit"
         ]
@@ -9575,7 +9969,7 @@
     },
     "/detection-metrics": {
       "get": {
-        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created on or after `since` and at these stages, as the dashboard's filters pick.",
+        "description": "Precision and recall per check across every reviewed case, with targets (the dashboard). Optionally only\ncases created at or after `since` and before `before`, and at these stages, as the dashboard's filters pick.\nThe two are instants, not days: the dashboard sends the start of the officer's own days, so a case counts on\nthe same day here as in the dashboard's case counts.",
         "operationId": "get_detection_metrics_detection_metrics_get",
         "parameters": [
           {
@@ -9585,7 +9979,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "format": "date",
+                  "format": "date-time",
                   "type": "string"
                 },
                 {
@@ -9593,6 +9987,23 @@
                 }
               ],
               "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
             }
           },
           {

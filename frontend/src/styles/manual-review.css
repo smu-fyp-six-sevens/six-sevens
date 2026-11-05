@@ -2,14 +2,6 @@
    Manual Review
    ========================================================= */
 
-.details-section-heading--warning {
-  color: var(--red-40);
-}
-
-.details-section-heading--warning .details-section-icon {
-  color: var(--red-53);
-}
-
 .collapse-toggle {
   display: inline-flex;
   align-items: center;
@@ -25,81 +17,43 @@
 }
 
 .review-description {
-  margin: -4px 0 18px;
-  color: var(--slate-47);
+  margin: -2px 0 14px;
+  color: var(--ink-soft);
   font-size: 13px;
   line-height: 1.5;
 }
 
-.manual-review-table {
-  overflow: hidden;
-  border: 1px solid var(--red-86);
-  border-radius: 9px;
-  background: var(--red-99);
+.review-description strong {
+  color: var(--ink);
 }
 
-.manual-review-header,
-.manual-review-row {
-  display: grid;
-  grid-template-columns:
-    minmax(180px, 1fr)
-    minmax(260px, 1.8fr)
-    100px;
-  align-items: center;
-  column-gap: 20px;
-  padding: 0 16px;
-}
-
-.manual-review-header {
-  min-height: 42px;
-  background: var(--red-97);
-  border-bottom: 1px solid var(--red-bg);
-  color: var(--slate-45);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.manual-review-row {
-  min-height: 64px;
-  border-bottom: 1px solid var(--slate-91);
-  background: var(--white);
-}
-
-.manual-review-row:last-child {
-  border-bottom: 0;
-}
-
-.manual-review-row--needs-attention {
+/* The fields that need the officer, editable in place in the extracted table: the pinkish red of a review. */
+.extracted-table-row--editing {
+  padding-top: 8px;
+  padding-bottom: 8px;
   background: var(--red-98);
 }
 
-.manual-review-field {
-  color: var(--slate-24);
-  font-size: 13px;
+.extracted-table-row--editing:hover {
+  background: var(--red-98);
+}
+
+.extracted-table-row--editing .field-name {
+  color: var(--red);
   font-weight: 600;
 }
 
-.manual-review-row--needs-attention .manual-review-field {
-  color: var(--red);
-}
 .manual-review-input {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  padding: 10px 12px;
-  border: 1px solid var(--slate-86);
+  padding: 8px 12px;
+  border: 1px solid var(--red-53);
   border-radius: 7px;
-  background: var(--white);
+  background: var(--red-98);
   color: var(--slate-20);
   font: inherit;
   font-size: 13px;
-}
-
-.manual-review-row--needs-attention .manual-review-input {
-  border-color: var(--red-53);
-  background: var(--red-98);
 }
 
 .manual-review-input:focus {
@@ -111,6 +65,11 @@
 .manual-review-input:disabled {
   background: var(--slate-97);
   cursor: not-allowed;
+}
+
+/* An empty field the officer still has to fill in. */
+.manual-review-input--empty {
+  border-color: var(--red-48);
 }
 
 .manual-review-actions {
@@ -132,79 +91,31 @@
 }
 
 @media (max-width: 760px) {
-  .manual-review-table {
-    overflow-x: auto;
-  }
-
-  .manual-review-header,
-  .manual-review-row {
-    min-width: 650px;
-  }
-
   .manual-review-actions {
     align-items: stretch;
     flex-direction: column;
   }
 }
 
-/* =========================================================
-   Manual Review Warning
-   ========================================================= */
-
-.manual-review-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin: 0 0 20px;
-  padding: 14px 16px;
-  border: 1px solid var(--orange-76);
-  border-radius: 8px;
-  background: var(--orange-95);
-  color: var(--orange-23);
+/* The title, the review count and Add field stay on one line each; the title row gives way to the actions, not the reverse. */
+.details-section-heading > span,
+.details-section-heading .add-field-button,
+.details-section-heading .documents-card-review-count {
+  white-space: nowrap;
 }
 
-.manual-review-warning-icon {
-  flex: 0 0 auto;
-  margin-top: 1px;
-  font-size: 17px;
-  line-height: 1.2;
-  color: var(--orange-33a);
+.details-section-heading .details-section-actions {
+  margin-left: auto;
 }
 
-.manual-review-warning-content {
-  min-width: 0;
-}
-
-.manual-review-warning-title {
-  display: block;
-  margin: 0 0 7px;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.3;
-  color: var(--orange-23);
-}
-
-.manual-review-warning p {
-  margin: 0;
+/* How many fields need the officer, beside the card title: the pinkish red of a review. */
+.documents-card-review-count {
+  margin-left: 2px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--red-bg);
+  color: var(--red-40);
   font-size: 12px;
-  line-height: 1.55;
-  color: var(--orange-30a);
-}
-
-.manual-review-warning p + p {
-  margin-top: 7px;
-}
-
-.manual-review-warning-note {
   font-weight: 600;
-}
-
-.manual-review-input--empty {
-  border-color: var(--red-53);
-  background: var(--red-98);
-}
-
-.manual-review-input--empty:focus {
-  border-color: var(--red-48);
-  box-shadow: 0 0 0 3px var(--red-a10);
+  white-space: nowrap;
 }

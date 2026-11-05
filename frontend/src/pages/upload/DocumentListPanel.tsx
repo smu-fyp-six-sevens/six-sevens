@@ -1,20 +1,27 @@
-import type { DocumentCaseMatch, DocumentRecord } from '../../services/uploadService';
+import type { DocumentRecord } from '../../services/uploadService';
 import { ExtractedDocumentsCard } from './ExtractedDocumentsCard';
 import type { DocumentRowActions, DocumentSelection } from './ExtractedDocumentsCard';
+import type { Coverage } from './documentChecklist';
 
 export function DocumentListPanel({
-  documents,
   extractedDocuments,
-  caseMatches,
+  reviewReasons,
+  fulfilledRequirements,
+  coverage,
+  approvedDocuments,
+  rejectedDocuments,
   wsConnected,
   onOpenDocument,
   selection,
   rowActions,
   readOnly = false,
 }: {
-  documents: DocumentRecord[];
   extractedDocuments: DocumentRecord[];
-  caseMatches: Map<string, DocumentCaseMatch>;
+  reviewReasons?: Map<string, string>;
+  fulfilledRequirements: Set<string>;
+  coverage: Coverage;
+  approvedDocuments: DocumentRecord[];
+  rejectedDocuments: DocumentRecord[];
   wsConnected: boolean;
   onOpenDocument: (documentId: string) => void;
   selection: DocumentSelection;
@@ -22,20 +29,20 @@ export function DocumentListPanel({
   // A finalised case: documents can be opened, but nothing in the list can be changed.
   readOnly?: boolean;
 }) {
-  if (documents.length === 0) return null;
+  // Always shown: with nothing uploaded it is the checklist of what is missing.
   return (
-    <>
-      {extractedDocuments.length > 0 && (
-        <ExtractedDocumentsCard
-          extractedDocuments={extractedDocuments}
-          caseMatches={caseMatches}
-          wsConnected={wsConnected}
-          onOpenDocument={onOpenDocument}
-          selection={selection}
-          rowActions={rowActions}
-          readOnly={readOnly}
-        />
-      )}
-    </>
+    <ExtractedDocumentsCard
+      extractedDocuments={extractedDocuments}
+      reviewReasons={reviewReasons}
+      fulfilledRequirements={fulfilledRequirements}
+      coverage={coverage}
+      approvedDocuments={approvedDocuments}
+      rejectedDocuments={rejectedDocuments}
+      wsConnected={wsConnected}
+      onOpenDocument={onOpenDocument}
+      selection={selection}
+      rowActions={rowActions}
+      readOnly={readOnly}
+    />
   );
 }

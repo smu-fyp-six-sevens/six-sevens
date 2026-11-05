@@ -18,20 +18,17 @@ import { compareFindings } from './uploadHelpers';
 import DocumentReviewModal from './DocumentReviewModal';
 import type { ReviewLink } from './DocumentReviewModal';
 import { ErrorMessage } from '../../components/ErrorMessage';
+import { SCORE_BANDS } from './scoreBands';
+import { SeverityGauge, SeverityLegend } from './SeverityGauge';
+import { readingOrder } from '../../components/findingHighlights';
+import type { HighlightArea } from '../../components/findingHighlights';
+import { Icon } from '../../components/Icon';
 
 // The group cross-document findings sit in: they belong to the case, not to one document.
 const CASE_GROUP_ID = '__case__';
 
 type Severity = CaseRiskFinding['severity'];
 const SEVERITY_ORDER: Severity[] = ['high', 'medium', 'low'];
-
-// The score range of each level; mirrors SCORE_BANDS in backend/app/case_pipeline/risk/case_risk.py.
-const SCORE_BANDS = [
-  { level: 'Low', min: 0, max: 24 },
-  { level: 'Medium', min: 25, max: 49 },
-  { level: 'High', min: 50, max: 79 },
-  { level: 'Critical', min: 80, max: 100 },
-] as const;
 
 function contentWords(text: string): string[] {
   return text.toLowerCase().match(/[a-z0-9][a-z0-9.-]*[a-z0-9]|[a-z0-9]/g)?.filter((w) => w.length > 2 || /\d/.test(w)) ?? [];
@@ -51,36 +48,17 @@ function addedDetail(rationale: string, summary: string): string {
     .join(' ');
 }
 
+// The score on the same dial as the Case Summary's Overall Case Severity card, with what each band means beside it.
 function ScoreGauge({ score, level }: { score: number; level: string }) {
   const band = SCORE_BANDS.find((b) => b.level === level);
   return (
     <div className="risk-score">
-      <div className="risk-score-figure">
-        <span className="risk-score-value">{score}</span>
-        <span className="risk-score-scale">/100</span>
-      </div>
+      <SeverityGauge score={score} level={level} />
       <div className="risk-score-detail">
         <span className={`risk-score-level risk-score-level--${level.toLowerCase()}`}>
-          {level} risk{band ? ` · ${band.min}–${band.max}` : ''}
+          {level} Risk{band ? ` · ${band.min}–${band.max}` : ''}
         </span>
-        <div className="risk-gauge" role="img" aria-label={`Score ${score} out of 100, ${level} risk`}>
-          {SCORE_BANDS.map((b) => (
-            <span
-              key={b.level}
-              className={`risk-gauge-band risk-gauge-band--${b.level.toLowerCase()} ${b.level === level ? 'risk-gauge-band--current' : ''}`}
-              style={{ flexGrow: b.max - b.min + 1 }}
-              title={`${b.level}: ${b.min}–${b.max}`}
-            />
-          ))}
-          <span className="risk-gauge-marker" style={{ left: `${Math.min(100, Math.max(0, score))}%` }} />
-        </div>
-        <div className="risk-gauge-labels" aria-hidden="true">
-          {SCORE_BANDS.map((b) => (
-            <span key={b.level} style={{ flexGrow: b.max - b.min + 1 }}>
-              {b.level}
-            </span>
-          ))}
-        </div>
+        <SeverityLegend level={level} />
       </div>
     </div>
   );
@@ -235,7 +213,7 @@ function NotScoredMessage({ risk }: { risk: CaseRisk | null }) {
 
   return (
     <div className={`summary-message summary-message--${tone}`}>
-      <span className="summary-message-icon">{tone === 'warning' ? '⚠' : 'ⓘ'}</span>
+      <span className="summary-message-icon"><Icon name={tone === 'warning' ? 'alert' : 'info'} size={18} /></span>
       <div>
         <strong>{title}</strong>
         <p>{body}</p>
@@ -491,10 +469,12 @@ export function CaseRiskCard({
               ? 'Not reviewed by a specialist.'
               : addedDetail(finding.rationale, finding.summary);
             const ids = row.members.map(reportFindingId);
-            const placed = link ? ids.find((id) => link.located.has(id)) : undefined;
-            const pages = placed
-              ? [...new Set(link!.located.get(placed)!.areas.map((area) => area.page))].join(', ')
-              : '';
+            // Every place the row's findings point at, in reading order, as the document steps through them.
+            const places: Place[] = link
+              ? ids
+                  .flatMap((id) => (link.located.get(id)?.areas ?? []).map((place, area) => ({ id, area, place })))
+                  .sort((a, b) => readingOrder(a.place, b.place))
+              : [];
             const isActive = link?.activeId !== null && link?.activeId !== undefined && ids.includes(link.activeId);
             const rowId = `risk-finding-${document.documentId}-${finding.finding_id}`;
             const rowClass = [isActive && 'risk-finding--active', linkedId === rowId && 'risk-finding--linked']
@@ -539,14 +519,12 @@ export function CaseRiskCard({
                     </span>
                   )}
                   {link &&
-                    (placed ? (
-                      <button
-                        type="button"
-                        className="risk-finding-locate"
-                        onClick={() => link.showOnDocument(placed)}
-                      >
-                        ⌖ Show on page {pages}
-                      </button>
+                    (places.length > 0 ? (
+                      <PlaceLocator
+                        places={places}
+                        shownAt={places.findIndex((p) => p.id === link.activeId && p.area === link.activeArea)}
+                        onShow={(p) => link.showOnDocument(p.id, p.area)}
+                      />
                     ) : (
                       <span className="risk-finding-unplaced">Not tied to one place on the document</span>
                     ))}
@@ -626,13 +604,13 @@ export function CaseRiskCard({
       <section className="summary-card">
         <div className="summary-card-header">
           <div className="summary-card-title">
-            <span className="summary-icon summary-icon--risk">▥</span>
+            <span className="summary-icon summary-icon--risk"><Icon name="risk" size={20} /></span>
             <h2>Customer Risk Summary</h2>
           </div>
 
           {scored && (
             <span className={`risk-badge risk-badge--${scored.level!.toLowerCase()}`}>
-              {scored.level} risk
+              {scored.level} Risk
             </span>
           )}
         </div>
@@ -644,7 +622,7 @@ export function CaseRiskCard({
             {scored.score !== null && scored.score !== undefined && (
               <ScoreGauge score={scored.score} level={scored.level!} />
             )}
-            <div className="risk-overview">
+            <div className="risk-facts">
               <span>
                 Based on {scored.documents_scanned}{' '}
                 {scored.documents_scanned === 1 ? 'document' : 'documents'}
@@ -665,7 +643,7 @@ export function CaseRiskCard({
 
             {findings.length === 0 && (
               <div className="summary-message summary-message--success">
-                <span className="summary-message-icon">✓</span>
+                <span className="summary-message-icon"><Icon name="check" size={18} /></span>
                 <div>
                   <strong>No contributing findings.</strong>
                   <p>Detection found nothing worth flagging across this case's documents.</p>
@@ -695,7 +673,7 @@ export function CaseRiskCard({
         <section className="summary-card">
           <div className="summary-card-header">
             <div className="summary-card-title">
-              <span className="summary-icon">▤</span>
+              <span className="summary-icon"><Icon name="documents" size={20} /></span>
               <h2>Findings by Document</h2>
             </div>
           </div>
@@ -709,7 +687,7 @@ export function CaseRiskCard({
         <section className="summary-card">
           <div className="summary-card-header">
             <div className="summary-card-title">
-              <span className="summary-icon">▤</span>
+              <span className="summary-icon"><Icon name="documents" size={20} /></span>
               <h2>Documents to Review</h2>
             </div>
             {reviews.data && (
@@ -730,7 +708,7 @@ export function CaseRiskCard({
             <div className="flagged-list">{toReview.map(renderGroup)}</div>
           ) : (
             <div className="summary-message summary-message--success">
-              <span className="summary-message-icon">✓</span>
+              <span className="summary-message-icon"><Icon name="check" size={18} /></span>
               <div>
                 <strong>No more documents to review.</strong>
                 <p>Every document's findings have been reviewed. Open one below to change a verdict or report a missed issue.</p>
@@ -769,6 +747,7 @@ export function CaseRiskCard({
             </>
           }
           onClose={() => setReviewing(null)}
+          order={reviewingGroup.rows.map((row) => row.members.map(reportFindingId))}
         >
           {(link) => renderGroupBody(reviewingGroup, link)}
         </DocumentReviewModal>
@@ -776,3 +755,50 @@ export function CaseRiskCard({
     </>
   );
 }
+
+// One of the places a row's findings point at: a report finding id, which of its areas, and where that is.
+interface Place {
+  id: string;
+  area: number;
+  place: HighlightArea;
+}
+
+// Takes the document to a row's findings. One place: a button to it. Several (a misspelling can recur dozens
+// of times): one button to the first, then, while the row is the one shown, a stepper through its places.
+function PlaceLocator({ places, shownAt, onShow }: { places: Place[]; shownAt: number; onShow: (place: Place) => void }) {
+  if (places.length === 1) {
+    return (
+      <button type="button" className="risk-finding-locate" onClick={() => onShow(places[0])}>
+        <Icon name="locate" size={14} /> Show on page {places[0].place.page}
+      </button>
+    );
+  }
+  if (shownAt < 0) {
+    const pages = [...new Set(places.map((p) => p.place.page))];
+    return (
+      <button
+        type="button"
+        className="risk-finding-locate"
+        title={`On page${pages.length > 1 ? 's' : ''} ${pages.join(', ')}`}
+        onClick={() => onShow(places[0])}
+      >
+        <Icon name="locate" size={14} /> Show on document · {places.length} places
+      </button>
+    );
+  }
+  const go = (step: 1 | -1) => onShow(places[(shownAt + step + places.length) % places.length]);
+  return (
+    <span className="risk-finding-places" role="group" aria-label="Places on the document">
+      <button type="button" onClick={() => go(-1)} aria-label="Previous place">
+        ‹
+      </button>
+      <span>
+        Place {shownAt + 1} of {places.length} (Page {places[shownAt].place.page})
+      </span>
+      <button type="button" onClick={() => go(1)} aria-label="Next place">
+        ›
+      </button>
+    </span>
+  );
+}
+

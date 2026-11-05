@@ -1,5 +1,5 @@
 import type { CaseAnalysisOverview, CaseRisk, CaseRiskFinding, DocumentCaseMatch, DocumentRecord } from '../../services/uploadService';
-import { formatDocumentType } from '../../services/uploadService';
+import { formatDocumentLabel, formatDocumentType } from '../../services/uploadService';
 import { Rate } from '../../components/Rate';
 import { RATE_MEANING, belowTargetNote, formatCheck } from '../../utils/checkLabels';
 import { InfoLabel } from '../../components/InfoTip';
@@ -9,6 +9,7 @@ import type { CaseSection } from './caseSections';
 import { formatUsd, processingTimes } from './processingTimes';
 import { useCaseCost } from './useCaseCost';
 import { CaseOverviewSkeleton } from '../../components/Skeletons';
+import { Icon } from '../../components/Icon';
 
 const SHOWN_SEVERITIES = ['high', 'medium', 'low'] as const;
 const FLAGGED_DOCUMENTS_SHOWN = 5;
@@ -41,10 +42,6 @@ function documentsByWorstFinding(findings: CaseRiskFinding[]): FlaggedDocument[]
     groups.set(key, group);
   }
   return [...groups.values()].sort((a, b) => compareFindings(a.findings[0], b.findings[0]) || b.points - a.points);
-}
-
-function riskTone(level: string | null | undefined): string {
-  return level ? level.toLowerCase() : 'unknown';
 }
 
 function documentStatus(document: DocumentRecord): { label: string; tone: string } {
@@ -105,7 +102,6 @@ export function CaseOverview({
   caseId: string;
   onSelectSection: (section: CaseSection) => void;
 }) {
-  const scored = risk?.state === 'scored' && risk.level;
   // The officer's reviews of this case's findings (Risk Summary), as precision and recall. A case created without
   // reviews has no Detection Accuracy panel and no Review Findings step.
   const reviewsOn = reviewsRequired;
@@ -130,19 +126,7 @@ export function CaseOverview({
         <CaseOverviewSkeleton />
       ) : (
         <>
-          <section className="case-overview-topline" aria-label="Case risk and document counts">
-            <article className={`case-overview-risk case-overview-risk--${riskTone(risk?.level)}`}>
-              <div className="case-overview-risk-copy">
-                <span className="case-overview-stat-label">Overall Case Severity</span>
-                <strong>{scored ? `${risk.level} risk` : risk?.state === 'pending' ? 'Assessment in progress' : 'Not scored yet'}</strong>
-                <span>{scored ? 'Based on completed document checks' : risk?.state === 'failed' ? 'A document check failed to complete' : 'Run case analysis after documents are approved and scanned'}</span>
-              </div>
-              {scored && risk.score != null && (
-                <div className="case-overview-score" aria-label={`Risk score ${risk.score} out of 100`}>
-                  <strong>{risk.score}</strong><span>/100</span>
-                </div>
-              )}
-            </article>
+          <section className="case-overview-topline" aria-label="Document counts">
             <div className="case-overview-stats">
               <Stat label="Documents" value={approvedDocuments.length} detail={`of ${documents.length} approved`} />
               <Stat label="Awaiting Approval" value={awaitingApprovalCount} detail="Eligible to approve" tone="blue" onClick={() => onSelectSection('documents')} />
@@ -151,6 +135,65 @@ export function CaseOverview({
             </div>
           </section>
 
+          <section className="case-overview-grid">
+            <article className="case-overview-panel case-overview-documents">
+              <div className="case-overview-panel-heading">
+                <div><h2>Recent Documents</h2><p>Latest uploads and their review status</p></div>
+                <button type="button" className="case-overview-text-button" onClick={() => onSelectSection('documents')}>Open Document List →</button>
+              </div>
+              {recentDocuments.length ? (
+                <ul className="case-overview-document-list">
+                  {recentDocuments.map((document) => {
+                    const status = documentStatus(document);
+                    return <li key={document.id}><span className="case-overview-document-icon" aria-hidden="true">{fileExtension(document.filename)}</span><span className="case-overview-document-copy"><strong>{document.filename}</strong><small>{document.document_type ? formatDocumentLabel(document) : 'Type not classified'} · {dateLabel(document.uploaded_at)}</small></span><span className={`case-overview-document-status case-overview-document-status--${status.tone}`}>{status.label}</span></li>;
+                  })}
+                </ul>
+              ) : (
+                <div className="case-overview-empty"><span aria-hidden="true">＋</span><div><strong>No documents uploaded</strong><p>Uploaded documents will appear here with their current review status.</p></div></div>
+              )}
+            </article>
+
+            <article className="case-overview-panel case-overview-findings">
+              <div className="case-overview-panel-heading">
+                <div><h2>Key Findings</h2><p>Documents with the most severe findings, worst first</p></div>
+                {findingCount > 0 && <button type="button" className="case-overview-text-button" onClick={() => onSelectSection('risk')}>View Risk Details →</button>}
+              </div>
+              {worstDocuments.length ? (
+                <>
+                  <ul className="case-overview-flagged-list">
+                    {worstDocuments.map((document) => (
+                      <li key={document.key}>
+                        <button type="button" className="case-overview-flagged-document" onClick={() => onSelectSection('risk')}>
+                          <span className="case-overview-flagged-copy">
+                            <strong>{document.filename}</strong>
+                            <span className="case-overview-flagged-meta">
+                              <span>{document.documentType ? formatDocumentType(document.documentType) : 'Cross-document findings'}</span>
+                              {SHOWN_SEVERITIES.map((severity) => {
+                                const count = document.findings.filter((finding) => finding.severity === severity).length;
+                                return count > 0 && (
+                                  <span key={severity} className={`case-overview-severity case-overview-severity--${severity}`}>{count} {severity}</span>
+                                );
+                              })}
+                            </span>
+                          </span>
+                          <span className="case-overview-flagged-chevron" aria-hidden="true">›</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {documentsWithFindings.length > worstDocuments.length && (
+                    <p className="case-overview-flagged-more">
+                      +{documentsWithFindings.length - worstDocuments.length} more {documentsWithFindings.length - worstDocuments.length === 1 ? 'document' : 'documents'} with findings in Risk Summary
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="case-overview-empty"><span aria-hidden="true"><Icon name="check" size={18} /></span><div><strong>{risk?.state === 'scored' ? 'No findings in completed checks' : 'No findings available yet'}</strong><p>{risk?.state === 'scored' ? 'Completed checks did not return findings for this case.' : 'Findings appear here after document detection and case analysis.'}</p></div></div>
+              )}
+            </article>
+          </section>
+
+          {/* How the case was run (time, cost, accuracy): after what the officer acts on. */}
           <section
             className={`case-overview-metrics${reviewsOn ? '' : ' case-overview-metrics--no-accuracy'}`}
             aria-label="Processing and classification metrics"
@@ -199,7 +242,7 @@ export function CaseOverview({
               </div>
               {reviewed === 0 && (
                 <div className="case-overview-accuracy-empty">
-                  <span className="case-overview-accuracy-empty-icon" aria-hidden="true">✓</span>
+                  <span className="case-overview-accuracy-empty-icon" aria-hidden="true"><Icon name="check" size={18} /></span>
                   <strong>No findings reviewed yet</strong>
                 </div>
               )}
@@ -233,64 +276,6 @@ export function CaseOverview({
               )}
             </article>
             )}
-          </section>
-
-          <section className="case-overview-grid">
-            <article className="case-overview-panel case-overview-documents">
-              <div className="case-overview-panel-heading">
-                <div><h2>Recent Documents</h2><p>Latest uploads and their review status</p></div>
-                <button type="button" className="case-overview-text-button" onClick={() => onSelectSection('documents')}>Open Document List →</button>
-              </div>
-              {recentDocuments.length ? (
-                <ul className="case-overview-document-list">
-                  {recentDocuments.map((document) => {
-                    const status = documentStatus(document);
-                    return <li key={document.id}><span className="case-overview-document-icon" aria-hidden="true">{fileExtension(document.filename)}</span><span className="case-overview-document-copy"><strong>{document.filename}</strong><small>{document.document_type ? formatDocumentType(document.document_type) : 'Type not classified'} · {dateLabel(document.uploaded_at)}</small></span><span className={`case-overview-document-status case-overview-document-status--${status.tone}`}>{status.label}</span></li>;
-                  })}
-                </ul>
-              ) : (
-                <div className="case-overview-empty"><span aria-hidden="true">＋</span><div><strong>No documents uploaded</strong><p>Uploaded documents will appear here with their current review status.</p></div></div>
-              )}
-            </article>
-
-            <article className="case-overview-panel case-overview-findings">
-              <div className="case-overview-panel-heading">
-                <div><h2>Key Findings</h2><p>Documents with the most severe findings, worst first</p></div>
-                {findingCount > 0 && <button type="button" className="case-overview-text-button" onClick={() => onSelectSection('risk')}>View Risk Details →</button>}
-              </div>
-              {worstDocuments.length ? (
-                <>
-                  <ul className="case-overview-flagged-list">
-                    {worstDocuments.map((document) => (
-                      <li key={document.key}>
-                        <button type="button" className="case-overview-flagged-document" onClick={() => onSelectSection('risk')}>
-                          <span className="case-overview-flagged-copy">
-                            <strong>{document.filename}</strong>
-                            <span className="case-overview-flagged-meta">
-                              <span>{document.documentType ? formatDocumentType(document.documentType) : 'Cross-document findings'}</span>
-                              {SHOWN_SEVERITIES.map((severity) => {
-                                const count = document.findings.filter((finding) => finding.severity === severity).length;
-                                return count > 0 && (
-                                  <span key={severity} className={`case-overview-severity case-overview-severity--${severity}`}>{count} {severity}</span>
-                                );
-                              })}
-                            </span>
-                          </span>
-                          <span className="case-overview-flagged-chevron" aria-hidden="true">›</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  {documentsWithFindings.length > worstDocuments.length && (
-                    <p className="case-overview-flagged-more">
-                      +{documentsWithFindings.length - worstDocuments.length} more {documentsWithFindings.length - worstDocuments.length === 1 ? 'document' : 'documents'} with findings in Risk Summary
-                    </p>
-                  )}
-                </>
-              ) : (
-                <div className="case-overview-empty"><span aria-hidden="true">✓</span><div><strong>{risk?.state === 'scored' ? 'No findings in completed checks' : 'No findings available yet'}</strong><p>{risk?.state === 'scored' ? 'Completed checks did not return findings for this case.' : 'Findings appear here after document detection and case analysis.'}</p></div></div>
-              )}
-            </article>
           </section>
         </>
       )}

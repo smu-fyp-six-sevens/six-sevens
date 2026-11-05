@@ -8,6 +8,7 @@ import { PreviousRuns } from './PreviousRuns';
 import { CaseAnalysisTracePanel } from './CaseAnalysisTracePanel';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { missingRequirementsText, outOfDateMessage } from './caseSections';
+import { Icon } from '../../components/Icon';
 
 const CATEGORY_LABELS: Record<string, string> = {
   identity_entity_conflict: 'Identity conflict',
@@ -128,7 +129,7 @@ export function CaseAnalysisCard({
     <section className="summary-card">
       <div className="summary-card-header">
         <div className="summary-card-title">
-          <span className="summary-icon summary-icon--risk">◇</span>
+          <span className="summary-icon summary-icon--risk"><Icon name="analysis" size={20} /></span>
           <h2>Case Analysis</h2>
         </div>
         {analysisReady && (
@@ -187,7 +188,7 @@ export function CaseAnalysisCard({
 
       {!viewing && !running && overview?.stale && (
         <div className="summary-message summary-message--warning">
-          <span className="summary-message-icon">⚠</span>
+          <span className="summary-message-icon"><Icon name="alert" size={18} /></span>
           <div>
             <strong>Out of date.</strong>
             <p title={outOfDateMessage(overview).waitingList || undefined}>{outOfDateMessage(overview).detail}</p>
@@ -198,7 +199,7 @@ export function CaseAnalysisCard({
 
       {!viewing && analysis?.status === 'failed' && (
         <div className="summary-message summary-message--warning">
-          <span className="summary-message-icon">⚠</span>
+          <span className="summary-message-icon"><Icon name="alert" size={18} /></span>
           <div>
             <strong>The analysis did not finish.</strong>
             <p>Run it again.</p>
@@ -212,7 +213,7 @@ export function CaseAnalysisCard({
 
           {findings.length === 0 ? (
             <div className="summary-message summary-message--success">
-              <span className="summary-message-icon">✓</span>
+              <span className="summary-message-icon"><Icon name="check" size={18} /></span>
               <div>
                 <strong>No cross-document findings.</strong>
                 <p>Nothing was proven across this case's documents.</p>

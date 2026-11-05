@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CaseRecord } from '../../App';
+import type { CaseRecord } from '../../utils/caseRecord';
 import { deleteCase, updateCase } from '../../services/uploadService';
 import { validateCompanyName } from '../../utils/caseValidation';
 

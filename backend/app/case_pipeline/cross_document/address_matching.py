@@ -69,6 +69,8 @@ class AddressRecord:
     identity_keys: frozenset[str] = frozenset()
     # The company the address belongs to: "id:<UEN>" and/or "name:<name without Pte Ltd etc.>".
     company_keys: frozenset[str] = frozenset()
+    # A personal address's holder as printed, for the officer to read whose address it is ("" when unnamed).
+    holder: str = ""
 
 
 @dataclass(frozen=True)
@@ -193,6 +195,7 @@ def _add_record(
     *,
     identity_keys: frozenset[str] = frozenset(),
     company_keys: frozenset[str] = frozenset(),
+    holder: object = None,
 ) -> None:
     for address in _strings(value):
         if not normalize_address(address):
@@ -205,6 +208,7 @@ def _add_record(
             scope=scope,
             identity_keys=identity_keys,
             company_keys=company_keys,
+            holder=" ".join(str(holder).split()) if isinstance(holder, str) else "",
         )
         if record not in records:
             records.append(record)
@@ -237,7 +241,7 @@ def extract_addresses(doc: DocumentRecord) -> list[AddressRecord]:
             continue  # a company's address stored under the older field name; read as the company's below
         _add_record(
             records, doc, field_name, fields.get(field_name), "personal",
-            identity_keys=identity_keys,
+            identity_keys=identity_keys, holder=name,
         )
 
     for field_name, value in fields.items():
@@ -249,7 +253,7 @@ def extract_addresses(doc: DocumentRecord) -> list[AddressRecord]:
         role_id = _first(fields, tuple(f"{prefix}_{suffix}" for suffix in _ID_FIELDS))
         _add_record(
             records, doc, field_name, value, "personal",
-            identity_keys=_identity_keys(role_name, role_id),
+            identity_keys=_identity_keys(role_name, role_id), holder=role_name,
         )
 
     for list_field in _PERSON_LIST_FIELDS:
@@ -265,7 +269,7 @@ def extract_addresses(doc: DocumentRecord) -> list[AddressRecord]:
             person_id = _first(entry, _ID_FIELDS)
             _add_record(
                 records, doc, f"{list_field}[{index}].address", address, "personal",
-                identity_keys=_identity_keys(entry.get("name"), person_id),
+                identity_keys=_identity_keys(entry.get("name"), person_id), holder=entry.get("name"),
             )
 
     if not personal_doc:
@@ -280,7 +284,7 @@ def extract_addresses(doc: DocumentRecord) -> list[AddressRecord]:
         if identity_keys:
             _add_record(
                 records, doc, "address", generic_addresses, "personal",
-                identity_keys=identity_keys,
+                identity_keys=identity_keys, holder=name,
             )
         elif company_keys and not personal_doc:
             _add_record(

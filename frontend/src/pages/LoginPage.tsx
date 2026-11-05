@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { apiBaseUrl, setToken } from '../lib/api';
+import { Icon } from '../components/Icon';
 
 interface LoginPageProps {
   onLoggedIn: () => void;
@@ -131,7 +132,7 @@ export default function LoginPage({ onLoggedIn }: LoginPageProps) {
 
             {error && (
               <div className="login-error" role="alert">
-                <span className="login-error-icon">⚠</span>
+                <span className="login-error-icon"><Icon name="alert" size={16} /></span>
                 <span>{error}</span>
               </div>
             )}

@@ -4,6 +4,7 @@ import {
   CLASSIFICATION_CONFIDENCE_THRESHOLD,
   DOCUMENT_TYPE_OPTIONS,
   documentStatusDisplay,
+  formatDocumentLabel,
   formatDocumentType,
   formatRoutingOutcome,
   isDocumentStuckProcessing,
@@ -150,7 +151,7 @@ export function DocumentSummaryCard({
                 </div>
               ) : (
                 <strong>
-                  {formatDocumentType(document.document_type, document.classification_confidence)}
+                  {formatDocumentLabel(document)}
                 </strong>
               )}
             </div>

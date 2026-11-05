@@ -461,6 +461,11 @@ async def page_consistency_tool(document_id: Annotated[str, InjectedState("docum
             "summary": finding.summary,
             # Other checks that saw the same page or boundary: one cause, one finding.
             "evidence": finding.evidence,
+            # bbox (PDF points) is for the preview to highlight; only checks that read a place on the page set it.
+            **({
+                "bbox_units": "pt",
+                "locations": [{"page": p.page, "bbox": list(p.bbox), "text": _short(p.text)} for p in finding.places],
+            } if finding.places else {}),
         }
         for finding in result.findings
     ]

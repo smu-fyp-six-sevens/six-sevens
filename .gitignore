@@ -9,6 +9,7 @@ venv/
 env/
 node_modules/
 dist/
+*.tsbuildinfo
 .DS_Store
 .env
 .env.local
@@ -35,6 +36,9 @@ frontend/test-results/
 .playwright-mcp/
 
 .ruff_cache/
+
+# Graphify's code graph
+graphify-out/
 
 # Terraform
 deploy/terraform/.terraform/

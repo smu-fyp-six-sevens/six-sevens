@@ -1,24 +1,34 @@
-import type { DocumentCaseMatch, DocumentRecord } from '../../services/uploadService';
+import type { DocumentRecord } from '../../services/uploadService';
 import {
   TERMINAL_DOCUMENT_STATUSES,
   canCancelDocument,
   canRetryDocument,
   formatDocumentStatus,
-  formatDocumentType,
-  formatRoutingOutcome,
+  formatDocumentLabel,
   isDocumentStuckProcessing,
 } from '../../services/uploadService';
 import { LiveBadge } from './LiveBadge';
+import { useState } from 'react';
+import { CANCELLED_REASON, documentGroup, missingAdditional, missingRequirements, type Coverage, type DocumentGroup } from './documentChecklist';
+import { REQUIRED_DOCUMENT_TYPES } from '../../services/uploadService';
 import type { useDocumentRowActions } from './useDocumentRowActions';
 import type { useDocumentSelection } from './useDocumentSelection';
 import { ErrorMessage } from '../../components/ErrorMessage';
+import { Icon } from '../../components/Icon';
 
 export type DocumentSelection = ReturnType<typeof useDocumentSelection>;
 export type DocumentRowActions = ReturnType<typeof useDocumentRowActions>;
 
 interface ExtractedDocumentsCardProps {
   extractedDocuments: DocumentRecord[];
-  caseMatches: Map<string, DocumentCaseMatch>;
+  // Why each document that needs the officer's review does (by document id); the others have no entry.
+  reviewReasons?: Map<string, string>;
+  // Which required documents the case already has, so the card can list the ones it still lacks.
+  fulfilledRequirements: Set<string>;
+  coverage: Coverage;
+  // The documents already decided on, listed under their own folded groups at the foot of the table.
+  approvedDocuments: DocumentRecord[];
+  rejectedDocuments: DocumentRecord[];
   wsConnected: boolean;
   onOpenDocument: (documentId: string) => void;
   selection: DocumentSelection;
@@ -30,7 +40,11 @@ interface ExtractedDocumentsCardProps {
 // Extracted documents awaiting the officer: bulk select, approve, move and delete, plus per-row retry and cancel.
 export function ExtractedDocumentsCard({
   extractedDocuments,
-  caseMatches,
+  reviewReasons,
+  fulfilledRequirements,
+  coverage,
+  approvedDocuments,
+  rejectedDocuments,
   wsConnected,
   onOpenDocument,
   selection,
@@ -52,12 +66,61 @@ export function ExtractedDocumentsCard({
   } = selection;
   const { approveError, cancelActionError, retryActionError, isApprovingSelected, handleApproveSelected } = rowActions;
 
+  const requiredReceived = REQUIRED_DOCUMENT_TYPES.filter((requirement) => fulfilledRequirements.has(requirement.value)).length;
+  const missing = missingRequirements(fulfilledRequirements, coverage);
+  const optionalMissing = missingAdditional(fulfilledRequirements);
+  const groups: Record<DocumentGroup, DocumentRecord[]> = { review: [], processing: [], pending: [] };
+  extractedDocuments.forEach((document) => groups[documentGroup(document, reviewReasons?.has(document.id) ?? false)].push(document));
+
+  // Documents still being worked on wait for approval too: they sit first under Pending Approval, with a spinner.
+  const pendingDocuments = [...groups.processing, ...groups.pending];
+
+  // Only one category is open at a time. Until the officer picks one, the first category that has rows is open, other
+  // than Additional (optional documents aren't what the officer came to do). Opening one closes the rest; opening
+  // the open one closes it. A choice whose category has since emptied falls back to that first one.
+  const present: GroupId[] = [
+    missing.length > 0 && 'missing',
+    optionalMissing.length > 0 && 'additional',
+    groups.review.length > 0 && 'review',
+    pendingDocuments.length > 0 && 'pending',
+    approvedDocuments.length > 0 && 'approved',
+    rejectedDocuments.length > 0 && 'rejected',
+  ].filter((id): id is GroupId => id !== false);
+  const defaultGroup = present.find((id) => id !== 'additional') ?? null;
+  const [chosenGroup, setChosenGroup] = useState<GroupId | null | undefined>(undefined);
+  const openGroup = chosenGroup === undefined || (chosenGroup !== null && !present.includes(chosenGroup)) ? defaultGroup : chosenGroup;
+  const toggle = (id: GroupId) => setChosenGroup(openGroup === id ? null : id);
+
+  const rowsFor = (documents: DocumentRecord[]) =>
+    [...documents].sort(byDocumentType).map((document) => {
+      const group = documentGroup(document, reviewReasons?.has(document.id) ?? false);
+      return (
+        <ExtractedDocumentRow
+          key={document.id}
+          document={document}
+          group={group}
+          reason={group === 'review' ? (reviewReasons?.get(document.id) ?? CANCELLED_REASON) : undefined}
+          isSelected={selectedDocumentIds.has(document.id)}
+          onToggleSelected={selection.toggleDocumentSelected}
+          onOpenDocument={onOpenDocument}
+          rowActions={rowActions}
+          readOnly={readOnly}
+        />
+      );
+    });
+
   return (
     <section className="documents-card">
       <div className="documents-card-header">
         <div className="documents-card-title">
-          <span className="documents-card-icon">▣</span>
-          <span>Uploaded Documents</span>
+          <span className="documents-card-icon"><Icon name="documents" size={20} /></span>
+          <span>Documents</span>
+          <span className="checklist-progress">
+            <strong>{requiredReceived}</strong> of {REQUIRED_DOCUMENT_TYPES.length} required
+            <span className="checklist-bar" aria-hidden="true">
+              <i style={{ width: `${(requiredReceived / REQUIRED_DOCUMENT_TYPES.length) * 100}%` }} />
+            </span>
+          </span>
         </div>
 
         <div className="documents-card-actions">
@@ -77,7 +140,7 @@ export function ExtractedDocumentsCard({
               disabled={eligibleForApprovalCount === 0}
               onClick={handleSelectAllEligible}
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 11l3 3L22 4" />
                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
               </svg>
@@ -92,7 +155,7 @@ export function ExtractedDocumentsCard({
               disabled={isApprovingSelected || selectedApprovableCount === 0}
               onClick={() => void handleApproveSelected()}
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 12l5 5L20 6" />
               </svg>
               <span className="bulk-icon-count">{selectedApprovableCount}</span>
@@ -106,7 +169,7 @@ export function ExtractedDocumentsCard({
               disabled={selectedMovableOrDeletableCount === 0}
               onClick={() => void openMoveDialog()}
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12h14" />
                 <path d="M13 6l6 6-6 6" />
               </svg>
@@ -123,7 +186,7 @@ export function ExtractedDocumentsCard({
                 selectedExtractedDocuments.filter((document) => TERMINAL_DOCUMENT_STATUSES.has(document.status)),
               )}
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 7h16" />
                 <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                 <path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
@@ -142,7 +205,7 @@ export function ExtractedDocumentsCard({
         (actionError, index) => actionError && <ErrorMessage key={index} className="toast-error" message={actionError} />,
       )}
 
-      <div className="documents-table documents-table--selectable">
+      <div className={`documents-table documents-table--selectable${selectedDocumentIds.size > 0 ? ' documents-table--has-selection' : ''}`}>
         <div className="documents-table-header">
           <label className="document-select-cell">
             <input
@@ -157,40 +220,105 @@ export function ExtractedDocumentsCard({
               }
             />
           </label>
-          <span>Filename</span>
           <span>Document Type</span>
+          <span>Filename</span>
           <span>Status</span>
-          <span>Routing Outcome</span>
         </div>
 
-        {extractedDocuments.map((document) => (
-          <ExtractedDocumentRow
-            key={document.id}
-            document={document}
-            caseMatch={caseMatches.get(document.id)}
-            isSelected={selectedDocumentIds.has(document.id)}
-            onToggleSelected={selection.toggleDocumentSelected}
-            onOpenDocument={onOpenDocument}
-            rowActions={rowActions}
-            readOnly={readOnly}
-          />
-        ))}
+        {missing.length > 0 && (
+          <>
+            <GroupToggle id="missing" label="Missing" count={missing.length} open={openGroup === 'missing'} onToggle={toggle} />
+            {openGroup === 'missing' && missing.map((requirement) => (
+              <div key={requirement.value} className="checklist-missing-row">
+                <span className="document-select-cell" aria-hidden="true">
+                  <span className="row-mark row-mark--missing" />
+                </span>
+                <span className="document-type-cell">{requirement.label}</span>
+                <span className="document-filename">
+                  <span className="document-filename-line checklist-hint">{requirement.hint}</span>
+                </span>
+                <span className="document-status-cell">
+                  <span className="status-pill">Missing</span>
+                </span>
+              </div>
+            ))}
+          </>
+        )}
+
+        {optionalMissing.length > 0 && (
+          <div className="checklist-additional">
+            <GroupToggle id="additional" label="Additional" count={optionalMissing.length} note="only if the case needs them" open={openGroup === 'additional'} onToggle={toggle} />
+            {openGroup === 'additional' && optionalMissing.map((label) => (
+              <div key={label} className="checklist-missing-row checklist-optional-row">
+                <span className="document-select-cell" aria-hidden="true">
+                  <span className="row-mark row-mark--missing" />
+                </span>
+                <span className="document-type-cell">{label}</span>
+                <span className="document-filename">
+                  <span className="document-filename-line checklist-hint">Not needed unless the case calls for it</span>
+                </span>
+                <span className="document-status-cell">
+                  <span className="status-pill">Optional</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {groups.review.length > 0 && (
+          <>
+            <GroupToggle id="review" label="Needs Review" count={groups.review.length} open={openGroup === 'review'} onToggle={toggle} />
+            {openGroup === 'review' && rowsFor(groups.review)}
+          </>
+        )}
+
+        {pendingDocuments.length > 0 && (
+          <>
+            <GroupToggle id="pending" label="Pending Approval" count={pendingDocuments.length} open={openGroup === 'pending'} onToggle={toggle} />
+            {openGroup === 'pending' && rowsFor(pendingDocuments)}
+          </>
+        )}
+
+        {(['approved', 'rejected'] as const).map((kind) => {
+          const decided = kind === 'approved' ? approvedDocuments : rejectedDocuments;
+          if (decided.length === 0) return null;
+          const isOpen = openGroup === kind;
+          return (
+            <div key={kind} className="checklist-decided">
+              <GroupToggle id={kind} label={kind === 'approved' ? 'Approved' : 'Rejected'} count={decided.length} open={isOpen} onToggle={toggle} />
+              {isOpen && [...decided].sort(byDocumentType).map((document) => (
+                <DecidedRow key={document.id} document={document} kind={kind} onOpenDocument={onOpenDocument} />
+              ))}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
 }
 
-function statusDotClass(status: DocumentRecord['status'], isStuck: boolean): string {
-  if (status === 'analyzed') return 'status-dot--success';
-  if (status === 'failed') return 'status-dot--failed';
-  if (status === 'rejected') return 'status-dot--rejected';
-  if (status === 'cancelled') return 'status-dot--cancelled';
-  return isStuck ? 'status-dot--stuck' : '';
+// A category's documents A to Z by the type as listed (so "NRIC" comes before "NRIC (Proof of Address)"), then by
+// filename. One not yet classified has no type to sort by, and goes last.
+function byDocumentType(a: DocumentRecord, b: DocumentRecord): number {
+  if (!a.document_type !== !b.document_type) return a.document_type ? -1 : 1;
+  const type = a.document_type
+    ? formatDocumentLabel(a).localeCompare(formatDocumentLabel(b), undefined, { sensitivity: 'base' })
+    : 0;
+  return type || a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function statusPillClass(status: DocumentRecord['status'], isStuck: boolean, isTerminal: boolean): string {
+  if (status === 'analyzed') return 'status-pill--ok';
+  if (status === 'failed' || status === 'rejected') return 'status-pill--fail';
+  if (status === 'cancelled') return '';
+  if (isStuck) return 'status-pill--warn';
+  return isTerminal ? '' : 'status-pill--proc';
 }
 
 function ExtractedDocumentRow({
   document,
-  caseMatch,
+  group,
+  reason,
   isSelected,
   onToggleSelected,
   onOpenDocument,
@@ -198,7 +326,9 @@ function ExtractedDocumentRow({
   readOnly,
 }: {
   document: DocumentRecord;
-  caseMatch: DocumentCaseMatch | undefined;
+  group: DocumentGroup;
+  // Set in Needs Review: why the document waits on the officer.
+  reason?: string;
   isSelected: boolean;
   onToggleSelected: (documentId: string) => void;
   onOpenDocument: (documentId: string) => void;
@@ -211,12 +341,10 @@ function ExtractedDocumentRow({
   const isStuck = isDocumentStuckProcessing(document);
   const isCancellingRow = cancellingDocumentId === document.id;
   const isRetryingRow = retryingDocumentId === document.id;
-  const routingOutcome = formatRoutingOutcome(document, caseMatch);
-  const manualReviewTitle = caseMatch?.status === 'manual_review' ? caseMatch.reason : 'Requires manual review';
 
   return (
     <div
-      className="documents-table-row documents-table-row--clickable"
+      className={`documents-table-row documents-table-row--clickable${reason ? ' documents-table-row--review' : ''}`}
       role="button"
       tabIndex={0}
       aria-label={`View ${document.filename}`}
@@ -234,6 +362,17 @@ function ExtractedDocumentRow({
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
+        {/* The row's mark is what the first column shows; the checkbox takes its place on hover, once a selection
+            has begun, and for keyboard focus, so every row starts with the same kind of thing. */}
+        <span className={`row-mark row-mark--${group}`} aria-hidden="true">
+          {group === 'review' ? (
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+              <path d="M12 6v8M12 18.5v.01" />
+            </svg>
+          ) : group === 'pending' ? (
+            <Icon name="check" size={11} />
+          ) : null}
+        </span>
         <input
           type="checkbox"
           checked={isSelected}
@@ -243,22 +382,17 @@ function ExtractedDocumentRow({
         />
       </label>
 
-      <span className="document-filename">
-        {routingOutcome === 'Manual Review' && (
-          <span className="document-manual-review-icon" title={manualReviewTitle} aria-label={manualReviewTitle}>
-            ⚠
-          </span>
-        )}
-        {document.filename}
+      <span className="document-type-cell">
+        {document.document_type ? formatDocumentLabel(document) : 'Not classified'}
       </span>
 
-      <span className="document-type-cell">
-        {formatDocumentType(document.document_type, document.classification_confidence)}
+      <span className="document-filename">
+        <span className="document-filename-line">{document.filename}</span>
+        {reason && <span className="document-review-reason">{reason}</span>}
       </span>
 
       <span className="document-status-cell">
-        <span className={`status-dot ${statusDotClass(status, isStuck)}`} />
-        <span>
+        <span className={`status-pill ${statusPillClass(status, isStuck, isTerminal)}`}>
           {formatDocumentStatus(status)}
           {!isTerminal && '…'}
         </span>
@@ -278,7 +412,7 @@ function ExtractedDocumentRow({
             }}
             onKeyDown={(event) => event.stopPropagation()}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 11A8 8 0 1 0 18.6 16" />
               <path d="M20 5v6h-6" />
             </svg>
@@ -298,7 +432,7 @@ function ExtractedDocumentRow({
             }}
             onKeyDown={(event) => event.stopPropagation()}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
               <path d="M6 6l12 12" />
               <path d="M18 6L6 18" />
             </svg>
@@ -306,7 +440,85 @@ function ExtractedDocumentRow({
         )}
       </span>
 
-      <span className="document-routing">{routingOutcome}</span>
     </div>
+  );
+}
+
+// An approved or rejected document, listed read-only under its folded group: its type, filename and where it stands.
+function DecidedRow({
+  document,
+  kind,
+  onOpenDocument,
+}: {
+  document: DocumentRecord;
+  kind: 'approved' | 'rejected';
+  onOpenDocument: (documentId: string) => void;
+}) {
+  return (
+    <div
+      className="documents-table-row documents-table-row--clickable"
+      role="button"
+      tabIndex={0}
+      aria-label={`View ${document.filename}`}
+      onClick={() => onOpenDocument(document.id)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpenDocument(document.id);
+        }
+      }}
+    >
+      <span className="document-select-cell" aria-hidden="true">
+        <span className={`row-mark row-mark--${kind}`}>
+          <Icon name={kind === 'approved' ? 'check' : 'x'} size={11} />
+        </span>
+      </span>
+      <span className="document-type-cell">
+        {document.document_type ? formatDocumentLabel(document) : 'Not classified'}
+      </span>
+      <span className="document-filename">
+        <span className="document-filename-line">{document.filename}</span>
+      </span>
+      <span className="document-status-cell">
+        <span className={`status-pill ${kind === 'rejected' ? 'status-pill--fail' : document.status === 'detecting' ? 'status-pill--proc' : 'status-pill--ok'}`}>
+          {kind === 'rejected' ? 'Rejected' : formatDocumentStatus(document.status)}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+type GroupId = DocumentGroup | 'missing' | 'additional' | 'approved' | 'rejected';
+
+// A group's label as a button that folds and unfolds it; the chevron sits in the first column, over the marks. The group's
+// colour (documents-table.css, by id) is how a category reads at a glance.
+function GroupToggle({
+  id,
+  label,
+  count,
+  note,
+  open,
+  onToggle,
+}: {
+  id: GroupId;
+  label: string;
+  count: number;
+  note?: string;
+  open: boolean;
+  onToggle: (id: GroupId) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`documents-table-group documents-table-group--toggle documents-table-group--${id}`}
+      aria-expanded={open}
+      onClick={() => onToggle(id)}
+    >
+      <svg className="group-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M9 6l6 6-6 6" />
+      </svg>
+      {label} <span className="num">{count}</span>
+      {note && <span className="muted-note">{note}</span>}
+    </button>
   );
 }

@@ -1,4 +1,4 @@
-import type { CaseRecord } from '../App';
+import type { CaseRecord } from './caseRecord';
 
 export function caseNumberLabel(caseRecord: CaseRecord): string {
   return caseRecord.caseNumber || caseRecord.id;

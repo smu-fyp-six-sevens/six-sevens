@@ -278,8 +278,8 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await openRisk(page, backend, 'RS-001');
 
     const card = riskCard(page);
-    await expect(card.locator('.risk-badge')).toHaveText('Low risk');
-    await expect(card.locator('.risk-score-value')).toHaveText('0');
+    await expect(card.locator('.risk-badge')).toHaveText('Low Risk');
+    await expect(card.locator('.severity-gauge-value')).toHaveText('0');
     await expect(card).toContainText('No contributing findings.');
     await expect(card.locator('.risk-reason')).toHaveText('Rated Low: detection found nothing worth flagging.');
     await expect(card).toContainText('Based on 3 documents');
@@ -291,7 +291,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     const card = riskCard(page);
     await expect(card).toContainText('Detection failed on a document.');
     await expect(card).toContainText('2 of 3 documents scanned.');
-    await expect(card.locator('.risk-score-value')).toHaveCount(0);
+    await expect(card.locator('.severity-gauge-value')).toHaveCount(0);
     await expect(card.locator('.risk-badge')).toHaveCount(0);
     await expect(sectionStatus(page, 'Risk Summary')).toContainText('Detection Failed');
   });
@@ -300,9 +300,9 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await openRisk(page, backend, 'RS-003');
 
     const card = riskCard(page);
-    await expect(card.locator('.risk-badge')).toHaveText('Critical risk');
-    await expect(card.locator('.risk-score-value')).toHaveText('89');
-    await expect(card.locator('.risk-score-level')).toHaveText('Critical risk · 80–100');
+    await expect(card.locator('.risk-badge')).toHaveText('Critical Risk');
+    await expect(card.locator('.severity-gauge-value')).toHaveText('89');
+    await expect(card.locator('.risk-score-level')).toHaveText('Critical Risk · 80–100');
     await expect(card.locator('.risk-reason')).toHaveText('Rated Critical: high-severity findings on 4 documents.');
     await expect(sectionStatus(page, 'Risk Summary')).toContainText('Critical · 89');
   });
@@ -311,8 +311,8 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     const theCase = await openRisk(page, backend, 'RS-004');
 
     const card = riskCard(page);
-    await expect(card.locator('.risk-badge')).toHaveText('Medium risk');
-    await expect(card.locator('.risk-score-level')).toHaveText('Medium risk · 25–49');
+    await expect(card.locator('.risk-badge')).toHaveText('Medium Risk');
+    await expect(card.locator('.risk-score-level')).toHaveText('Medium Risk · 25–49');
     await expect(card).toContainText('1 medium');
     await openTrace(page, theCase);
     const row = tracePanel(page).locator('.debug-table tbody tr');
@@ -324,8 +324,8 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await openRisk(page, backend, 'RS-005');
 
     const card = riskCard(page);
-    await expect(card.locator('.risk-badge')).toHaveText('High risk');
-    await expect(card.locator('.risk-score-value')).toHaveText('50');
+    await expect(card.locator('.risk-badge')).toHaveText('High Risk');
+    await expect(card.locator('.severity-gauge-value')).toHaveText('50');
     await expect(card.locator('.risk-reason')).toHaveText('Rated High from the combined severity of 1 finding(s).');
   });
 
@@ -410,7 +410,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await expect(card).toContainText('Not scored yet.');
     await expect(card.locator('.risk-badge')).toHaveCount(0);
     await expect(card).toContainText('Run the case analysis once every approved document has been scanned.');
-    await expect(card.locator('.risk-score-value')).toHaveCount(0);
+    await expect(card.locator('.severity-gauge-value')).toHaveCount(0);
     await expect(card.locator('.risk-document')).toHaveCount(0);
   });
 
@@ -421,7 +421,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await expect(card).toContainText('1 of 2 documents scanned.');
     await expect(sectionStatus(page, 'Risk Summary')).toContainText('1/2 Scanned');
     await expect(card.locator('.risk-badge')).toHaveCount(0);
-    await expect(card.locator('.risk-score-value')).toHaveCount(0);
+    await expect(card.locator('.severity-gauge-value')).toHaveCount(0);
     await expect(card.locator('.risk-document')).toHaveCount(0);
   });
 });
@@ -460,7 +460,7 @@ test.describe('Handle invalid agent output @sprint4 @SCRUM-54', () => {
     const others = fixture.documents.filter((d) => d.id !== payslip.id);
 
     await page.goto(fixture.documentUrl(payslip));
-    await page.getByRole('button', { name: '↻ Retry Document' }).click();
+    await page.getByRole('button', { name: 'Retry Document' }).click();
 
     await expect.poll(() => backend.requestsTo('POST', `/documents/${payslip.id}/retry`).length).toBe(1);
     expect(payslip.status).toBe('queued');
