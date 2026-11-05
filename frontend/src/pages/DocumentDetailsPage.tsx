@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import type { CaseRecord } from '../utils/caseRecord';
 import AppHeader from '../components/AppHeader';
 import CaseHeader, { CaseTitle } from '../components/CaseHeader';
@@ -88,8 +88,7 @@ export default function DocumentDetailsPage({
   onDocumentDeleted,
 }: DocumentDetailsPageProps) {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const showTrace = searchParams.get('section') === 'trace';
+  const [isTraceOpen, setIsTraceOpen] = useState(false);
   // The same live statuses the case page's menu shows.
   const navStatuses = useCaseNavStatuses(selectedCase.id);
   const {
@@ -498,35 +497,15 @@ export default function DocumentDetailsPage({
     </CaseHeader>
   );
 
-  const traceSection = (
-    <>
-      <button type="button" className="back-link" onClick={() => setSearchParams({})}>← Back to the document</button>
-      <Suspense fallback={null}>
-        <AgentTraceView
-          title="Agent trace"
-          steps={langGraphTrace?.steps ?? null}
-          emptyText="No trace yet: this document hasn't been processed."
-          isRefreshing={isRefreshingTrace}
-          onRefresh={refreshLangGraphTrace}
-        />
-      </Suspense>
-    </>
-  );
-
-  // The case's section menu stays beside the document, as its rail of icons (it opens over the page): choosing one goes back to that section.
+  // The case's section menu stays beside the document, as its rail of icons (it opens over the page).
   const framed = (content: ReactNode) => (
     <CaseFrame
       nav={
         <CaseSectionNav
-          activeSection={showTrace ? 'trace' : null}
+          activeSection={null}
           statuses={navStatuses.statuses}
           statusesLoading={navStatuses.statusesLoading}
           onSelect={(section) => {
-            // Agent Trace stays on the document: its trace, not the case analysis's.
-            if (section === 'trace') {
-              setSearchParams({ section });
-              return;
-            }
             const base = caseCrumb(selectedCase).to.split('?')[0];
             navigate(section === 'summary' ? base : `${base}?section=${section}`);
           }}
@@ -566,7 +545,7 @@ export default function DocumentDetailsPage({
     <div className="shell shell--upload document-details-page">
       <AppHeader />
 
-      {framed(showTrace ? traceSection : (
+      {framed(
       <div
         className={`document-details-body document-details-body--split${
           isPreviewPaneOpen ? '' : ' document-details-body--preview-hidden'
@@ -603,6 +582,14 @@ export default function DocumentDetailsPage({
                   id: 'preview',
                   label: 'Full-screen preview',
                   onSelect: () => setIsPreviewOpen(true),
+                },
+                {
+                  id: 'trace',
+                  label: 'Agent trace',
+                  onSelect: () => {
+                    setIsTraceOpen(true);
+                    void refreshLangGraphTrace();
+                  },
                 },
                 ...(!hasBeenApproved(document.status) && !isInFlight && !caseFinalised
                   ? [
@@ -683,7 +670,21 @@ export default function DocumentDetailsPage({
         </div>
         </div>
       </div>
-      ))}
+      ,
+      )}
+
+      {isTraceOpen && (
+        <Suspense fallback={null}>
+          <AgentTraceView
+            title="Agent trace"
+            steps={langGraphTrace?.steps ?? null}
+            emptyText="No trace yet: this document hasn't been processed."
+            isRefreshing={isRefreshingTrace}
+            onRefresh={refreshLangGraphTrace}
+            onClose={() => setIsTraceOpen(false)}
+          />
+        </Suspense>
+      )}
 
       {deleteConfirmOpen && document && (
         <ConfirmDialog

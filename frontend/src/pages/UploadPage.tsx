@@ -23,7 +23,6 @@ import { CaseSectionNav } from './upload/CaseSectionNav';
 import { useCaseReportDownload } from './upload/useCaseReportDownload';
 import { CharacterCount } from '../components/CharacterCount';
 import { CaseStageCard } from './upload/CaseStageCard';
-import { CaseTraceCard } from './upload/CaseTraceCard';
 import { isCaseSection, type CaseSection } from './upload/caseSections';
 import { sectionStatusesFrom } from './upload/caseNavStatuses';
 import { reviewReason } from './upload/reviewReason';
@@ -94,6 +93,7 @@ export default function UploadPage({
   const rawSection = searchParams.get('section');
   const sectionParam = rawSection === 'approved' ? 'documents' : rawSection;
   const activeSection: CaseSection = isCaseSection(sectionParam) ? sectionParam : 'summary';
+  const [isAnalysisTraceOpen, setIsAnalysisTraceOpen] = useState(false);
   const selectSection = (section: CaseSection) => {
     setSearchParams(section === 'summary' ? {} : { section }, { replace: true });
   };
@@ -190,7 +190,7 @@ export default function UploadPage({
   });
 
   return (
-    <main className="shell shell--upload">
+    <main className="shell shell--upload case-page">
       <AppHeader />
 
       <CaseFrame
@@ -256,6 +256,9 @@ export default function UploadPage({
                 label={isDeletingCase ? 'Deleting case' : 'Case actions'}
                 disabled={isDeletingCase}
                 items={[
+                  ...(activeSection === 'analysis'
+                    ? [{ id: 'trace', label: 'Case analysis trace', onSelect: () => setIsAnalysisTraceOpen(true) }]
+                    : []),
                   {
                     id: 'report',
                     label: report.isDownloading ? 'Preparing report…' : 'Download report',
@@ -448,6 +451,8 @@ export default function UploadPage({
               analysisReady={analysisReady && !isFinalised}
               overview={analysisOverview}
               missingRequirements={missingRequirements}
+              traceOpen={isAnalysisTraceOpen}
+              onTraceClose={() => setIsAnalysisTraceOpen(false)}
             />
           )}
 
@@ -462,8 +467,6 @@ export default function UploadPage({
           {activeSection === 'notes' && <NotesCard finalised={isFinalised} caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
 
           {activeSection === 'audit' && <AuditTrailCard caseId={selectedCase.id} caseNumber={selectedCase.caseNumber} documents={documents} />}
-
-          {activeSection === 'trace' && <CaseTraceCard caseId={selectedCase.id} overview={analysisOverview} />}
 
           {activeSection === 'cost' && <CaseCostCard caseId={selectedCase.id} documents={documents} />}
         </div>

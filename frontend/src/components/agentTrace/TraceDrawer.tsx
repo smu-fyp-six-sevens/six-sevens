@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { RefreshButton } from '../RefreshButton';
 import {
   groupKeys,
   rootOf,
@@ -75,33 +76,46 @@ function Row({
 }
 
 export function TraceDrawer({
-  title, trace, initialKey, onClose,
+  title, trace, initialKey, emptyText, isRefreshing, onRefresh, onClose,
 }: {
   title: string;
   trace: BuiltTrace;
   initialKey: string;
+  emptyText: string;
+  isRefreshing: boolean;
+  onRefresh: () => void | Promise<void>;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
-  // The groups start folded, so a run reads as its stages.
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(groupKeys(trace.roots)));
+  const [toggled, setToggled] = useState<Set<string>>(new Set());
   const [selectedKey, setSelectedKey] = useState(initialKey);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
   }, [onClose]);
 
+  // Groups start folded, so a run reads as its stages; refreshed traces can add new groups.
+  const groups = new Set(groupKeys(trace.roots));
+  const collapsed = new Set([...groups].filter((key) => !toggled.has(key)));
+  toggled.forEach((key) => {
+    if (!groups.has(key)) collapsed.add(key);
+  });
   const rows = visibleRows(trace.roots, { collapsed, search });
   const all = visibleRows(trace.roots, { collapsed: new Set(), search: '' });
   const selected = all.find((row) => row.node.key === selectedKey)?.node ?? trace.roots[0];
   const toggle = (key: string) =>
-    setCollapsed((current) => {
+    setToggled((current) => {
       const next = new Set(current);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -124,6 +138,7 @@ export function TraceDrawer({
       >
         <header className="trace-drawer-head">
           <h2>{title}</h2>
+          <RefreshButton isRefreshing={isRefreshing} onClick={() => void onRefresh()} label={title.toLowerCase()} />
           <dl className="trace-stats">
             <div>
               <dt>Status</dt>
@@ -142,7 +157,7 @@ export function TraceDrawer({
           </dl>
           <button ref={closeRef} type="button" className="trace-close" aria-label="Close trace" onClick={onClose}>✕</button>
         </header>
-        {!trace.hasSpans && (
+        {!trace.hasSpans && trace.roots.length > 0 && (
           <p className="trace-notice">
             This run has no per-step Claude figures, because it was processed before they were recorded. Its cost is on
             the case's Claude Cost tab. Runs from now on show tokens and cost on each step.
@@ -162,7 +177,7 @@ export function TraceDrawer({
               />
             </div>
             <div className="trace-tree" role="tree" aria-label={`${title} steps`}>
-              {rows.length === 0 && <p className="trace-muted trace-empty">No step matches “{search}”.</p>}
+              {rows.length === 0 && <p className="trace-muted trace-empty">{search ? `No step matches “${search}”.` : emptyText}</p>}
               {rows.map((row) => (
                 <Row
                   key={row.node.key}

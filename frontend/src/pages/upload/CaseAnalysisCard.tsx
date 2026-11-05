@@ -5,6 +5,7 @@ import { getCaseAnalysis, getCaseAnalysisRun, listCaseAnalysisRuns, runCaseAnaly
 import { AnalysisSummaryBlock } from './AnalysisSummaryBlock';
 import { analysisFindingAnchor } from './analysisSummary';
 import { PreviousRuns } from './PreviousRuns';
+import { AgentTraceView } from '../../components/agentTrace/AgentTraceView';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { missingRequirementsText, outOfDateMessage } from './caseSections';
 import { Icon } from '../../components/Icon';
@@ -26,26 +27,34 @@ export function CaseAnalysisCard({
   analysisReady,
   overview,
   missingRequirements = 0,
+  traceOpen,
+  onTraceClose,
 }: {
   caseId: string;
   analysisReady: boolean;
   overview: CaseAnalysisOverview | null;
   // How many required checklist documents are not yet on file: the analysis waits for every one.
   missingRequirements?: number;
+  traceOpen: boolean;
+  onTraceClose: () => void;
 }) {
   const [analysis, setAnalysis] = useState<CaseAnalysis | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [runs, setRuns] = useState<CaseAnalysisRunItem[]>([]);
   // An earlier run opened read-only; the latest is shown when null.
   const [viewing, setViewing] = useState<CaseAnalysis | null>(null);
   const [openingRunId, setOpeningRunId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setIsRefreshing(true);
     try {
       setAnalysis(await getCaseAnalysis(caseId));
     } catch {
       // The card still shows the overview; a failed detail fetch isn't worth an error banner.
+    } finally {
+      setIsRefreshing(false);
     }
   }, [caseId]);
 
@@ -94,6 +103,10 @@ export function CaseAnalysisCard({
     setViewing(null);
   }, [runId]);
 
+  useEffect(() => {
+    if (traceOpen && hasOverview) void load();
+  }, [traceOpen, hasOverview, load]);
+
   // A failed run's stored error is an exception's text: the console has it, the card says to run it again.
   const failedError = analysis?.status === 'failed' ? analysis.error : null;
   useEffect(() => {
@@ -122,6 +135,7 @@ export function CaseAnalysisCard({
   const showResult = shown?.status === 'complete';
 
   return (
+    <>
     <section className="summary-card">
       <div className="summary-card-header">
         <div className="summary-card-title">
@@ -244,5 +258,16 @@ export function CaseAnalysisCard({
         />
       )}
     </section>
+    {traceOpen && (
+      <AgentTraceView
+        title="Case analysis trace"
+        steps={shown?.trace ?? null}
+        emptyText={shown ? 'No steps recorded yet.' : 'No analysis has been run for this case yet.'}
+        isRefreshing={isRefreshing}
+        onRefresh={load}
+        onClose={onTraceClose}
+      />
+    )}
+    </>
   );
 }

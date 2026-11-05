@@ -1,17 +1,13 @@
 /* =========================================================
-   Agent trace (components/agentTrace): a card listing the runs,
-   and a panel with the span tree beside the selected span.
+   Agent trace (components/agentTrace): a panel with the span tree
+   beside the selected span.
    ========================================================= */
 
-.trace-card { position: relative; }
-.trace-card-head { display: flex; align-items: center; gap: 12px; padding-right: 40px; }
-.trace-card-head h2 { margin: 0; }
 .trace-muted { color: var(--ink-soft); }
 .trace-ok-text { color: var(--green-30); }
 .trace-warn-text { color: var(--amber); font-weight: 600; }
 .trace-error-text { color: var(--red); }
 
-.trace-open,
 .trace-close {
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -20,30 +16,7 @@
   font: inherit;
   cursor: pointer;
 }
-.trace-open { padding: 4px 12px; font-size: 0.85rem; font-weight: 600; }
-.trace-open:hover,
 .trace-close:hover { background: var(--slate-97); }
-
-/* --- the runs on the card --- */
-
-.trace-runs { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
-.trace-run {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--white);
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.trace-run:hover { border-color: var(--slate-73); background: var(--slate-97); }
-.trace-run-label { font-weight: 600; }
-.trace-run-figures { margin-left: auto; font-size: 0.82rem; color: var(--ink-soft); white-space: nowrap; }
 
 /* --- shared pieces --- */
 
@@ -129,6 +102,7 @@
 .trace-drawer-head h2 { margin: 0; font-size: 1.15rem; }
 .trace-notice { margin: 0; padding: 8px 20px; border-bottom: 1px solid var(--line); background: var(--amber-bg); font-size: 0.85rem; }
 .trace-close { position: absolute; top: 14px; right: 16px; width: 34px; height: 34px; font-size: 1rem; }
+.trace-drawer-head .panel-refresh-button { top: 17px; right: 60px; }
 
 .trace-drawer-body {
   flex: 1;
