@@ -215,7 +215,7 @@ export default function UploadPage({
         }
       >
       <CaseHeader
-        crumbs={[caseQueueCrumb, caseCrumb(selectedCase, { current: true })]}
+        crumbs={[caseQueueCrumb, caseCrumb(selectedCase, { current: true, section: activeSection })]}
         notice={isFinalised ? <FinalisedBanner /> : undefined}
       >
         {isEditingCase ? (

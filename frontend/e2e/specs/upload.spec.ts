@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
+import { openGroupWith } from '../support/documentGroups';
 import { makeCase, type MockBackend } from '../support/mockBackend';
 import { browseFiles, browseOversizedPdf, dropFiles, jpg, pdf, png, text } from '../support/files';
 
@@ -161,6 +162,7 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
     }
     backend.push(theCase.id);
     const table = page.locator('.documents-table');
+    await openGroupWith(page, 'payslip.pdf');
     await expect(table.getByText('payslip.pdf')).toBeVisible();
     await expect(table.getByText('passport.pdf')).toBeVisible();
   });
@@ -232,6 +234,7 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
     await uploadButton(page).click();
     await expect(fileRow(page, 'payslip.pdf').locator('.badge')).toHaveText('Uploaded');
     const table = page.locator('.documents-table');
+    await openGroupWith(page, 'payslip.pdf');
     await expect(table.getByText('payslip.pdf')).toBeVisible();
 
     // Deleted elsewhere: this page only hears about it through the next snapshot.

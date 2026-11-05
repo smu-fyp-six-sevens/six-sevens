@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
+import { openGroupWith } from '../support/documentGroups';
 import { loadFixture, readFixture, readRegressionFixture } from '../support/fixtures';
 import type { DocumentRow, MockBackend } from '../support/mockBackend';
 
@@ -109,6 +110,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
 
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
+    await openGroupWith(page, constitution.filename);
     await expect(extractedCard(page)).toContainText(constitution.filename);
     // No document is approved yet, so there is no Approved group to open.
     await expect(approvedGroup(page)).toHaveCount(0);

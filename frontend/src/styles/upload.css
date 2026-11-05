@@ -1446,7 +1446,8 @@
    while the page scrolls. Closed, it sits under the top bar (which is at 20); only the opened menu rises above the page. */
 .case-frame-nav {
   z-index: 15;
-  height: calc(100vh - var(--topbar-height));
+  /* A pixel short of the window: page heights are fractional, and without the slack the end of the page nudged the rail. */
+  height: calc(100vh - var(--topbar-height) - 1px);
 }
 
 .case-frame-nav:has(.case-nav--open) {
@@ -1537,5 +1538,26 @@
   .case-nav:not(.case-nav--open) .case-nav-item {
     padding-top: 2px;
     padding-bottom: 2px;
+  }
+}
+
+/* The rail is sticky inside the frame and can't leave it. The page's own bottom padding sat outside the frame, so at the
+   end of a page the rail stopped short of the window's bottom edge, with paper showing under it. The padding moves into
+   the content column, and the frame is at least a window tall, so the rail always runs to the bottom. */
+.shell--upload:has(.case-frame) {
+  padding-bottom: 0;
+}
+
+.case-frame {
+  min-height: calc(100vh - var(--topbar-height));
+}
+
+.case-frame-main {
+  padding-bottom: 24px;
+}
+
+@media (max-width: 860px) {
+  .case-frame {
+    min-height: 0;
   }
 }

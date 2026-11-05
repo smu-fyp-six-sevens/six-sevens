@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
+import { openGroup, openGroupWith } from '../support/documentGroups';
 import { makeCase, makeDocument, type CaseRow, type MockBackend } from '../support/mockBackend';
 import type { AuditEvent, CaseRisk } from '../../src/services/uploadService/types';
 import { loadFixture, readRegressionFixture } from '../support/fixtures';
@@ -496,16 +497,29 @@ test.describe('Case page layout @SCRUM-299', () => {
 });
 
 test.describe('View case details @sprint2 @SCRUM-83', () => {
-  test('selecting a case from the breadcrumb dropdown opens its summary @CM-005', async ({ page, backend }) => {
-    const { harbor } = seedQueue(backend);
+  test('selecting a case from the breadcrumb dropdown opens the same section of that case @CM-005', async ({ page, backend }) => {
+    const { harbor, meridian } = seedQueue(backend);
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
 
     const breadcrumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
     await breadcrumbs.getByRole('button', { name: new RegExp(`${harbor.greenlink_case_id}: switch case`) }).click();
-    await page.getByRole('menuitem', { name: harbor.company_name! }).click();
+    await page.getByRole('menuitem', { name: meridian.company_name! }).click();
 
+    // Still on Documents, now for the other case.
+    await expect(page).toHaveURL(new RegExp(`/cases/${meridian.greenlink_case_id}[?]section=documents`));
+    await expect(page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: /^Documents/i })).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('.documents-card')).toBeVisible();
+  });
+
+  test('the case dropdown keeps whichever section the officer is on, the summary included @CM-005', async ({ page, backend }) => {
+    const { harbor, meridian } = seedQueue(backend);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=summary`);
+
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: new RegExp(`${harbor.greenlink_case_id}: switch case`) }).click();
+    await page.getByRole('menuitem', { name: meridian.company_name! }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/cases/${meridian.greenlink_case_id}[?]section=summary`));
     await expect(page.getByRole('main', { name: 'Case summary dashboard' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: /^Case Summary/i })).toHaveAttribute('aria-current', 'page');
   });
 
   test('the breadcrumb dropdown lists 50 cases, then loads the rest on request', async ({ page, backend }) => {
@@ -534,6 +548,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(page.locator('.case-title')).toContainText(harbor.company_name!);
     await expect(page.locator('.case-title')).not.toContainText(meridian.company_name!);
     const table = page.locator('.documents-table');
+    await openGroupWith(page, 'C014_CertIncumbency.pdf');
     await expect(table.getByText('C014_CertIncumbency.pdf')).toBeVisible();
     await expect(page.getByText('C067_NOA.pdf')).toHaveCount(0);
   });
@@ -615,12 +630,14 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     // A document that needs the officer says why under its name in the document list.
     const row = page.locator('.documents-table-row', { hasText: 'Fashion-Purchase-Order.pdf' });
+    await openGroup(page, 'Needs Review');
     await expect(page.locator('.documents-table-row--review')).toHaveCount(1);
     await expect(row.locator('.document-review-reason')).toContainText('could not be recognised');
     await expect(page.locator('.documents-table-group--review')).toContainText('Needs Review');
     // Not confirmed by an officer yet, so it reads Unrecognised, not Other.
     await expect(row.locator('.document-type-cell')).toContainText('Unrecognised');
     // The document that is fine has no reason under its name.
+    await openGroup(page, 'Pending Approval');
     await expect(page.locator('.documents-table-row', { hasText: 'C014_CertIncorp.pdf' }).locator('.document-review-reason')).toHaveCount(0);
   });
 
@@ -1056,6 +1073,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     expect(backend.requestsTo('DELETE', /./)).toHaveLength(0);
+    await openGroupWith(page, 'C035_NOA.pdf');
     await expect(page.locator('.documents-table').getByText('C035_NOA.pdf')).toBeVisible();
 
     // CM-025: confirming deletes the case.
@@ -1128,11 +1146,14 @@ test.describe('Case page: document actions, live updates and cost', () => {
     const { harbor, document } = caseWithDocument(backend, 'extracting');
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
 
+    await openGroupWith(page, document.filename);
     await page.getByRole('button', { name: `Cancel ${document.filename}` }).click();
 
     await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/cancel`).length).toBe(1);
     expect(document.status).toBe('cancelled');
     backend.push(harbor.id);
+    // A cancelled document moves to Needs Review.
+    await openGroupWith(page, document.filename);
     await expect(page.getByRole('button', { name: `View ${document.filename}` })).toContainText('Cancelled');
     await expect(page.getByRole('button', { name: `Cancel ${document.filename}` })).toHaveCount(0);
   });
@@ -1142,6 +1163,7 @@ test.describe('Case page: document actions, live updates and cost', () => {
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
 
     // The padded cell around the checkbox is the click target.
+    await openGroupWith(page, document.filename);
     const select = page.getByRole('checkbox', { name: `Select ${document.filename}` });
     await page.locator('.document-select-cell', { has: select }).click();
     await expect(select).toBeChecked();
@@ -1159,6 +1181,7 @@ test.describe('Case page: document actions, live updates and cost', () => {
     });
     await expect(page.locator('.documents-table').getByText(document.filename)).toHaveCount(0);
     await page.goto(`/cases/${meridian.greenlink_case_id}?section=documents`);
+    await openGroupWith(page, document.filename);
     await expect(page.locator('.documents-table').getByText(document.filename)).toBeVisible();
   });
 
@@ -1174,6 +1197,7 @@ test.describe('Case page: document actions, live updates and cost', () => {
     document.status = 'analyzed';
 
     await expect(live).toHaveText('LIVE', { timeout: 10_000 });
+    await openGroupWith(page, document.filename);
     await expect(page.getByRole('button', { name: `View ${document.filename}` })).not.toContainText('Extracting');
     await expect(page.getByRole('button', { name: `Cancel ${document.filename}` })).toHaveCount(0);
     // Every connection asks for a new single-use ticket.
