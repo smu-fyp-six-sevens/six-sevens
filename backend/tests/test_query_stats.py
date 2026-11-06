@@ -49,10 +49,10 @@ async def test_a_claude_call_is_counted_into_its_unit_with_tokens_and_list_price
     with query_stats.scope("detection doc-1") as unit:
         await call_claude("layout_rendering", response())
 
-    # 500 uncached x $2 + 200 out x $10 + 1,000 cache reads x $0.10, per million.
+    # 500 uncached x $2 + 200 out x $10 + 1,000 cache reads x $0.10, per million; the cache saved 1,000 x ($2 - $0.10).
     assert unit.llm_detail() == {
         "llm_cost_usd": 0.0031, "llm_calls": 1, "llm_input_tokens": 1500, "llm_output_tokens": 200,
-        "llm_cache_read_tokens": 1000, "llm_cache_write_tokens": 0,
+        "llm_cache_read_tokens": 1000, "llm_cache_write_tokens": 0, "llm_cache_saved_usd": 0.0019,
     }
     assert counted("layout_rendering") == before + 1
     assert "1 claude (1500 in / 200 out tokens; cache read 1000 / write 0; $0.0031)" in unit.summary()

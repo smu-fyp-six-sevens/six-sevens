@@ -41,6 +41,7 @@
       "classification_confidence": 0.83,
       "document_type": "proof_of_address",
       "llm_cache_read_tokens": 0,
+      "llm_cache_saved_usd": 0.0,
       "llm_cache_write_tokens": 0,
       "llm_calls": 0,
       "llm_cost_usd": 0.0,

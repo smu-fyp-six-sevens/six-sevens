@@ -1382,7 +1382,7 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
 
     const severity = page.locator('.case-overview-risk');
     await expect(severity.locator('.case-overview-risk-copy strong')).toHaveText('Not scored yet');
-    await expect(severity).toContainText('Run case analysis after documents are approved and scanned');
+    await expect(severity).toContainText('Scored once documents are approved and scanned');
     await expect(severity.getByLabel(/^Risk score/)).toHaveCount(0);
   });
 

@@ -221,7 +221,12 @@ async def run(document_id: str) -> None:
 
 
 def steps(document_id: str) -> list[str]:
-    return [s["step"] for s in (trace.get(document_id) or {}).get("steps", [])]
+    """The pipeline's steps, in order; the agent-run spans recorded alongside them (telemetry.steps_into) are left out."""
+    return [
+        s["step"]
+        for s in (trace.get(document_id) or {}).get("steps", [])
+        if s["step"] != "span"
+    ]
 
 
 @pytest.fixture(autouse=True)
