@@ -1152,8 +1152,9 @@ test.describe('Case page: document actions, live updates and cost', () => {
     await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/cancel`).length).toBe(1);
     expect(document.status).toBe('cancelled');
     backend.push(harbor.id);
-    // A cancelled document moves to Needs Review.
-    await openGroupWith(page, document.filename);
+    // A cancelled document moves to Needs Review. Open that group by name: looking for the filename instead can find
+    // it still in its old group just before the pushed snapshot lands and moves it.
+    await openGroup(page, 'Needs Review');
     await expect(page.getByRole('button', { name: `View ${document.filename}` })).toContainText('Cancelled');
     await expect(page.getByRole('button', { name: `Cancel ${document.filename}` })).toHaveCount(0);
   });

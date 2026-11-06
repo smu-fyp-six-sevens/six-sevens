@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import AgentGraph, { AgentGlyph } from '../components/AgentGraph';
 import AppHeader from '../components/AppHeader';
 import { getAgentPrompt, getAgentRegistry, type AgentPrompt, type AgentRecord } from '../services/agents';
 
@@ -9,7 +11,7 @@ function documentTypeLabel(value: string): string {
   }).join(' ');
 }
 
-function AgentCard({ agent }: { agent: AgentRecord }) {
+function AgentModelCard({ agent }: { agent: AgentRecord }) {
   const [showPrompt, setShowPrompt] = useState(false);
   const [prompt, setPrompt] = useState<AgentPrompt | null>(null);
   const [promptLoading, setPromptLoading] = useState(false);
@@ -38,14 +40,7 @@ function AgentCard({ agent }: { agent: AgentRecord }) {
   }
 
   return (
-    <article className="agent-directory-card">
-      <div className="agent-directory-card-heading">
-        <span className="agent-directory-mark" aria-hidden="true">AI</span>
-        <div>
-          <p className="agent-directory-role">{agent.group}</p>
-          <h3>{agent.name}</h3>
-        </div>
-      </div>
+    <div className="agent-directory-card">
       <p className="agent-directory-description">{agent.purpose}</p>
       <p className="agent-directory-model-card-label">MODEL CARD</p>
       <dl className="agent-directory-fields">
@@ -100,59 +95,77 @@ function AgentCard({ agent }: { agent: AgentRecord }) {
           </div>
         )}
       </div>
-    </article>
+    </div>
   );
 }
 
-function WorkflowDiagram({ agents }: { agents: AgentRecord[] }) {
-  const stages = [
-    {
-      title: 'Document Processing',
-      description: 'Understand and extract each upload',
-      roles: agents.filter((agent) => agent.group === 'Document processing'),
-    },
-    {
-      title: 'Fraud Detection',
-      description: 'Choose relevant checks for an approved document',
-      roles: agents.filter((agent) => agent.group === 'Fraud detection'),
-    },
-    {
-      title: 'Fraud Detection Specialists',
-      description: 'Run focused checks; results go back to the lead',
-      roles: agents.filter((agent) => agent.group === 'Fraud detection specialists'),
-    },
-    {
-      title: 'Case Analysis',
-      description: 'Compare approved documents across the case',
-      roles: agents.filter((agent) => agent.group === 'Case analysis'),
-    },
-  ];
+function AgentDialog({ agent, onClose }: { agent: AgentRecord; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
 
+  useEffect(() => {
+    const returnFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      returnFocus?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return createPortal(
+    <div className="agent-dialog-backdrop" onClick={onClose}>
+      <div
+        className="agent-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="agent-dialog-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="agent-dialog-header">
+          <span className="agent-dialog-icon" aria-hidden="true"><AgentGlyph agent={agent} /></span>
+          <div>
+            <p className="agent-directory-role">{agent.group}</p>
+            <h2 id="agent-dialog-title">{agent.name}</h2>
+          </div>
+          <button ref={closeRef} type="button" className="agent-dialog-close" onClick={onClose} aria-label="Close model card">×</button>
+        </header>
+        <div className="agent-dialog-body">
+          <AgentModelCard agent={agent} />
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function WorkflowDiagram({ agents, loading, selectedId, onSelect }: {
+  agents: AgentRecord[];
+  loading: boolean;
+  selectedId: string | null;
+  onSelect: (agentId: string) => void;
+}) {
   return (
     <section className="agent-directory-workflow" aria-labelledby="agent-workflow-title">
       <div className="agent-directory-section-heading">
         <div>
-          <h2 id="agent-workflow-title">Where Each Agent Fits</h2>
-          <p>Document checks happen per upload. Case analysis compares approved documents after they are available.</p>
+          <h2 id="agent-workflow-title">Agent Registry</h2>
+          <p>Document checks happen per upload. The detection lead assigns focused checks to specialists, who report back. Case analysis compares approved documents after they are available. Select an agent to open its model card.</p>
+          <p>Models and pipeline call limits are read from the current backend configuration. A shared pipeline cap is not an individual agent budget.</p>
         </div>
-        <span className="agent-directory-count">WORKFLOW</span>
+        <span className="agent-directory-count">{loading ? 'Loading' : `${agents.length} roles`}</span>
       </div>
-      <ol className="agent-directory-workflow-stages">
-        {stages.map((stage, index) => (
-          <li className="agent-directory-workflow-stage" key={stage.title}>
-            <div className="agent-directory-workflow-card">
-              <span className="agent-directory-workflow-number">0{index + 1}</span>
-              <h3>{stage.title}</h3>
-              <p>{stage.description}</p>
-              <div className="agent-directory-workflow-roles">
-                {stage.roles.map((agent) => (
-                  <span key={agent.id}>{agent.name}</span>
-                ))}
-              </div>
-            </div>
-          </li>
-        ))}
-      </ol>
+      {loading
+        ? <p className="agent-directory-loading">Loading configured agents…</p>
+        : <AgentGraph agents={agents} selectedId={selectedId} onSelect={onSelect} />}
     </section>
   );
 }
@@ -161,6 +174,8 @@ export default function AgentDirectoryPage() {
   const [agents, setAgents] = useState<AgentRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const openAgent = agents.find((agent) => agent.id === openId) ?? null;
 
   useEffect(() => {
     let active = true;
@@ -185,20 +200,7 @@ export default function AgentDirectoryPage() {
 
         {error && <p className="agent-directory-error" role="alert">{error}</p>}
 
-        <section className="agent-directory-section">
-          <div className="agent-directory-section-heading">
-            <div>
-              <h2>Agent Registry</h2>
-              <p>Models and pipeline call limits are read from the current backend configuration. A shared pipeline cap is not an individual agent budget.</p>
-            </div>
-            <span className="agent-directory-count">{loading ? 'Loading' : `${agents.length} roles`}</span>
-          </div>
-          {loading ? <p className="agent-directory-loading">Loading configured agents…</p> : (
-            <div className="agent-directory-grid">{agents.map((agent) => <AgentCard key={agent.id} agent={agent} />)}</div>
-          )}
-        </section>
-
-        {!loading && !error && <WorkflowDiagram agents={agents} />}
+        {!error && <WorkflowDiagram agents={agents} loading={loading} selectedId={openId} onSelect={setOpenId} />}
 
         <section className="agent-directory-oversight-grid" aria-label="Governance coverage">
           <article className="agent-directory-oversight-card">
@@ -210,7 +212,7 @@ export default function AgentDirectoryPage() {
           <article className="agent-directory-oversight-card">
             <p className="agent-directory-eyebrow">PROMPT TRANSPARENCY</p>
             <h2>View the source prompt for each role</h2>
-            <p>Open “View prompt” on an agent card to inspect its instructions. Runtime document data is replaced by clear placeholders, and the extractor prompt can be previewed by document type.</p>
+            <p>Select an agent on the map and choose “View prompt” to inspect its instructions. Runtime document data is replaced by clear placeholders, and the extractor prompt can be previewed by document type.</p>
             <span className="agent-directory-tag agent-directory-tag-partial">Templates shown</span>
           </article>
         </section>
@@ -220,6 +222,7 @@ export default function AgentDirectoryPage() {
           <p><strong>How to read this page:</strong> “Not versioned” and “Not assigned” mark gaps in the current implementation. Tool access is described from code; it is not a separate per-agent permission policy. Pipeline caps are shared ceilings, not per-agent or dollar-cost budgets. Agent outputs support human review; they do not make the lending decision.</p>
         </aside>
       </div>
+      {openAgent && <AgentDialog key={openAgent.id} agent={openAgent} onClose={() => setOpenId(null)} />}
     </main>
   );
 }

@@ -1,7 +1,7 @@
 import { test, expect } from '../support/test';
 
 test.describe('AI agents registry', () => {
-  test('opens from the main navigation and explains the current agent roles and workflow', async ({ page, backend }) => {
+  test('opens from the main navigation and maps the current agent roles', async ({ page, backend }) => {
     void backend;
     await page.goto('/dashboard');
     await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'AI Agents' }).click();
@@ -10,16 +10,25 @@ test.describe('AI agents registry', () => {
     await expect(page.getByRole('heading', { name: 'Know Your Agents' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Agent Registry' })).toBeVisible();
     await expect(page.getByText('8 roles')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Document classifier' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Field extractor' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Detection lead' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Layout & Rendering Analyst' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Hypothesis planner' })).toBeVisible();
-    await expect(page.getByText('MODEL CARD').first()).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Where Each Agent Fits' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Document Processing', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Fraud Detection', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Fraud Detection Specialists', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Case Analysis', exact: true })).toBeVisible();
+    for (const name of ['Document classifier', 'Field extractor', 'Detection lead', 'Layout & Rendering Analyst', 'Hypothesis planner']) {
+      await expect(page.getByRole('button', { name: new RegExp(`^${name},`) })).toBeVisible();
+    }
+  });
+
+  test('opens an agent model card in a dialog from the map', async ({ page, backend }) => {
+    void backend;
+    await page.goto('/agents');
+
+    const node = page.getByRole('button', { name: /^Detection lead,/ });
+    await node.click();
+
+    const dialog = page.getByRole('dialog', { name: 'Detection lead' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('MODEL CARD')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'View prompt' })).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(node).toBeFocused();
   });
 });

@@ -160,7 +160,7 @@ test.describe('Dashboard case pipeline', () => {
     await page.goto('/dashboard');
 
     const steps = page.locator('.case-pipeline-step');
-    await expect(steps).toHaveCount(10);
+    await expect(steps).toHaveCount(9);
     const count = (stage: string) => steps.filter({ hasText: stage }).locator('.case-pipeline-count');
     await expect(count('Pending Review')).toHaveText('3');
     await expect(count('Missing Documents')).toHaveText('1');
