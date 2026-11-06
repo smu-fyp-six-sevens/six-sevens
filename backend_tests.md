@@ -139,3 +139,30 @@ Code verifies every verdict, so the uncovered branches in `verify.py` come first
 | 9 | **Vitest and `data-testid`s** (2.7) | Logic with no test below the browser | M |
 
 Steps 1 and 6 share the fake client: build it once in step 1.
+
+## 4. Progress (5 Nov, tests only)
+
+The test-only parts of steps 1, 3, 4 and 5 are done, and the smaller holes in 2.6. Backend: 2,925 pass, 2 skipped, 4 expected failures; line coverage 91% → 93%.
+
+| Gap | Now | Tests |
+|---|---|---|
+| 2.1 Review repository | `findings_repository` 58% → 98%, on an in-memory Supabase client (`tests/support/fake_supabase.py`) that asserts stored rows | `test_findings_repository` |
+| 2.2 Conditional writes | `case_pipeline/repository` 64% → 95% (`fail_if_running`, the superseded guard, `running_started_before`); `detection_results` 51% → 100% | `test_case_analysis_repository`, `test_detection_results` |
+| 2.3 Statements and payslips | `STAT.ROUND_NUMBERS`, `STAT.LAST_TWO_DIGITS`, `PAY.DEDUCTIONS_SUM` flag; transaction tools 17% → 91%, `reading` 32% → 96%, `comparisons` 28% → 80% | `test_numerical_validation`, `test_case_agent_transaction_tools`, `test_case_agent_evidence_tools` |
+| 2.4 Case analysis agent | `verify.py` 73% → 100%; `agents.py` 57% → 97% (plan filtering, a reply asked again, text replies, an unreadable judge reply, the run cap, a failing or hanging check) | `test_verify_verdict`, `test_case_analysis_agent` |
+| 2.5 Failure paths | `bulk_move`, push 401s (missing, invalid, wrong account), `publish` raising and the Pub/Sub path, recovery giving up, the approve rollback, the upload's failure handling | `test_bulk_move`, `test_events`, `test_sweeper`, `test_documents` |
+| 2.6 Smaller holes | `risk/store` 46% → 100%, `notes_repository` 68% → 93%, `routers/audit` 72% → 100%, `flush_syncs`, the LLM callback's labels and cost, traceparent out on publish and continued on push | `test_risk_store`, `test_notes_repository`, `test_audit_routes`, `test_document_repository`, `test_query_stats`, `test_telemetry` |
+| 2.7 Frontend | Vitest set up (`npm test`, run in CI after the type check): `canApproveDocument` (pulled out of `DocumentDetailsPage`), `useCaseSnapshot`, `useDetection`, the dashboard's date periods and status filter. Test ids on the Documents card, its groups and rows, the audit entries, case rows, notes and risk badges, and the specs moved off those CSS classes. The Accuracy tab is covered by the Sprint 5 regression; review sign-off now checks what is sent, who signed and that it survives a reload (the mock keeps sign-offs) | `src/**/*.test.ts(x)`, `case-analysis.spec.ts` |
+| 2.9 Sprint 4 leftovers | Real check codes in `critical_case` (`PAY.CPF_CEILING`; the passport typo as the spelling tool's finding; `NOA.DATE_LOGIC`), fixture regenerated, still Critical 89/100. No test module imports another: the harnesses and builders are in `tests/support/` (`pipeline_harness`, `detection_harness`, `detection_documents`, `statements`, `ai_images`, `guard_payslips`). `test_regression_case_analysis` no longer waits on `trace._writer`. REG-014, MA-013 and RS-001 re-checked: unchanged | |
+
+**Defects the new tests found**, each pinned as `xfail(strict=True)` with its reason, so the test fails (and the marker comes off) once fixed:
+
+| Defect | Where | Test |
+|---|---|---|
+| `PAY.NET` silent pass (known): lines but no totals give neither a finding nor a skip | `numerical_validation/records.py` | `test_payslip_net_with_lines_but_no_totals_is_compared_or_skipped` |
+| `STAT.LAST_TWO_DIGITS` counts bank fees, so a genuine statement with many identical charges is flagged. `STAT.BENFORD_1D` already sets fees aside | `numerical_validation/statements.py` | `test_a_genuine_fee_heavy_statement_is_not_flagged_for_its_cents` |
+| The 90th percentile is taken at `int(0.9 * (n - 1))`, so for two debits of 250 and 1,800 it reads 250, below the median | `cross_document/evidence.py` `transaction_summary` | `test_the_90th_percentile_is_never_below_the_median` |
+| The officer's text reads "The the check" for a named tool after an article ("The compare_identifiers result"): the article only binds to the first half of `_TOOL_RE` | `cross_document/verify.py` `plain_text` | `test_a_named_tool_after_an_article_reads_as_one_article` |
+| REG-014, now also at unit level: the cancel-pending flag outlives the run when the cancel answers after the run stopped | `document-details/useDetection.ts` | `useDetection.test.ts` (`it.fails`) |
+
+**Not done (needs code changes or is outside the backend):** the idempotency fixes and their twice-delivered tests (2.2), the `PAY.NET` fix (2.3), `CR.TENOR` and `FATCA.TIN_FORMAT`, step 6 (moving the remaining repository tests to the fake client and deleting the mock-only ones), CI infrastructure checks (2.8), and test ids for the remaining class selectors (the documents table's cells, the dashboard panels).

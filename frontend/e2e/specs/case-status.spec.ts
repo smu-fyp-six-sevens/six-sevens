@@ -31,8 +31,8 @@ test.describe('Track case status @SCRUM-80', () => {
     backend.cases.push(makeCase({ id: 'case-new', greenlink_case_id: 'GLDB-1201', company_name: 'Newco Pte Ltd', status: 'fraud_detection' }));
     await page.goto('/cases');
 
-    await expect(page.locator('.case-row').filter({ hasText: 'Acme Trading' }).locator('.case-row-status')).toHaveText('Ready to Finalise');
-    await expect(page.locator('.case-row').filter({ hasText: 'Newco' }).locator('.case-row-status')).toHaveText('Detecting Fraud');
+    await expect(page.getByTestId('case-row').filter({ hasText: 'Acme Trading' }).getByTestId('case-row-status')).toHaveText('Ready to Finalise');
+    await expect(page.getByTestId('case-row').filter({ hasText: 'Newco' }).getByTestId('case-row-status')).toHaveText('Detecting Fraud');
   });
 
   test('AC1 the case page shows the current stage @SCRUM-80 @sprint5 @CM-086', async ({ page, backend }) => {
@@ -200,17 +200,20 @@ test.describe('Track case status @sprint5 @SCRUM-80', () => {
     await page.goto('/cases/GLDB-1200?section=audit');
 
     const entry = page.getByTestId('audit-entry').filter({ hasText: 'Finalised case' });
-    await expect(entry.locator('.audit-officer')).toHaveText('By officer');
+    await expect(entry.getByTestId('audit-officer')).toHaveText('By officer');
   });
 
   test('CM-089 / CM-092 after a change the case reads the same stage on its page, the queue and the dashboard @CM-089 @CM-092', async ({ page, backend }) => {
     await finalised(page, backend);
 
     await page.goto('/cases');
-    await expect(page.locator('.case-row').filter({ hasText: 'Acme Trading' }).locator('.case-row-status')).toHaveText('Finalised');
+    await expect(page.getByTestId('case-row').filter({ hasText: 'Acme Trading' }).getByTestId('case-row-status')).toHaveText('Finalised');
 
-    await page.goto('/dashboard?tab=cases');
-    await page.getByLabel('Date range').selectOption('All time');
-    await expect(page.getByRole('link', { name: 'Open case GLDB-1200' }).locator('[data-label="Status"]')).toHaveText('Finalised');
+    // The dashboard counts it on its case pipeline, under Finalised.
+    await page.goto('/dashboard');
+    await page.getByRole('button', { name: 'Date range' }).click();
+    await page.getByRole('button', { name: 'All time' }).click();
+    const finalisedStep = page.locator('.case-pipeline-step', { has: page.locator('.case-pipeline-label', { hasText: /^Finalised$/ }) });
+    await expect(finalisedStep.locator('.case-pipeline-count')).toHaveText('1');
   });
 });

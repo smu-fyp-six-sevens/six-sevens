@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
-import pymupdf
 import pytest
 from fastapi.testclient import TestClient
 
@@ -24,8 +23,9 @@ from app.ingestion.ingestion_service import ingest_document
 from app.langgraph import trace
 from app.main import app
 from app.models import DocumentStatus
-from tests import test_regression_ai_pipeline as pipeline_harness
-from tests.test_regression_ai_pipeline import classification, extraction, run, steps
+from tests.support import pipeline_harness
+from tests.support.guard_payslips import exiftool_metadata, payslip_pdf
+from tests.support.pipeline_harness import classification, extraction, run, steps
 
 client = TestClient(app)
 
@@ -33,40 +33,7 @@ client = TestClient(app)
 ai = pipeline_harness.ai
 _clear_pipeline_memory = pipeline_harness._clear_pipeline_memory
 
-PAYSLIP_LINES = [
-    "PAYSLIP - OCTOBER 2026",
-    "Employer: Brightwave Analytics Pte Ltd",
-    "Employee: Heng Wan Ting   NRIC: S8812345F",
-    "Basic salary          SGD 5,200.00",
-    "Employee CPF          SGD 1,040.00",
-    "Net pay               SGD 4,160.00",
-]
 PAYSLIP_FIELDS = {"employer_name": ("Brightwave Analytics Pte Ltd", 0.98), "net_pay": (4160.00, 0.98)}
-
-
-def payslip_pdf(*, hidden: str | None = None, metadata: dict[str, str] | None = None, image_text: str | None = None) -> bytes:
-    """A one-page payslip, with the test case's text hidden in white, set in its document info, or drawn into a
-    picture on the page."""
-    doc = pymupdf.open()
-    page = doc.new_page()
-    for row, line in enumerate(PAYSLIP_LINES):
-        page.insert_text((60, 80 + row * 20), line, fontsize=11)
-    if hidden:
-        page.insert_text((60, 260), hidden, fontsize=9, color=(1, 1, 1))
-    if image_text:
-        note = pymupdf.open()
-        picture = note.new_page(width=pymupdf.get_text_length(image_text, fontsize=12) + 24, height=40)
-        picture.insert_text((12, 26), image_text, fontsize=12)
-        page.insert_image(pymupdf.Rect(60, 300, 560, 340), pixmap=picture.get_pixmap(dpi=150))
-    if metadata:
-        doc.set_metadata({key.lower(): value for key, value in metadata.items()})
-    return doc.tobytes()
-
-
-def exiftool_metadata(file_bytes: bytes, filename: str) -> dict:
-    """The document info fields exiftool reports for a PDF (Title, Subject, Author...)."""
-    info = pymupdf.open(stream=file_bytes, filetype="pdf").metadata or {}
-    return {key[:1].upper() + key[1:]: value for key, value in info.items() if value}
 
 
 class GuardStore(pipeline_harness.FakeStore):

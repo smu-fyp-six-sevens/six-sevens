@@ -430,8 +430,8 @@ export function AuditTrailCard({
                             >
                               {formatTimeOfDay(event.occurred_at)}
                             </time>
-                            <strong className="audit-action">{actionLabel(event)}</strong>
-                            {documentLabel && <span className="audit-document">{documentLabel}</span>}
+                            <strong className="audit-action" data-testid="audit-action">{actionLabel(event)}</strong>
+                            {documentLabel && <span className="audit-document" data-testid="audit-document">{documentLabel}</span>}
                             {event.outcome !== 'success' && (
                               <span className={`audit-outcome audit-outcome--${event.outcome}`}>
                                 {OUTCOME_LABELS[event.outcome]}
@@ -441,7 +441,7 @@ export function AuditTrailCard({
                           {(risk || summary) && (
                             <p className="audit-summary">
                               {risk && (
-                                <span className={`risk-badge risk-badge--${risk} audit-risk-badge`}>{riskLevel(risk)} Risk</span>
+                                <span className={`risk-badge risk-badge--${risk} audit-risk-badge`} data-testid="risk-badge">{riskLevel(risk)} Risk</span>
                               )}
                               {summary}
                             </p>
@@ -473,7 +473,7 @@ export function AuditTrailCard({
                             </ul>
                           )}
                           <div className="audit-meta">
-                            <span className="audit-officer">{attribution(event)}</span>
+                            <span className="audit-officer" data-testid="audit-officer">{attribution(event)}</span>
                             {event.duration_ms !== null && <span>took {formatDuration(event.duration_ms)}</span>}
                           </div>
                         </div>

@@ -17,9 +17,9 @@ import pytest
 
 from app.injection.page_defects import duplicate_page, edit_carry_line
 from app.langgraph.detection.graph import run_detection
-from tests import test_regression_detection as detection_harness
-from tests.test_page_consistency import Statement, make_statement
-from tests.test_regression_detection import CONTENT, Specialist, consulted, findings_from
+from tests.support.statements import Statement, make_statement
+from tests.support import detection_harness
+from tests.support.detection_harness import CONTENT, Specialist, consulted, findings_from
 
 # The Sprint 3 harness's fixtures: scripted Claude, the in-memory store, and the cleanup after each run.
 ai = detection_harness.ai

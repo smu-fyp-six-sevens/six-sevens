@@ -705,6 +705,29 @@ def test_payslip_net_is_skipped_not_passed_with_nothing_to_compare() -> None:
     assert any(s.check_code == "PAY.NET" for s in result.skipped_checks)
 
 
+def test_payslip_deduction_lines_that_do_not_add_up_are_flagged() -> None:
+    deductions = [{"label": "Employee CPF", "amount": "1040"}, {"label": "SHG", "amount": "130"}]
+    result = _run([_field("net_pay", "4580"), _field("total_earnings", "5850"),
+                   _field("deductions_items", deductions), _field("total_deductions", "1270")], document_type="payslip")
+
+    [finding] = _codes(result, "PAY.DEDUCTIONS_SUM")
+    assert finding.summary == "Deduction lines sum to 1,170.00, but total deductions shows 1,270.00"
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "Known gap (backend_tests.md 2.3): with earning and deduction lines but no stated totals, PAY.NET compares "
+    "nothing and reports neither a finding nor a skip. Remove this marker once it computes from the lines or skips."
+))
+def test_payslip_net_with_lines_but_no_totals_is_compared_or_skipped() -> None:
+    earnings = [{"label": "Basic salary", "amount": "5200"}, {"label": "Allowance", "amount": "650"}]
+    deductions = [{"label": "Employee CPF", "amount": "1170"}]
+    result = _run([_field("net_pay", "5680"), _field("earnings_items", earnings), _field("deductions_items", deductions)],
+                  document_type="payslip")
+
+    # 5,850.00 - 1,170.00 = 4,680.00, not the 5,680.00 printed.
+    assert _codes(result, "PAY.NET") or any(s.check_code == "PAY.NET" for s in result.skipped_checks)
+
+
 def test_noa_skips_a_year_without_known_rules_or_no_year() -> None:
     for year in ("2010", None):
         result = _run([_field("eci", "100000"), _field("tax_payable", "1")]
@@ -1341,3 +1364,78 @@ def test_only_one_of_the_split_totals_is_not_compared() -> None:
     assert _aggregate_findings(
         _field("accounts", _CBR_ACCOUNTS), _field("total_outstanding_balance_secured", "1801884.46"),
     ) == []
+
+
+# ---------------------------------------------------------------------------
+# STAT.ROUND_NUMBERS / STAT.LAST_TWO_DIGITS — statement-wide statistics
+# ---------------------------------------------------------------------------
+
+
+def _statement_of(amounts: list[float], description=lambda index, amount: f"Payment {index}"):
+    rows = [{"date": "01 Oct 2026", "description": description(i, a), "amount": a} for i, a in enumerate(amounts)]
+    return _run([_field("transactions", rows)], document_type="bank_statement")
+
+
+def _genuine_amounts(count: int, seed: int = 1) -> list[float]:
+    """Amounts spread over orders of magnitude, as real payments are (log-uniform, so they follow Benford's Law)."""
+    rng = random.Random(seed)
+    return [round(10 ** rng.uniform(1, 4), 2) for _ in range(count)]
+
+
+def _skipped(result, code: str) -> list[str]:
+    return [s.reason for s in result.skipped_checks if s.check_code == code]
+
+
+def test_a_genuine_statement_raises_no_statistical_finding() -> None:
+    result = _statement_of(_genuine_amounts(150))
+
+    assert [f.check_code for f in result.findings if f.check_code.startswith("STAT.")] == []
+
+
+def test_a_statement_with_too_many_round_amounts_is_flagged() -> None:
+    amounts = [float(n * 100) for n in range(1, 51)] + _genuine_amounts(70)
+
+    [finding] = _codes(_statement_of(amounts), "STAT.ROUND_NUMBERS")
+
+    assert finding.summary == "42% of amounts are round multiples of 100 — higher than typical"
+
+
+def test_a_few_round_amounts_are_not_flagged() -> None:
+    amounts = [float(n * 100) for n in range(1, 11)] + _genuine_amounts(110)
+
+    assert _codes(_statement_of(amounts), "STAT.ROUND_NUMBERS") == []
+
+
+def test_cents_that_are_always_the_same_are_flagged() -> None:
+    amounts = [n + 0.99 for n in range(10, 120)]
+
+    [finding] = _codes(_statement_of(amounts), "STAT.LAST_TWO_DIGITS")
+
+    assert finding.summary.startswith("The last two digits of amounts are not uniformly distributed")
+
+
+def test_the_statistics_skip_a_statement_with_under_100_amounts() -> None:
+    result = _statement_of(_genuine_amounts(99))
+
+    assert _skipped(result, "STAT.ROUND_NUMBERS") == ["fewer than 100 amounts"]
+    assert _skipped(result, "STAT.LAST_TWO_DIGITS") == ["fewer than 100 decimal amounts"]
+
+
+def test_whole_amounts_do_not_count_towards_the_cents_check() -> None:
+    # 150 amounts, but only 60 with cents: too few to judge the cents.
+    amounts = [float(n) for n in range(10, 100)] + _genuine_amounts(60)
+
+    assert _skipped(_statement_of(amounts), "STAT.LAST_TWO_DIGITS") == ["fewer than 100 decimal amounts"]
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "Known false positive (found writing this test): STAT.LAST_TWO_DIGITS counts bank fees, so a genuine statement "
+    "with many identical charges (45 x SERVICE CHARGE 2.50) is flagged. STAT.BENFORD_1D already sets fees aside "
+    "(_BANK_CHARGE_KEYWORDS). Remove this marker once the cents check does too."
+))
+def test_a_genuine_fee_heavy_statement_is_not_flagged_for_its_cents() -> None:
+    amounts = [2.50] * 45 + _genuine_amounts(105)
+
+    result = _statement_of(amounts, description=lambda index, amount: "SERVICE CHARGE" if amount == 2.50 else f"Payment {index}")
+
+    assert _codes(result, "STAT.LAST_TWO_DIGITS") == []

@@ -247,7 +247,7 @@
       their AI responses scripted.
     </p>
     <div class="meta">
-      <span>Run <b>2 Nov 2026</b></span>
+      <span>Run <b>2 Nov 2026</b>, re-run <b>5 Nov</b> after merging main</span>
       <span>Branch <b class="mono">SCRUM-323-Sprint-5-Regression-Testing</b></span>
       <span>From main <b class="mono">f7251e7</b></span>
       <span>Source <b>Test Cases – Sprint 5.xlsx</b></span>
@@ -305,16 +305,16 @@
     </div>
     <div class="verdict">
       <div>
-        <span class="figure">2743</span>
-        <span class="label">Backend tests (pytest) · 2741 pass, 2 skipped<br>313 tagged Sprint 5 · real endpoints, workers and graphs, scripted AI</span>
+        <span class="figure">2931</span>
+        <span class="label">Backend tests (pytest) · 2925 pass, 2 skipped, 4 expected failures (Sprint 6 test audit)<br>314 tagged Sprint 5 · real endpoints, workers and graphs, scripted AI</span>
       </div>
       <div>
-        <span class="figure">226</span>
+        <span class="figure">240</span>
         <span class="label">Frontend tests (Playwright) · all pass, 1 expected failure (REG-014)<br>41 tagged Sprint 5 · real app against a mocked backend</span>
       </div>
       <div>
-        <span class="figure pass">1394</span>
-        <span class="label">Sprint 1 – 4 tests re-run · all pass<br>1258 backend (2 skipped), 136 browser</span>
+        <span class="figure pass">1412</span>
+        <span class="label">Sprint 1 – 4 tests re-run · all pass<br>1275 backend (2 skipped, 2 expected failures), 137 browser</span>
       </div>
     </div>
   </section>
@@ -403,7 +403,7 @@
       <div style="display: grid; gap: 12px">
         <h2>Needs a decision</h2>
         <ul class="plain">
-          <li><b>CM-041, CM-046, CM-048 — status tabs.</b> The cases expect Manual Review and Rejected tabs with empty states. The app has Documents and Approved Documents; manual-review and rejected documents are cards in Documents, shown only when there are any. Reword the cases, or build the tabs.</li>
+          <li><b>CM-046, CM-047, CM-048 — empty states.</b> Since the redesign the Documents card groups documents by status (CM-041 now matches), but a group shows only while it has documents, so no status has an empty message, and the Approved Documents section is gone. Reword the cases, or give empty groups a message.</li>
           <li><b>CM-063 — documents behind a flagged check.</b> The Accuracy tab shows how many documents were reviewed, not which. Each document's results per check are on the case's Risk section. Point the case there, or add the list to the tab.</li>
         </ul>
         <h2>Observations</h2>
@@ -460,12 +460,11 @@
   const DECIDE = 'Needs a decision';
   const CASES = [
     ['ov', 'CM-037 – CM-040', 4, 'SCRUM-299', 'Company name shown; a scored case\'s level and score; "Not scored yet" before scoring; a long name cut with an ellipsis, in full on hover', OV, 'pass'],
-    ['ov', 'CM-041', 1, 'SCRUM-299', 'Documents are organised by status', OV, 'pass', DECIDE, 'The app has sections and cards, not status tabs.'],
-    ['ov', 'CM-042', 1, 'SCRUM-299', 'A document moves to Approved Documents, or Rejected, when its status changes', OV, 'pass'],
-    ['ov', 'CM-043 – CM-045', 3, 'SCRUM-299', 'Each document\'s name, type and status; "Extracting…" while processing; selecting a document opens it', OV, 'pass'],
-    ['ov', 'CM-046', 1, 'SCRUM-299', 'An empty section says so', OV, 'pass', DECIDE, 'An empty Rejected card isn\'t shown at all.'],
-    ['ov', 'CM-047', 1, 'SCRUM-299', 'Approved Documents with none approved says "No approved documents yet."', OV, 'pass'],
-    ['ov', 'CM-048', 1, 'SCRUM-299', 'A case with no documents: the upload area, and empty Approved Documents', OV, 'pass', DECIDE, 'No Manual Review or Rejected tabs to show empty.'],
+    ['ov', 'CM-041 – CM-042', 2, 'SCRUM-299', 'Documents grouped by status; a document moves to the Approved or Rejected group when its status changes', OV, 'pass'],
+    ['ov', 'CM-043 – CM-045', 3, 'SCRUM-299', 'Each document\'s type, name and status; "Extracting…" under Pending Approval while processing; selecting a document opens it', OV, 'pass'],
+    ['ov', 'CM-046', 1, 'SCRUM-299', 'A status with no documents says so', OV, 'pass', DECIDE, 'An empty group isn\'t shown at all.'],
+    ['ov', 'CM-047', 1, 'SCRUM-299', 'The approved documents\' empty message', OV, 'pass', DECIDE, 'The Approved Documents section was removed in the redesign.'],
+    ['ov', 'CM-048', 1, 'SCRUM-299', 'A case with no documents: every required document listed as Missing', OV, 'pass', DECIDE, 'No empty groups to show.'],
     ['ov', 'CM-049', 1, 'SCRUM-299', 'The open section is kept after a reload', OV, 'pass'],
     ['db', 'CM-050 – CM-052', 3, 'SCRUM-297', 'Cases in view; counts by risk level; each level drawn as a bar of the whole', DB, 'pass'],
     ['db', 'CM-053 – CM-056', 4, 'SCRUM-297', 'Counts follow the status filter; an unscored case shows a dash and why; a row opens its case; the case queue opens', DB, 'pass'],

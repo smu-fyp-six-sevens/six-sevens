@@ -2,7 +2,7 @@
 
 **Story:** SCRUM-323 Sprint 5 Regression Testing
 **Branch:** `SCRUM-323-Sprint-5-Regression-Testing`, from `main` at `f7251e7`
-**Run date:** 2026-11-02
+**Run date:** 2026-11-02; re-run 2026-11-05 after merging `main` at `4976496` (the frontend redesign)
 **Source test cases:** `Test Cases - Sprint 5.xlsx`
 
 ## Summary
@@ -19,18 +19,18 @@ The 93 in-scope cases come from four tabs: Case Management CM-037 – CM-092 (56
 
 | Suite | Tests | Passed | Known defects (expected failures) |
 |---|---|---|---|
-| Backend — pytest (all) | 2743 | 2741 (+2 skipped) | 0 |
-| └ tagged `sprint5` | 313 | 313 | 0 |
-| └ tagged `sprint1` – `sprint4` (re-run) | 1258 | 1256 (+2 skipped) | 0 |
-| Frontend — Playwright (all) | 226 | 226 | 1 (REG-014) |
+| Backend — pytest (all) | 2931 | 2925 (+2 skipped) | 4 (from the Sprint 6 test audit, `backend_tests.md`) |
+| └ tagged `sprint5` | 314 | 314 | 0 |
+| └ tagged `sprint1` – `sprint4` (re-run) | 1275 | 1271 (+2 skipped) | 2 (`test_numerical_validation.py`, from the same audit) |
+| Frontend — Playwright (all) | 240 | 240 | 1 (REG-014) |
 | └ tagged `@sprint5` | 41 | 41 | 0 |
-| └ tagged `@sprint1` – `@sprint4` (re-run) | 136 | 136 | 0 |
+| └ tagged `@sprint1` – `@sprint4` (re-run) | 137 | 137 | 0 |
 
-**Sprints 1 – 4 still pass.**
+**Sprints 1 – 4 still pass.** The expected failures in the backend are known defects that new tests in the Sprint 6 test audit found (`backend_tests.md`), not Sprint 5 cases; each is marked `xfail(strict=True)` with its reason.
 
 **Defects:** none new in this regression. AE-014 and AE-015 failed in the live run and were fixed and passed on re-test; the suite keeps both fixed. REG-014 (Sprint 4, a race in the detection panel) is still open. Its test is now an expected failure, so it can't fail the build at random and will flag the fix when it lands.
 
-**For a decision:** four case-overview cases (CM-041, CM-046, CM-048 and CM-063) describe a layout the app doesn't have. See [Observations](#observations-not-defects).
+**For a decision:** four cases (CM-046, CM-047, CM-048 and CM-063) describe screens the app doesn't have. See [Observations](#observations-not-defects).
 
 ### Acceptance criteria
 
@@ -53,7 +53,7 @@ Same approach as Sprints 1 – 4: real endpoints, workers and LangGraph graphs, 
 - **Detection accuracy:** `tests/test_regression_detection_metrics.py` puts the sheet's own reviews through the real `GET /detection-metrics`: 10 spelling findings with 4 marked wrong, 2 font findings, a numbers check on target, and a metadata check with nothing real to measure recall against.
 - **Audit trail:** `tests/test_regression_audit_trail.py` works through an officer's steps on the Anchorpoint case, each through the real endpoint or worker handler, and reads the events they record. The steps are: upload two utility bills, classify one, confirm its type, add a field, edit one, cancel the second bill, approve the first, and add a note.
 - **Shared fixtures (new):** the last two write `detection-metrics-sprint5.json` and `audit-trail-sprint5.json`. The Playwright Accuracy tab and Audit Trail tests render these, so the UI is tested on what the backend produces, not on hand-built data. Each backend test fails if the code drifts from its fixture (regenerate with `REGENERATE_REGRESSION_FIXTURES=1`). The report download's filename is checked the same way: the backend test pins it, and the mock serves the same name.
-- **Frontend:** a Sprint 5 block in each of `case-management.spec.ts` (case overview, report download), `dashboard.spec.ts` (dashboard and Accuracy tab), `audit-trail.spec.ts` and `case-status.spec.ts`. Five existing tests are tagged `@sprint5` too: four case-stage tests in `case-status.spec.ts` (CM-086, CM-087, CM-089 – CM-091) and the retry-detection test in `detection.spec.ts` (MA-029). Scored cases on the dashboard carry risks the backend computed (`case-risk-sprint4.json`). `mockBackend.ts` gained `detectionMetrics`, the report PDF, and the audit entry finalising records, as `routers/cases.py` does.
+- **Frontend:** the case overview and dashboard blocks were rewritten for `main`'s frontend redesign (5 Nov): the Documents card's status groups, opened with `support/documentGroups.ts`, and the dashboard's case pipeline, risk overview and Needs attention panels. A Sprint 5 block in each of `case-management.spec.ts` (case overview, report download), `dashboard.spec.ts` (dashboard and Accuracy tab), `audit-trail.spec.ts` and `case-status.spec.ts`. Five existing tests are tagged `@sprint5` too: four case-stage tests in `case-status.spec.ts` (CM-086, CM-087, CM-089 – CM-091) and the retry-detection test in `detection.spec.ts` (MA-029). Scored cases on the dashboard carry risks the backend computed (`case-risk-sprint4.json`). `mockBackend.ts` gained `detectionMetrics`, the report PDF, and the audit entry finalising records, as `routers/cases.py` does.
 - **No real AI calls:** whether Claude still picks the right tools and ratings on the real documents is checked by the **manual live run at the end of each sprint**.
 
 Existing tests that already cover Sprint 5 cases are tagged `sprint5` centrally in `conftest.py`: `test_page_consistency.py`, `test_content_guard.py`, `test_prompt_injection.py`, `test_finding_reviews.py`, `test_audit_trail.py`, `test_case_report.py`, `test_case_stage.py`, and the cancel-and-retry tests in `test_events.py` and `test_detection.py`.
@@ -65,10 +65,9 @@ Existing tests that already cover Sprint 5 cases are tagged `sprint5` centrally 
 | ID | Story | Scenario | Automated by | Result |
 |---|---|---|---|---|
 | CM-037 – CM-040 | SCRUM-299 | Company name shown; a scored case's level and score; "Not scored yet" before scoring; a long name cut with an ellipsis, in full on hover, without widening the page | `case-management.spec.ts` | ✅ |
-| CM-041 | SCRUM-299 | Documents organised by status | `case-management.spec.ts` | ⚠️ |
-| CM-042 | SCRUM-299 | A document moves to Approved Documents, or Rejected, when its status changes | `case-management.spec.ts` | ✅ |
-| CM-043 – CM-045 | SCRUM-299 | Each document's name, type and status; "Extracting…" while processing; selecting a document opens it | `case-management.spec.ts` | ✅ |
-| CM-046 – CM-048 | SCRUM-299 | An empty section says so; "No approved documents yet."; a case with no documents | `case-management.spec.ts` | ✅ CM-047 · ⚠️ CM-046, CM-048 |
+| CM-041, CM-042 | SCRUM-299 | Documents grouped by status (Needs Review, Pending Approval, Approved, Rejected); a document moves to the Approved or Rejected group when its status changes | `case-management.spec.ts` | ✅ |
+| CM-043 – CM-045 | SCRUM-299 | Each document's type, name and status; "Extracting…" under Pending Approval while processing; selecting a document opens it | `case-management.spec.ts` | ✅ |
+| CM-046 – CM-048 | SCRUM-299 | A status with no documents; the approved tab's empty message; a case with no documents | `case-management.spec.ts` | ⚠️ |
 | CM-049 | SCRUM-299 | The open section is kept after a reload | `case-management.spec.ts` | ✅ |
 | CM-050 – CM-052 | SCRUM-297 | Cases in view; counts by risk level; each level drawn as a bar of the whole | `dashboard.spec.ts` | ✅ |
 | CM-053 – CM-059 | SCRUM-297 | Counts and chart follow the status filter; an unscored case shows a dash and why; a row opens its case; the case queue opens; a newly scored or deleted case is reflected on refresh; empty state when nothing matches | `dashboard.spec.ts` | ✅ |
@@ -108,11 +107,11 @@ Existing tests that already cover Sprint 5 cases are tagged `sprint5` centrally 
   - `after a cancel whose reply arrives late, a retried run can still be cancelled`. This one holds the cancel reply until the snapshot has arrived (`cancelGate` in `mockBackend.ts`), so it reproduces the defect every time, and it is marked `test.fail()`.
 
   All three passed every one of 10 repeated runs. When the fix lands, the third test will start passing, and Playwright reports that as a failure: remove the `test.fail()` line then.
-- **Sprints 1 – 4:** all re-run and passing (backend 1256 + 2 skipped, Playwright 136).
+- **Sprints 1 – 4:** all re-run and passing after the merge (backend 1271 + 2 skipped, Playwright 137).
 
 ## Observations (not defects)
 
-- **CM-041, CM-046, CM-048 — status tabs (needs a decision):** these cases expect separate Manual Review and Rejected *tabs*, each with an empty state. The app has two sections, Documents and Approved Documents. Documents for manual review and rejected documents are cards inside Documents, and each card is shown only while it has documents. The suite tests what the app does: documents move between the sections and cards, Approved Documents has its empty state, and no empty Rejected card is shown. Either the cases should be reworded to match, or the tabs and their empty states need building (SCRUM-299, `UploadPage.tsx` / `caseSections.ts`).
+- **CM-046, CM-047, CM-048 — empty states (needs a decision):** since the redesign, the Documents card groups a case's documents by status (CM-041 now matches), one group open at a time. A group is shown only while it has documents, so no status shows an empty-state message, and the Approved Documents section (with its "No approved documents yet.") is gone. A case with no documents lists every required document under Missing instead. The suite tests what the app does. Either the cases should be reworded to match, or empty groups need their own message (SCRUM-299, `ExtractedDocumentsCard.tsx`).
 - **CM-063 — documents behind a flagged check (needs a decision):** the case expects the Accuracy tab to list, next to a flagged check, the documents whose findings were marked wrong. The dashboard shows only how many documents were reviewed. Each document's own results per check are on the case's Risk section (`GET /cases/{id}/finding-reviews`), and the suite tests that: the bank statement's spelling is 4 wrong (0%) and the payslip's is 6 correct (100%). The live run passed this case, so it's worth checking what was looked at. Either the case should point to the case page, or the Accuracy tab needs the document list (SCRUM-297, `DetectionAccuracyPanel.tsx`).
 - **CD-035 (failed live):** in the live document, page 3 had no amounts on it. The furniture rule keeps a first or last page with no amounts (a cover or terms page) out of the font comparison, which is what CD-036 wants. With page 3 holding transactions in other fonts, the suite gets the expected low-severity PAGE.SOURCE finding on page 3. The test document should get transactions on its odd page.
 - **CD-023 (not tested live):** "can't approve a document with no fields". A scan whose text can be read is OCR'd and checked, so this case needs a scan with no readable text at all, and such a document can't be approved, so detection never runs on it from the UI. The suite runs detection on blank scanned pages directly and gets "No text could be read from any page" (unable to assess).

@@ -92,7 +92,6 @@ class Runs:
         return True
 
     def trace(self, run_id) -> list[dict]:
-        run_trace._writer.submit(lambda: None).result()  # the trace is saved on a background thread
         return self.traces.get(run_id, [])
 
 
@@ -120,6 +119,8 @@ def runs(monkeypatch) -> Runs:
     fake = Runs()
     for name in ("insert_run", "latest_run_state", "write_trace", "finish_run"):
         monkeypatch.setattr(f"app.case_pipeline.repository.{name}", getattr(fake, name))
+    # A trace is saved on a background thread; here at once, so a test reads it as soon as the run has saved it.
+    monkeypatch.setattr(run_trace.RunTrace, "save", lambda trace: fake.write_trace(trace.run_id, list(trace.events)))
     return fake
 
 

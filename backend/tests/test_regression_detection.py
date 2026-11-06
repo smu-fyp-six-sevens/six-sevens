@@ -20,6 +20,8 @@ ones and run the real checks in fraud_detection/ on the document's bytes.
 Only Claude's replies are scripted, by FakeClaude standing in for
 build_chat_anthropic — no request ever leaves the test (conftest.py also
 blocks real Claude calls). The database and storage are in-memory fakes.
+The harness is tests/support/detection_harness.py, the generated documents
+tests/support/detection_documents.py; other detection suites share both.
 
 The scripted specialists behave like a well-behaved Claude: they call the
 tools named in the script, then rate every finding those tools returned.
@@ -34,420 +36,30 @@ of each sprint.
 """
 from __future__ import annotations
 
-import io
 import json
 import os
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 
-import pymupdf
 import pytest
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
-from PIL import Image, ImageDraw
 
-from app import findings_repository
-from app.fraud_detection.font_consistency import ExtractedField
-from app.fraud_detection.external_validation.sg_reference.holidays import BUNDLED_HOLIDAYS
-from app.langgraph import trace
-from app.langgraph.detection import tools as detection_tools
 from app.langgraph.detection.graph import run_detection
 from app.langgraph.detection.specialists import SPECIALISTS
-from app.models import DocumentRecord, DocumentStatus, RoutingStatus
+from tests.support import detection_harness
+from tests.support.detection_documents import (
+    CLEAN_METADATA, TAMPERED_METADATA, certificate_pdf, clauses_pdf, credit_report_with_font_and_metadata_tampering,
+    id_card_pdf, image_only_pdf, payslip_pdf,
+)
+from tests.support.detection_harness import (
+    CONTENT, DIGITAL, LAYOUT, DetectionAI, FakeStore, Review, Specialist, consulted, findings_from, indicators,
+)
+
+# The harness's fixtures: scripted Claude, the in-memory store, and the cleanup after each run.
+ai = detection_harness.ai
+store = detection_harness.store
+_clear_detection_memory = detection_harness._clear_detection_memory
 
 FIXTURES = Path(__file__).parent / "fixtures" / "regression"
 
-LAYOUT, CONTENT, DIGITAL = "layout_rendering", "content_validation", "digital_authenticity"
-
-
-# --- scripted Claude -------------------------------------------------------------
-
-
-@dataclass
-class Specialist:
-    """One specialist's scripted behaviour: which tools it calls, and how it rates what they find."""
-
-    tools: list[str] = field(default_factory=list)
-    severity: str = "medium"
-    # finding id or tool name -> severity, overriding `severity`
-    rate: dict[str, str] = field(default_factory=dict)
-    # finding ids or tool names it dismisses as false positives
-    dismiss: set[str] = field(default_factory=set)
-    summary: str = "Reviewed within my expertise."
-    # The specialist's confidence in its review and in each assessment (0: it gave none).
-    confidence: float = 0.0
-
-
-@dataclass
-class Review:
-    summary: str
-    second_look: dict | None = None
-
-
-class DetectionAI:
-    """Answers each AI step of the detection graph from a script, and records every call."""
-
-    def __init__(self) -> None:
-        self.briefs = {name: f"Brief for {name}." for name in SPECIALISTS}
-        self.specialists: dict[str, Specialist] = {name: Specialist() for name in SPECIALISTS}
-        self.second_looks: dict[str, Specialist] = {}
-        self.reviews: list[Review] = []
-        self.calls: list[str] = []
-
-    def answer(self, messages: list[BaseMessage]) -> AIMessage:
-        system = _text(messages[0].content)
-        if "write each one a brief" in system:
-            self.calls.append("lead_plan")
-            return AIMessage(content=json.dumps({"briefs": self.briefs}))
-        if "Your specialists have reported" in system:
-            self.calls.append("lead_review")
-            review = self.reviews.pop(0) if self.reviews else Review("Nothing worth flagging was found.")
-            return AIMessage(content=json.dumps({"summary": review.summary, "second_look": review.second_look}))
-        if "fill in the inputs of a bank's forgery-check numerical checks" in system:
-            self.calls.append("numerical_binder")
-            return AIMessage(content=json.dumps({"bindings": []}))
-        name = next(n for n, spec in SPECIALISTS.items() if f"You are the {spec.title}" in system)
-        second_look = "SECOND LOOK requested" in system
-        script = self.second_looks[name] if second_look else self.specialists[name]
-        step = f"{name}:second_look" if second_look else name
-        # Its own tools, once: a result already there from another tool (the pre-run injection check) doesn't count.
-        if not any(isinstance(m, ToolMessage) and m.name in script.tools for m in messages) and script.tools:
-            self.calls.append(f"{step}:tools")
-            return AIMessage(content="", tool_calls=[
-                {"name": tool, "args": {}, "id": f"{step}-{tool}"} for tool in script.tools
-            ])
-        self.calls.append(f"{step}:report")
-        return AIMessage(content=json.dumps(_assess(script, messages)))
-
-
-def _assess(script: Specialist, messages: list[BaseMessage]) -> dict:
-    assessments = []
-    for message in messages:
-        if not isinstance(message, ToolMessage):
-            continue
-        result = json.loads(_text(message.content))
-        for finding in result.get("findings") or []:
-            keys = (finding["id"], result["tool"])
-            if any(key in script.dismiss for key in keys):
-                assessments.append({"finding_id": finding["id"], "dismiss": True, "severity": None,
-                                    "rationale": "False positive for this document.", "confidence": script.confidence})
-                continue
-            severity = next((script.rate[key] for key in keys if key in script.rate), script.severity)
-            assessments.append({"finding_id": finding["id"], "dismiss": False, "severity": severity,
-                                "rationale": f"Rated {severity}.", "confidence": script.confidence})
-    return {"summary": script.summary, "confidence": script.confidence, "assessments": assessments,
-            "uncertain": False, "uncertainty_reason": None}
-
-
-def _text(content) -> str:
-    if isinstance(content, str):
-        return content
-    return "".join(block.get("text", "") for block in content if isinstance(block, dict))
-
-
-class FakeClaude:
-    """Duck-types the parts of ChatAnthropic the detection graph uses."""
-
-    def __init__(self, ai: DetectionAI) -> None:
-        self.ai = ai
-
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    async def ainvoke(self, messages):
-        return self.ai.answer(list(messages))
-
-
-# --- in-memory database and storage ------------------------------------------------
-
-
-class FakeStore:
-    """Stands in for document_repository, extracted_fields_repository and storage_service."""
-
-    def __init__(self) -> None:
-        self.documents: dict[str, DocumentRecord] = {}
-        self.fields: dict[str, list[ExtractedField]] = {}
-        self.files: dict[str, bytes] = {}
-        self.statuses: dict[str, list[str]] = {}
-        self.guard_results: dict[str, dict] = {}
-        self.reports: dict[str, dict] = {}
-        self.errors: dict[str, str] = {}
-
-    def add(self, filename: str, document_type: str, file: bytes, *, fields: dict | None = None,
-            metadata: dict | None = None) -> str:
-        """An approved document awaiting detection, its file in storage and its fields extracted."""
-        document = DocumentRecord(
-            id=f"doc-{len(self.documents) + 1}",
-            case_id="case-1",
-            filename=filename,
-            document_type=document_type,
-            classification_confidence=0.97,
-            routing_status=RoutingStatus.ACCEPTED,
-            storage_path=f"case-1/{filename}",
-            status=DocumentStatus.APPROVED,
-            uploaded_at=datetime.now(timezone.utc),
-            metadata=metadata,
-            extracted_fields=fields,
-        )
-        self.add_record(document, file)
-        return document.id
-
-    def add_record(self, document: DocumentRecord, file: bytes | None = None) -> None:
-        self.documents[document.id] = document
-        self.fields[document.id] = [
-            ExtractedField(field_name=name, field_type="string", field_value=value, confidence=0.97)
-            for name, value in (document.extracted_fields or {}).items()
-        ]
-        if file is not None:
-            assert document.storage_path is not None
-            self.files[document.storage_path] = file
-
-    # document_repository
-    def get_document(self, document_id, include_fields=True, include_metadata=False):
-        return self.documents.get(document_id)
-
-    def get_guard_result(self, document_id):
-        """What the content guard saved at ingest: clean, unless a test sets one."""
-        return self.guard_results.get(document_id, {
-            "version": 2, "risk": "none", "checks_run": ["hidden_text", "image_text", "dictionary"],
-            "spans": [], "spans_dropped": 0,
-        })
-
-    def get_document_for_detection(self, document_id):
-        document = self.documents.get(document_id)
-        return (document, self.get_guard_result(document_id)) if document else None
-
-    def list_documents(self, case_id=None, **kwargs):
-        return [d for d in self.documents.values() if d.case_id == case_id]
-
-    def _status(self, document_id, status):
-        self.documents[document_id].status = status
-        self.statuses.setdefault(document_id, []).append(status.value)
-
-    def mark_detecting(self, document_id):
-        self._status(document_id, DocumentStatus.DETECTING)
-
-    def mark_detected(self, document_id):
-        self._status(document_id, DocumentStatus.DETECTED)
-
-    def revert_to_approved(self, document_id):
-        self._status(document_id, DocumentStatus.APPROVED)
-
-    def end_unfinished_detection(self, document_id, *, has_report):
-        if self.documents[document_id].status == DocumentStatus.DETECTING:
-            self._status(document_id, DocumentStatus.DETECTED if has_report else DocumentStatus.APPROVED)
-
-    # detection_results
-    def mark_started(self, document_id):
-        self.errors.pop(document_id, None)
-
-    def save_report(self, document_id, report):
-        self.reports[document_id] = report
-
-    def save_error(self, document_id, error):
-        self.errors[document_id] = error
-
-    def has_report(self, document_id):
-        return document_id in self.reports
-
-    # extracted_fields_repository
-    def get_extracted_fields(self, document_id):
-        return self.fields.get(document_id, [])
-
-    # storage_service
-    def download_file(self, storage_path):
-        return self.files[storage_path]
-
-
-@pytest.fixture
-def ai(monkeypatch) -> DetectionAI:
-    script = DetectionAI()
-    fake = lambda model, max_tokens, **kwargs: FakeClaude(script)  # noqa: E731
-    monkeypatch.setattr("app.langgraph._anthropic.build_chat_anthropic", fake)
-    monkeypatch.setattr("app.langgraph.detection.field_checks.binder.build_chat_anthropic", fake)
-    return script
-
-
-def wire_store(monkeypatch, fake: FakeStore) -> None:
-    """Puts the in-memory store in place of the database and storage the detection graph and its tools use."""
-    for module in ("app.langgraph.detection.graph", "app.langgraph.detection.tools"):
-        monkeypatch.setattr(f"{module}.document_repository", fake)
-        monkeypatch.setattr(f"{module}.extracted_fields_repository", fake)
-    monkeypatch.setattr("app.langgraph.detection.tools.storage_service", fake)
-    monkeypatch.setattr("app.langgraph.detection.graph.detection_results", fake)
-    # Detection ends by comparing the document with its case's identity; that has its own regression file
-    # (test_regression_case_match), so here each document is tested in isolation and the case is taken to match.
-    monkeypatch.setattr("app.case_service.get_case_match_for_document", lambda document_id, **_kwargs: None)
-
-    async def bundled_holidays():
-        return BUNDLED_HOLIDAYS
-
-    # Bank statements fetch the live public-holiday list; the bundled copy keeps the test offline.
-    monkeypatch.setattr("app.fraud_detection.external_validation.runner.public_holidays", bundled_holidays)
-    monkeypatch.setattr(trace, "_persist", lambda document_id: None)
-    monkeypatch.setattr(trace, "get_persisted", lambda document_id: None)
-    monkeypatch.setattr(findings_repository, "sync_document", lambda document_id, case_id, report: 0)
-
-
-@pytest.fixture
-def store(monkeypatch) -> FakeStore:
-    fake = FakeStore()
-    wire_store(monkeypatch, fake)
-    return fake
-
-
-@pytest.fixture(autouse=True)
-def _clear_detection_memory():
-    yield
-    trace._traces.clear()
-    detection_tools._context.clear()
-
-
-def findings_from(report: dict, tool: str) -> list[dict]:
-    return [f for f in report["findings"] if f["tool"] == tool]
-
-
-def indicators(report: dict, tool: str) -> set[str]:
-    return {f["indicator"] for f in findings_from(report, tool)}
-
-
-def consulted(report: dict, name: str) -> dict:
-    return next(c for c in report["consulted"] if c["specialist"] == name)
-
-
-# --- generated documents ----------------------------------------------------------
-# Each builder writes a small native-text PDF; the tampered variant carries
-# exactly the anomaly its test case injects into the real test document.
-
-
-def _pdf(build: Callable[[pymupdf.Document], None]) -> bytes:
-    doc = pymupdf.open()
-    build(doc)
-    data = doc.tobytes()
-    doc.close()
-    return data
-
-
-_LABELS = ["Basic salary", "Overtime pay", "Transport allowance", "Employee CPF", "Income tax", "Net pay"]
-_AMOUNTS = ["$5,200.00", "$480.00", "$300.00", "$1,040.00", "$212.00", "$4,728.00"]
-
-
-def payslip_pdf(*, font: dict[int, str] | None = None, size: dict[int, float] | None = None,
-                underline: int | None = None) -> bytes:
-    """A payslip's label/amount table; the overrides restyle one label (SCRUM-61's three tampers)."""
-
-    def build(doc):
-        page = doc.new_page(width=400, height=300)
-        for i, (label, amount) in enumerate(zip(_LABELS, _AMOUNTS, strict=True)):
-            y = 80 + i * 18
-            label_font = (font or {}).get(i, "helv")
-            label_size = (size or {}).get(i, 9)
-            page.insert_text((50, y), label, fontsize=label_size, fontname=label_font)
-            page.insert_text((250, y), amount, fontsize=9, fontname="helv")
-            if i == underline:
-                width = pymupdf.get_text_length(label, label_font, label_size)
-                page.draw_line((50, y + 2), (50 + width, y + 2), width=0.6)
-
-    return _pdf(build)
-
-
-_CLAUSE = (
-    "The registered office of the Company shall be at such place in Singapore "
-    "as the directors may from time to time determine, and the Company shall "
-    "keep its registers at that office in accordance with the Act."
-)
-
-
-def clauses_pdf(*, indent_third: bool = False, overlay: str | None = None) -> bytes:
-    """Four body paragraphs; tampered by indenting one (SCRUM-62) or typing over one (SCRUM-63)."""
-
-    def build(doc):
-        page = doc.new_page(width=612, height=792)
-        y = 90
-        for i in range(4):
-            left = 96 if indent_third and i == 2 else 72
-            page.insert_textbox(pymupdf.Rect(left, y, 540, y + 70), _CLAUSE, fontsize=11, fontname="helv")
-            y += 80
-        if overlay:
-            page.insert_text((150, 104), overlay, fontsize=11, fontname="helv")
-
-    return _pdf(build)
-
-
-_CREST = pymupdf.Rect(100, 100, 220, 240)
-
-
-def _crest(width: int = 300, height: int = 350) -> Image.Image:
-    image = Image.new("RGB", (width, height), (255, 255, 255))
-    draw = ImageDraw.Draw(image)
-    draw.ellipse((40, 40, width - 40, height - 90), fill=(220, 40, 50), outline=(30, 30, 30), width=4)
-    draw.polygon([(width // 2, 70), (width // 2 + 40, 160), (width // 2 - 40, 160)], fill=(250, 250, 250))
-    draw.rectangle((60, height - 80, width - 60, height - 60), fill=(200, 160, 30))
-    return image
-
-
-def _encode(image: Image.Image, fmt: str = "PNG", quality: int = 90) -> bytes:
-    buffer = io.BytesIO()
-    image.save(buffer, fmt, quality=quality)
-    return buffer.getvalue()
-
-
-def id_card_pdf(*, replace_crest: bool = False) -> bytes:
-    """An ID page with one crest; tampered by painting the crest over with a low-resolution JPEG copy."""
-
-    def build(doc):
-        page = doc.new_page(width=595, height=842)
-        page.insert_text((72, 72), "REPUBLIC OF SINGAPORE", fontsize=16)
-        page.insert_image(_CREST, stream=_encode(_crest()))
-        if replace_crest:
-            cover = pymupdf.Rect(_CREST.x0 - 0.8, _CREST.y0 - 0.8, _CREST.x1 + 0.8, _CREST.y1 + 0.8)
-            page.draw_rect(cover, color=None, fill=(1, 1, 1), overlay=True)
-            low_res = _encode(_crest().resize((52, 60)), "JPEG", quality=16)
-            page.insert_image(cover, stream=low_res, keep_proportion=False)
-
-    return _pdf(build)
-
-
-def image_only_pdf() -> bytes:
-    """A page that is one picture: no text for the font and layout checks to read."""
-
-    def build(doc):
-        page = doc.new_page(width=200, height=200)
-        page.insert_image(pymupdf.Rect(20, 20, 180, 120), stream=_encode(_crest()))
-
-    return _pdf(build)
-
-
-def certificate_pdf(company_name: str) -> bytes:
-    def build(doc):
-        page = doc.new_page(width=595, height=842)
-        lines = [
-            "ACCOUNTING AND CORPORATE REGULATORY AUTHORITY",
-            "CERTIFICATE CONFIRMING INCORPORATION OF COMPANY",
-            f"This is to confirm that {company_name}",
-            "Registration No. 201634564N",
-            "is incorporated under the Companies Act 1967 on 26 March 2016",
-            "and that the company is a private company limited by shares.",
-        ]
-        for i, line in enumerate(lines):
-            page.insert_text((72, 100 + i * 24), line, fontsize=11, fontname="helv")
-
-    return _pdf(build)
-
-
-# A credit report's embedded metadata (what ingestion's exiftool stored).
-TAMPERED_METADATA = {
-    "Author": "FraudTests",
-    "Creator": "Adobe Acrobat Pro (64-bit) 24.1",
-    "Producer": "Adobe Acrobat Pro (64-bit) 24.1",
-}
-CLEAN_METADATA = {
-    "Producer": "Experian Credit Bureau Report Generator",
-    "Creator": "Experian",
-    "CreateDate": "2026:04:14 09:00:00",
-    "ModifyDate": "2026:04:14 09:00:00",
-}
 
 
 # --- SCRUM-65 Image manipulation: boundary, scaling & colour ---------------------
@@ -703,16 +315,10 @@ async def test_an_untouched_image_raises_no_resolution_or_compression_finding(ai
 # --- SCRUM-119 Lead Detection Agent ------------------------------------------------------
 
 
-def _credit_report_with_font_and_metadata_tampering(store: FakeStore) -> str:
-    """C028 in the live run: a restyled field and Acrobat/"FraudTests" metadata."""
-    return store.add("C028_CreditReport.pdf", "credit_report", payslip_pdf(font={2: "cour"}),
-                     metadata=TAMPERED_METADATA)
-
-
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-119", "FD-015")
 async def test_detection_produces_one_verdict_one_summary_and_one_findings_list(ai, store):
-    document_id = _credit_report_with_font_and_metadata_tampering(store)
+    document_id = credit_report_with_font_and_metadata_tampering(store)
     ai.specialists[LAYOUT] = Specialist(tools=["font_consistency_tool", "layout_anomalies_tool"])
     ai.specialists[DIGITAL] = Specialist(tools=["metadata_tool"])
     ai.reviews = [Review("The font of one field and the file's metadata both point to editing.")]
@@ -839,7 +445,7 @@ def _second_look_request(finding_id: str, to: str) -> dict:
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-119", "FD-020")
 async def test_a_second_look_runs_once_on_a_different_specialist_and_shows_the_question(ai, store):
-    document_id = _credit_report_with_font_and_metadata_tampering(store)
+    document_id = credit_report_with_font_and_metadata_tampering(store)
     ai.specialists[LAYOUT] = Specialist(tools=["font_consistency_tool"])
     ai.specialists[DIGITAL] = Specialist(tools=[])  # first pass: nothing run
     ai.second_looks[DIGITAL] = Specialist(tools=["metadata_tool"])
@@ -870,7 +476,7 @@ async def test_a_second_look_runs_once_on_a_different_specialist_and_shows_the_q
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-119", "FD-020")
 async def test_a_second_look_back_to_the_specialist_that_raised_the_finding_is_refused(ai, store):
-    document_id = _credit_report_with_font_and_metadata_tampering(store)
+    document_id = credit_report_with_font_and_metadata_tampering(store)
     ai.specialists[LAYOUT] = Specialist(tools=["font_consistency_tool"])
     ai.reviews = [Review("Asking the same specialist again.", _second_look_request("font_consistency_tool-1", LAYOUT))]
 
@@ -967,7 +573,7 @@ DETECTION_REPORT_FIXTURE = FIXTURES / "detection-report-c028.json"
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-119", "FD-015 – FD-020")
 async def test_the_playwright_suites_detection_report_matches_the_graph(ai, store):
-    document_id = _credit_report_with_font_and_metadata_tampering(store)
+    document_id = credit_report_with_font_and_metadata_tampering(store)
     ai.briefs = {
         LAYOUT: "Credit report with printed figures: check fonts and layout.",
         CONTENT: "Check the dates and the credit report's internal consistency.",

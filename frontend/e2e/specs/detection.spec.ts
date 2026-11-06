@@ -42,9 +42,9 @@ async function rejectDocument(page: Page) {
 const documentStatus = (page: Page) => page.locator('.document-status');
 const detectionPanel = (page: Page) => page.getByRole('region', { name: 'Detection' });
 const verdict = (page: Page) => detectionPanel(page).locator('.detection-verdict');
-const extractedCard = (page: Page) => page.locator('.documents-card:not(.approved-documents-card, .rejected-documents-card)');
+const extractedCard = (page: Page) => page.getByTestId('documents-card');
 // Approved documents are a folded group at the foot of the Documents card.
-const approvedGroup = (page: Page) => page.locator('.documents-table-group--toggle', { hasText: 'Approved' });
+const approvedGroup = (page: Page) => page.getByTestId('document-group').filter({ hasText: 'Approved' });
 
 /** A real credit report from GLDB-02 that is ready to approve (no flagged fields). */
 function creditReport(backend: MockBackend) {
@@ -101,7 +101,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await page.goto(`${fixture.caseUrl}?section=documents`);
     await expect(extractedCard(page)).not.toContainText(document.filename);
     await approvedGroup(page).click();
-    await expect(page.locator('.documents-card')).toContainText(document.filename);
+    await expect(page.getByTestId('documents-card')).toContainText(document.filename);
   });
 
   test('MA-006 a document not yet approved stays in Uploaded Files @MA-006', async ({ page, backend }) => {

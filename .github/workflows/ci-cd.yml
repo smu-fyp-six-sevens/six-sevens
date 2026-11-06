@@ -142,6 +142,10 @@ jobs:
       - name: Type-check frontend
         run: npm run typecheck
 
+      # The logic below the browser (hooks, approval rules, filters), in a simulated DOM (vitest, src/**/*.test.ts).
+      - name: Run unit tests
+        run: npm test
+
       - name: Build frontend
         run: npm run build
 

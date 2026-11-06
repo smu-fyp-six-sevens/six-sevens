@@ -621,3 +621,27 @@ def test_every_documents_status_is_read_a_page_at_a_time() -> None:
            "uploaded_at": "2026-08-26T00:00:00Z", "queued_at": None, "processing_started_at": None}
     with patch("app.document_repository.fetch_all", return_value=[row, row]):
         assert len(document_repository.list_all_document_statuses()) == 2
+
+
+# --- The case stage refresh a request leaves behind -----------------------------------------------------------
+
+
+def test_flushing_runs_the_requests_scheduled_refreshes_now_and_leaves_other_requests_alone(monkeypatch) -> None:
+    from app import document_repository
+
+    synced: list[str] = []
+    monkeypatch.setattr(document_repository, "SYNC_DEBOUNCE_SECONDS", 60)  # far enough off that only a flush runs it
+    monkeypatch.setattr(document_repository, "_sync_now", synced.append)
+    mine = document_repository.track_request_syncs()
+    document_repository._sync_case("case-1")
+    document_repository._sync_case("case-1")  # a second write shares the pending refresh
+    document_repository._sync_case("case-other")
+    try:
+        document_repository.flush_syncs({"case-1"})
+
+        assert synced == ["case-1"]
+        assert mine == {"case-1", "case-other"}
+        assert "case-1" not in document_repository._sync_timers
+        assert "case-other" in document_repository._sync_timers  # another request's, not flushed here
+    finally:
+        document_repository.flush_syncs({"case-other"})

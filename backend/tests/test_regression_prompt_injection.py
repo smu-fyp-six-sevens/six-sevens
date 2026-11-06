@@ -18,9 +18,9 @@ from app.guardrails import content_guard
 from app.ingestion.ingestion_service import ingest_document
 from app.langgraph.detection.graph import run_detection
 from app.models import DocumentStatus
-from tests import test_regression_detection as detection_harness
-from tests.test_regression_content_guard import exiftool_metadata, payslip_pdf
-from tests.test_regression_detection import DIGITAL, LAYOUT, Specialist, consulted, findings_from
+from tests.support import detection_harness
+from tests.support.guard_payslips import exiftool_metadata, payslip_pdf
+from tests.support.detection_harness import DIGITAL, LAYOUT, Specialist, consulted, findings_from
 
 ai = detection_harness.ai
 _clear_detection_memory = detection_harness._clear_detection_memory

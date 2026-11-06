@@ -44,10 +44,10 @@ const REQUIRED_VALUES = [
 
 // The Documents card is the checklist: what the case still lacks is listed in its Missing group, one row per
 // required document, and everything the case has is a file row under the other groups.
-const card = (page: Page) => page.locator('.documents-card');
+const card = (page: Page) => page.getByTestId('documents-card');
 const progress = (page: Page) => card(page).locator('.checklist-progress');
 const missingRow = (page: Page, label: string) =>
-  page.locator('.checklist-missing-row:not(.checklist-optional-row)').filter({
+  page.getByTestId('missing-document').filter({
     has: page.locator('.document-type-cell', { hasText: new RegExp(`^${label.replace(/[()/]/g, '\\$&')}$`) }),
   });
 // The optional documents the case has none of yet, listed in their own group.
@@ -59,11 +59,11 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
     const fulfilled = new Set(fixture.case.fulfilled_requirements);
-    await expect(page.locator('.checklist-missing-row:not(.checklist-optional-row)')).toHaveCount(REQUIRED.length - [...fulfilled].filter((value) => REQUIRED_VALUES.includes(value)).length);
+    await expect(page.getByTestId('missing-document')).toHaveCount(REQUIRED.length - [...fulfilled].filter((value) => REQUIRED_VALUES.includes(value)).length);
     await expect(progress(page)).toContainText(`of ${REQUIRED.length} required`);
     // The optional documents are not part of the count, and only the ones still lacking are named.
     for (const label of ADDITIONAL) {
-      await expect(page.locator('.checklist-missing-row:not(.checklist-optional-row)').filter({ hasText: label })).toHaveCount(0);
+      await expect(page.getByTestId('missing-document').filter({ hasText: label })).toHaveCount(0);
     }
     await openGroup(page, 'Additional');
     await expect(additionalNote(page)).toContainText('only if the case needs them');
@@ -100,7 +100,7 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
     await expect(additionalNote(page)).toContainText('Company Proof of Address');
     await expect(additionalNote(page)).not.toContainText('List of Loans');
     await expect(progress(page)).toContainText(`${REQUIRED.length} of ${REQUIRED.length} required`);
-    await expect(page.locator('.checklist-missing-row:not(.checklist-optional-row)')).toHaveCount(0);
+    await expect(page.getByTestId('missing-document')).toHaveCount(0);
 
     // DI-032: none of the optional documents at all.
     removeDocuments('LoanFacility', 'LoanOffer', 'FacilityLetter', 'SimS_SourceOfWealth', 'Wealth_Statement_scan');
@@ -109,9 +109,9 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
       await expect(additionalNote(page)).toContainText(label);
     }
     await expect(progress(page)).toContainText(`${REQUIRED.length} of ${REQUIRED.length} required`);
-    await expect(page.locator('.checklist-missing-row:not(.checklist-optional-row)')).toHaveCount(0);
+    await expect(page.getByTestId('missing-document')).toHaveCount(0);
     await page.goto('/cases');
-    await expect(page.locator('.case-row').filter({ hasText: 'Anchorpoint' })).toContainText('Pending Review');
+    await expect(page.getByTestId('case-row').filter({ hasText: 'Anchorpoint' })).toContainText('Pending Review');
   });
 });
 
@@ -128,12 +128,12 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
     ];
     for (const [filename, type, label] of expected) {
       await openGroupWith(page, filename);
-      const row = page.locator('.documents-table-row').filter({ hasText: filename });
+      const row = page.getByTestId('document-row').filter({ hasText: filename });
       await expect(row.locator('.document-type-cell')).toHaveText(new RegExp(type, 'i'));
       await expect(missingRow(page, label)).toHaveCount(0);
     }
     await openGroupWith(page, 'C014_ListLoans');
-    const loans = page.locator('.documents-table-row').filter({ hasText: 'C014_ListLoans' });
+    const loans = page.getByTestId('document-row').filter({ hasText: 'C014_ListLoans' });
     await expect(loans.locator('.document-type-cell')).toHaveText(/list of loans/i);
     await expect(additionalNote(page)).not.toContainText('List of Loans');
   });
@@ -147,7 +147,7 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
 
     for (const side of ['MuhammadD_NRIC_front.jpg', 'MuhammadD_NRIC_back.jpg']) {
       await openGroupWith(page, side);
-      await expect(page.locator('.documents-table-row').filter({ hasText: side }).locator('.document-type-cell')).toHaveText(/nric/i);
+      await expect(page.getByTestId('document-row').filter({ hasText: side }).locator('.document-type-cell')).toHaveText(/nric/i);
     }
   });
 
@@ -221,8 +221,8 @@ test.describe('Map documents @sprint2 @SCRUM-118', () => {
 });
 
 test.describe('Documents categories open one at a time', () => {
-  const groups = (page: Page) => card(page).locator('.documents-table-group--toggle');
-  const group = (page: Page, name: string) => card(page).locator('.documents-table-group--toggle', { hasText: name });
+  const groups = (page: Page) => card(page).getByTestId('document-group');
+  const group = (page: Page, name: string) => card(page).getByTestId('document-group').filter({ hasText: name });
 
   test('the first category opens on load, and opening another closes it', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'harbor-light');
@@ -231,13 +231,13 @@ test.describe('Documents categories open one at a time', () => {
     // Missing comes first, so it is the one open.
     await expect(group(page, 'Missing')).toHaveAttribute('aria-expanded', 'true');
     await expect(groups(page).locator('xpath=self::*[@aria-expanded="true"]')).toHaveCount(1);
-    await expect(page.locator('.checklist-missing-row:not(.checklist-optional-row)').first()).toBeVisible();
+    await expect(page.getByTestId('missing-document').first()).toBeVisible();
 
     await group(page, 'Pending Approval').click();
 
     await expect(group(page, 'Pending Approval')).toHaveAttribute('aria-expanded', 'true');
     await expect(group(page, 'Missing')).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.locator('.checklist-missing-row:not(.checklist-optional-row)')).toHaveCount(0);
+    await expect(page.getByTestId('missing-document')).toHaveCount(0);
     await expect(groups(page).locator('xpath=self::*[@aria-expanded="true"]')).toHaveCount(1);
 
     // Opening the open one closes it, leaving none.
@@ -276,7 +276,7 @@ test.describe('Documents categories open one at a time', () => {
 
 test.describe('A document that stands as proof of address says so', () => {
   const typeCell = (page: Page, filename: string) =>
-    page.locator('.documents-table-row').filter({ hasText: filename }).locator('.document-type-cell');
+    page.getByTestId('document-row').filter({ hasText: filename }).locator('.document-type-cell');
 
   test('a personal bank statement reads "Bank Statement (Proof of Address)", a corporate one just "Bank Statement"', async ({ page, backend }) => {
     const theCase = makeCase({ id: 'case-poa', greenlink_case_id: 'GLDB-6001', company_name: 'Label Co' });
@@ -332,7 +332,7 @@ test.describe('Documents are listed A to Z by type', () => {
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=documents`);
     await openGroup(page, 'Pending Approval');
 
-    await expect(card(page).locator('.documents-table-row .document-filename-line')).toHaveText([
+    await expect(card(page).getByTestId('document-row').locator('.document-filename-line')).toHaveText([
       'c_statement.pdf', // Bank Statement (Proof of Address)
       'd_incumbency.pdf', // Certificate of Incumbency
       'b_fatca.pdf', // FATCA/CRS Declaration

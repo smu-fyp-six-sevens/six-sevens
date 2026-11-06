@@ -11,6 +11,7 @@ import DocumentPreviewPane, { ShowDocumentButton } from '../components/DocumentP
 import KebabMenu from '../components/KebabMenu';
 import { DocumentBodySkeleton } from '../components/Skeletons';
 import {
+  canApproveDocument,
   canCancelDocument,
   canRejectDocument,
   canRetryDocument,
@@ -22,6 +23,7 @@ import {
   hasExtractedInformation,
   isBlockedByContentGuard,
   isClassificationConfirmed,
+  lowConfidenceFieldNames,
   skipsDetection,
 } from '../services/uploadService';
 import { displayableFieldEntries } from './document-details/fieldDisplay';
@@ -115,15 +117,7 @@ export default function DocumentDetailsPage({
   const isLocked = isApproved || document?.status === 'rejected' || caseFinalised;
   // Fields still under the threshold haven't been reviewed: "Save fields" marks every reviewed field.
   const lowConfidenceFields = useMemo(
-    () =>
-      Object.entries(document?.extracted_fields ?? {})
-        .filter(([, raw]) => {
-          const confidence =
-            raw && typeof raw === 'object' ? (raw as { confidence?: unknown }).confidence : null;
-          return typeof confidence === 'number' && confidence < EXTRACTION_CONFIDENCE_THRESHOLD;
-        })
-        .map(([fieldName]) => fieldName)
-        .sort(),
+    () => lowConfidenceFieldNames(document?.extracted_fields ?? null),
     [document?.extracted_fields],
   );
 
@@ -136,13 +130,7 @@ export default function DocumentDetailsPage({
   const isOtherDocument = document?.document_type === 'unrecognised';
   const otherFieldsUnsaved = isOtherDocument && !document?.fields_reviewed_at;
 
-  const canApprove =
-    document?.status === 'analyzed' &&
-    isTypeConfirmed &&
-    hasExtractedInfo &&
-    (document.missing_required_fields?.length ?? 0) === 0 &&
-    lowConfidenceFields.length === 0 &&
-    !otherFieldsUnsaved;
+  const canApprove = document ? canApproveDocument(document) : false;
 
   const missingRequiredFields = useMemo(
     () => document?.missing_required_fields ?? [],

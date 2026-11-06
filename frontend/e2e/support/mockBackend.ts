@@ -134,6 +134,15 @@ export interface DocumentRow {
   metadata: Record<string, unknown> | null;
 }
 
+/** A review sign-off as GET /cases/{id}/finding-reviews returns it, with the case it belongs to. */
+export interface SignOffRow {
+  case_id: string;
+  scope: 'document' | 'case';
+  document_id: string | null;
+  reviewer: string;
+  updated_at: string;
+}
+
 export interface NoteRow {
   id: string;
   case_id: string;
@@ -334,6 +343,8 @@ export class MockBackend {
   contentGuards: Record<string, unknown> = {};
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
+  /** Officers' reviews of groups with no findings to mark, one per case and group, like findings_repository.sign_off. */
+  signOffs: SignOffRow[] = [];
   /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
   auditEvents: AuditEvent[] = [];
   /** Each case's latest analysis run (GET /cases/:id/analysis); none = 404. POST .../analysis/run starts one. */
@@ -662,21 +673,30 @@ export class MockBackend {
     if (reviewedCase && this.cases.find((c) => c.id === reviewedCase[1])?.reviews_required === false) {
       return json({ detail: 'This case was created without finding reviews.' }, 409);
     }
-    // Officers' reviews of findings (precision/recall): none recorded, so every rate is "nothing to measure".
-    const reviews = (signOffs: unknown[]) =>
+    // Officers' reviews of findings (precision/recall): no verdicts recorded, so every rate is "nothing to measure";
+    // the case's sign-offs as saved.
+    const reviews = (caseId: string) =>
       json({
         reviews: [],
-        sign_offs: signOffs,
+        sign_offs: this.signOffs
+          .filter((signOff) => signOff.case_id === caseId)
+          .map(({ scope, document_id, reviewer, updated_at }) => ({ scope, document_id, reviewer, updated_at })),
         case: emptyMetrics(),
         documents: {},
         cross_document: emptyMetrics(),
         checks: { document: [], case: [] },
       });
-    if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {
-      return reviews([]);
+    if (method === 'GET' && reviewedCase && path.endsWith('/finding-reviews')) {
+      return reviews(reviewedCase[1]);
     }
-    if (method === 'PUT' && /^\/cases\/[^/]+\/finding-reviews\/sign-offs$/.test(path)) {
-      return reviews([{ ...(body as object), reviewer: 'officer', updated_at: '2026-10-31T00:00:00Z' }]);
+    if (method === 'PUT' && reviewedCase && path.endsWith('/finding-reviews/sign-offs')) {
+      // Like findings_repository.sign_off: one per group, a later one replacing it, signed by the logged-in officer.
+      const { scope, document_id } = body as Pick<SignOffRow, 'scope' | 'document_id'>;
+      this.signOffs = this.signOffs.filter((s) => !(s.case_id === reviewedCase[1] && s.document_id === document_id));
+      this.signOffs.push({
+        case_id: reviewedCase[1], scope, document_id, reviewer: this.credentials.username, updated_at: '2026-10-31T00:00:00Z',
+      });
+      return reviews(reviewedCase[1]);
     }
     if (method === 'GET' && path === '/detection-metrics') {
       return json(this.detectionMetrics ?? {

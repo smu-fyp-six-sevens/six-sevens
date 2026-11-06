@@ -23,10 +23,9 @@ from app.langgraph.detection.graph import run_detection
 from app.main import app
 from app.models import DocumentStatus
 from app.workers import detection as detection_worker
-from tests import test_regression_detection as detection_harness
-from tests.test_regression_detection import (
-    DIGITAL, LAYOUT, Review, Specialist, _credit_report_with_font_and_metadata_tampering,
-)
+from tests.support import detection_harness
+from tests.support.detection_documents import credit_report_with_font_and_metadata_tampering
+from tests.support.detection_harness import DIGITAL, LAYOUT, Review, Specialist
 
 client = TestClient(app)
 
@@ -54,7 +53,7 @@ def script_layout_and_digital(ai, **digital) -> None:
 @pytest.mark.sprint5
 @pytest.mark.story("SCRUM-55", "MA-028")
 async def test_a_successful_run_stores_each_specialists_tool_calls_in_order_with_their_times(ai, store):
-    document_id = _credit_report_with_font_and_metadata_tampering(store)
+    document_id = credit_report_with_font_and_metadata_tampering(store)
     script_layout_and_digital(ai)
 
     await run_detection(document_id)
@@ -75,7 +74,7 @@ async def test_a_successful_run_stores_each_specialists_tool_calls_in_order_with
 async def test_a_cancelled_run_keeps_the_tool_calls_made_before_it_stopped_and_the_error(ai, store, monkeypatch):
     # The detection-worker runs it, as on an approval, and the officer cancels it while the lead reviews the
     # specialists' reports: every specialist has made its tool calls by then.
-    document_id = _credit_report_with_font_and_metadata_tampering(store)
+    document_id = credit_report_with_font_and_metadata_tampering(store)
     script_layout_and_digital(ai)
     monkeypatch.setattr(detection_worker, "detection_results", store)
     monkeypatch.setattr(detection_worker.audit, "find", lambda *args, **kwargs: [])  # no cancel from elsewhere
@@ -122,7 +121,7 @@ async def test_a_cancelled_run_keeps_the_tool_calls_made_before_it_stopped_and_t
 @pytest.mark.sprint5
 @pytest.mark.story("SCRUM-55", "MA-031")
 async def test_each_tool_call_is_stored_with_its_arguments_and_the_run_with_its_results(ai, store):
-    document_id = _credit_report_with_font_and_metadata_tampering(store)
+    document_id = credit_report_with_font_and_metadata_tampering(store)
     script_layout_and_digital(ai)
 
     report = await run_detection(document_id)
@@ -141,7 +140,7 @@ async def test_each_tool_call_is_stored_with_its_arguments_and_the_run_with_its_
 @pytest.mark.sprint5
 @pytest.mark.story("SCRUM-55", "MA-032")
 async def test_the_reasoning_behind_each_run_tool_and_finding_is_stored(ai, store):
-    document_id = _credit_report_with_font_and_metadata_tampering(store)
+    document_id = credit_report_with_font_and_metadata_tampering(store)
     ai.briefs[LAYOUT] = "Credit report with printed figures: check fonts and layout."
     ai.reviews = [Review("The font of one field and the file's metadata both point to editing.")]
     script_layout_and_digital(ai, dismiss={"metadata_tool-2"})
@@ -164,7 +163,7 @@ async def test_the_trace_is_read_back_from_storage_after_a_restart(ai, store, mo
     monkeypatch.setattr(trace, "_persist", REAL_PERSIST)
     monkeypatch.setattr(trace, "_write_row", lambda snapshot: table.__setitem__(snapshot["document_id"], snapshot))
     monkeypatch.setattr(trace, "get_persisted", table.get)
-    document_id = _credit_report_with_font_and_metadata_tampering(store)
+    document_id = credit_report_with_font_and_metadata_tampering(store)
     script_layout_and_digital(ai)
     await run_detection(document_id)
     in_memory = trace.get(document_id)
@@ -180,7 +179,7 @@ async def test_the_trace_is_read_back_from_storage_after_a_restart(ai, store, mo
 @pytest.mark.sprint5
 @pytest.mark.story("SCRUM-283", "AE-016")
 async def test_confidence_scores_and_findings_are_saved_with_the_completed_run(ai, store):
-    document_id = _credit_report_with_font_and_metadata_tampering(store)
+    document_id = credit_report_with_font_and_metadata_tampering(store)
     script_layout_and_digital(ai)
 
     report = await run_detection(document_id)

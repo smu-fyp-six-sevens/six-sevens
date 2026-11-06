@@ -171,9 +171,9 @@ export function NotesCard({
 
   // The note's text, or the edit form in its place.
   function noteContent(note: CaseNote) {
-    if (note.deleted_at) return <p className="note-body note-body--deleted">This note was deleted.</p>;
+    if (note.deleted_at) return <p className="note-body note-body--deleted" data-testid="note-body">This note was deleted.</p>;
     if (editor?.kind === 'edit' && editor.noteId === note.id) return editorForm(editor, 'Edit note');
-    return <p className="note-body">{note.body}</p>;
+    return <p className="note-body" data-testid="note-body">{note.body}</p>;
   }
 
   // Reply on a note (not on a reply), plus Edit and Delete for the officer's own notes and replies.

@@ -193,13 +193,12 @@ test.describe('Overall case dashboard @sprint5 @SCRUM-297', () => {
     scored('8004', 'Keppel Bay Traders', 'RS-001'),
     makeCase({ id: '8005', greenlink_case_id: 'GLDB-8005', company_name: 'Tanjong Print Works' }),
   ];
-  const riskRow = (page: Page, level: string) => page.locator('.risk-snapshot-row', { hasText: `${level} risk` });
-  const casesInView = (page: Page) => page.locator('.stat-total .stat-number');
-
-  async function openDashboard(page: Page) {
-    await page.goto('/dashboard');
-    await page.getByLabel('Date range').selectOption('All time');
-  }
+  // The Overview's Risk overview: each level's count, and its segment of the bar (titled with its cases).
+  const riskCount = (page: Page, level: string) =>
+    page.locator('.risk-overview-legend li', { hasText: new RegExp(`${level}$`) }).locator('strong');
+  const riskSegment = (page: Page, level: string) => page.locator(`.risk-overview-bar i[title^="${level}:"]`);
+  const pipelineTotal = (page: Page) => page.locator('.case-pipeline .panel-heading p');
+  const attentionRow = (page: Page, caseNumber: string) => page.getByRole('button', { name: new RegExp(`^Open case ${caseNumber}:`) });
 
   async function showOnlyStatus(page: Page, status: string) {
     await page.getByRole('button', { name: /^Filter by status/ }).click();
@@ -212,52 +211,55 @@ test.describe('Overall case dashboard @sprint5 @SCRUM-297', () => {
   test('CM-050 the dashboard shows the total number of cases @CM-050', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
 
-    await openDashboard(page);
+    await openAllTime(page);
 
-    await expect(casesInView(page)).toHaveText('5');
-    await expect(page.locator('.stat-total')).toContainText('Cases in view');
+    await expect(pipelineTotal(page)).toHaveText(/^5 cases in view/);
   });
 
-  test('CM-051 / CM-052 cases are counted by risk level, each drawn as a bar of the whole @CM-051 @CM-052', async ({ page, backend }) => {
+  test('CM-051 / CM-052 cases are counted by risk level, each drawn as its share of the bar @CM-051 @CM-052', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
 
-    await openDashboard(page);
+    await openAllTime(page);
 
-    for (const level of ['Critical', 'High', 'Medium', 'Low']) {
-      await expect(riskRow(page, level).locator('strong')).toHaveText('1');
-      // One case of five: a fifth of the bar.
-      await expect(riskRow(page, level).locator('.risk-snapshot-track i')).toHaveAttribute('style', 'width: 20%;');
+    for (const level of ['Critical', 'High', 'Medium', 'Low', 'Not scored']) {
+      await expect(riskCount(page, level)).toHaveText('1');
+      // One case of five each: equal segments.
+      await expect(riskSegment(page, level)).toHaveCSS('flex-grow', '1');
     }
+    await expect(riskSegment(page, 'Critical')).toHaveAttribute('title', 'Critical: GLDB-8001');
   });
 
   test('CM-053 the counts and chart follow the status filter @CM-053', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
-    await openDashboard(page);
-    await expect(riskRow(page, 'Critical').locator('strong')).toHaveText('1');
+    await openAllTime(page);
+    await expect(riskCount(page, 'Critical')).toHaveText('1');
 
-    await showOnlyStatus(page, 'Open');
+    await showOnlyStatus(page, 'Awaiting Documents');
 
-    await expect(casesInView(page)).toHaveText('1');
+    await expect(pipelineTotal(page)).toHaveText(/^1 case in view/);
     for (const level of ['Critical', 'High', 'Medium', 'Low']) {
-      await expect(riskRow(page, level).locator('strong')).toHaveText('0');
+      await expect(riskCount(page, level)).toHaveText('0');
+      await expect(riskSegment(page, level)).toHaveCount(0);
     }
+    await expect(riskCount(page, 'Not scored')).toHaveText('1');
   });
 
-  test('CM-054 a case not yet scored shows a dash that says why, not a risk @CM-054', async ({ page, backend }) => {
+  test('CM-054 a case not yet scored says so, not a risk @CM-054', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
-    await openCases(page);
+    await openAllTime(page);
 
-    const unscored = page.getByRole('link', { name: 'Open case GLDB-8005' });
-    await expect(unscored.locator('[data-label="Risk"] .processing-pending')).toHaveAttribute('title', 'Shown once the case has been analysed');
+    const unscored = attentionRow(page, 'GLDB-8005');
+    await expect(unscored.locator('.attention-risk')).toHaveText('Not scored');
+    await expect(unscored.locator('.attention-risk [title]')).toHaveAttribute('title', 'Shown once the case has been analysed');
     await expect(unscored.locator('.risk-score')).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Open case GLDB-8001' }).locator('.risk-level')).toHaveText(RISKS['RS-003'].risk.level!);
+    await expect(attentionRow(page, 'GLDB-8001').locator('.risk-level')).toHaveText(RISKS['RS-003'].risk.level!);
   });
 
   test('CM-055 clicking a case opens its details @CM-055', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
-    await openCases(page);
+    await openAllTime(page);
 
-    await page.getByRole('link', { name: 'Open case GLDB-8001' }).click();
+    await attentionRow(page, 'GLDB-8001').click();
 
     await expect(page).toHaveURL(/\/cases\/GLDB-8001/);
     await expect(page.getByRole('heading', { name: /Brightwave Analytics Pte Ltd/ })).toBeVisible();
@@ -265,9 +267,9 @@ test.describe('Overall case dashboard @sprint5 @SCRUM-297', () => {
 
   test('CM-056 the full case listing opens from the dashboard @CM-056', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
-    await openDashboard(page);
+    await openAllTime(page);
 
-    await page.getByRole('link', { name: 'Open case queue' }).first().click();
+    await page.getByRole('link', { name: 'Open case queue' }).click();
 
     await expect(page).toHaveURL(/\/cases$/);
     await expect(page.getByText('Tanjong Print Works')).toBeVisible();
@@ -275,36 +277,38 @@ test.describe('Overall case dashboard @sprint5 @SCRUM-297', () => {
 
   test('CM-057 a newly scored case is counted once the dashboard is refreshed @CM-057', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
-    await openDashboard(page);
-    await expect(riskRow(page, 'High').locator('strong')).toHaveText('1');
+    await openAllTime(page);
+    await expect(riskCount(page, 'High')).toHaveText('1');
 
     Object.assign(backend.cases.find((c) => c.id === '8005')!, { status: 'case_analysed', risk: RISKS['RS-006'].risk });
     await page.getByRole('button', { name: 'Refresh cases' }).click();
 
-    await expect(riskRow(page, 'High').locator('strong')).toHaveText('2');
+    await expect(riskCount(page, 'High')).toHaveText('2');
+    await expect(riskCount(page, 'Not scored')).toHaveText('0');
   });
 
   test('CM-058 a deleted case leaves the counts once the dashboard is refreshed @CM-058', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
-    await openDashboard(page);
-    await expect(casesInView(page)).toHaveText('5');
+    await openAllTime(page);
+    await expect(pipelineTotal(page)).toHaveText(/^5 cases in view/);
 
     backend.cases = backend.cases.filter((c) => c.id !== '8001');
     await page.getByRole('button', { name: 'Refresh cases' }).click();
 
-    await expect(casesInView(page)).toHaveText('4');
-    await expect(riskRow(page, 'Critical').locator('strong')).toHaveText('0');
+    await expect(pipelineTotal(page)).toHaveText(/^4 cases in view/);
+    await expect(riskCount(page, 'Critical')).toHaveText('0');
   });
 
-  test('CM-059 when no case matches the filters the list says so @CM-059', async ({ page, backend }) => {
+  test('CM-059 when no case matches the filters the dashboard says so @CM-059', async ({ page, backend }) => {
     backend.cases.push(...brightwaveCases());
-    await openCases(page);
+    await openAllTime(page);
 
     await showOnlyStatus(page, 'Finalised');
 
-    await expect(page.getByText('No cases match the current filters.')).toBeVisible();
-    await expect(casesInView(page)).toHaveText('0');
-    await expect(page.getByRole('link', { name: /^Open case GLDB-/ })).toHaveCount(0);
+    await expect(pipelineTotal(page)).toHaveText(/^0 cases in view/);
+    await expect(page.getByText('Nothing is waiting on an officer in this date and status selection.')).toBeVisible();
+    await page.getByRole('navigation', { name: 'Dashboard sections' }).getByRole('button', { name: /^Cases/ }).click();
+    await expect(page.getByText('No cases in this date and status selection.')).toBeVisible();
   });
 
   test.describe('Accuracy tab', () => {
@@ -314,7 +318,7 @@ test.describe('Overall case dashboard @sprint5 @SCRUM-297', () => {
 
     test.beforeEach(async ({ page, backend }) => {
       backend.detectionMetrics = structuredClone(METRICS);
-      await openDashboard(page);
+      await openAllTime(page);
       await page.getByRole('navigation', { name: 'Dashboard sections' }).getByRole('button', { name: /^Accuracy/ }).click();
     });
 

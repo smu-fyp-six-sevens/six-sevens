@@ -89,18 +89,17 @@ def critical_case():
         payslip.id: _report(_finding(
             1, "external_validation_tool", "high",
             "Employee CPF of $1,920.00 is above the most any band allows at the $8,000 ceiling",
-            check_code="PS.CPF_RATE", stated="1920.00")),
+            check_code="PAY.CPF_CEILING", stated="1920.00")),
         nric.id: _report(
             _finding(1, "numerical_checks_tool", "high", "NRIC S7534567X fails its checksum: the check letter should be D"),
-            _finding(1, "external_validation_tool", "high", "The passport's issuing authority is not one Singapore uses",
-                     check_code="REG.ISSUER", stated="OFSINGAPORE")),
+            _finding(1, "spelling_tool", "high", 'Possible misspelling "OFSINGAPORE" (suggested: "OF SINGAPORE").')),
         incorp.id: _report(
             _finding(1, "date_consistency_tool", "high", "incorporation_date (2027-04-18) is after today's date"),
             _finding(1, "external_validation_tool", "high", "ACRA has no record of UEN 202736160G",
                      check_code="REG.UEN_EXISTS", stated="202736160G")),
         noa.id: _report(_finding(
-            1, "external_validation_tool", "high", "IRAS's assessment year does not match the year of income",
-            check_code="TAX.YEAR_OF_ASSESSMENT", stated="YA 2027")),
+            1, "date_consistency_tool", "high", "Notice is dated 2026-03-14, before its own year of assessment (2027)",
+            check_code="NOA.DATE_LOGIC", stated="2026-03-14")),
         statement.id: _report(),
     }
     cross = CrossDocFinding(

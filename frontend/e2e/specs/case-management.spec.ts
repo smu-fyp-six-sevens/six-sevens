@@ -75,7 +75,7 @@ function seedQueue(backend: MockBackend) {
   return { harbor, meridian, platinum };
 }
 
-const caseCards = (page: Page) => page.locator('.case-row');
+const caseCards = (page: Page) => page.getByTestId('case-row');
 const searchBox = (page: Page) => page.getByRole('combobox', { name: 'Search case number or company name' });
 const searchOptions = (page: Page) => page.getByRole('listbox').getByRole('option');
 // Enter without picking a suggestion lists every match in the queue (/cases?q=…).
@@ -207,7 +207,7 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     await page.goto('/cases');
 
     const stuck = caseCards(page).filter({ hasText: 'Stuck Co Pte Ltd' });
-    await expect(stuck.locator('.case-row-status')).toContainText('Processing Documents');
+    await expect(stuck.getByTestId('case-row-status')).toContainText('Processing Documents');
     await expect(stuck.locator('.case-row-stuck')).toHaveText('Stuck');
     await expect(caseCards(page).locator('.case-row-stuck')).toHaveCount(1);
   });
@@ -294,7 +294,7 @@ test.describe('Case queue paging and filters @SCRUM-299', () => {
     expect(lastListRequest(backend)).toContain('status=failed');
 
     // Every case on that page is one of the two chosen statuses: the five in progress never appear.
-    await expect(page.locator('.case-row-status').filter({ hasText: 'Processing Documents' })).toHaveCount(0);
+    await expect(page.getByTestId('case-row-status').filter({ hasText: 'Processing Documents' })).toHaveCount(0);
 
     await pick(page, 'status', /Processing Documents/);
 
@@ -508,7 +508,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     // Still on Documents, now for the other case.
     await expect(page).toHaveURL(new RegExp(`/cases/${meridian.greenlink_case_id}[?]section=documents`));
     await expect(page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: /^Documents/i })).toHaveAttribute('aria-current', 'page');
-    await expect(page.locator('.documents-card')).toBeVisible();
+    await expect(page.getByTestId('documents-card')).toBeVisible();
   });
 
   test('the case dropdown keeps whichever section the officer is on, the summary included @CM-005', async ({ page, backend }) => {
@@ -560,7 +560,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await openSection(page, 'Risk summary');
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
-    await expect(section.locator('.risk-badge')).toHaveText('High Risk');
+    await expect(section.getByTestId('risk-badge')).toHaveText('High Risk');
     await expect(section.locator('.severity-gauge-value')).toHaveText('58');
     await expect(section.locator('.risk-score-level')).toHaveText('High Risk · 50–79');
     await expect(section.locator('.severity-gauge')).toHaveAttribute('aria-label', 'Risk score 58 out of 100, High');
@@ -629,7 +629,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
 
     // A document that needs the officer says why under its name in the document list.
-    const row = page.locator('.documents-table-row', { hasText: 'Fashion-Purchase-Order.pdf' });
+    const row = page.getByTestId('document-row').filter({ hasText: 'Fashion-Purchase-Order.pdf' });
     await openGroup(page, 'Needs Review');
     await expect(page.locator('.documents-table-row--review')).toHaveCount(1);
     await expect(row.locator('.document-review-reason')).toContainText('could not be recognised');
@@ -638,7 +638,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(row.locator('.document-type-cell')).toContainText('Unrecognised');
     // The document that is fine has no reason under its name.
     await openGroup(page, 'Pending Approval');
-    await expect(page.locator('.documents-table-row', { hasText: 'C014_CertIncorp.pdf' }).locator('.document-review-reason')).toHaveCount(0);
+    await expect(page.getByTestId('document-row').filter({ hasText: 'C014_CertIncorp.pdf' }).locator('.document-review-reason')).toHaveCount(0);
   });
 
   test('CM-009 the case audit trail is reached from case details and lists what was recorded for this case @CM-009', async ({ page, backend }) => {
@@ -1102,7 +1102,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     const noa = fixture.document('Anchorpoint_IRAS_NOA');
     await page.goto(`${fixture.caseUrl}?section=documents`);
     const missing = (label: string) =>
-      page.locator('.checklist-missing-row').filter({ has: page.locator('.document-type-cell', { hasText: new RegExp(`^${label}$`) }) });
+      page.getByTestId('missing-document').filter({ has: page.locator('.document-type-cell', { hasText: new RegExp(`^${label}$`) }) });
     await expect(missing('Notice of Assessment')).toHaveCount(0);
 
     await page.goto(fixture.documentUrl(noa));
@@ -1152,8 +1152,10 @@ test.describe('Case page: document actions, live updates and cost', () => {
     await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/cancel`).length).toBe(1);
     expect(document.status).toBe('cancelled');
     backend.push(harbor.id);
-    // A cancelled document moves to Needs Review.
-    await openGroupWith(page, document.filename);
+    // A cancelled document moves to Needs Review. Wait for the group (the case's only document leaves Pending Approval
+    // for it) before opening it: until the snapshot lands, the row still shows under Pending Approval.
+    await expect(page.getByTestId('documents-card').getByTestId('document-group').filter({ hasText: /^Needs Review/ })).toBeVisible();
+    await openGroup(page, 'Needs Review');
     await expect(page.getByRole('button', { name: `View ${document.filename}` })).toContainText('Cancelled');
     await expect(page.getByRole('button', { name: `Cancel ${document.filename}` })).toHaveCount(0);
   });
@@ -1342,15 +1344,16 @@ test.describe('X-ray in the findings review', () => {
 
 /**
  * Sprint 5 regression (SCRUM-323), "Test Cases - Sprint 5.xlsx" Case Management sheet, View Case Overview
- * (SCRUM-299): CM-037 – CM-049, on the captured Anchorpoint case (GLDB-02, 20 extracted documents). The app keeps a
- * case's documents in two sections, Documents and Approved Documents; documents for manual review and rejected ones
- * are cards within Documents, shown while there are any (see the Sprint 5 report on CM-041 / CM-046 / CM-048).
+ * (SCRUM-299): CM-037 – CM-049, on the captured Anchorpoint case (GLDB-02, 20 extracted documents). The Documents
+ * section groups a case's documents by status (Missing, Needs Review, Pending Approval, Approved, Rejected), one group
+ * open at a time, and shows a group only while it has documents (see the Sprint 5 report on CM-046 – CM-048).
  */
 test.describe('View case overview @sprint5 @SCRUM-299', () => {
   const sectionNav = (page: Page) => page.getByRole('navigation', { name: 'Case sections' });
   const openSection = (page: Page, name: RegExp) => sectionNav(page).getByRole('button', { name }).click();
   const documentRow = (page: Page, filename: string) => page.getByRole('button', { name: `View ${filename}` });
-  const card = (page: Page, title: string) => page.locator('.documents-card', { has: page.locator('.documents-card-title', { hasText: title }) });
+  const groupToggle = (page: Page, name: string) =>
+    page.getByTestId('documents-card').getByTestId('document-group').filter({ hasText: new RegExp(`^${name} \\d+`) });
 
   test('CM-037 the company name is shown when the case opens @CM-037', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
@@ -1368,8 +1371,8 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
     await page.goto(fixture.caseUrl);
 
     const severity = page.locator('.case-overview-risk');
-    await expect(severity.locator('strong').first()).toHaveText(`${risk.level} risk`);
-    await expect(severity.getByLabel(`Risk score ${risk.score} out of 100`)).toBeVisible();
+    await expect(severity.locator('.case-overview-risk-copy strong')).toHaveText(`${risk.level} Risk`);
+    await expect(severity.getByLabel(`Risk score ${risk.score} out of 100, ${risk.level}`)).toBeVisible();
   });
 
   test('CM-039 before it is scored the case says so, with no score @CM-039', async ({ page, backend }) => {
@@ -1378,7 +1381,7 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
     await page.goto(fixture.caseUrl);
 
     const severity = page.locator('.case-overview-risk');
-    await expect(severity.locator('strong').first()).toHaveText('Not scored yet');
+    await expect(severity.locator('.case-overview-risk-copy strong')).toHaveText('Not scored yet');
     await expect(severity).toContainText('Run case analysis after documents are approved and scanned');
     await expect(severity.getByLabel(/^Risk score/)).toHaveCount(0);
   });
@@ -1397,50 +1400,55 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
-  test('CM-041 / CM-042 a document moves from Documents to Approved Documents, or to Rejected, as its status changes @CM-041 @CM-042', async ({ page, backend }) => {
+  test('CM-041 / CM-042 a document moves to the Approved or Rejected group as its status changes @CM-041 @CM-042', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const noa = fixture.document('IRAS_NOA');
     const fatca = fixture.document('FATCA');
     await page.goto(`${fixture.caseUrl}?section=documents`);
-    await expect(documentRow(page, noa.filename)).toBeVisible();
+    await expect(groupToggle(page, 'Approved')).toHaveCount(0);
 
     noa.status = 'approved';
     fatca.status = 'rejected';
     backend.push(fixture.case.id);
 
+    await expect(groupToggle(page, 'Approved')).toHaveText(/^Approved 1/);
+    await openGroup(page, 'Approved');
+    await expect(documentRow(page, noa.filename)).toBeVisible();
+    await expect(documentRow(page, fatca.filename)).toHaveCount(0);
+    await openGroup(page, 'Rejected');
+    await expect(documentRow(page, fatca.filename).locator('.document-status-cell')).toHaveText('Rejected');
     await expect(documentRow(page, noa.filename)).toHaveCount(0);
-    await expect(card(page, 'Rejected Documents').getByRole('button', { name: `View ${fatca.filename}` })).toBeVisible();
-    await openSection(page, /^Approved Documents/);
-    await expect(card(page, 'Approved Documents').getByRole('button', { name: `View ${noa.filename}` })).toBeVisible();
-    await expect(card(page, 'Approved Documents').getByRole('button', { name: `View ${fatca.filename}` })).toHaveCount(0);
   });
 
-  test('CM-043 each document shows its name, type and status @CM-043', async ({ page, backend }) => {
+  test('CM-043 each document shows its type, name and status @CM-043', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const noa = fixture.document('IRAS_NOA');
-
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
+    await openGroupWith(page, noa.filename);
+
     const row = documentRow(page, noa.filename);
-    await expect(row.locator('.document-filename')).toHaveText(noa.filename);
+    await expect(row.locator('.document-filename-line')).toHaveText(noa.filename);
     await expect(row.locator('.document-type-cell')).toHaveText('Notice of Assessment');
-    await expect(row.locator('.document-status-cell')).toContainText('Extracted');
+    await expect(row.locator('.document-status-cell')).toHaveText('Extracted');
   });
 
-  test('CM-044 a document still being processed shows its in-progress status @CM-044', async ({ page, backend }) => {
+  test('CM-044 a document still being processed shows its in-progress status under Pending Approval @CM-044', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const noa = fixture.document('IRAS_NOA');
     noa.status = 'extracting';
-
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
-    await expect(documentRow(page, noa.filename).locator('.document-status-cell')).toContainText('Extracting…');
+    await openGroup(page, 'Pending Approval');
+
+    await expect(documentRow(page, noa.filename).locator('.status-pill')).toHaveText('Extracting…');
   });
 
   test('CM-045 selecting a document opens its details @CM-045', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const noa = fixture.document('IRAS_NOA');
     await page.goto(`${fixture.caseUrl}?section=documents`);
+    await openGroupWith(page, noa.filename);
 
     await documentRow(page, noa.filename).click();
 
@@ -1448,40 +1456,37 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
     await expect(page.getByText(noa.filename).first()).toBeVisible();
   });
 
-  test('CM-046 / CM-047 a section with no documents says so: Approved Documents before any approval @CM-046 @CM-047', async ({ page, backend }) => {
+  test('CM-046 / CM-047 a status with no documents has no group, rather than an empty one @CM-046 @CM-047', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
 
-    await page.goto(`${fixture.caseUrl}?section=approved`);
+    await page.goto(`${fixture.caseUrl}?section=documents`);
 
-    await expect(page.getByText('No approved documents yet.')).toBeVisible();
-    await expect(page.getByText('Documents appear here once an officer approves them from the Documents tab.')).toBeVisible();
-    // Nothing rejected: Documents shows no Rejected Documents card at all, rather than an empty one.
-    await openSection(page, /^Documents/);
-    await expect(documentRow(page, fixture.document('IRAS_NOA').filename)).toBeVisible();
-    await expect(card(page, 'Rejected Documents')).toHaveCount(0);
+    await expect(groupToggle(page, 'Pending Approval')).toBeVisible();
+    // Nothing approved or rejected yet, and the case has every required document.
+    for (const group of ['Approved', 'Rejected', 'Missing']) await expect(groupToggle(page, group)).toHaveCount(0);
   });
 
-  test('CM-048 a case with no documents shows the upload area and empty Approved Documents @CM-048', async ({ page, backend }) => {
+  test('CM-048 a case with no documents lists every required document as missing @CM-048', async ({ page, backend }) => {
     backend.cases.push(makeCase({ id: 'case-empty', greenlink_case_id: 'GLDB-3048', company_name: 'Empty Case Pte Ltd' }));
 
     await page.goto('/cases/GLDB-3048?section=documents');
 
-    await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
+    await expect(groupToggle(page, 'Missing')).toBeVisible();
+    await expect(page.getByTestId('missing-document').locator('.status-pill').first()).toHaveText('Missing');
     await expect(page.getByRole('button', { name: /^View / })).toHaveCount(0);
-    await openSection(page, /^Approved Documents/);
-    await expect(page.getByText('No approved documents yet.')).toBeVisible();
+    for (const group of ['Needs Review', 'Pending Approval', 'Approved', 'Rejected']) await expect(groupToggle(page, group)).toHaveCount(0);
   });
 
   test('CM-049 the open section is kept after a reload @CM-049', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     await page.goto(fixture.caseUrl);
-    await openSection(page, /^Approved Documents/);
-    await expect(page).toHaveURL(/section=approved/);
+    await openSection(page, /^Notes/);
+    await expect(page).toHaveURL(/section=notes/);
 
     await page.reload();
 
-    await expect(sectionNav(page).getByRole('button', { name: /^Approved Documents/ })).toHaveAttribute('aria-current', 'page');
-    await expect(page.getByText('No approved documents yet.')).toBeVisible();
+    await expect(sectionNav(page).getByRole('button', { name: /^Notes/ })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByLabel('New note')).toBeVisible();
   });
 });
 
