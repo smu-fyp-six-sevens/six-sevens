@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { officerName } from '../../lib/officers';
 import type {
   CaseRisk,
@@ -16,10 +16,12 @@ import type { GroupReviewStatus } from './FindingReviewControls';
 import { GroupReviewBar, MetricsLine, MissedIssues, ReasonChips, ReviewSummary } from './FindingReviewControls';
 import { AppliedFeedback } from './AppliedFeedback';
 import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
+import type { VerdictRow } from './useFindingReviews';
 import { compareFindings } from './uploadHelpers';
 import DocumentReviewModal from './DocumentReviewModal';
 import type { ReviewLink } from './DocumentReviewModal';
 import { ErrorMessage } from '../../components/ErrorMessage';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import { SCORE_BANDS } from './scoreBands';
 import { SeverityGauge, SeverityLegend } from './SeverityGauge';
 import { readingOrder } from '../../components/findingHighlights';
@@ -249,6 +251,8 @@ export function CaseRiskCard({
   const [drafts, setDrafts] = useState<Record<string, boolean>>({});
   const [reasonDrafts, setReasonDrafts] = useState<Record<string, FalseAlarmReason | null>>({});
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  // Showing the confirm for "Save all reviews": every group's Save review in one go.
+  const [confirmSaveAll, setConfirmSaveAll] = useState(false);
   const reviewsOn = reviewsRequired;
   const reviews = useFindingReviews(caseId, scored !== null && reviewsOn);
   const allReviews = reviews.data?.reviews ?? [];
@@ -265,6 +269,15 @@ export function CaseRiskCard({
   // A reason in the case analysis summary links here as #risk-finding-<document>-<finding>: open that document for
   // review, then bring the finding into view once the reviews have loaded.
   const { hash } = useLocation();
+  // A reason on the Case Analysis card links here with from=analysis to open the document; closing it should
+  // return there, not leave the officer on the risk tab they never chose.
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const cameFromAnalysis = searchParams.get('from') === 'analysis';
+  function closeReview() {
+    setReviewing(null);
+    if (cameFromAnalysis) navigate({ search: '?section=analysis', hash: '' }, { replace: true });
+  }
   const linkedId = hash.startsWith('#risk-finding-') ? decodeURIComponent(hash.slice(1)) : null;
   const linkedGroupId =
     findings.find((finding) => findingScope(finding) !== 'case' && linkedId === `risk-finding-${finding.document_id}-${finding.finding_id}`)
@@ -377,22 +390,25 @@ export function CaseRiskCard({
     setDrafts((current) => ({ ...current, ...Object.fromEntries(keys.map((key) => [key, checked])) }));
   }
 
+  // What a group's Save review sends: each tick's verdict, and for a ticked false alarm its reason (and note for
+  // "other"). Save all reviews sends the same rows for every group, so the two never disagree.
+  function groupRows(group: DocumentGroup): VerdictRow[] {
+    return ticks(group).map((tick) => {
+      const ticked = isTicked(tick);
+      return {
+        members: tick.members,
+        verdict: verdictOf(tick, ticked),
+        reason: ticked && !tick.setAside ? reasonOf(tick) : null,
+        note: ticked && !tick.setAside && reasonOf(tick) === 'other' ? noteOf(tick).trim() : null,
+      };
+    });
+  }
+
   async function saveGroup(group: DocumentGroup) {
     const all = ticks(group);
     const saved =
       all.length > 0
-        ? await reviews.saveGroup(
-            `group:${group.documentId}`,
-            all.map((tick) => {
-              const ticked = isTicked(tick);
-              return {
-                members: tick.members,
-                verdict: verdictOf(tick, ticked),
-                reason: ticked && !tick.setAside ? reasonOf(tick) : null,
-                note: ticked && !tick.setAside && reasonOf(tick) === 'other' ? noteOf(tick).trim() : null,
-              };
-            }),
-          )
+        ? await reviews.saveGroup(`group:${group.documentId}`, groupRows(group))
         : await reviews.signOff(
             `group:${group.documentId}`,
             group.scope,
@@ -404,14 +420,16 @@ export function CaseRiskCard({
     setDrafts(otherGroups);
     setReasonDrafts(otherGroups);
     setNoteDrafts(otherGroups);
-    // Done with it: close it, so it moves into the reviewed list rather than jumping down the page open.
+    // Done with it: close it, so it moves into the reviewed list rather than jumping down the page open. Saving
+    // from the document opened via a Case Analysis reason returns there too, like closing it.
     if (saved) {
-      setReviewing((current) => (current === group.documentId ? null : current));
       setExpanded((current) => {
         const next = new Set(current);
         next.delete(group.documentId);
         return next;
       });
+      if (reviewing === group.documentId) closeReview();
+      else setReviewing((current) => (current === group.documentId ? null : current));
     }
   }
 
@@ -651,6 +669,40 @@ export function CaseRiskCard({
   const toReview = allGroups.filter(needsReview);
   const done = allGroups.filter((group) => !needsReview(group));
 
+  // "Save all reviews": every group still to review, saved exactly as its own Save review would save it (groupRows):
+  // nothing is ticked for the officer, and a group with no findings is signed off. Like Save review, it waits until
+  // every ticked false alarm has a reason. The officer can still open any group afterwards to change a verdict.
+  const toSave = toReview.map((group) => ({ group, all: ticks(group) }));
+  const saveAllRows = toSave.flatMap(({ group }) => groupRows(group));
+  const findingsAs = (verdict: ReviewVerdict) =>
+    saveAllRows.filter((row) => row.verdict === verdict).reduce((n, row) => n + row.members.length, 0);
+  const realIssues = findingsAs('correct');
+  const falseAlarms = findingsAs('wrong');
+  const cleanToSignOff = toSave.filter(({ all }) => all.length === 0).length;
+  const missingReasons = toSave.flatMap(({ all }) => all).filter(lacksReason).length;
+
+  async function saveAllReviews() {
+    const signOffs = toSave
+      .filter(({ all }) => all.length === 0)
+      .map(({ group }) => ({ scope: group.scope, documentId: group.scope === 'case' ? null : group.documentId }));
+    const saved = await reviews.saveAll('save-all', saveAllRows, signOffs);
+    if (saved) {
+      setDrafts({});
+      setReasonDrafts({});
+      setNoteDrafts({});
+      setReviewing(null);
+      setExpanded(new Set());
+    }
+    setConfirmSaveAll(false);
+  }
+
+  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+  const saveAllMessage = [
+    realIssues > 0 && `${plural(realIssues, 'finding')} will be saved as ${realIssues === 1 ? 'a real issue' : 'real issues'}`,
+    falseAlarms > 0 && `${plural(falseAlarms, 'finding')} as ${falseAlarms === 1 ? 'a false alarm' : 'false alarms'}`,
+    cleanToSignOff > 0 && `${plural(cleanToSignOff, 'document')} with no findings will be signed off`,
+  ].filter(Boolean).join(', ');
+
   return (
     <>
       <section className="summary-card">
@@ -743,9 +795,28 @@ export function CaseRiskCard({
               <h2>Documents to Review</h2>
             </div>
             {reviews.data && (
-              <span className="risk-review-count">
-                {toReview.length === 0 ? 'All reviewed' : `${toReview.length} of ${allGroups.length} to review`}
-              </span>
+              <div className="risk-review-actions">
+                <span className="risk-review-count">
+                  {toReview.length === 0 ? 'All reviewed' : `${toReview.length} of ${allGroups.length} to review`}
+                </span>
+                {!readOnly && toReview.length > 0 && (
+                  <>
+                    {missingReasons > 0 && (
+                      <span className="group-review-incomplete" role="status">
+                        {missingReasons === 1 ? '1 false alarm needs a reason' : `${missingReasons} false alarms need a reason`}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="risk-save-all"
+                      disabled={reviews.savingKey !== null || missingReasons > 0}
+                      onClick={() => setConfirmSaveAll(true)}
+                    >
+                      {reviews.savingKey === 'save-all' ? 'Saving…' : 'Save all reviews'}
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
@@ -798,11 +869,24 @@ export function CaseRiskCard({
               {renderGroupMeta(reviewingGroup)}
             </>
           }
-          onClose={() => setReviewing(null)}
+          onClose={closeReview}
           order={reviewingGroup.rows.map((row) => row.members.map(reportFindingId))}
         >
           {(link) => renderGroupBody(reviewingGroup, link)}
         </DocumentReviewModal>
+      )}
+
+      {confirmSaveAll && (
+        <ConfirmDialog
+          title="Save all reviews?"
+          message={`${saveAllMessage}. You can still open any document to change a verdict or report a missed issue.`}
+          confirmLabel="Save all"
+          busyLabel="Saving…"
+          tone="primary"
+          isConfirming={reviews.savingKey === 'save-all'}
+          onCancel={() => setConfirmSaveAll(false)}
+          onConfirm={() => void saveAllReviews()}
+        />
       )}
     </>
   );

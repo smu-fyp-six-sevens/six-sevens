@@ -121,8 +121,21 @@ test.describe('Case analysis summary and earlier runs', () => {
     await expect(page.locator('#analysis-finding-xdoc-1')).toBeInViewport();
 
     await brief.getByRole('link', { name: "Declared pay isn't reflected in the account." }).click();
-    await expect(page).toHaveURL(/section=risk#risk-finding-doc-payslip-numerical_checks_tool-1$/);
+    await expect(page).toHaveURL(/section=risk&from=analysis#risk-finding-doc-payslip-numerical_checks_tool-1$/);
     await expect(page.locator('#risk-finding-doc-payslip-numerical_checks_tool-1')).toHaveClass(/risk-finding--linked/);
+  });
+
+  test('closing a document opened from a reason returns to the Case Analysis tab, not the risk tab', async ({ page, backend }) => {
+    const brief = await openAnalysis(page, backend);
+
+    await brief.getByRole('link', { name: "Declared pay isn't reflected in the account." }).click();
+    const modal = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
+    await expect(modal).toBeVisible();
+
+    await modal.getByRole('button', { name: 'Close review' }).click();
+
+    await expect(page).toHaveURL(/section=analysis$/);
+    await expect(brief.locator('.analysis-brief-headline strong')).toBeVisible();
   });
 
   test('"Would help" goes to the Additional Documents card', async ({ page, backend }) => {

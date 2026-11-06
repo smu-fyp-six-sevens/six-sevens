@@ -477,6 +477,44 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await expect(card.locator(':scope > .flagged-list .risk-document')).toHaveCount(3);
   });
 
+  test('Save all reviews saves every group as its ticks stand, in one go', async ({ page, backend }) => {
+    const theCase = await openRisk(page, backend, 'RS-006');
+    const card = reviewCard(page);
+
+    // Four groups to review: three documents with a finding, and the empty cross-document group.
+    await expect(card.locator(':scope > .flagged-list .risk-document')).toHaveCount(4);
+
+    // The payslip's finding is ticked as a false alarm; the other two are left unticked (right).
+    await card.locator('.risk-document', { hasText: 'C011_Payslip.pdf' }).getByRole('button').click();
+    const modal = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
+    await modal.getByRole('checkbox', { name: 'Select all' }).check();
+    await modal.getByRole('button', { name: 'Close review' }).click();
+
+    // A false alarm without a reason holds Save all back, as it does Save review.
+    const saveAll = card.getByRole('button', { name: 'Save all reviews' });
+    await expect(card.getByText('1 false alarm needs a reason')).toBeVisible();
+    await expect(saveAll).toBeDisabled();
+    await card.locator('.risk-document', { hasText: 'C011_Payslip.pdf' }).getByRole('button').click();
+    await modal.getByRole('group', { name: 'Why is this a false alarm?' }).getByRole('button', { name: 'Tool misread it' }).click();
+    await modal.getByRole('button', { name: 'Close review' }).click();
+
+    await saveAll.click();
+    const dialog = page.getByRole('alertdialog', { name: 'Save all reviews?' });
+    await expect(dialog).toContainText(
+      '2 findings will be saved as real issues, 1 finding as a false alarm, 1 document with no findings will be signed off',
+    );
+    await dialog.getByRole('button', { name: 'Save all' }).click();
+
+    // Every group is reviewed in one go: none left to review, all folded into Reviewed, the button gone.
+    await expect(card.getByText('All reviewed')).toBeVisible();
+    await expect(card.getByText('Reviewed (4)')).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Save all reviews' })).toHaveCount(0);
+    // Saved as ticked, with the false alarm's reason, as each group's Save review would.
+    const verdicts = Object.values(backend.findingReviews[theCase.id].verdicts) as { verdict: string; reason: string | null }[];
+    expect(verdicts.map((review) => review.verdict).sort()).toEqual(['correct', 'correct', 'wrong']);
+    expect(verdicts.find((review) => review.verdict === 'wrong')?.reason).toBe('tool_misread');
+  });
+
   test('RS-008 / CM-007 the risk summary is reached from case details, and an unscored case shows no score and no findings @RS-008 @CM-007 @sprint2 @SCRUM-83', async ({ page, backend }) => {
     const theCase = makeCase({ greenlink_case_id: 'GLDB-4008', risk: null });
     backend.cases.push(theCase);

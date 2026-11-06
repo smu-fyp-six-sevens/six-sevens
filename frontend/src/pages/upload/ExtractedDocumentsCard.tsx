@@ -3,11 +3,14 @@ import {
   TERMINAL_DOCUMENT_STATUSES,
   canCancelDocument,
   canRetryDocument,
+  documentDetectionStage,
   formatDocumentStatus,
+  formatDocumentStatusLabel,
   formatDocumentType,
   isDocumentStuckProcessing,
 } from '../../services/uploadService';
 import { LiveBadge } from './LiveBadge';
+import { useDetectionOutcome } from './useDetectionOutcome';
 import { useState } from 'react';
 import { CANCELLED_REASON, documentGroup, missingAdditional, missingRequirements, type Coverage, type DocumentGroup } from './documentChecklist';
 import { REQUIRED_DOCUMENT_TYPES } from '../../services/uploadService';
@@ -429,6 +432,23 @@ function ExtractedDocumentRow({
   );
 }
 
+// The status pill for a decided document. An approved document is on its way through fraud detection, so it reads
+// "Scanning" (a grey pill) from approval until the scan finishes; it never rests on a bare "Approved" that hides that
+// scanning is still to come. Once scanned it reads "Clean" when detection found nothing and "Detected" when it found
+// at least one issue ("Scanned" while the report loads). A document with no type skips detection and stays "Approved".
+function ApprovedStatusPill({ document, kind }: { document: DocumentRecord; kind: 'approved' | 'rejected' }) {
+  const outcome = useDetectionOutcome(document.id, kind === 'approved' ? document.status : '');
+  if (kind === 'rejected') {
+    return <span className="status-pill status-pill--fail">Rejected</span>;
+  }
+  if (documentDetectionStage(document.status, false, document.document_type) === 'detected') {
+    if (outcome === 'clean') return <span className="status-pill status-pill--ok">Clean</span>;
+    if (outcome === 'findings') return <span className="status-pill status-pill--warn">Detected</span>;
+    return <span className="status-pill">Scanned</span>;
+  }
+  return <span className="status-pill">{formatDocumentStatusLabel(document.status, false, document.document_type)}</span>;
+}
+
 // An approved or rejected document, listed read-only under its folded group: its type, filename and where it stands.
 function DecidedRow({
   document,
@@ -465,9 +485,7 @@ function DecidedRow({
         <span className="document-filename-line">{document.filename}</span>
       </span>
       <span className="document-status-cell">
-        <span className={`status-pill ${kind === 'rejected' ? 'status-pill--fail' : document.status === 'detecting' ? 'status-pill--proc' : 'status-pill--ok'}`}>
-          {kind === 'rejected' ? 'Rejected' : formatDocumentStatus(document.status)}
-        </span>
+        <ApprovedStatusPill document={document} kind={kind} />
       </span>
     </div>
   );

@@ -1298,6 +1298,37 @@
   font-weight: 600;
 }
 
+/* The review count and the "Save all reviews" button, right-aligned in the section header. */
+.risk-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.risk-save-all {
+  padding: 5px 12px;
+  border: 1px solid var(--steel);
+  border-radius: 6px;
+  background: var(--steel);
+  color: var(--white);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.risk-save-all:disabled {
+  border-color: var(--line);
+  background: var(--white);
+  color: var(--ink-soft);
+  cursor: default;
+}
+
+.risk-save-all:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 1px;
+}
+
 /* A finding a case analysis summary reason linked to (CaseRiskCard). */
 .risk-findings li.risk-finding--linked {
   border-radius: 6px;

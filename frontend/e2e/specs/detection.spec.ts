@@ -103,6 +103,35 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect(page.locator('.documents-card')).toContainText(document.filename);
   });
 
+  test('an approved document reads "Scanning" until the scan finishes, then "Clean" or "Detected" from its findings', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const scanning = fixture.document('Credit_Bureau_Report');
+    const clean = fixture.document('Payslip');
+    const flagged = fixture.document('Constitution');
+    scanning.status = 'approved'; // approved, detection still to run — not resting on a bare "Approved"
+    scanning.document_type = 'credit_report';
+    for (const [document, type] of [[clean, 'payslip'], [flagged, 'company_constitution']] as const) {
+      document.status = 'detected';
+      document.document_type = type;
+    }
+    backend.detectionReports[clean.id] = { document_id: clean.id, verdict: 'clean', findings: [] };
+    backend.detectionReports[flagged.id] = {
+      document_id: flagged.id, verdict: 'flagged',
+      findings: [{ id: 'font_consistency_tool-1', tool: 'font_consistency_tool', severity: 'high', summary: 'Edited.' }],
+    };
+
+    await page.goto(`${fixture.caseUrl}?section=documents`);
+    await approvedGroup(page).click();
+    const pill = (filename: string) => page.locator('.documents-table-row', { hasText: filename }).locator('.status-pill');
+
+    await expect(pill(scanning.filename)).toHaveText('Scanning');
+    await expect(pill(scanning.filename)).not.toHaveClass(/status-pill--(ok|warn|proc|fail)/); // grey base pill
+    await expect(pill(clean.filename)).toHaveText('Clean');
+    await expect(pill(clean.filename)).toHaveClass(/status-pill--ok/);
+    await expect(pill(flagged.filename)).toHaveText('Detected');
+    await expect(pill(flagged.filename)).toHaveClass(/status-pill--warn/);
+  });
+
   test('MA-006 a document not yet approved stays in Uploaded Files @MA-006', async ({ page, backend }) => {
     const { fixture } = creditReport(backend);
     const constitution = fixture.document('Constitution');

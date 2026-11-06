@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CaseFindingReviews, FalseAlarmReason, FindingReview, ReviewScope, ReviewVerdict } from '../../services/uploadService';
+import type {
+  CaseFindingReviews,
+  FalseAlarmReason,
+  FindingReview,
+  FindingVerdictInput,
+  ReviewScope,
+  ReviewVerdict,
+} from '../../services/uploadService';
 import {
   deleteFindingReview,
   getCaseFindingReviews,
@@ -27,6 +34,28 @@ export function findingScope(finding: ReviewTarget): ReviewScope {
 // The document a finding's review sits on: none for a cross-document finding.
 function reviewDocument(finding: ReviewTarget): string | null {
   return findingScope(finding) === 'case' ? null : finding.document_id;
+}
+
+// One row of a group's review: the verdict its tick gives, and for a false alarm the reason (and a note for "other").
+// A row can stand for several identical findings, so it goes on each of its members.
+export interface VerdictRow {
+  members: ReviewTarget[];
+  verdict: ReviewVerdict;
+  reason?: FalseAlarmReason | null;
+  note?: string | null;
+}
+
+function verdictInputs(rows: VerdictRow[]): FindingVerdictInput[] {
+  return rows.flatMap(({ members, verdict, reason, note }) =>
+    members.map((finding) => ({
+      scope: findingScope(finding),
+      documentId: reviewDocument(finding),
+      fingerprint: finding.fingerprint,
+      verdict,
+      reason,
+      note,
+    })),
+  );
 }
 
 // The officer's verdict on this finding: the same document and fingerprint. A rerun replaces the findings and
@@ -81,27 +110,26 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
   // One group's review: each row has the verdict the officer's tick gives it, and a row can stand for several identical
   // findings (same check and summary), so its verdict goes on each of them. One request for the whole group.
   const saveGroup = useCallback(
-    (key: string, rows: { members: ReviewTarget[]; verdict: ReviewVerdict; reason?: FalseAlarmReason | null; note?: string | null }[]) =>
-      run(key, () =>
-        setFindingVerdicts(
-          caseId,
-          rows.flatMap(({ members, verdict, reason, note }) =>
-            members.map((finding) => ({
-              scope: findingScope(finding),
-              documentId: reviewDocument(finding),
-              fingerprint: finding.fingerprint,
-              verdict,
-              reason,
-              note,
-            })),
-          ),
-        ),
-      ),
+    (key: string, rows: VerdictRow[]) => run(key, () => setFindingVerdicts(caseId, verdictInputs(rows))),
     [caseId, run],
   );
 
   const signOff = useCallback(
     (key: string, scope: ReviewScope, documentId: string | null) => run(key, () => signOffGroup(caseId, scope, documentId)),
+    [caseId, run],
+  );
+
+  // Every group at once: the verdicts for the groups that have findings (one request, as saveGroup does per
+  // group), then a sign-off for each group that has none. A final read returns the state after every write, so
+  // the parallel sign-off responses can't leave a stale snapshot.
+  const saveAll = useCallback(
+    (key: string, rows: VerdictRow[], signOffs: { scope: ReviewScope; documentId: string | null }[]) =>
+      run(key, async () => {
+        const verdicts = verdictInputs(rows);
+        if (verdicts.length > 0) await setFindingVerdicts(caseId, verdicts);
+        await Promise.all(signOffs.map((group) => signOffGroup(caseId, group.scope, group.documentId)));
+        return getCaseFindingReviews(caseId);
+      }),
     [caseId, run],
   );
 
@@ -122,5 +150,5 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     [caseId, run],
   );
 
-  return { data, error, savingKey, saveGroup, signOff, addMissed, editMissed, removeReview };
+  return { data, error, savingKey, saveGroup, saveAll, signOff, addMissed, editMissed, removeReview };
 }
