@@ -26,6 +26,7 @@ import httpx
 from langchain_core.callbacks import AsyncCallbackHandler
 
 from . import metrics, pricing, telemetry
+from .llm_io import thinking_summaries
 
 logger = logging.getLogger("perf")
 
@@ -44,6 +45,7 @@ class _Scope:
         self.llm_cache_read = 0
         self.llm_cache_write = 0
         self.llm_cost_usd = 0.0
+        self.llm_cache_saved_usd = 0.0
         self._lock = threading.Lock()  # to_thread calls in one scope can run concurrently
 
     def add_call(self, label: str) -> None:
@@ -56,6 +58,7 @@ class _Scope:
 
     def add_llm(
         self, input_tokens: int, output_tokens: int, cache_read: int = 0, cache_write: int = 0, cost_usd: float = 0.0,
+        *, cache_saved_usd: float = 0.0,
     ) -> None:
         with self._lock:
             self.llm_calls += 1
@@ -64,6 +67,7 @@ class _Scope:
             self.llm_cache_read += cache_read
             self.llm_cache_write += cache_write
             self.llm_cost_usd += cost_usd
+            self.llm_cache_saved_usd += cache_saved_usd
 
     def summary(self) -> str:
         with self._lock:
@@ -89,6 +93,8 @@ class _Scope:
                 "llm_cost_usd": round(self.llm_cost_usd, 6), "llm_calls": self.llm_calls,
                 "llm_input_tokens": self.llm_input_tokens, "llm_output_tokens": self.llm_output_tokens,
                 "llm_cache_read_tokens": self.llm_cache_read, "llm_cache_write_tokens": self.llm_cache_write,
+                # Net of what the cache writes cost above plain input.
+                "llm_cache_saved_usd": round(self.llm_cache_saved_usd, 6),
             }
 
 
@@ -181,7 +187,8 @@ class _LLMUsage(AsyncCallbackHandler):
         seconds = time.perf_counter() - started if started is not None else None
         for generations in response.generations:
             for generation in generations:
-                used = pricing.usage(getattr(generation, "message", None))
+                message = getattr(generation, "message", None)
+                used = pricing.usage(message)
                 if used is None:
                     continue
                 cost = metrics.record_llm(
@@ -189,12 +196,24 @@ class _LLMUsage(AsyncCallbackHandler):
                     cache_write_1h=used.cache_write_1h,
                 )
                 _active().add_llm(
-                    used.total_input, used.output, used.cache_read, used.cache_write + used.cache_write_1h, cost,
+                    used.total_input, used.output, used.cache_read, used.cache_write + used.cache_write_1h, cost.usd,
+                    cache_saved_usd=cost.net_cache_saving_usd,
                 )
+                telemetry.add_llm_call({
+                    "model": used.model, "input_tokens": used.uncached_input, "output_tokens": used.output,
+                    "cache_read_tokens": used.cache_read, "cache_write_tokens": used.cache_write + used.cache_write_1h,
+                    "cost_usd": round(cost.usd, 6), "seconds": round(seconds, 3) if seconds is not None else None,
+                    "stop_reason": (getattr(message, "response_metadata", None) or {}).get("stop_reason"),
+                    "thinking": thinking_summaries(message),
+                })
 
     async def on_llm_error(self, error: BaseException, *, run_id: Any = None, **kwargs: Any) -> None:
-        _, agent = self._started.pop(run_id, (None, telemetry.current_agent()))
+        started, agent = self._started.pop(run_id, (None, telemetry.current_agent()))
         metrics.llm_calls.labels(agent, "unknown", "error").inc()
+        telemetry.add_llm_call({
+            "error": f"{type(error).__name__}: {error}"[:300],
+            "seconds": round(time.perf_counter() - started, 3) if started is not None else None,
+        })
 
 
 llm_callback = _LLMUsage()

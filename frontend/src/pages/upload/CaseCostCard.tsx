@@ -1,4 +1,4 @@
-import type { CaseCostRun, DocumentRecord } from '../../services/uploadService';
+import type { CacheUse, CaseCostRun, DocumentRecord } from '../../services/uploadService';
 import { formatUsd as usd } from './processingTimes';
 import { useCaseCost } from './useCaseCost';
 import { Icon } from '../../components/Icon';
@@ -11,6 +11,69 @@ const RUN_LABELS: Record<string, string> = {
   detection: 'Detection',
   case_analysis: 'Case analysis',
 };
+
+const tokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
+const percent = (rate: number | null | undefined) => (rate == null ? '—' : `${Math.round(rate * 100)}%`);
+
+// How much of the case's Claude input came from the prompt cache, and what that saved.
+function PromptCaching({ cache, byRun }: { cache: CacheUse; byRun: Record<string, CacheUse> }) {
+  const input = cache.input_tokens ?? 0;
+  const read = cache.cache_read_tokens ?? 0;
+  const written = cache.cache_write_tokens ?? 0;
+  const uncached = Math.max(0, input - read - written);
+  const share = (n: number) => `${input ? (n / input) * 100 : 0}%`;
+  return (
+    <section className="cache-use" aria-label="Prompt caching">
+      <h3>Prompt caching</h3>
+      {!cache.runs ? (
+        <p className="cache-use-note">No runs with token counts yet.</p>
+      ) : (
+        <>
+          <div className="cache-use-headline">
+            <span className="cache-use-rate">{percent(cache.hit_rate)}</span>
+            <span>of input tokens were read from the cache, saving <strong>{usd(cache.saved_usd ?? 0)}</strong></span>
+          </div>
+          <div className="cache-use-meter" role="img" aria-label={`${percent(cache.hit_rate)} read from the cache`}>
+            <span className="cache-use-meter--read" style={{ width: share(read) }} />
+            <span className="cache-use-meter--write" style={{ width: share(written) }} />
+          </div>
+          <ul className="cache-use-legend">
+            <li><span className="cache-use-swatch cache-use-meter--read" /> Read from cache {tokens(read)}</li>
+            <li><span className="cache-use-swatch cache-use-meter--write" /> Written to cache {tokens(written)}</li>
+            <li><span className="cache-use-swatch cache-use-meter--plain" /> Not cached {tokens(uncached)}</li>
+          </ul>
+          <table className="supporting-document-breakdown">
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Runs</th>
+                <th>Input tokens</th>
+                <th>From cache</th>
+                <th>Saved</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(byRun).map(([kind, use]) => (
+                <tr key={kind}>
+                  <td>{RUN_LABELS[kind] ?? kind}</td>
+                  <td>{use.runs}</td>
+                  <td>{tokens(use.input_tokens ?? 0)}</td>
+                  <td>{percent(use.hit_rate)}</td>
+                  <td>{usd(use.saved_usd ?? 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="cache-use-note">
+            Saved is what the cache reads would have cost as plain input, less what the cache writes cost above it.
+            {(cache.runs_without_saving ?? 0) > 0 &&
+              ` ${cache.runs_without_saving} earlier run(s) predate the saving being recorded, so their saving isn't counted.`}
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
 
 export function CaseCostCard({ caseId, documents }: { caseId: string; documents: DocumentRecord[] }) {
   const { cost, error, loading, reload } = useCaseCost(caseId);
@@ -76,6 +139,8 @@ export function CaseCostCard({ caseId, documents }: { caseId: string; documents:
               {usd(cost.failed_or_cancelled_usd ?? 0)}
             </p>
           )}
+
+          {cost.cache && <PromptCaching cache={cost.cache} byRun={cost.cache_by_run ?? {}} />}
 
           {Object.keys(cost.documents_usd).length > 0 && (
             <>

@@ -167,7 +167,7 @@ async def run_requested_analysis(published_events) -> Event:
 
 
 def steps(trace: list[dict]) -> list[str]:
-    return [event["step"] for event in trace]
+    return [event["step"] for event in trace if event["step"] != "span"]
 
 
 # --- SCRUM-52 Trigger case analysis pipeline -------------------------------------------

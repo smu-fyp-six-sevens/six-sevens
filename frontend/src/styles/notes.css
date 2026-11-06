@@ -10,6 +10,14 @@
   box-shadow: 0 2px 8px var(--ink-a04);
 }
 
+.document-details-page .notes-card {
+  margin-bottom: 24px;
+}
+
+.case-content > .notes-card {
+  margin-bottom: 24px;
+}
+
 .notes-card .summary-card-header {
   gap: 12px;
   padding: 12px var(--notes-inset) 0;

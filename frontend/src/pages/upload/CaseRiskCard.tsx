@@ -196,7 +196,7 @@ function ReviewTag({ status, latest }: { status: GroupReviewStatus; latest?: Pic
 function NotScoredMessage({ risk }: { risk: CaseRisk | null }) {
   // The score only comes from a case analysis run, never computed on its own.
   const [title, body, tone] = !risk
-    ? ['Not scored yet.', 'Run the case analysis once every approved document has been scanned.', 'info']
+    ? ['Not scored yet.', 'The case analysis scores the case once every approved document has been scanned.', 'info']
     : risk.state === 'no_documents'
       ? ['No documents to score yet.', 'A risk level appears once documents are uploaded, approved and scanned.', 'info']
       : risk.state === 'failed'

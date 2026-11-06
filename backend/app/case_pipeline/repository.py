@@ -73,14 +73,28 @@ def latest_run_id(case_id: str) -> str | None:
 
 def latest_run_state(case_id: str) -> tuple[str, datetime] | None:
     """The newest run's status and start, without its large result and trace."""
+    brief = latest_run_brief(case_id)
+    return (brief[0], brief[1]) if brief else None
+
+
+def latest_run_brief(case_id: str) -> tuple[str, datetime, str] | None:
+    """The newest run's status, start and fingerprint, without its large result and trace."""
     rows = (
-        supabase_client.table(_TABLE).select("status, started_at").eq("case_id", case_id)
+        supabase_client.table(_TABLE).select("status, started_at, fingerprint").eq("case_id", case_id)
         .order("started_at", desc=True).limit(1).execute().data
     )
     if not rows:
         return None
     row = _row(rows[0])
-    return str(row["status"]), datetime.fromisoformat(str(row["started_at"]))
+    return str(row["status"]), datetime.fromisoformat(str(row["started_at"])), str(row["fingerprint"])
+
+
+def count_runs_since(case_id: str, since: datetime) -> int:
+    rows = (
+        supabase_client.table(_TABLE).select("run_id").eq("case_id", case_id)
+        .gte("started_at", since.isoformat()).execute().data or []
+    )
+    return len(rows)
 
 
 def running_started_before(cutoff: datetime) -> list[tuple[str, str, datetime]]:

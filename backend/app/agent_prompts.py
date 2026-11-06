@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from .case_pipeline.cross_document import agents as case_agents
 from .langgraph import classify_support, extraction_prompts
@@ -15,6 +15,24 @@ from .guardrails.envelope import DOCUMENT_DATA_RULE
 class PromptSection(BaseModel):
     title: str
     text: str
+
+    # Some templates carry separator newlines because they are appended to another prompt at
+    # runtime (e.g. classify_support._INPUTS_BLOCK). Shown on their own, those render as blank lines.
+    @field_validator("text")
+    @classmethod
+    def _trim_blank_lines(cls, text: str) -> str:
+        return text.strip("\n")
+
+
+class _KeepPlaceholders(dict):
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+
+def _as_sent(template: str) -> str:
+    """A str.format template as the model receives it: escaped braces ({{ }}) collapse to single
+    ones, while runtime placeholders like {catalogue} stay visible for the reader."""
+    return template.format_map(_KeepPlaceholders())
 
 
 class AgentPrompt(BaseModel):
@@ -32,7 +50,7 @@ def get_agent_prompt(agent_id: str, document_type: str | None = None) -> AgentPr
             note="The static system prompt is shown below. Each run appends the rule-classifier result and document text availability; images may also be passed to the vision tool.",
             sections=[
                 PromptSection(title="System prompt", text=classify_support.AGENT_STATIC_PROMPT),
-                PromptSection(title="Per-document input template", text=classify_support._INPUTS_BLOCK),
+                PromptSection(title="Per-document input template", text=_as_sent(classify_support._INPUTS_BLOCK)),
             ],
         )
 
@@ -70,11 +88,11 @@ def get_agent_prompt(agent_id: str, document_type: str | None = None) -> AgentPr
                     title=spec.title, expertise=spec.expertise, rules=spec.rules,
                 ),
             ),
-            PromptSection(title="Per-document context template", text=dynamic),
+            PromptSection(title="Per-document context template", text=_as_sent(dynamic)),
         ]
         if spec.uses_field_catalogue:
             sections.append(PromptSection(
-                title="Field and check-menu instructions", text=specialists._FIELD_CATALOGUE_PROMPT,
+                title="Field and check-menu instructions", text=_as_sent(specialists._FIELD_CATALOGUE_PROMPT),
             ))
         return AgentPrompt(
             agent_id=agent_id,

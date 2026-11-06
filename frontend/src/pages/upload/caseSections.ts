@@ -54,24 +54,25 @@ export interface OutOfDateMessage {
   waitingList: string;
 }
 
-// Why an out-of-date analysis can or can't be rerun yet, naming the documents the risk score is waiting on.
+// What an out-of-date analysis is waiting for before it reruns on its own, naming the documents the risk score is
+// waiting on.
 export function outOfDateMessage(overview: CaseAnalysisOverview): OutOfDateMessage {
   const waiting = overview.waiting_documents ?? [];
   const waitingList = waiting.map((d) => `${d.filename}: ${WAITING_FOR[d.reason]}`).join('\n');
   if (waiting.length === 0) {
     return {
       short: 'Run Again',
-      detail: 'The documents changed since the last run: run again to update the score.',
+      detail: 'The documents changed since the last run. A new run starts on its own; if none has, run it again.',
       waitingList,
     };
   }
   if (waiting.length === 1) {
     const [{ filename, reason }] = waiting;
     const byReason: Record<WaitingDocument['reason'], [string, string]> = {
-      processing: ['Processing', `${filename} is still being processed. Approve it once it's ready, then run again when it's scanned.`],
-      needs_approval: ['1 to Approve', `Approve ${filename}, then run again once it's scanned.`],
-      scanning: ['Scanning', `${filename} is still being scanned; run again when it finishes.`],
-      failed: ['1 Failed', `${filename} failed processing: retry or reject it, then run again.`],
+      processing: ['Processing', `${filename} is still being processed. Approve it once it's ready; the analysis reruns once it's scanned.`],
+      needs_approval: ['1 to Approve', `Approve ${filename}; the analysis reruns once it's scanned.`],
+      scanning: ['Scanning', `${filename} is still being scanned; the analysis reruns when it finishes.`],
+      failed: ['1 Failed', `${filename} failed processing: retry or reject it, and the analysis reruns.`],
     };
     const [short, detail] = byReason[reason];
     return { short, detail, waitingList };
@@ -80,12 +81,12 @@ export function outOfDateMessage(overview: CaseAnalysisOverview): OutOfDateMessa
   return failed > 0
     ? {
         short: `${failed} Failed`,
-        detail: `${waiting.length} documents are holding up the score, ${failed} of them failed processing: retry or reject ${failed === 1 ? 'it' : 'them'}, and run again once the rest are approved and scanned.`,
+        detail: `${waiting.length} documents are holding up the score, ${failed} of them failed processing: retry or reject ${failed === 1 ? 'it' : 'them'}. The analysis reruns once the rest are approved and scanned.`,
         waitingList,
       }
     : {
         short: `${waiting.length} Pending`,
-        detail: `${waiting.length} documents still need approving or scanning; run again once they're done.`,
+        detail: `${waiting.length} documents still need approving or scanning; the analysis reruns once they're done.`,
         waitingList,
       };
 }
@@ -135,8 +136,8 @@ export function caseSectionStatuses({
 
   const analysis: SectionStatus = !analysisOverview
     ? analysisReady
-      ? { tone: 'action', text: 'Ready to Run' }
-      : { tone: 'idle', text: 'Not Ready' }
+      ? { tone: 'progress', text: 'Starting' }
+      : { tone: 'idle', text: 'Waiting' }
     : analysisOverview.status === 'running'
       ? { tone: 'progress', text: 'Running' }
       : analysisOverview.status === 'failed'

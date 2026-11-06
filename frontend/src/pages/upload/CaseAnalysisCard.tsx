@@ -5,7 +5,7 @@ import { getCaseAnalysis, getCaseAnalysisRun, listCaseAnalysisRuns, runCaseAnaly
 import { AnalysisSummaryBlock } from './AnalysisSummaryBlock';
 import { analysisFindingAnchor } from './analysisSummary';
 import { PreviousRuns } from './PreviousRuns';
-import { CaseAnalysisTracePanel } from './CaseAnalysisTracePanel';
+import { AgentTraceView } from '../../components/agentTrace/AgentTraceView';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { missingRequirementsText, outOfDateMessage } from './caseSections';
 import { Icon } from '../../components/Icon';
@@ -19,18 +19,24 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const SEVERITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
-// "Run case analysis": a structured summary, cross-document findings, and every earlier run to open read-only.
+// The case analysis, which starts on its own once every approved document is scanned: a structured summary,
+// cross-document findings, every earlier run to open read-only, and the run's trace. The button is the fallback
+// for a failed run, or one that didn't start automatically.
 export function CaseAnalysisCard({
   caseId,
   analysisReady,
   overview,
   missingRequirements = 0,
+  traceOpen,
+  onTraceClose,
 }: {
   caseId: string;
   analysisReady: boolean;
   overview: CaseAnalysisOverview | null;
   // How many required checklist documents are not yet on file: the analysis waits for every one.
   missingRequirements?: number;
+  traceOpen: boolean;
+  onTraceClose: () => void;
 }) {
   const [analysis, setAnalysis] = useState<CaseAnalysis | null>(null);
   const [starting, setStarting] = useState(false);
@@ -97,6 +103,10 @@ export function CaseAnalysisCard({
     setViewing(null);
   }, [runId]);
 
+  useEffect(() => {
+    if (traceOpen) void load();
+  }, [traceOpen, load]);
+
   // A failed run's stored error is an exception's text: the console has it, the card says to run it again.
   const failedError = analysis?.status === 'failed' ? analysis.error : null;
   useEffect(() => {
@@ -143,11 +153,11 @@ export function CaseAnalysisCard({
         <div className="summary-message summary-message--info">
           <span className="summary-message-icon">ⓘ</span>
           <div>
-            <strong>Not ready yet.</strong>
+            <strong>Not started yet.</strong>
             <p>
               {missingRequirements
                 ? `Every required document must be approved first: ${missingRequirementsText(missingRequirements)}.`
-                : 'The analysis can be run once every approved document has been scanned.'}
+                : 'The analysis starts on its own once every document is decided and every approved one has been scanned.'}
             </p>
           </div>
         </div>
@@ -248,7 +258,16 @@ export function CaseAnalysisCard({
         />
       )}
     </section>
-    <CaseAnalysisTracePanel analysis={analysis} isRefreshing={isRefreshing} onRefresh={load} />
+    {traceOpen && (
+      <AgentTraceView
+        title="Case analysis trace"
+        steps={shown?.trace ?? null}
+        emptyText={shown ? 'No steps recorded yet.' : 'No analysis has been run for this case yet.'}
+        isRefreshing={isRefreshing}
+        onRefresh={load}
+        onClose={onTraceClose}
+      />
+    )}
     </>
   );
 }

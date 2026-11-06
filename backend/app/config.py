@@ -209,6 +209,8 @@ class Settings:
     # --- Per-case analysis (case_pipeline/) ---
     # Kill switch: off falls back to document-level detection and scoring only.
     CASE_ANALYSIS_ENABLED: bool = os.environ.get("CASE_ANALYSIS_ENABLED", "true").lower() == "true"
+    # Runs started automatically per case per hour (each spends about 12k tokens); past it, the officer starts one.
+    CASE_ANALYSIS_AUTO_RUNS_PER_HOUR: int = int(os.environ.get("CASE_ANALYSIS_AUTO_RUNS_PER_HOUR", "4"))
     # Whether cases created here need every required checklist document approved before they can be analysed.
     # Stored on each case when it's created (cases.checklist_enforced). On only in prod (Terraform).
     REQUIRE_COMPLETE_CHECKLIST: bool = os.environ.get("REQUIRE_COMPLETE_CHECKLIST", "false").lower() == "true"

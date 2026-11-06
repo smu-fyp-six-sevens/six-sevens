@@ -108,29 +108,30 @@ def document_stage(
 def analysis_stage(case: CaseRecord, documents: list[DocumentRecord]) -> StageResult:
     """
     For a case whose approved documents are all scanned (documents carrying
-    their extracted fields). A run, failed or complete, counts only while it
-    still matches the documents — the same staleness check the case page
-    shows (case_pipeline/state.py); otherwise the case is ready to be
-    analysed again. A running analysis keeps the case at Ready for Analysis. A
-    complete one is Pending Evaluation until the officer has marked every
-    finding correct or wrong (precision and recall), then Case Analysed. A
-    case created without reviews (cases.reviews_required) is Case Analysed
-    straight away.
+    their extracted fields). The case analysis starts on its own then
+    (case_pipeline/service.start_if_due), and the case stays at Fraud
+    Detection until it ends: the analysis is the case-level part of fraud
+    detection. A run, failed or complete, counts only while it still matches
+    the documents — the same staleness check the case page shows
+    (case_pipeline/state.py). A complete one is Pending Evaluation until the
+    officer has marked every finding correct or wrong (precision and recall),
+    then Case Analysed. A case created without reviews
+    (cases.reviews_required) is Case Analysed straight away.
     """
     analysis = analysis_repository.get_latest_summary(case.id)
     if analysis is None:
-        return StageResult(CaseStage.READY_FOR_ANALYSIS)
+        return StageResult(CaseStage.FRAUD_DETECTION)
     if analysis.status == "running":
         if analysis_state.is_live(analysis.status, analysis.started_at):
-            return StageResult(CaseStage.READY_FOR_ANALYSIS)
+            return StageResult(CaseStage.FRAUD_DETECTION)
         return _failed(CaseFailure.CASE_ANALYSIS)  # the worker was lost; the sweeper marks it failed
     reports, _ = detection_results.get_states([d.id for d in documents])
     if analysis.fingerprint != analysis_state.compute_fingerprint(documents, reports):
-        return StageResult(CaseStage.READY_FOR_ANALYSIS)
+        return StageResult(CaseStage.FRAUD_DETECTION)
     if analysis.status == "failed":
         return _failed(CaseFailure.CASE_ANALYSIS)
     if analysis.status != "complete":
-        return StageResult(CaseStage.READY_FOR_ANALYSIS)
+        return StageResult(CaseStage.FRAUD_DETECTION)
     if (
         case.reviews_required
         and reviewable(analysis.risk)

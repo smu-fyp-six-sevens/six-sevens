@@ -91,3 +91,43 @@ def test_case_cost_adds_up_runs_per_document_and_case():
     assert [(t.type, t.duration_ms) for t in summary.timings] == [
         (types.DOCUMENT_ANALYZED, 4000), (types.DOCUMENT_DETECTED, 9000),
     ]
+
+
+def test_cache_writes_cost_more_than_plain_input_and_count_against_the_saving():
+    # Sonnet 5.5: input $2, cache read $0.10, cache write $2.50 per million tokens.
+    cost = pricing.cost("claude-sonnet-5-5", 0, 0, 1_000_000, 1_000_000)
+    assert round(cost.saved_by_cache_usd, 6) == 1.9
+    assert round(cost.cache_write_extra_usd, 6) == 0.5
+    assert round(cost.net_cache_saving_usd, 6) == 1.4
+
+
+def test_case_cost_says_how_much_input_came_from_the_cache():
+    from unittest.mock import MagicMock, patch
+
+    from app import audit
+    from app.events import Event, types
+
+    def row(type: str, run: str, input_tokens: int, read: int, saved: float | None) -> dict:
+        detail = {
+            "run": run, "llm_cost_usd": 0.01, "llm_input_tokens": input_tokens, "llm_cache_read_tokens": read,
+            "llm_cache_write_tokens": 100,
+        }
+        if saved is not None:
+            detail["llm_cache_saved_usd"] = saved
+        return Event(type=type, case_id="case-1", document_id="doc-1", detail=detail).to_audit_row()
+
+    rows = [
+        row(types.DOCUMENT_ANALYZED, "document", 1000, 600, 0.002),
+        row(types.DOCUMENT_DETECTED, "detection", 3000, 0, 0.0),
+        row(types.DOCUMENT_DETECTED, "detection", 1000, 400, None),  # recorded before the saving was
+    ]
+    with (
+        patch("app.audit.service_supabase_client", return_value=MagicMock()),
+        patch("app.audit.fetch_all", side_effect=[rows, []]),
+    ):
+        summary = audit.case_cost("case-1", [])
+
+    assert (summary.cache.input_tokens, summary.cache.cache_read_tokens, summary.cache.hit_rate) == (5000, 1000, 0.2)
+    assert summary.cache.saved_usd == 0.002 and summary.cache.runs_without_saving == 1
+    assert summary.cache_by_run["document"].hit_rate == 0.6
+    assert summary.cache_by_run["detection"].hit_rate == 0.1
