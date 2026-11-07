@@ -555,8 +555,3 @@ def list_document_statuses(case_ids: list[str]) -> list[DocumentRecord]:
         documents.extend(DocumentRecord(**item) for item in rows)
     return documents
 
-
-def list_all_document_statuses() -> list[DocumentRecord]:
-    """Every document's status columns, a page of 1,000 per query: what the queue's status counts roll up."""
-    rows = fetch_all(lambda: supabase_client.table("documents").select(_STATUS_COLUMNS), "id")
-    return [DocumentRecord(**item) for item in rows]

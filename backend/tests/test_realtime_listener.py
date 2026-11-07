@@ -25,7 +25,6 @@ def _reset_module_state():
     realtime_listener._pending.clear()
 
 
-@pytest.mark.asyncio
 async def test_debounced_publish_builds_and_broadcasts_snapshot_after_the_delay() -> None:
     with (
         patch("app.realtime_listener.asyncio.sleep", new=AsyncMock()),
@@ -46,7 +45,6 @@ async def test_debounced_publish_builds_and_broadcasts_snapshot_after_the_delay(
         assert "case-1" not in realtime_listener._pending
 
 
-@pytest.mark.asyncio
 async def test_debounced_publish_returns_quietly_when_cancelled_during_the_delay() -> None:
     with (
         patch(
@@ -61,7 +59,6 @@ async def test_debounced_publish_returns_quietly_when_cancelled_during_the_delay
         mock_publish.assert_not_called()
 
 
-@pytest.mark.asyncio
 async def test_debounced_publish_swallows_snapshot_build_errors() -> None:
     with (
         patch("app.realtime_listener.asyncio.sleep", new=AsyncMock()),
@@ -80,7 +77,6 @@ async def test_debounced_publish_swallows_snapshot_build_errors() -> None:
         assert "case-1" not in realtime_listener._pending
 
 
-@pytest.mark.asyncio
 async def test_debounced_publish_skips_broadcast_when_case_no_longer_exists() -> None:
     with (
         patch("app.realtime_listener.asyncio.sleep", new=AsyncMock()),
@@ -127,7 +123,6 @@ def _change(case_id: str, key: str = "record") -> dict:
     return {"data": {key: {"case_id": case_id}}}
 
 
-@pytest.mark.asyncio
 async def test_a_burst_of_changes_to_an_open_case_delivers_one_snapshot() -> None:
     live, viewers, built, build = _open_cases("case-1")
 
@@ -138,7 +133,6 @@ async def test_a_burst_of_changes_to_an_open_case_delivers_one_snapshot() -> Non
     assert viewers["case-1"].get_nowait() == {"type": "snapshot", "case": "case-1"}
 
 
-@pytest.mark.asyncio
 async def test_only_a_documents_change_makes_the_build_read_the_documents_again() -> None:
     live, _, _, _ = _open_cases("case-1")
     calls: list[bool] = []
@@ -155,7 +149,6 @@ async def test_only_a_documents_change_makes_the_build_read_the_documents_again(
     assert calls == [False, True]
 
 
-@pytest.mark.asyncio
 async def test_each_open_case_gets_its_own_snapshot() -> None:
     live, viewers, built, build = _open_cases("case-1", "case-2")
 
@@ -165,7 +158,6 @@ async def test_each_open_case_gets_its_own_snapshot() -> None:
     assert {case_id: queue.qsize() for case_id, queue in viewers.items()} == {"case-1": 1, "case-2": 1}
 
 
-@pytest.mark.asyncio
 async def test_a_change_to_a_case_nobody_has_open_builds_nothing() -> None:
     live, viewers, built, build = _open_cases("case-1")
 
@@ -176,7 +168,6 @@ async def test_a_change_to_a_case_nobody_has_open_builds_nothing() -> None:
     assert realtime_listener._pending == {}
 
 
-@pytest.mark.asyncio
 async def test_a_deleted_row_still_refreshes_its_case_from_the_old_record() -> None:
     live, viewers, built, build = _open_cases("case-1")
 
@@ -186,7 +177,6 @@ async def test_a_deleted_row_still_refreshes_its_case_from_the_old_record() -> N
     assert viewers["case-1"].qsize() == 1
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [{"data": {}}, {}, {"data": {"record": {"id": "doc-1"}}}], ids=[
     "no record", "no data", "a record with no case id",
 ])
@@ -199,7 +189,6 @@ async def test_an_event_that_names_no_case_delivers_nothing(payload) -> None:
     assert viewers["case-1"].empty()
 
 
-@pytest.mark.asyncio
 async def test_start_subscribes_to_documents_cases_and_analysis_changes() -> None:
     mock_channel = MagicMock()
     mock_channel.subscribe = AsyncMock()
@@ -221,7 +210,6 @@ async def test_start_subscribes_to_documents_cases_and_analysis_changes() -> Non
     assert realtime_listener._channel is mock_channel
 
 
-@pytest.mark.asyncio
 async def test_stop_cancels_pending_tasks_and_closes_the_realtime_client() -> None:
     pending_task = MagicMock()
     realtime_listener._pending["case-1"] = pending_task
@@ -240,7 +228,6 @@ async def test_stop_cancels_pending_tasks_and_closes_the_realtime_client() -> No
     assert realtime_listener._channel is None
 
 
-@pytest.mark.asyncio
 async def test_stop_is_a_no_op_when_never_started() -> None:
     # _client is None (never started) — should not try to close anything.
     await realtime_listener.stop()

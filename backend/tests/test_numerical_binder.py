@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from langchain_core.messages import AIMessage
 
 from app.fraud_detection.font_consistency import ExtractedField
@@ -26,7 +25,6 @@ def _model(reply: str | Exception):
     return model
 
 
-@pytest.mark.asyncio
 async def test_bindings_are_parsed_from_the_reply() -> None:
     reply = ('{"bindings": [{"role": "revenue", "field": "turnover", "row": null},'
              ' {"role": "expense_line", "field": "income_statement_items", "row": 0}]}')
@@ -40,7 +38,6 @@ async def test_bindings_are_parsed_from_the_reply() -> None:
     ]
 
 
-@pytest.mark.asyncio
 async def test_no_fields_means_no_model_call() -> None:
     with patch("app.langgraph.detection.field_checks.binder.build_chat_anthropic") as build:
         result = await bind_checks("source_of_wealth", [])
@@ -50,7 +47,6 @@ async def test_no_fields_means_no_model_call() -> None:
     assert result.error is None
 
 
-@pytest.mark.asyncio
 async def test_a_failed_call_gives_no_bindings_and_an_error() -> None:
     with patch("app.langgraph.detection.field_checks.binder.build_chat_anthropic",
                return_value=_model(RuntimeError("api down"))):
@@ -60,7 +56,6 @@ async def test_a_failed_call_gives_no_bindings_and_an_error() -> None:
     assert "api down" in result.error
 
 
-@pytest.mark.asyncio
 async def test_a_reply_that_is_not_json_gives_no_bindings() -> None:
     with patch("app.langgraph.detection.field_checks.binder.build_chat_anthropic", return_value=_model("sorry, no")):
         result = await bind_checks("source_of_wealth", FIELDS)
@@ -69,7 +64,6 @@ async def test_a_reply_that_is_not_json_gives_no_bindings() -> None:
     assert "not the expected JSON" in result.error
 
 
-@pytest.mark.asyncio
 async def test_a_malformed_entry_is_dropped_and_the_rest_kept() -> None:
     reply = '{"bindings": [{"role": "revenue"}, {"role": "revenue", "field": "turnover", "row": "two"}]}'
     with patch("app.langgraph.detection.field_checks.binder.build_chat_anthropic", return_value=_model(reply)):
@@ -79,7 +73,6 @@ async def test_a_malformed_entry_is_dropped_and_the_rest_kept() -> None:
     assert "malformed" in result.error
 
 
-@pytest.mark.asyncio
 async def test_a_role_left_with_a_null_field_is_left_out_not_an_error() -> None:
     reply = '{"bindings": [{"role": "date_of_birth", "field": null, "row": null}, {"role": "revenue", "field": "turnover"}]}'
     with patch("app.langgraph.detection.field_checks.binder.build_chat_anthropic", return_value=_model(reply)):

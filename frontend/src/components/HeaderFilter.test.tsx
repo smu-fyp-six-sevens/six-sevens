@@ -46,7 +46,7 @@ describe('the status filter', () => {
     fireEvent.click(box('Finalised'));
 
     expect(filteredTo(onChange)).toEqual(['Awaiting Documents', 'Pending Review']);
-    expect(screen.getByRole('button', { name: 'Filter by status (2 selected)' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Filter by status (2 selected)' })).not.toBeNull();
   });
 
   it('ticking every status again is the same as no filter', () => {
@@ -56,7 +56,7 @@ describe('the status filter', () => {
     fireEvent.click(box('Finalised'));
 
     expect(filteredTo(onChange)).toEqual([]);
-    expect(screen.getByRole('button', { name: 'Filter by status' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Filter by status' })).not.toBeNull();
   });
 
   it('after Unselect all, the statuses ticked are the only ones kept', () => {

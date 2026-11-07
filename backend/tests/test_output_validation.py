@@ -386,6 +386,10 @@ def test_outside_a_run_there_is_no_ceiling() -> None:
     for _ in range(100):
         run_context.spend_model_call("anything")
 
+    # Nothing was counted anywhere: a run started afterwards begins at zero.
+    with run_context.run_context(5) as context:
+        assert context.calls == 0
+
 
 async def test_parallel_tasks_share_one_run_ceiling() -> None:
     async def call(_: int) -> bool:

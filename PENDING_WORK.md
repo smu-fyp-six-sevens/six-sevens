@@ -1,6 +1,6 @@
 # Pending work
 
-Open product and platform work only: remove an item once it's done. Elsewhere: code smells and optimisations in `REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, case dashboard, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10; backwards-compatibility fallbacks in `REFACTORING_AUDIT.md` §5; stability findings and database load in `STABILITY_AUDIT.md`. Updated 2026-11-01.
+Open product and platform work only: remove an item once it's done. Elsewhere: stability findings, code smells, optimisations and database load in `STABILITY_AND_REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10; backwards-compatibility fallbacks in `STABILITY_AND_REFACTORING_AUDIT.md` §7. Updated 2026-11-07.
 
 ## Product
 
@@ -53,16 +53,17 @@ Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 ## Evals and verification
 
 - **Evals aren't built** (next few days): an evaluation framework run on demand when a prompt or model changes, not nightly, as the reference for quality. Golden-set runs from `documents_generated/` (classification accuracy, per-field extraction, escalation rate, cost per document, cache hit rate); detection precision and recall per defect type from `injection_manifest.json` (a case may upload the clean, non-`_F` file; check names first); for case analysis, false positives on clean cases, recall on planted contradictions, parity across subgroups. Synthetic companies always fail the ACRA check (8 points once per case). Keep the synthetic-to-real caveat.
-- **Checks that exist only as scratch scripts,** worth turning into tests: the verifier rules, the bias screens (`bias.py`), year-less statement dates (`tools/common.row_date`), the single-flight detection cache and snapshot builder, the finding fingerprints and the kept/dismissed split (`finding_keys.py`), `findings_repository`'s row builders.
+- **Checks that exist only as scratch scripts,** worth turning into tests: the bias screens (`bias.py`), year-less statement dates (`tools/common.row_date`), the single-flight detection cache and snapshot builder, the finding fingerprints and the kept/dismissed split (`finding_keys.py`)
 
 ## Performance
 
-Budgets are in `HOW_IT_WORKS.md` §8; database load is in `STABILITY_AUDIT.md` §3.
+Budgets are in `HOW_IT_WORKS.md` §8; database load is in `STABILITY_AND_REFACTORING_AUDIT.md` §2.
 - A burst of changes can chain snapshot builds, and the first requester waits for the follow-up.
 - **Opening a case still waits in sequence on a direct link or refresh:** the case lookup, then the WebSocket ticket, connection and first snapshot. (From the queue the case is handed over and the page code is prefetched.) Not done yet: fetching the first snapshot over a plain request alongside the socket, and putting the case's own details in the snapshot so a direct load needs one request.
 
 ## Cloud operations
 
+- **Drop the unused publishable Supabase key.** The backend no longer reads `SUPABASE_PUBLISHABLE_KEY` and the database grants `anon` nothing. Remove it from `local.supabase` in `deploy/terraform/main.tf`, `terraform apply`, then delete the secret in Secret Manager; disabling the legacy keys in the Supabase dashboard is the last step. Not urgent: the logs show no call with it after 08:10 UTC on 2026-11-07, when the new revision took over.
 - **Make Snyk blocking again once its monthly quota resets** (made non-blocking 2026-11-04): delete the two `continue-on-error: true` lines under the Snyk steps in `.github/workflows/ci-cd.yml`, and drop "temporarily non-blocking" from CLAUDE.md, README and CLOUD_ARCHITECTURE_PLAN §6.
 - **Frontend fully non-root:** nginx's workers already run as `nginx`; going all the way means `nginx-unprivileged` on 8080 (change `nginx.conf`, the frontend's `container_port` in `run.tf` and the compose port together, apply before deploying).
 - **Dead-lettered messages** stay in `domain-events-dead-letter-pull` until someone reads them (the sweeper rescues the document behind them).

@@ -72,7 +72,7 @@ async def test_a_refusal_raises_model_refused_from_the_call_itself():
 
 async def test_an_ordinary_reply_passes_the_refusal_check():
     result = LLMResult(generations=[[ChatGeneration(message=AIMessage(content="ok", response_metadata={"stop_reason": "end_turn"}))]])
-    await _anthropic._refusal_callback.on_llm_end(result)
+    assert await _anthropic._refusal_callback.on_llm_end(result) is None
 
 
 async def test_a_refused_document_fails_with_the_refusal_as_its_reason():

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
+import pytest
 
 from app import extracted_fields_repository
 from app.fraud_detection.font_consistency import ExtractedField
+from tests.support.fake_supabase import FakeSupabase
 
 
 def _saved(mock_service) -> tuple[str, list[dict]]:
@@ -89,142 +92,88 @@ def test_replace_extracted_fields_infers_types_for_lists_dicts_and_null() -> Non
         assert by_name["is_verified"]["field_type"] == "boolean"
 
 
-def test_get_extracted_fields_queries_by_document_id_and_wraps_rows() -> None:
-    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
-        result = MagicMock()
-        result.data = [
-            {
-                "field_name": "individual_name",
-                "field_type": "string",
-                "field_value": "Jane Tan",
-                "confidence": 0.95,
-            },
-            {
-                "field_name": "net_pay",
-                "field_type": "number",
-                "field_value": 5000,
-                "confidence": 0.9,
-            },
-        ]
-        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = result
-
-        fields = extracted_fields_repository.get_extracted_fields("doc-1")
-
-        mock_client.table.assert_called_once_with("extracted_fields")
-        mock_client.table.return_value.select.assert_called_once_with("*")
-        mock_client.table.return_value.select.return_value.eq.assert_called_once_with(
-            "document_id", "doc-1"
-        )
-        assert fields == [
-            ExtractedField(
-                field_name="individual_name", field_type="string", field_value="Jane Tan", confidence=0.95
-            ),
-            ExtractedField(field_name="net_pay", field_type="number", field_value=5000, confidence=0.9),
-        ]
+@pytest.fixture
+def db(monkeypatch) -> FakeSupabase:
+    fake = FakeSupabase()
+    monkeypatch.setattr(extracted_fields_repository, "supabase_client", fake)
+    return fake
 
 
-def test_get_extracted_fields_returns_empty_list_when_none_stored() -> None:
-    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
-        result = MagicMock()
-        result.data = []
-        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = result
-
-        assert extracted_fields_repository.get_extracted_fields("doc-1") == []
+def _field_row(document_id: str, name: str, value, field_type: str, confidence: float, **extra) -> dict:
+    return {
+        "document_id": document_id, "field_name": name, "field_type": field_type, "field_value": value,
+        "confidence": confidence, **extra,
+    }
 
 
-def test_get_extracted_fields_for_documents_returns_empty_dict_without_querying() -> None:
-    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
-        result = extracted_fields_repository.get_extracted_fields_for_documents([])
+def test_get_extracted_fields_returns_only_that_documents_fields(db) -> None:
+    db.add("extracted_fields", _field_row("doc-1", "individual_name", "Jane Tan", "string", 0.95))
+    db.add("extracted_fields", _field_row("doc-1", "net_pay", 5000, "number", 0.9))
+    db.add("extracted_fields", _field_row("doc-2", "bank_name", "OCBC", "string", 0.8))
 
-        assert result == {}
-        mock_client.table.assert_not_called()
+    fields = extracted_fields_repository.get_extracted_fields("doc-1")
 
-
-def test_get_extracted_fields_for_documents_groups_rows_by_document_id() -> None:
-    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
-        result = MagicMock()
-        result.data = [
-            {
-                "document_id": "doc-1",
-                "field_name": "individual_name",
-                "field_type": "string",
-                "field_value": "Jane Tan",
-                "confidence": 0.95,
-            },
-            {
-                "document_id": "doc-1",
-                "field_name": "net_pay",
-                "field_type": "number",
-                "field_value": 5000,
-                "confidence": 0.9,
-            },
-            {
-                "document_id": "doc-2",
-                "field_name": "bank_name",
-                "field_type": "string",
-                "field_value": "OCBC",
-                "confidence": 0.8,
-            },
-        ]
-        def fetch_all(query, order_column):
-            query()
-            return result.data
-
-        with patch("app.extracted_fields_repository.fetch_all", side_effect=fetch_all):
-            by_document = extracted_fields_repository.get_extracted_fields_for_documents(
-                ["doc-1", "doc-2"]
-            )
-
-        mock_client.table.assert_called_once_with("extracted_fields")
-        mock_client.table.return_value.select.assert_called_once_with("*")
-        mock_client.table.return_value.select.return_value.in_.assert_called_once_with(
-            "document_id", ["doc-1", "doc-2"]
-        )
-        assert set(by_document.keys()) == {"doc-1", "doc-2"}
-        assert len(by_document["doc-1"]) == 2
-        assert by_document["doc-2"] == [
-            ExtractedField(field_name="bank_name", field_type="string", field_value="OCBC", confidence=0.8)
-        ]
+    assert sorted(fields, key=lambda f: f.field_name) == [
+        ExtractedField(field_name="individual_name", field_type="string", field_value="Jane Tan", confidence=0.95),
+        ExtractedField(field_name="net_pay", field_type="number", field_value=5000, confidence=0.9),
+    ]
 
 
-def test_add_extracted_field_inserts_human_verified_row() -> None:
-    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
-        extracted_fields_repository.add_extracted_field(
-            "doc-1", "net_pay", 5000, required_field_names={"net_pay"}
-        )
-
-        row = mock_client.table.return_value.insert.call_args[0][0]
-        assert row["document_id"] == "doc-1"
-        assert row["field_name"] == "net_pay"
-        assert row["field_value"] == 5000
-        # Manually entered, so human-verified by definition.
-        assert row["confidence"] == 1.0
-        # Named in the document type's schema, so it counts as required
-        # rather than a freeform addition.
-        assert row["field_category"] == "required"
-        assert row["field_type"] == "number"
+def test_get_extracted_fields_returns_empty_list_when_none_stored(db) -> None:
+    assert extracted_fields_repository.get_extracted_fields("doc-1") == []
 
 
-def test_add_extracted_field_marks_unschemad_field_as_additional() -> None:
-    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
-        extracted_fields_repository.add_extracted_field(
-            "doc-1", "reference_no", "REF-9", required_field_names={"net_pay"}
-        )
-
-        row = mock_client.table.return_value.insert.call_args[0][0]
-        assert row["field_category"] == "additional"
-        assert row["field_type"] == "string"
+def test_get_extracted_fields_for_documents_returns_empty_dict_without_querying(db) -> None:
+    assert extracted_fields_repository.get_extracted_fields_for_documents([]) == {}
+    assert db.tables == {}
 
 
-def test_delete_extracted_field_scopes_delete_to_its_own_document() -> None:
-    # Both filters matter: keying on field_id alone would let a caller
-    # delete another document's row by guessing its id.
-    with patch("app.extracted_fields_repository.supabase_client") as mock_client:
-        extracted_fields_repository.delete_extracted_field("doc-1", "field-1")
+def test_get_extracted_fields_for_documents_groups_rows_by_document_id(db) -> None:
+    db.add("extracted_fields", _field_row("doc-1", "individual_name", "Jane Tan", "string", 0.95))
+    db.add("extracted_fields", _field_row("doc-1", "net_pay", 5000, "number", 0.9))
+    db.add("extracted_fields", _field_row("doc-2", "bank_name", "OCBC", "string", 0.8))
+    db.add("extracted_fields", _field_row("doc-3", "left_out", "x", "string", 0.8))
 
-        delete_query = mock_client.table.return_value.delete.return_value
-        delete_query.eq.assert_called_once_with("id", "field-1")
-        delete_query.eq.return_value.eq.assert_called_once_with("document_id", "doc-1")
+    by_document = extracted_fields_repository.get_extracted_fields_for_documents(["doc-1", "doc-2"])
+
+    assert set(by_document) == {"doc-1", "doc-2"}
+    assert len(by_document["doc-1"]) == 2
+    assert by_document["doc-2"] == [
+        ExtractedField(field_name="bank_name", field_type="string", field_value="OCBC", confidence=0.8)
+    ]
+
+
+def test_add_extracted_field_stores_a_human_verified_row(db) -> None:
+    extracted_fields_repository.add_extracted_field("doc-1", "net_pay", 5000, required_field_names={"net_pay"})
+
+    [row] = db.rows("extracted_fields", document_id="doc-1")
+    assert (row["field_name"], row["field_value"], row["field_type"]) == ("net_pay", 5000, "number")
+    # Manually entered, so human-verified by definition.
+    assert row["confidence"] == 1.0
+    # Named in the document type's schema, so it counts as required rather than a freeform addition.
+    assert row["field_category"] == "required"
+
+
+def test_add_extracted_field_marks_unschemad_field_as_additional(db) -> None:
+    extracted_fields_repository.add_extracted_field(
+        "doc-1", "reference_no", "REF-9", required_field_names={"net_pay"}
+    )
+
+    [row] = db.rows("extracted_fields", document_id="doc-1")
+    assert (row["field_category"], row["field_type"]) == ("additional", "string")
+
+
+def test_delete_extracted_field_scopes_delete_to_its_own_document(db) -> None:
+    # Both filters matter: keying on the field's id alone would let a caller delete another document's row by
+    # guessing its id.
+    db.add("extracted_fields", _field_row("doc-1", "net_pay", 5000, "number", 0.9, id="field-1"))
+    db.add("extracted_fields", _field_row("doc-2", "net_pay", 4000, "number", 0.9, id="field-2"))
+
+    extracted_fields_repository.delete_extracted_field("doc-2", "field-1")  # the wrong document: nothing goes
+    assert len(db.rows("extracted_fields")) == 2
+
+    extracted_fields_repository.delete_extracted_field("doc-1", "field-1")
+    assert [row["id"] for row in db.rows("extracted_fields")] == ["field-2"]
 
 
 def test_normalise_field_name_lowercases_and_joins_with_underscores() -> None:

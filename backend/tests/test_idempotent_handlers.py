@@ -1,6 +1,6 @@
 """
 Pub/Sub delivers at least once, so every handler that spends money or changes state must find a repeated event
-already taken (STABILITY_AUDIT.md findings 1 to 3): the detection worker claims the document, the case worker claims
+already taken (the idempotency fixes of 2026-11-07): the detection worker claims the document, the case worker claims
 the run, and an approval goes through only once. Each test delivers the same event twice.
 """
 from __future__ import annotations

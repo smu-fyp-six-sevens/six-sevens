@@ -45,7 +45,7 @@ def test_no_lead_for_a_finding_that_has_no_counterpart() -> None:
 def test_the_check_code_is_also_read_from_nested_details() -> None:
     docs = _docs(_view("notice_of_assessment_1", "notice_of_assessment"))
 
-    assert lead_for({"details": {"check_code": "FS.TAX_EXPENSE_RATE"}}, docs) is not None
+    assert "notice_of_assessment_1" in (lead_for({"details": {"check_code": "FS.TAX_EXPENSE_RATE"}}, docs) or "")
 
 
 def test_a_payslip_finding_leads_to_the_bank_statement() -> None:
