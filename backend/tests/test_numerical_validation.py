@@ -714,18 +714,37 @@ def test_payslip_deduction_lines_that_do_not_add_up_are_flagged() -> None:
     assert finding.summary == "Deduction lines sum to 1,170.00, but total deductions shows 1,270.00"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Known gap (backend_tests.md 2.3): with earning and deduction lines but no stated totals, PAY.NET compares "
-    "nothing and reports neither a finding nor a skip. Remove this marker once it computes from the lines or skips."
-))
-def test_payslip_net_with_lines_but_no_totals_is_compared_or_skipped() -> None:
+def test_payslip_net_without_stated_totals_is_compared_from_the_lines() -> None:
     earnings = [{"label": "Basic salary", "amount": "5200"}, {"label": "Allowance", "amount": "650"}]
     deductions = [{"label": "Employee CPF", "amount": "1170"}]
     result = _run([_field("net_pay", "5680"), _field("earnings_items", earnings), _field("deductions_items", deductions)],
                   document_type="payslip")
 
     # 5,850.00 - 1,170.00 = 4,680.00, not the 5,680.00 printed.
-    assert _codes(result, "PAY.NET") or any(s.check_code == "PAY.NET" for s in result.skipped_checks)
+    [finding] = _codes(result, "PAY.NET")
+    assert finding.summary == "Earnings lines 5,850.00 - deduction lines 1,170.00 = 4,680.00, but net pay shows 5,680.00"
+
+
+def test_payslip_net_from_the_lines_passes_when_it_adds_up() -> None:
+    earnings = [{"label": "Basic salary", "amount": "5200"}, {"label": "Allowance", "amount": "650"}]
+    deductions = [{"label": "Employee CPF", "amount": "1170"}]
+    result = _run([_field("net_pay", "4680"), _field("earnings_items", earnings), _field("deductions_items", deductions)],
+                  document_type="payslip")
+
+    assert _codes(result, "PAY.NET") == []
+    assert not any(s.check_code == "PAY.NET" for s in result.skipped_checks)
+
+
+def test_payslip_net_says_when_it_cannot_be_compared() -> None:
+    earnings = [{"label": "Basic salary", "amount": "5200"}, {"label": "Allowance", "amount": "n/a"}]
+    deductions = [{"label": "Employee CPF", "amount": "1170"}]
+    result = _run([_field("net_pay", "5680"), _field("earnings_items", earnings), _field("deductions_items", deductions)],
+                  document_type="payslip")
+
+    assert _codes(result, "PAY.NET") == []
+    assert [s.reason for s in result.skipped_checks if s.check_code == "PAY.NET"] == [
+        "Net pay not compared: no stated totals, and the line items are missing or incomplete"
+    ]
 
 
 def test_noa_skips_a_year_without_known_rules_or_no_year() -> None:
@@ -1428,11 +1447,6 @@ def test_whole_amounts_do_not_count_towards_the_cents_check() -> None:
     assert _skipped(_statement_of(amounts), "STAT.LAST_TWO_DIGITS") == ["fewer than 100 decimal amounts"]
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Known false positive (found writing this test): STAT.LAST_TWO_DIGITS counts bank fees, so a genuine statement "
-    "with many identical charges (45 x SERVICE CHARGE 2.50) is flagged. STAT.BENFORD_1D already sets fees aside "
-    "(_BANK_CHARGE_KEYWORDS). Remove this marker once the cents check does too."
-))
 def test_a_genuine_fee_heavy_statement_is_not_flagged_for_its_cents() -> None:
     amounts = [2.50] * 45 + _genuine_amounts(105)
 

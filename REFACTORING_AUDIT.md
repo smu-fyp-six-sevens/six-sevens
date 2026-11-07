@@ -52,10 +52,10 @@ Effort: S (minutes), M (an hour or two), L (a day or more). Reviewed 2026-10-22,
 
 | # | Where | What happens now | Fix | Effort |
 |---|---|---|---|---|
-| 1 | Spelling dictionary warm-up (`main.py`) | Built in the background on detection-worker only; the api's first on-demand spelling check waits about 6 s | Warm it on api too (costs its memory), or accept it | S |
+
 | 2 | Cancel polling (`workers/recovery.cancel_when`) | One Supabase read every 5 s per running pipeline or detection in Pub/Sub mode (at most about 12 a minute per run) | Fine at today's volume. If it grows, push cancels to the run over Realtime. The existing subscription (`realtime_listener.py`) can't simply be reused: it runs on the api role only and pushes case snapshots, while the polls run on doc-worker and detection-worker. Each worker instance would open its own channel (a Realtime connection each), filtered to cancelled rows, and keep a slow poll as the fallback, since Realtime delivery isn't guaranteed | S, later |
 
-**Needs measuring first:** whether rule-confident classifications could skip the Sonnet call, or the detection lead could use Haiku. The Agents and Cost dashboards now give the data (cost and calls per agent and per unit of work). It changes detection quality, so test against the regression set first.
+
 
 ---
 
@@ -71,7 +71,7 @@ The delete rules, RLS policies and grants are all in `backend/sql/schema.sql` (e
 | # | Finding | Fix | Effort |
 |---|---|---|---|
 | 2 | **Delete audit events are fire-and-forget** (`events.record`): if publishing fails, the delete stands with no audit row. A case delete logs one `case.deleted` with a count, not a `document.deleted` per document | `publish` for deletes (fail the request), or accept; per-document events on case delete | S |
-| 3 | **`audit_events` can still be wiped.** No role can UPDATE or DELETE it (`schema.sql` grants), but `service_role` holds TRUNCATE, which empties the table in one statement. The dashboard owner can always delete. No retention policy | `revoke truncate on public.audit_events from service_role;` | S |
+
 | 4 | **A delete's steps outside the database aren't in its transaction:** the cross-document findings citing a document go first, then the stored files, then the row (whose cascades are atomic). A failure partway leaves the row (a retry finishes the job); a stored file that fails to delete is only logged, so it stays in storage | Accept | - |
 
 **Unused schema** (read 2026-10-30):
@@ -104,7 +104,7 @@ Found by the size and coupling in a code graph (2026-11-05), not by reading the 
 
 ## Suggested order
 
-1. **Revoke TRUNCATE on the audit trail** (§4.3), one line of SQL.
+1. ~~**Revoke TRUNCATE on the audit trail** (§4.3), one line of SQL.~~
 2. **Quick win:** the 502 wrappers (backend 2.4), S.
 3. **Public field-value helpers** (backend 2.1).
 4. **Semantic risk tokens** (frontend 1.1), when the risk cards are restyled.

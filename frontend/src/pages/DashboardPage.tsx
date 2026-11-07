@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { CaseRecord } from '../utils/caseRecord';
 import type { Risk } from './dashboardRisk';
 import AppHeader from '../components/AppHeader';
+import { ErrorMessage } from '../components/ErrorMessage';
 import HeaderFilter, { type FilterOption } from '../components/HeaderFilter';
 import PeriodMenu, { CUSTOM_RANGE } from '../components/PeriodMenu';
 import CompareMenu from '../components/CompareMenu';
@@ -186,11 +187,14 @@ export default function DashboardPage({
   cases: caseRecords,
   isLoading,
   isRefreshing,
+  error,
   onRefresh,
 }: {
   cases: CaseRecord[];
   isLoading: boolean;
   isRefreshing: boolean;
+  // The last load's failure, if it failed.
+  error?: string | null;
   onRefresh: () => void;
 }) {
   const navigate = useNavigate();
@@ -403,9 +407,10 @@ export default function DashboardPage({
               )}
             </div>
           )}
+          {error && <ErrorMessage className="dashboard-load-error" message={`${error} Use Refresh to try again.`} />}
           {tab === 'Overview' && <CasePipeline counts={stageCounts} total={visibleCases.length} period={rangeLabel} before={before ? { counts: countsByStage(before.statusCounts), total: before.cases.length } : undefined} />}
           {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
-          {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
+          {!isLoading && !caseRecords.length && !error && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
 
           {tab === 'Overview' && <>
           <section className="dashboard-insight-grid">

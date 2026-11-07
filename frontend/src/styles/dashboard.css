@@ -120,6 +120,7 @@
 .flag-severity.low { border-color: var(--risk-low); background: var(--white); color: var(--ink-soft); }
 .flag-doc-types, .flag-case-ids { color: var(--ink-soft); font-size: 12.5px; }
 .dashboard-data-note { margin: -11px 0 15px; color: var(--ink-soft); font-size: 13px; }
+.dashboard-load-error { margin: 0 0 15px; }
 .dashboard-app .risk-score-critical { color: var(--risk-critical); }
 .classification-panel { margin: 14px 0; }
 .metric-placeholder-label { padding: 4px 7px; border: 1px solid var(--slate-88); border-radius: 10px; color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; }

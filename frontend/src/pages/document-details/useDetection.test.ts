@@ -98,8 +98,8 @@ describe('useDetection', () => {
   // REG-014 (Sprint 4 regression report): the panel is left on "Cancelling…" when the worker's snapshot (the run
   // stopped) reaches the page before the cancel request answers. The flag is cleared when the document leaves
   // detecting and set again when the answer lands, and nothing clears it after that, so a retried run shows a
-  // disabled "Cancelling…". This test reproduces it; remove `.fails` once useDetection is fixed.
-  it.fails('a retried run can be cancelled even when the cancel answered after the run had stopped (REG-014)', async () => {
+  // disabled "Cancelling…". Fixed: a late answer no longer sets the flag once the run has stopped.
+  it('a retried run can be cancelled even when the cancel answered after the run had stopped (REG-014)', async () => {
     let answer!: (outcome: 'cancelling') => void;
     api.cancelDetection.mockReturnValue(new Promise((resolve) => (answer = resolve)));
     const { result, rerender } = detection('detecting');

@@ -69,11 +69,6 @@ async def test_stats_of_credits_are_the_salary() -> None:
     assert (stats["count"], stats["total_credits"], stats["total_debits"]) == (1, 5200.0, 0)
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Known defect (found writing this test): transaction_summary takes the 90th percentile at index "
-    "int(0.9 * (n - 1)), which rounds down to the smallest size for a small sample: two debits of 250 and 1,800 "
-    "give a p90 of 250, below their median of 1,025. Remove this marker once the percentile is computed properly."
-))
 async def test_the_90th_percentile_is_never_below_the_median() -> None:
     tools, _ = toolkit()
 

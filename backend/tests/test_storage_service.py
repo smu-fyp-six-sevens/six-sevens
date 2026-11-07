@@ -14,6 +14,7 @@ class _FakeBucket:
         self.files: dict[str, bytes] = {}
         self.content_types: dict[str, str] = {}
         self.remove_calls: list[list[str]] = []
+        self.refuse_removal = False
         self.signed: list[tuple[str, int, dict]] = []
 
     def upload(self, path: str, data: bytes, options: dict) -> None:
@@ -23,10 +24,13 @@ class _FakeBucket:
     def download(self, path: str) -> bytes:
         return self.files[path]
 
-    def remove(self, paths: list[str]) -> None:
+    def remove(self, paths: list[str]) -> list[dict]:
         self.remove_calls.append(list(paths))
+        if self.refuse_removal:  # what storage does when no policy allows the delete: an empty answer, no error
+            return []
         for path in paths:
             self.files.pop(path, None)
+        return [{"name": path} for path in paths]
 
     def create_signed_url(self, path: str, expires_in: int, options: dict) -> dict:
         self.signed.append((path, expires_in, options))
@@ -100,6 +104,18 @@ def test_deleting_many_files_is_one_removal_call() -> None:
 
     assert client.bucket.files == {}
     assert client.bucket.remove_calls == [paths]
+
+
+def test_a_removal_storage_refuses_is_logged() -> None:
+    client, patched = _storage()
+    with patched, patch("app.storage_service.logger") as logger:
+        path = storage_service.upload_file("case-1", "stuck.pdf", b"x", "application/pdf")
+        client.bucket.refuse_removal = True
+        storage_service.delete_file(path)
+
+    assert path in client.bucket.files
+    logger.warning.assert_called_once()
+    assert logger.warning.call_args.args[1:3] == (0, 1)
 
 
 def test_deleting_no_files_does_not_call_storage_at_all() -> None:

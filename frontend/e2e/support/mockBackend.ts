@@ -183,11 +183,17 @@ export interface RecordedRequest {
 
 const ISO = '2026-09-01T00:00:00Z';
 
+// Ids come from a counter, so two cases or documents made in one test can never collide. Case numbers made here stay
+// below 9000, where the ones the mock creates itself begin.
+let serial = 0;
+const nextSerial = () => (serial += 1);
+
 export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
-  const id = overrides.id ?? `case-${Math.random().toString(36).slice(2, 10)}`;
+  const number = nextSerial();
+  const id = overrides.id ?? `case-${number}`;
   return {
     id,
-    greenlink_case_id: overrides.greenlink_case_id ?? `GLDB-${Math.floor(Math.random() * 9000) + 1000}`,
+    greenlink_case_id: overrides.greenlink_case_id ?? `GLDB-${1000 + (number % 8000)}`,
     company_name: 'Harbor Light Shipping Pte Ltd',
     status: 'open',
     checklist_enforced: false,
@@ -209,7 +215,7 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
 /** A case analysis run as GET /cases/:id/analysis returns it (backend case_pipeline/models.py CaseAnalysis). */
 export function makeAnalysis(overrides: Partial<CaseAnalysis> & Pick<CaseAnalysis, 'case_id'>): CaseAnalysis {
   return {
-    run_id: `run-${Math.random().toString(36).slice(2, 10)}`,
+    run_id: `run-${nextSerial()}`,
     status: 'complete',
     fingerprint: 'fingerprint',
     started_at: ISO,
@@ -304,7 +310,7 @@ function isReadyForAnalysis(documents: Pick<DocumentRow, 'status'>[]): boolean {
 
 export function makeDocument(overrides: Partial<DocumentRow> = {}): DocumentRow {
   return {
-    id: `doc-${Math.random().toString(36).slice(2, 10)}`,
+    id: `doc-${nextSerial()}`,
     case_id: null,
     filename: 'document.pdf',
     document_type: null,

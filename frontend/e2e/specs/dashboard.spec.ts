@@ -16,6 +16,14 @@ async function openAllTime(page: Page) {
   await page.getByRole('button', { name: 'All time' }).click();
 }
 
+// The clock stands still at midday in Singapore, so the calendar's "today", the last-30-days preset and the cases made
+// "now" read the same on every run: not a run near midnight, nor one on another timezone.
+const FIXED_NOW = new Date('2026-11-05T04:00:00Z');
+test.use({ timezoneId: 'Asia/Singapore' });
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(FIXED_NOW);
+});
+
 test.describe('Dashboard', () => {
   test("lists every case, whoever created it, and none of the sample cases", async ({ page, backend }) => {
     backend.cases.push(
@@ -80,7 +88,7 @@ test.describe('Dashboard', () => {
   });
 
   test('a custom range picked on the calendar narrows the dashboard to it', async ({ page, backend }) => {
-    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: new Date().toISOString() }));
+    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: FIXED_NOW.toISOString() }));
     await page.goto('/dashboard');
     await expect(page.getByText('Acme Pte Ltd')).toBeVisible();
 
@@ -97,7 +105,7 @@ test.describe('Dashboard', () => {
   });
 
   test('compare picks the first period, then a second one outside it, and shows both', async ({ page, backend }) => {
-    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: new Date().toISOString() }));
+    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: FIXED_NOW.toISOString() }));
     await page.goto('/dashboard');
     const compare = page.getByRole('button', { name: 'Compare two periods' });
 
@@ -125,7 +133,7 @@ test.describe('Dashboard', () => {
   });
 
   test('a comparison picked after the first period becomes this period, so changes read as now against before', async ({ page, backend }) => {
-    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: new Date().toISOString() }));
+    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: FIXED_NOW.toISOString() }));
     await page.goto('/dashboard');
     const compare = page.getByRole('button', { name: 'Compare two periods' });
 
@@ -151,7 +159,7 @@ test.describe('Dashboard', () => {
   });
 });
 
-const NOW = new Date().toISOString();
+const NOW = FIXED_NOW.toISOString();
 
 test.describe('Dashboard case pipeline', () => {
   test('every stage is a step with its count, and Failed stands apart from the line', async ({ page, backend }) => {

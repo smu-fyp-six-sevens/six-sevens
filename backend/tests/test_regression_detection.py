@@ -36,8 +36,6 @@ of each sprint.
 """
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 
 import pytest
@@ -52,6 +50,7 @@ from tests.support.detection_documents import (
 from tests.support.detection_harness import (
     CONTENT, DIGITAL, LAYOUT, DetectionAI, FakeStore, Review, Specialist, consulted, findings_from, indicators,
 )
+from tests.support.regression_fixtures import check_fixture
 
 # The harness's fixtures: scripted Claude, the in-memory store, and the cleanup after each run.
 ai = detection_harness.ai
@@ -565,7 +564,7 @@ async def test_a_correctly_spelt_certificate_has_no_spelling_finding(ai, store):
 # frontend/e2e/specs/detection.spec.ts renders this report (FD-015 – FD-020),
 # so the UI is tested against what the graph really produces. If the graph's
 # output changes, this test fails until the fixture is regenerated:
-#     REGENERATE_REGRESSION_FIXTURES=1 python -m pytest tests/test_regression_detection.py -k playwright
+#     python scripts/regenerate_regression_fixtures.py
 
 DETECTION_REPORT_FIXTURE = FIXTURES / "detection-report-c028.json"
 
@@ -593,11 +592,7 @@ async def test_the_playwright_suites_detection_report_matches_the_graph(ai, stor
     report = await run_detection(document_id)
     report = {**report, "generated_at": "2026-10-14T00:00:00+00:00"}
 
-    if os.environ.get("REGENERATE_REGRESSION_FIXTURES"):
-        DETECTION_REPORT_FIXTURE.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-    assert json.loads(DETECTION_REPORT_FIXTURE.read_text()) == json.loads(json.dumps(report)), (
-        "detection-report-c028.json is out of date with the detection graph — regenerate it (see above)"
-    )
+    check_fixture(DETECTION_REPORT_FIXTURE, report)
 
 
 @pytest.mark.sprint3
@@ -608,8 +603,4 @@ async def test_the_playwright_suites_clean_and_inconclusive_reports_match_the_gr
     fixture = FIXTURES / f"detection-report-{verdict}.json"
     report = {**await scenario(ai, store), "generated_at": "2026-10-14T00:00:00+00:00"}
 
-    if os.environ.get("REGENERATE_REGRESSION_FIXTURES"):
-        fixture.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-    assert json.loads(fixture.read_text()) == json.loads(json.dumps(report)), (
-        f"{fixture.name} is out of date with the detection graph — regenerate it (see above)"
-    )
+    check_fixture(fixture, report)

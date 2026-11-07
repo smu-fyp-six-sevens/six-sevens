@@ -17,7 +17,6 @@ used cases C060/C064, which no longer exist in Supabase.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -33,6 +32,7 @@ from app.models import (
     DocumentRecord,
     compute_fulfilled_requirements,
 )
+from tests.support.regression_fixtures import check_fixture
 
 FIXTURES = Path(__file__).parent / "fixtures" / "regression"
 
@@ -269,7 +269,7 @@ def test_the_playwright_suites_checklists_match_the_backend():
     The mocked backend can't run build_summary, so it serves the checklist (and the identity and proof-of-address
     coverage) recorded here for whichever of these document sets a case is left with. A browser test deletes
     documents; it never sets the checklist itself.
-    Regenerate with REGENERATE_REGRESSION_FIXTURES=1.
+    Regenerate with scripts/regenerate_regression_fixtures.py.
     """
     case, documents, _ = _load("anchorpoint")
     confirmed = _officer_confirmed(documents)
@@ -287,8 +287,4 @@ def test_the_playwright_suites_checklists_match_the_backend():
             "id_document_coverage": summary.id_document_coverage.model_dump(),
         })
 
-    if os.environ.get("REGENERATE_REGRESSION_FIXTURES"):
-        CHECKLIST_FIXTURE.write_text(json.dumps(variants, indent=2) + "\n")
-    assert json.loads(CHECKLIST_FIXTURE.read_text()) == variants, (
-        "checklist-variants.json is out of date with build_summary — regenerate it (see above)"
-    )
+    check_fixture(CHECKLIST_FIXTURE, variants, sort_keys=False)

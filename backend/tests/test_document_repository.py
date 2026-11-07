@@ -175,14 +175,17 @@ def test_approve_document_accepts_it_and_resyncs_the_case() -> None:
         patch("app.document_repository.supabase_client") as mock_client,
         patch("app.case_stage.sync_case_stage") as mock_case_service,
     ):
-        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = (
             _execute_result([_row(status="approved", routing_status="accepted")])
         )
 
         approved = document_repository.approve_document("doc-1")
 
-    mock_client.table.return_value.update.assert_called_once_with({"status": "approved", "routing_status": "accepted"})
-    mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "doc-1")
+    update = mock_client.table.return_value.update
+    update.assert_called_once_with({"status": "approved", "routing_status": "accepted"})
+    # Only an analyzed document is approved, so a second approval at once matches nothing.
+    update.return_value.eq.assert_called_once_with("id", "doc-1")
+    update.return_value.eq.return_value.eq.assert_called_once_with("status", "analyzed")
     assert approved is not None and approved.status == DocumentStatus.APPROVED
     mock_case_service.assert_called_once_with("case-1")
 
@@ -208,7 +211,7 @@ def test_approve_document_returns_none_when_nothing_was_updated() -> None:
         patch("app.document_repository.supabase_client") as mock_client,
         patch("app.case_stage.sync_case_stage") as mock_case_service,
     ):
-        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = (
             _execute_result([])
         )
 

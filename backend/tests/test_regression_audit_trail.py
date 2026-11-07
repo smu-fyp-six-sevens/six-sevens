@@ -11,14 +11,13 @@ covered by Sprint 2's suite) is stood in for by the result it saved on the live 
 
 The Audit Trail's Playwright tests (audit-trail.spec.ts) are served this trail, from
 fixtures/regression/audit-trail-sprint5.json; a test below fails if it drifts. Regenerate with
-REGENERATE_REGRESSION_FIXTURES=1.
+scripts/regenerate_regression_fixtures.py.
 """
 from __future__ import annotations
 
 import asyncio
 import io
 import json
-import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -32,6 +31,7 @@ from app.main import app
 from app.models import CaseNote, CaseRecord, DocumentRecord, DocumentStatus
 from app.workers import documents as doc_worker
 from tests.conftest import TEST_USER
+from tests.support.regression_fixtures import check_fixture
 
 client = TestClient(app)
 FIXTURES = Path(__file__).parent / "fixtures" / "regression"
@@ -255,8 +255,4 @@ def test_edits_take_their_place_in_time_order(trail):
 def test_the_playwright_suites_audit_trail_matches_the_backend(trail):
     rows = [e.model_dump(mode="json") for e in trail]
 
-    if os.environ.get("REGENERATE_REGRESSION_FIXTURES"):
-        TRAIL_FIXTURE.write_text(json.dumps(rows, indent=2, sort_keys=True) + "\n")
-    assert json.loads(TRAIL_FIXTURE.read_text()) == rows, (
-        "audit-trail-sprint5.json is out of date with the audit events — regenerate it (see above)"
-    )
+    check_fixture(TRAIL_FIXTURE, rows)

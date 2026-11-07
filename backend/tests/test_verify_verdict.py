@@ -213,11 +213,6 @@ def test_the_officer_reads_plain_words_not_tool_names_flags_or_ref_ids() -> None
     assert plain_text(text) == "The check shows the mismatch, and the cross-check found no explanation."
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Known defect (found writing this test): in verify._TOOL_RE the optional article only binds to the first "
-    "alternative (names ending _tool), so a named tool after 'The' keeps it and gains another: 'The "
-    "compare_identifiers result' reads 'The the check result'. Remove this marker once the alternation is grouped."
-))
 def test_a_named_tool_after_an_article_reads_as_one_article() -> None:
     assert plain_text("The compare_identifiers result differs.") == "The check result differs."
 

@@ -77,6 +77,13 @@ class Runs:
         self.rows[run_id] = {"run_id": run_id, "case_id": case_id, "status": "running", "fingerprint": fingerprint,
                              "started_at": datetime.now(timezone.utc), "finished_at": None, "error": None}
 
+    def claim_run(self, run_id):
+        row = self.rows.get(run_id)
+        if row is None or row["status"] != "running" or row.get("claimed"):
+            return False
+        row["claimed"] = True
+        return True
+
     def latest_run_state(self, case_id):
         rows = [r for r in self.rows.values() if r["case_id"] == case_id]
         newest = max(rows, key=lambda r: r["started_at"], default=None)
@@ -117,7 +124,7 @@ class Case:
 @pytest.fixture
 def runs(monkeypatch) -> Runs:
     fake = Runs()
-    for name in ("insert_run", "latest_run_state", "write_trace", "finish_run"):
+    for name in ("insert_run", "claim_run", "latest_run_state", "write_trace", "finish_run"):
         monkeypatch.setattr(f"app.case_pipeline.repository.{name}", getattr(fake, name))
     # A trace is saved on a background thread; here at once, so a test reads it as soon as the run has saved it.
     monkeypatch.setattr(run_trace.RunTrace, "save", lambda trace: fake.write_trace(trace.run_id, list(trace.events)))

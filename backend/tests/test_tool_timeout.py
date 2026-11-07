@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import time
+import threading
 
 from langchain_core.tools import StructuredTool
 
@@ -19,11 +19,17 @@ def _tool(job) -> StructuredTool:
     return guard_tool(StructuredTool.from_function(coroutine=run, name="layout_anomalies_tool", description="test"))
 
 
-async def _behind_a_busy_worker(seconds: float):
-    """Occupies the one CPU worker, and returns once it is busy."""
-    blocker = asyncio.create_task(run_cpu(time.sleep, seconds))
-    await asyncio.sleep(0.05)
-    return blocker
+async def _behind_a_busy_worker() -> tuple[asyncio.Task, threading.Event]:
+    """Occupies the one CPU worker until the returned event is set, and returns once it is busy."""
+    busy, release = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        busy.set()
+        release.wait(10)
+
+    blocker = asyncio.create_task(run_cpu(hold))
+    await asyncio.to_thread(busy.wait, 5)
+    return blocker, release
 
 
 def _short_limits(monkeypatch) -> None:
@@ -33,17 +39,24 @@ def _short_limits(monkeypatch) -> None:
 
 async def test_a_job_that_waits_longer_than_the_limit_still_runs(monkeypatch) -> None:
     _short_limits(monkeypatch)
-    blocker = await _behind_a_busy_worker(0.6)
+    blocker, release = await _behind_a_busy_worker()
+    call = asyncio.create_task(_tool(lambda: "done").coroutine())  # type: ignore[misc]
 
-    result = await _tool(lambda: "done").coroutine()  # type: ignore[misc]
+    await asyncio.sleep(0.4)  # twice the limit, all of it spent waiting for the worker
+    assert not call.done()
+    release.set()
 
-    assert result == {"value": "done"}
+    assert await call == {"value": "done"}
     await blocker
 
 
 async def test_a_job_that_runs_longer_than_the_limit_still_times_out(monkeypatch) -> None:
     _short_limits(monkeypatch)
-    result = await _tool(lambda: time.sleep(0.6)).coroutine()  # type: ignore[misc]
+    finish = threading.Event()
+    try:
+        result = await _tool(lambda: finish.wait(10)).coroutine()  # type: ignore[misc]
+    finally:
+        finish.set()  # the job's thread ends with the test instead of running into the next one
 
     assert "no result within 0.2 seconds" in str(result)
 
@@ -51,12 +64,14 @@ async def test_a_job_that_runs_longer_than_the_limit_still_times_out(monkeypatch
 async def test_waiting_has_its_own_cap(monkeypatch) -> None:
     _short_limits(monkeypatch)
     monkeypatch.setattr(settings, "CPU_QUEUE_TIMEOUT_SECONDS", 0.2)
-    blocker = await _behind_a_busy_worker(0.8)
-
-    result = await _tool(lambda: "done").coroutine()  # type: ignore[misc]
+    blocker, release = await _behind_a_busy_worker()
+    try:
+        result = await _tool(lambda: "done").coroutine()  # type: ignore[misc]
+    finally:
+        release.set()
+        await blocker
 
     assert "waited 0.2 seconds for the CPU worker" in str(result)
-    await blocker
 
 
 async def test_a_tool_that_never_uses_the_worker_keeps_its_plain_limit(monkeypatch) -> None:

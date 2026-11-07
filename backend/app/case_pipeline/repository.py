@@ -59,6 +59,18 @@ def insert_run(run_id: str, case_id: str, fingerprint: str) -> None:
     }).execute()
 
 
+def claim_run(run_id: str) -> bool:
+    """
+    Takes a requested run for a worker, once (compare-and-swap): whether it did. A redelivered request finds the run
+    taken, or already ended, and has nothing to do.
+    """
+    result = (
+        supabase_client.table(_TABLE).update({"worker_started_at": datetime.now(timezone.utc).isoformat()})
+        .eq("run_id", run_id).eq("status", "running").is_("worker_started_at", "null").execute()
+    )
+    return bool(result.data)
+
+
 def write_trace(run_id: str, events: list[dict[str, Any]]) -> None:
     supabase_client.table(_TABLE).update({"trace": events}).eq("run_id", run_id).execute()
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -31,19 +32,35 @@ async def _cancel_requested_since(document_id: str, since: datetime) -> bool:
     return bool(found)
 
 
-async def run(document_id: str, case_id: str | None, requested_by: str | None = None) -> None:
+async def run(
+    document_id: str, case_id: str | None, requested_by: str | None = None,
+    start_from: Sequence[DocumentStatus] | None = None,
+) -> None:
     """
     One detection run, its end event, and a live refresh. An interrupted run goes back to approved, retryable.
     `requested_by` is the officer whose approval or retry started it, for the audit trail.
+    With `start_from`, the run starts only if it can move the document from one of those statuses to detecting;
+    a redelivered event finds it already moved, and does nothing.
     """
+    if start_from is not None and _runs.is_running(document_id):
+        logger.info("Detection for document %s is already running here; ignoring the repeat", document_id)
+        return
     timer = Stopwatch()
     outcome: Outcome = "success"
     detail: dict[str, Any] = {}
     usage: dict[str, float | int] = {}
+    started = False
     try:
         # The cancel event is the flag: the audit trail shows one made through another instance.
         with _runs.track(document_id, lambda: _cancel_requested_since(document_id, timer.started_at)):
             async with _slots:
+                if start_from is not None and not await asyncio.to_thread(
+                    document_repository.update_status, document_id, DocumentStatus.DETECTING,
+                    expected_current_statuses=list(start_from),
+                ):
+                    logger.info("Document %s is no longer waiting for detection; ignoring the repeat", document_id)
+                    return
+                started = True
                 with query_stats.scope(f"detection doc={document_id[:8]}", work="detection") as unit:
                     try:
                         result = await run_detection(document_id)
@@ -69,7 +86,7 @@ async def run(document_id: str, case_id: str | None, requested_by: str | None = 
         logger.exception("Fraud detection failed for approved document %s", document_id)
         outcome, detail = "failed", {"error": f"{type(exc).__name__}: {exc}"[:300]}
     finally:
-        if case_id:
+        if case_id and started:
             # Every ending writes the document's status last, which Realtime reports.
             await push_case_snapshot(case_id, realtime_covers=True)
     await _record_end(document_id, case_id, requested_by, timer, outcome, detail, usage)
@@ -94,7 +111,11 @@ async def on_requested(event: Event) -> None:
     """An approval (unless the document has no type) or an officer's retry after a failed run."""
     if event.document_id is None or event.detail.get("skip_detection"):
         return
-    await run(event.document_id, event.case_id, officer_of(event))
+    # An approval starts the first run; a retry may also replace a finished report.
+    start_from = [DocumentStatus.APPROVED]
+    if event.type == types.DETECTION_RETRY_REQUESTED:
+        start_from.append(DocumentStatus.DETECTED)
+    await run(event.document_id, event.case_id, officer_of(event), start_from)
 
 
 async def on_cancel_requested(event: Event) -> None:

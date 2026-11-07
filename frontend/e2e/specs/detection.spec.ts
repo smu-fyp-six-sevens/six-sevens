@@ -200,10 +200,8 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
   });
 
   test('after a cancel whose reply arrives late, a retried run can still be cancelled @SCRUM-299', async ({ page, backend }) => {
-    // REG-014: the panel sets "Cancelling…" when the cancel request answers, and clears it when the document leaves
-    // detecting. With the worker's snapshot arriving first, it is set after being cleared and stays set, so the
-    // retried run shows a disabled "Cancelling…" instead of "Cancel detection".
-    test.fail();
+    // REG-014: the cancel's answer used to set "Cancelling…" after the worker's snapshot had already ended the run,
+    // so the retried run showed a disabled "Cancelling…" instead of "Cancel detection".
     const { fixture, document } = creditReport(backend);
     document.status = 'detecting';
     let answerCancel!: () => void;
@@ -219,8 +217,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/detection/retry`).length).toBe(1);
     backend.push(document.case_id!);
 
-    // A short wait: the expected failure needn't hold the run for the default timeout.
-    await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toBeVisible({ timeout: 3000 });
+    await expect(detectionPanel(page).getByRole('button', { name: 'Cancel detection' })).toBeVisible();
   });
 
   test('a scanned document can be run again; a cancelled rerun leaves the earlier report standing @SCRUM-299', async ({ page, backend }) => {

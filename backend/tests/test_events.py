@@ -67,17 +67,23 @@ def test_every_consumed_type_has_a_name() -> None:
 async def test_in_process_dispatch_runs_every_installed_role(clean_registry, monkeypatch) -> None:
     monkeypatch.setattr(bus, "_dispatch_in_process", _REAL_DISPATCH)
     seen: list[str] = []
+    both_ran = asyncio.Event()
+
+    def ran(role: str) -> None:
+        seen.append(role)
+        if len(seen) == 2:
+            both_ran.set()
 
     async def worker(event: Event) -> None:
-        seen.append("worker")
+        ran("worker")
 
     async def audit(event: Event) -> None:
-        seen.append("audit")
+        ran("audit")
 
     registry.install("case-worker", {types.CASE_ANALYSIS_REQUESTED: worker})
     registry.install("audit-metrics", {types.EVERY_TYPE: audit})
     await bus.publish(Event(type=types.CASE_ANALYSIS_REQUESTED, case_id="c"))
-    await asyncio.sleep(0.01)
+    await asyncio.wait_for(both_ran.wait(), timeout=2)
     assert sorted(seen) == ["audit", "worker"]
 
 

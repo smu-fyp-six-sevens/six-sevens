@@ -12,12 +12,10 @@ memory.
 
 The Accuracy tab's Playwright tests (dashboard.spec.ts) are served this endpoint's response, from
 fixtures/regression/detection-metrics-sprint5.json; a test below fails if it drifts. Regenerate with
-REGENERATE_REGRESSION_FIXTURES=1.
+scripts/regenerate_regression_fixtures.py.
 """
 from __future__ import annotations
 
-import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -28,6 +26,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.models import CaseRecord, FindingReview
 from tests.conftest import TEST_USER
+from tests.support.regression_fixtures import check_fixture
 
 client = TestClient(app)
 METRICS_FIXTURE = Path(__file__).parent / "fixtures" / "regression" / "detection-metrics-sprint5.json"
@@ -177,8 +176,4 @@ def test_with_no_reviews_neither_rate_is_given():
 def test_the_playwright_suites_detection_metrics_match_the_backend():
     metrics = dashboard_metrics(brightwave_reviews())
 
-    if os.environ.get("REGENERATE_REGRESSION_FIXTURES"):
-        METRICS_FIXTURE.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n")
-    assert json.loads(METRICS_FIXTURE.read_text()) == metrics, (
-        "detection-metrics-sprint5.json is out of date with detection_metrics — regenerate it (see above)"
-    )
+    check_fixture(METRICS_FIXTURE, metrics)

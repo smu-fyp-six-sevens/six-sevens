@@ -496,16 +496,20 @@ async def test_a_change_to_the_case_row_pushes_a_fresh_snapshot() -> None:
 
     live = CaseBroadcaster()
     viewer = live.subscribe("case-1")
-    with (
-        patch.object(realtime_listener, "broadcaster", live),
-        patch.object(realtime_listener, "DEBOUNCE_SECONDS", 0.01),
-        patch("app.realtime_listener.case_service.build_case_snapshot", return_value={"type": "snapshot"}),
-    ):
-        realtime_listener._on_change({"data": {"table": "cases", "record": {"id": "case-1", "status": "fraud_detection"}}})
-        await asyncio.sleep(0.1)
-    realtime_listener._pending.clear()
+    try:
+        with (
+            patch.object(realtime_listener, "broadcaster", live),
+            patch.object(realtime_listener, "DEBOUNCE_SECONDS", 0.01),
+            patch("app.realtime_listener.case_service.build_case_snapshot", return_value={"type": "snapshot"}),
+        ):
+            realtime_listener._on_change(
+                {"data": {"table": "cases", "record": {"id": "case-1", "status": "fraud_detection"}}}
+            )
+            snapshot = await asyncio.wait_for(viewer.get(), timeout=2)  # as soon as the debounce has passed
+    finally:
+        realtime_listener._pending.clear()
 
-    assert viewer.get_nowait() == {"type": "snapshot"}
+    assert snapshot == {"type": "snapshot"}
 
 
 def test_startup_brings_every_case_up_to_date_and_skips_one_that_fails() -> None:

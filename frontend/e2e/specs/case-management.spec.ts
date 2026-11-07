@@ -419,16 +419,19 @@ test.describe('Case page layout @SCRUM-299', () => {
     backend.cases.push(meridian);
     await page.goto('/cases');
     await expect(caseCards(page)).toHaveCount(1);
-    // The server's answer takes three seconds; the page must not wait for it.
+    // The server's answer is held back until the header has shown; the page must not wait for it.
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => (answer = resolve));
     await page.route('**/cases/by-number/**', async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await held;
       await route.fallback();
     });
 
     await page.getByRole('button', { name: `Open case ${meridian.greenlink_case_id}, ${meridian.company_name}` }).click();
 
-    await expect(page.getByRole('heading', { name: 'Fast Open Pte Ltd' })).toBeVisible({ timeout: 1500 });
+    await expect(page.getByRole('heading', { name: 'Fast Open Pte Ltd' })).toBeVisible();
     await expect(sectionNav(page).getByRole('button', { name: /^Case Summary/ })).toBeVisible();
+    answer();
   });
 
   test('the section menu is a rail of icons that opens over the page without moving it', async ({ page, backend }) => {

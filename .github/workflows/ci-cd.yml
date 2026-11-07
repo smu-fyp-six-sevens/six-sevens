@@ -30,7 +30,7 @@ jobs:
         working-directory: backend
     env:
       SUPABASE_URL: https://example.supabase.co
-      SUPABASE_PUBLISHABLE_KEY: placeholder-key
+      SUPABASE_SECRET_KEY: placeholder-key
       SUPABASE_STORAGE_BUCKET: documents
     steps:
       - name: Checkout repository
