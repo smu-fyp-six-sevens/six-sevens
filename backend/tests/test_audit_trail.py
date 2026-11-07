@@ -93,6 +93,7 @@ async def test_a_run_no_officer_started_names_none(published_events) -> None:
 async def test_a_detection_run_names_the_officer_who_approved(published_events) -> None:
     with (
         patch("app.workers.detection.run_detection", AsyncMock(return_value={"verdict": "clean", "findings": []})),
+        patch("app.workers.detection.document_repository.update_status", return_value=True),
         patch("app.workers.detection.push_case_snapshot", AsyncMock()),
     ):
         await detection_worker.on_requested(_by_officer(types.DOCUMENT_APPROVED, document_id="doc-1"))
@@ -105,6 +106,7 @@ async def test_a_detection_run_names_the_officer_who_approved(published_events) 
 async def test_a_failed_detection_run_still_names_the_officer(published_events) -> None:
     with (
         patch("app.workers.detection.run_detection", AsyncMock(side_effect=RuntimeError("boom"))),
+        patch("app.workers.detection.document_repository.update_status", return_value=True),
         patch("app.workers.detection.push_case_snapshot", AsyncMock()),
     ):
         await detection_worker.on_requested(_by_officer(types.DETECTION_RETRY_REQUESTED, document_id="doc-1"))
@@ -116,7 +118,10 @@ async def test_a_failed_detection_run_still_names_the_officer(published_events) 
 
 async def test_a_case_analysis_names_the_officer_who_requested_it(published_events) -> None:
     analysis = CaseAnalysis(run_id="run-1", case_id="case-1", status="complete", fingerprint="f", started_at=_TIMESTAMP)
-    with patch.object(case_worker.analysis_service, "run_requested", AsyncMock(return_value=analysis)):
+    with (
+        patch.object(case_worker.analysis_service, "run_requested", AsyncMock(return_value=analysis)),
+        patch.object(case_worker.analysis_repository, "claim_run", return_value=True),
+    ):
         await case_worker.on_analysis_requested(_by_officer(
             types.CASE_ANALYSIS_REQUESTED, detail={"run_id": "run-1", "fingerprint": "f"},
         ))

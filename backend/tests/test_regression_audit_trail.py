@@ -28,7 +28,7 @@ from fastapi.testclient import TestClient
 from app.events import Event, types
 from app.fraud_detection.font_consistency import ExtractedField
 from app.main import app
-from app.models import CaseNote, CaseRecord, DocumentRecord, DocumentStatus
+from app.models import CaseNote, CaseRecord, DocumentRecord, DocumentStatus, RoutingStatus
 from app.workers import documents as doc_worker
 from tests.conftest import TEST_USER
 from tests.support.regression_fixtures import check_fixture
@@ -74,7 +74,8 @@ class TrailStore:
         row = ANCHORPOINT["documents"][document_id]
         self.documents[document_id] = self.documents[document_id].model_copy(update={
             "status": DocumentStatus.ANALYZED, "document_type": row["document_type"],
-            "classification_confidence": row["classification_confidence"], "routing_status": row["routing_status"],
+            "classification_confidence": row["classification_confidence"],
+            "routing_status": RoutingStatus(row["routing_status"]) if row["routing_status"] else None,
         })
         self.fields[document_id] = {
             name: ExtractedField(field_name=name, field_type="string", field_value=f["value"], confidence=f["confidence"])
@@ -84,7 +85,7 @@ class TrailStore:
     def record_classification(self, document_id, *, document_type, classification_confidence, routing_status, **kwargs):
         self.documents[document_id] = self.documents[document_id].model_copy(update={
             "document_type": document_type, "classification_confidence": classification_confidence,
-            "routing_status": routing_status,
+            "routing_status": RoutingStatus(routing_status) if routing_status else None,
         })
 
     def update_extracted_fields(self, document_id, *args, **kwargs):
@@ -154,8 +155,12 @@ def officer_trail(published_events: list) -> list[Event]:
 def restamped(event: Event, n: int) -> Event:
     """The event at minute n of the trail's clock, with a fixed id: a run takes the time it recorded, ending then."""
     occurred_at = STARTED + timedelta(minutes=n)
-    started_at = occurred_at - timedelta(milliseconds=event.duration_ms or 0) if event.started_at else None
-    return event.model_copy(update={"event_id": f"trail-{n:02d}", "occurred_at": occurred_at, "started_at": started_at})
+    # A run's real duration (a millisecond or two) varies from run to run, so the trail records none.
+    timed = event.started_at is not None
+    return event.model_copy(update={
+        "event_id": f"trail-{n:02d}", "occurred_at": occurred_at,
+        "started_at": occurred_at if timed else None, "duration_ms": 0 if timed else event.duration_ms,
+    })
 
 
 @pytest.fixture

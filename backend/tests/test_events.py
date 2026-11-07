@@ -263,6 +263,7 @@ async def test_detection_skips_an_untyped_approval() -> None:
 async def test_detection_run_announces_detected(published_events) -> None:
     with (
         patch("app.workers.detection.run_detection", new=AsyncMock(return_value={"verdict": "clean", "findings": []})),
+        patch("app.workers.detection.document_repository.update_status", return_value=True),
         patch("app.workers.detection.push_case_snapshot", new=AsyncMock()) as push,
     ):
         await detection_worker.on_requested(Event(type=types.DOCUMENT_APPROVED, document_id="d", case_id="c"))
@@ -279,6 +280,7 @@ async def test_detection_run_announces_detected(published_events) -> None:
 async def test_detection_failure_announces_failed(published_events) -> None:
     with (
         patch("app.workers.detection.run_detection", new=AsyncMock(side_effect=RuntimeError("graph broke"))),
+        patch("app.workers.detection.document_repository.update_status", return_value=True),
         patch("app.workers.detection.push_case_snapshot", new=AsyncMock()),
     ):
         await detection_worker.on_requested(Event(type=types.DOCUMENT_APPROVED, document_id="d", case_id="c"))
@@ -296,6 +298,7 @@ async def test_an_officer_cancel_saves_the_error_and_ends_the_run(published_even
 
     with (
         patch("app.workers.detection.run_detection", new=slow),
+        patch("app.workers.detection.document_repository.update_status", return_value=True),
         patch("app.workers.detection.push_case_snapshot", new=AsyncMock()),
         patch("app.workers.detection.langgraph_trace") as trace,
         patch("app.workers.detection.detection_results") as results,
