@@ -10,7 +10,7 @@ def _env(name: str, default: str = "") -> str:
     """
     os.environ.get, stripped — a copy-pasted secret easily picks up a
     trailing newline, which is silently harmless for most settings but
-    fatal as an HTTP header value (e.g. SUPABASE_PUBLISHABLE_KEY).
+    fatal as an HTTP header value (e.g. SUPABASE_SECRET_KEY).
     """
     return os.environ.get(name, default).strip()
 
@@ -95,9 +95,7 @@ class Settings:
     ALLOWED_ORIGIN_REGEX: str | None = _env("ALLOWED_ORIGIN_REGEX") or None
 
     SUPABASE_URL: str = _env("SUPABASE_URL")
-    SUPABASE_PUBLISHABLE_KEY: str = _env("SUPABASE_PUBLISHABLE_KEY")
-    # Bypasses RLS — backend-only, for the Realtime subscription
-    # (realtime_listener.py). Never sent to the frontend.
+    # Bypasses RLS: every backend read, write and Storage call uses it. Never sent to the frontend.
     SUPABASE_SECRET_KEY: str = _env("SUPABASE_SECRET_KEY")
     SUPABASE_STORAGE_BUCKET: str = _env("SUPABASE_STORAGE_BUCKET", "documents")
 

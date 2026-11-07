@@ -1,6 +1,7 @@
 # storage_service.py
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import uuid
@@ -9,6 +10,8 @@ from storage3.types import URLOptions
 
 from .config import settings
 from .supabase_client import supabase_client
+
+logger = logging.getLogger(__name__)
 
 # Signed URLs handed out, reused while they have at least _MIN_LEFT_SECONDS to run: opening a document's preview
 # again needn't sign its file again. Per process, keyed by (path, download filename); oldest dropped first.
@@ -41,9 +44,16 @@ def _forget_signed(storage_paths: list[str]) -> None:
             _signed.pop(key, None)
 
 
+def _remove(storage_paths: list[str]) -> None:
+    # Storage answers a refused delete (no policy, wrong key) with an empty list instead of an error.
+    removed = supabase_client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).remove(storage_paths)
+    if isinstance(removed, list) and len(removed) < len(storage_paths):
+        logger.warning("Storage removed %d of %d files: %s", len(removed), len(storage_paths), storage_paths)
+
+
 def delete_file(storage_path: str) -> None:
     _forget_signed([storage_path])
-    supabase_client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).remove([storage_path])
+    _remove([storage_path])
 
 
 def delete_files(storage_paths: list[str]) -> None:
@@ -51,7 +61,7 @@ def delete_files(storage_paths: list[str]) -> None:
     if not storage_paths:
         return
     _forget_signed(storage_paths)
-    supabase_client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).remove(storage_paths)
+    _remove(storage_paths)
 
 
 def signed_url(storage_path: str, expires_in: int, download_filename: str | None = None) -> tuple[str, int]:

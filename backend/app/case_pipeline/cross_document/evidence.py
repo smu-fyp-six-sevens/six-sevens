@@ -6,6 +6,7 @@ A verdict may only cite an id the ledger issued (see verify.py).
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from statistics import median
@@ -156,7 +157,7 @@ def transaction_summary(rows: list[dict]) -> dict[str, Any]:
         "total_credits": round(sum(credits), 2),
         "total_debits": round(sum(debits), 2),
         "median_size": round(median(sizes), 2) if sizes else None,
-        "p90_size": round(sizes[int(0.9 * (len(sizes) - 1))], 2) if sizes else None,
+        "p90_size": round(sizes[math.ceil(0.9 * len(sizes)) - 1], 2) if sizes else None,  # nearest rank
         "max_size": round(sizes[-1], 2) if sizes else None,
         "min_size": round(sizes[0], 2) if sizes else None,
     }

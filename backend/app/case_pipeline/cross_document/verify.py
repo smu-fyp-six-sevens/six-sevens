@@ -46,8 +46,8 @@ def _replace(pattern: re.Pattern, word: str, text: str) -> str:
 def plain_text(text: str) -> str:
     """The model's wording with ref ids, tool names, flags and 'refutation' jargon replaced by plain words."""
     text = _REF_RE.sub("", text)
-    text = _replace(re.compile(_ARTICLE + _TOOL_RE.pattern, re.IGNORECASE), "check", text)
-    text = _replace(re.compile(_ARTICLE + _FLAG_RE.pattern, re.IGNORECASE), "mismatch", text)
+    text = _replace(re.compile(_ARTICLE + f"(?:{_TOOL_RE.pattern})", re.IGNORECASE), "check", text)
+    text = _replace(re.compile(_ARTICLE + f"(?:{_FLAG_RE.pattern})", re.IGNORECASE), "mismatch", text)
     text = _JARGON_RE.sub("cross-check", text)
     return re.sub(r"\s+([,.;:])", r"\1", " ".join(text.split()))
 

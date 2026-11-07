@@ -609,7 +609,7 @@ export function CaseRiskCard({
           </div>
 
           {scored && (
-            <span className={`risk-badge risk-badge--${scored.level!.toLowerCase()}`}>
+            <span className={`risk-badge risk-badge--${scored.level!.toLowerCase()}`} data-testid="risk-badge">
               {scored.level} Risk
             </span>
           )}

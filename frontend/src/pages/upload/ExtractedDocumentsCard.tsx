@@ -110,7 +110,7 @@ export function ExtractedDocumentsCard({
     });
 
   return (
-    <section className="documents-card">
+    <section className="documents-card" data-testid="documents-card">
       <div className="documents-card-header">
         <div className="documents-card-title">
           <span className="documents-card-icon"><Icon name="documents" size={20} /></span>
@@ -229,7 +229,7 @@ export function ExtractedDocumentsCard({
           <>
             <GroupToggle id="missing" label="Missing" count={missing.length} open={openGroup === 'missing'} onToggle={toggle} />
             {openGroup === 'missing' && missing.map((requirement) => (
-              <div key={requirement.value} className="checklist-missing-row">
+              <div key={requirement.value} className="checklist-missing-row" data-testid="missing-document">
                 <span className="document-select-cell" aria-hidden="true">
                   <span className="row-mark row-mark--missing" />
                 </span>
@@ -249,7 +249,7 @@ export function ExtractedDocumentsCard({
           <div className="checklist-additional">
             <GroupToggle id="additional" label="Additional" count={optionalMissing.length} note="only if the case needs them" open={openGroup === 'additional'} onToggle={toggle} />
             {openGroup === 'additional' && optionalMissing.map((label) => (
-              <div key={label} className="checklist-missing-row checklist-optional-row">
+              <div key={label} className="checklist-missing-row checklist-optional-row" data-testid="optional-document">
                 <span className="document-select-cell" aria-hidden="true">
                   <span className="row-mark row-mark--missing" />
                 </span>
@@ -345,6 +345,7 @@ function ExtractedDocumentRow({
   return (
     <div
       className={`documents-table-row documents-table-row--clickable${reason ? ' documents-table-row--review' : ''}`}
+      data-testid="document-row"
       role="button"
       tabIndex={0}
       aria-label={`View ${document.filename}`}
@@ -457,6 +458,7 @@ function DecidedRow({
   return (
     <div
       className="documents-table-row documents-table-row--clickable"
+      data-testid="document-row"
       role="button"
       tabIndex={0}
       aria-label={`View ${document.filename}`}
@@ -511,6 +513,7 @@ function GroupToggle({
     <button
       type="button"
       className={`documents-table-group documents-table-group--toggle documents-table-group--${id}`}
+      data-testid="document-group"
       aria-expanded={open}
       onClick={() => onToggle(id)}
     >

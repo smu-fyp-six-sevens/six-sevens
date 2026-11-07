@@ -5,15 +5,13 @@ with the real scoring (risk/case_risk.py), outlook (risk/outlook.py), additional
 
 The browser suite (frontend/e2e/specs/case-management.spec.ts) renders these from
 fixtures/regression/case-views.json instead of a hand-built risk, so it can only show states the backend
-produces. A test below fails if any of them drifts; regenerate with REGENERATE_REGRESSION_FIXTURES=1.
+produces. A test below fails if any of them drifts; regenerate with scripts/regenerate_regression_fixtures.py.
 
 Only the evidence requests are scripted: the agent writes them (propose_requests_with_status), and here its
 reply is given.
 """
 from __future__ import annotations
 
-import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +24,7 @@ from app.case_pipeline.risk.outlook import build_outlook
 from app.case_pipeline.risk.supporting_documents import recommend_supporting_documents
 from app.models import DocumentRecord, DocumentStatus, RoutingStatus
 from app.finding_keys import assign_document_fingerprints
+from tests.support.regression_fixtures import check_fixture
 
 CASE_VIEWS_FIXTURE = Path(__file__).parent / "fixtures" / "regression" / "case-views.json"
 _UPLOADED = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -184,8 +183,4 @@ def test_a_large_payment_and_rising_borrowings_ask_for_a_purchase_order_and_loan
 def test_the_playwright_suites_case_views_match_the_backend():
     views = {name: view() for name, view in VIEWS.items()}
 
-    if os.environ.get("REGENERATE_REGRESSION_FIXTURES"):
-        CASE_VIEWS_FIXTURE.write_text(json.dumps(views, indent=2, sort_keys=True) + "\n")
-    assert json.loads(CASE_VIEWS_FIXTURE.read_text()) == json.loads(json.dumps(views)), (
-        "case-views.json is out of date with the case analysis — regenerate it (see above)"
-    )
+    check_fixture(CASE_VIEWS_FIXTURE, views)

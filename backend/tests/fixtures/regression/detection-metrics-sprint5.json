@@ -1,0 +1,62 @@
+{
+  "cases_reviewed": 1,
+  "documents_reviewed": 3,
+  "min_reviews": 5,
+  "overall": {
+    "by_check": [
+      {
+        "check_name": "font_consistency_tool",
+        "correct": 2,
+        "flags": [
+          "Few reviews"
+        ],
+        "missed": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "scope": "document",
+        "wrong": 0
+      },
+      {
+        "check_name": "metadata_tool",
+        "correct": 0,
+        "flags": [
+          "Precision below target"
+        ],
+        "missed": 0,
+        "precision": 0.0,
+        "recall": null,
+        "scope": "document",
+        "wrong": 5
+      },
+      {
+        "check_name": "numerical_checks_tool",
+        "correct": 5,
+        "flags": [],
+        "missed": 1,
+        "precision": 1.0,
+        "recall": 0.8333,
+        "scope": "document",
+        "wrong": 0
+      },
+      {
+        "check_name": "spelling_tool",
+        "correct": 6,
+        "flags": [
+          "Precision below target"
+        ],
+        "missed": 0,
+        "precision": 0.6,
+        "recall": 1.0,
+        "scope": "document",
+        "wrong": 4
+      }
+    ],
+    "correct": 13,
+    "missed": 1,
+    "precision": 0.5909,
+    "recall": 0.9286,
+    "wrong": 9
+  },
+  "target_precision": 0.8,
+  "target_recall": 0.8
+}

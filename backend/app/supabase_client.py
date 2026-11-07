@@ -11,8 +11,8 @@ from .query_stats import HTTPX_EVENT_HOOKS
 def _build_client() -> Client:
     if not settings.SUPABASE_URL:
         raise RuntimeError("SUPABASE_URL is not set")
-    if not settings.SUPABASE_PUBLISHABLE_KEY:
-        raise RuntimeError("SUPABASE_PUBLISHABLE_KEY is not set")
+    if not settings.SUPABASE_SECRET_KEY:
+        raise RuntimeError("SUPABASE_SECRET_KEY is not set")
 
     # postgrest-py's default httpx client hardcodes http2=True, which isn't
     # safe under concurrent access from multiple OS threads — batch upload
@@ -31,7 +31,7 @@ def _build_client() -> Client:
     http_client = httpx.Client(http2=False, timeout=30.0, event_hooks=HTTPX_EVENT_HOOKS)
     return create_client(
         settings.SUPABASE_URL,
-        settings.SUPABASE_PUBLISHABLE_KEY,
+        settings.SUPABASE_SECRET_KEY,
         options=ClientOptions(httpx_client=http_client),
     )
 
@@ -43,10 +43,8 @@ _service_client: Client | None = None
 
 def service_supabase_client() -> Client:
     """
-    Backend-only client. Uses the secret key, which bypasses row-level
-    security, same as the realtime client. The shared supabase_client above
-    uses the publishable key, so a delete that role is not allowed to make
-    comes back as a successful empty result and the row stays.
+    Backend-only client, a second instance on the same secret key as supabase_client above (which bypasses
+    row-level security, so no grant on the anon role is needed).
     """
     global _service_client
     if _service_client is not None:
@@ -74,7 +72,7 @@ async def build_async_supabase_client() -> AsyncClient:
     async client and can't be constructed at import time since acreate_client
     itself is a coroutine. Called once from main.py's lifespan.
 
-    Uses SUPABASE_SECRET_KEY (bypasses RLS), not SUPABASE_PUBLISHABLE_KEY —
+    Uses SUPABASE_SECRET_KEY (bypasses RLS) —
     this subscription is a trusted, backend-only context, never exposed to
     the browser.
     """

@@ -2,7 +2,8 @@
 
 Holidays: MOM's "Singapore Public Holidays (consolidated)" dataset on data.gov.sg,
 including observed in-lieu days. It's looked up live (registry_lookups/public_holidays.py);
-the table below is a copy of it, used when data.gov.sg can't be reached.
+the table below is a copy of it, used when data.gov.sg can't be reached. Add each year once MOM gazettes it
+(mom.gov.sg/employment-practices/public-holidays): a year missing here makes the GIRO business-day check skip.
 
 GIRO processing days:
 * Interbank GIRO runs on business days only: Singapore moved to a 5-day clearing week
@@ -46,6 +47,12 @@ SG_PUBLIC_HOLIDAYS: dict[date, str] = {
     date(2026, 5, 27): "Hari Raya Haji", date(2026, 5, 31): "Vesak Day", date(2026, 6, 1): "Vesak Day (Observed)",
     date(2026, 8, 9): "National Day", date(2026, 8, 10): "National Day (Observed)", date(2026, 11, 8): "Deepavali",
     date(2026, 11, 9): "Deepavali (Observed)", date(2026, 12, 25): "Christmas Day",
+
+    date(2027, 1, 1): "New Year's Day", date(2027, 2, 6): "Chinese New Year", date(2027, 2, 7): "Chinese New Year",
+    date(2027, 2, 8): "Chinese New Year (Observed)", date(2027, 3, 10): "Hari Raya Puasa",
+    date(2027, 3, 26): "Good Friday", date(2027, 5, 1): "Labour Day", date(2027, 5, 17): "Hari Raya Haji",
+    date(2027, 5, 20): "Vesak Day", date(2027, 8, 9): "National Day", date(2027, 10, 28): "Deepavali",
+    date(2027, 12, 25): "Christmas Day",
 }
 
 HOLIDAY_YEARS = frozenset(d.year for d in SG_PUBLIC_HOLIDAYS)

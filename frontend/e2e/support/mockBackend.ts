@@ -69,6 +69,7 @@ function missingRequiredFields(document: { document_type: string | null; extract
  *   detection-report-{c028,clean,inconclusive}.json  test_regression_detection.py
  *   case-risk-sprint4.json          test_regression_case_risk.py
  *   case-views.json                 test_regression_case_views.py (a case's risk and additional documents)
+ *   detection-metrics-sprint5.json  test_regression_detection_metrics.py (the Accuracy tab's figures)
  * The simpler rules are mirrored here, each marked with the backend function
  * it copies (analysis readiness, the documents status, which documents can be
  * approved, rejected, edited, re-typed, deleted, moved, retried or cancelled,
@@ -133,6 +134,15 @@ export interface DocumentRow {
   metadata: Record<string, unknown> | null;
 }
 
+/** A review sign-off as GET /cases/{id}/finding-reviews returns it, with the case it belongs to. */
+export interface SignOffRow {
+  case_id: string;
+  scope: 'document' | 'case';
+  document_id: string | null;
+  reviewer: string;
+  updated_at: string;
+}
+
 export interface NoteRow {
   id: string;
   case_id: string;
@@ -173,11 +183,17 @@ export interface RecordedRequest {
 
 const ISO = '2026-09-01T00:00:00Z';
 
+// Ids come from a counter, so two cases or documents made in one test can never collide. Case numbers made here stay
+// below 9000, where the ones the mock creates itself begin.
+let serial = 0;
+const nextSerial = () => (serial += 1);
+
 export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
-  const id = overrides.id ?? `case-${Math.random().toString(36).slice(2, 10)}`;
+  const number = nextSerial();
+  const id = overrides.id ?? `case-${number}`;
   return {
     id,
-    greenlink_case_id: overrides.greenlink_case_id ?? `GLDB-${Math.floor(Math.random() * 9000) + 1000}`,
+    greenlink_case_id: overrides.greenlink_case_id ?? `GLDB-${1000 + (number % 8000)}`,
     company_name: 'Harbor Light Shipping Pte Ltd',
     status: 'open',
     checklist_enforced: false,
@@ -199,7 +215,7 @@ export function makeCase(overrides: Partial<CaseRow> = {}): CaseRow {
 /** A case analysis run as GET /cases/:id/analysis returns it (backend case_pipeline/models.py CaseAnalysis). */
 export function makeAnalysis(overrides: Partial<CaseAnalysis> & Pick<CaseAnalysis, 'case_id'>): CaseAnalysis {
   return {
-    run_id: `run-${Math.random().toString(36).slice(2, 10)}`,
+    run_id: `run-${nextSerial()}`,
     status: 'complete',
     fingerprint: 'fingerprint',
     started_at: ISO,
@@ -294,7 +310,7 @@ function isReadyForAnalysis(documents: Pick<DocumentRow, 'status'>[]): boolean {
 
 export function makeDocument(overrides: Partial<DocumentRow> = {}): DocumentRow {
   return {
-    id: `doc-${Math.random().toString(36).slice(2, 10)}`,
+    id: `doc-${nextSerial()}`,
     case_id: null,
     filename: 'document.pdf',
     document_type: null,
@@ -333,6 +349,8 @@ export class MockBackend {
   contentGuards: Record<string, unknown> = {};
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
+  /** Officers' reviews of groups with no findings to mark, one per case and group, like findings_repository.sign_off. */
+  signOffs: SignOffRow[] = [];
   /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
   auditEvents: AuditEvent[] = [];
   /** Each case's latest analysis run (GET /cases/:id/analysis); none = 404. POST .../analysis/run starts one. */
@@ -341,8 +359,12 @@ export class MockBackend {
   uploadOutcomes: Record<string, UploadOutcome> = {};
   /** When set, upload-batch waits for this before answering (to observe "Uploading"). */
   uploadGate: Promise<void> | null = null;
+  /** When set, a detection cancel is recorded at once but answered only after this (to have the worker's snapshot arrive first). */
+  cancelGate: Promise<void> | null = null;
   /** Backend-computed checklists for exact document sets (see ChecklistVariant); loadFixture registers them. */
   checklists: ChecklistVariant[] = [];
+  /** GET /detection-metrics as the backend computed it (detection-metrics-sprint5.json); null: no reviews yet. */
+  detectionMetrics: unknown = null;
   /** Credentials /auth/login accepts. */
   credentials = { username: 'officer', password: 'correct-password' };
   /** When true the session has expired: like require_auth, every call but /auth/login answers 401. */
@@ -657,26 +679,52 @@ export class MockBackend {
     if (reviewedCase && this.cases.find((c) => c.id === reviewedCase[1])?.reviews_required === false) {
       return json({ detail: 'This case was created without finding reviews.' }, 409);
     }
-    // Officers' reviews of findings (precision/recall): none recorded, so every rate is "nothing to measure".
-    const reviews = (signOffs: unknown[]) =>
+    // Officers' reviews of findings (precision/recall): no verdicts recorded, so every rate is "nothing to measure";
+    // the case's sign-offs as saved.
+    const reviews = (caseId: string) =>
       json({
         reviews: [],
-        sign_offs: signOffs,
+        sign_offs: this.signOffs
+          .filter((signOff) => signOff.case_id === caseId)
+          .map(({ scope, document_id, reviewer, updated_at }) => ({ scope, document_id, reviewer, updated_at })),
         case: emptyMetrics(),
         documents: {},
         cross_document: emptyMetrics(),
         checks: { document: [], case: [] },
       });
-    if (method === 'GET' && /^\/cases\/[^/]+\/finding-reviews$/.test(path)) {
-      return reviews([]);
+    if (method === 'GET' && reviewedCase && path.endsWith('/finding-reviews')) {
+      return reviews(reviewedCase[1]);
     }
-    if (method === 'PUT' && /^\/cases\/[^/]+\/finding-reviews\/sign-offs$/.test(path)) {
-      return reviews([{ ...(body as object), reviewer: 'officer', updated_at: '2026-10-31T00:00:00Z' }]);
+    if (method === 'PUT' && reviewedCase && path.endsWith('/finding-reviews/sign-offs')) {
+      // Like findings_repository.sign_off: one per group, a later one replacing it, signed by the logged-in officer.
+      const { scope, document_id } = body as Pick<SignOffRow, 'scope' | 'document_id'>;
+      this.signOffs = this.signOffs.filter((s) => !(s.case_id === reviewedCase[1] && s.document_id === document_id));
+      this.signOffs.push({
+        case_id: reviewedCase[1], scope, document_id, reviewer: this.credentials.username, updated_at: '2026-10-31T00:00:00Z',
+      });
+      return reviews(reviewedCase[1]);
     }
     if (method === 'GET' && path === '/detection-metrics') {
-      return json({
+      return json(this.detectionMetrics ?? {
         overall: emptyMetrics(), cases_reviewed: 0, documents_reviewed: 0,
         target_precision: 0.8, target_recall: 0.8, min_reviews: 5,
+      });
+    }
+    // Like routers/cases.py download_case_report: the PDF, named by case_report.filename_for. The report's content
+    // is covered by the backend's test_regression_case_report.py.
+    const reportMatch = path.match(/^\/cases\/([^/]+)\/report\.pdf$/);
+    if (reportMatch && method === 'GET') {
+      const found = this.cases.find((c) => c.id === reportMatch[1]);
+      if (!found) return json({ detail: 'Case not found' }, 404);
+      return route.fulfill({
+        status: 200,
+        headers: {
+          ...corsHeaders(),
+          'access-control-expose-headers': 'Content-Disposition',
+          'content-disposition': `attachment; filename="${found.greenlink_case_id} Case Report.pdf"`,
+        },
+        contentType: 'application/pdf',
+        body: MINIMAL_PDF,
       });
     }
 
@@ -751,6 +799,12 @@ export class MockBackend {
       if (found.status !== 'case_analysed') {
         return json({ detail: 'Only an analysed case, with its findings evaluated, can be finalised.' }, 409);
       }
+      // Like routers/cases.py finalise_case: the change is recorded in the audit trail as the officer's.
+      this.auditEvents.push({
+        event_id: `case.finalised-${found.id}`, type: 'case.finalised', occurred_at: new Date().toISOString(),
+        actor_type: 'user', actor: this.credentials.username, case_id: found.id, document_id: null,
+        outcome: 'success', started_at: null, duration_ms: null, detail: { from: found.status },
+      });
       found.status = 'finalised';
       return json(found);
     }
@@ -1006,6 +1060,7 @@ export class MockBackend {
         this.detectionErrors[documentId] = 'Cancelled by loan officer';
         document.status = this.detectionReports[documentId] ? 'detected' : 'approved';
         document.has_detection_error = true;
+        if (this.cancelGate) await this.cancelGate;
         return json({ status: queued ? 'cancelled' : 'cancelling' });
       }
       // Same rules as routers/detection.py retry_document_detection: on an approved or detected document, after a
@@ -1077,6 +1132,11 @@ export class MockBackend {
 function emptyMetrics() {
   return { correct: 0, wrong: 0, missed: 0, precision: null, recall: null, by_check: [] };
 }
+
+/** A one-page blank PDF: what the browser saves when the officer downloads a case report. */
+const MINIMAL_PDF =
+  '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
+  '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n';
 
 function corsHeaders(): Record<string, string> {
   return {

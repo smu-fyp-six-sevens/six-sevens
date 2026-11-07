@@ -9,7 +9,7 @@ from app.config import settings
 from app.supabase_client import build_async_supabase_client, service_supabase_client, supabase_client
 
 
-def test_publishable_client_table_access_is_blocked() -> None:
+def test_shared_client_table_access_is_blocked() -> None:
     with pytest.raises(RuntimeError, match="real Supabase call"):
         supabase_client.table("documents")
 

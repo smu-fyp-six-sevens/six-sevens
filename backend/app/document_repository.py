@@ -159,11 +159,15 @@ def approve_document(document_id: str) -> DocumentRecord | None:
     manual review that needed nothing saved (a content guard flag, say) stayed there after approval, never
     counting towards the checklist (models.counts_towards_checklist). That can move coverage and the stage,
     so resync the case.
+
+    Only an analyzed document is approved (compare-and-swap): None when the document is gone or has already moved
+    on, so two approvals at once publish one event.
     """
     result = (
         supabase_client.table("documents")
         .update({"status": DocumentStatus.APPROVED.value, "routing_status": RoutingStatus.ACCEPTED.value})
         .eq("id", document_id)
+        .eq("status", DocumentStatus.ANALYZED.value)
         .execute()
     )
     if not result.data:

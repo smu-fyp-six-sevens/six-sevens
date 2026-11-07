@@ -1,13 +1,12 @@
-# Tests: where we are and what's next
+# Tests: what's still open
 
-Test audit at the end of Sprint 5 (2026-11-01, `main`), for Sprint 6. Backend unit tests (`backend/tests`), Playwright (`frontend/e2e`), and the checks CI runs.
+Open test work for Sprint 6: backend unit tests (`backend/tests`), Playwright (`frontend/e2e`), Vitest, and the checks CI runs.
 
 **How it was measured:**
-- line coverage from CI's backend job (run `41288486211`, 2026-11-01: 2,669 passed, 91% of 20,998 statements);
-- a static scan of the test files (test counts, imports, assertions);
-- reading the code behind each gap.
-
-No tests were run locally.
+- CI run `42235844107` (2026-11-06, `SCRUM-323-Sprint-5-Regression-Testing` at `405a57b`) gave the results and the line coverage;
+- a static scan of the test files gave the counts;
+- the failing step of the recent failed CI runs showed whether any test is flaky (none failed and then passed unchanged; the risks in 2.3 come from reading the tests);
+- each gap comes from reading the code behind it.
 
 > **All test documents are synthetic.** GLDB can't share real loan documents, so every fixture and generated document is synthetic. That limits the whole system, not just this suite: real fraudsters' methods may differ from the ones we inject (`CLAUDE.md`, sponsor-confirmed facts).
 >
@@ -15,100 +14,78 @@ No tests were run locally.
 > - **Two company-name matchers, on purpose.** `identifiers.company_names_match` is lenient (it ignores legal suffixes and `&`, but is never typo-tolerant) and decides whether a document matches the case. `company_identity.cross_document_company_names_match` is strict ("A.B.C." differs from "ABC") and is a fraud signal across documents.
 > - **Case match is a triage check, not a fraud signal.** A document whose company or person isn't the case's goes to manual review, and the officer can still approve it. Comparing one person across documents is the case analysis's job.
 > - **The regression suites test code, not AI accuracy.** Claude is scripted (same reply every run, no cost); whether it picks the right tools, hypotheses and ratings on real documents is checked by the manual live run at the end of each sprint. The case analysis's evidence-request and summary calls are refused, so only their no-Claude fallbacks run.
+> - **Known defects are pinned as `xfail(strict=True)`** (`it.fails` in Vitest, `test.fail()` in Playwright), with the reason. A fix makes the test pass, which fails the run until the marker comes off. What the markers don't pin is in 2.5.
 
 ## 1. Health
 
-| | Now | 28 Oct |
-|---|---|---|
-| Backend test functions | 1,996 in 105 files | 1,783 in 93 |
-| Backend cases on CI | 2,669 pass, 0 skipped | 2,657 pass, 2 skipped |
-| Backend line coverage | 91% | not read |
-| Playwright test definitions | 184 in 12 specs | 155 in 9 |
-| Frontend unit tests | none | none |
-
-**The detection checks are solid.** Layout, numerical, image, fonts and dates are 86–100% covered, and the regression files run on real fixtures. **The gaps are in the code around them:** repositories, the case agent's tools, and failure paths.
-
-**Brittleness hasn't moved.** Router and repository tests still assert which mock was called rather than what was stored. About 20 tests assert *only* that a mock was called, mostly in:
-- `test_document_repository` (6);
-- `test_case_stage` (3);
-- `test_health` and `test_realtime_listener` (2 each).
-
-They pass as long as the code calls the mock, whatever it does with the result.
-
-## 2. Gaps, highest risk first
-
-### 2.1 Sprint 5's review feature: the repository is half covered
-
-`findings_repository.py` is at **51%**. Routers reach it only through mocks, so the code that writes to Supabase has no test of its own:
-
-| Function | What isn't tested |
+| | Now (6 Nov) |
 |---|---|
-| `set_verdict`, `add_missed`, `update_missed`, `delete_missed` | The officer's verdicts and missed issues |
-| `sign_off`, `list_sign_offs` | Review sign-off (no Playwright test either) |
-| `list_reviews` (date and stage filters) | The data behind the Accuracy tab (`DetectionAccuracyPanel` has no Playwright test either) |
-| `find_current`, `move_with_documents`, `delete_case_findings_citing` | Keeping verdicts on the right finding after a rerun, a move or a delete |
+| Backend test functions | 2,242 in 127 files |
+| Backend cases on CI | 2,956 pass, 4 xfail |
+| Backend line coverage | 93% |
+| Playwright | 253 pass (248 definitions in 14 specs) |
+| Vitest | 33 pass, 1 expected fail, in 5 files (of about 144 source files) |
+| `data-testid`s in the app | 24 |
 
-These rows are the record of what an officer decided, so a wrong one is a wrong audit answer.
+## 2. Open items, highest risk first
+
+
 
 ### 2.2 Idempotency (STABILITY_AUDIT findings 1–3)
 
-**Nothing tests a second delivery of the same event.** The fix for each finding should come with a test that delivers it twice and asserts the work runs once:
-- `document.approved` to the detection worker;
-- `case.analysis.requested` to the case worker;
-- two approvals at once.
 
-The conditional writes those fixes will rely on are also untested:
-- `case_pipeline/repository.py` is at 64%: `fail_if_running`, `finish_run`'s guard, `running_started_before`;
-- `detection_results.py` is at 51%.
+The conditional writes those fixes rely on (`fail_if_running`, the superseded guard, `running_started_before`, `detection_results`) are now tested.
 
-### 2.3 Income documents and bank statements (sponsor's highest risk)
 
-| Gap | Where |
-|---|---|
-| **`PAY.NET` silent pass, still open:** with earning and deduction lines but no stated totals, nothing is compared, and the check reports neither a finding nor a skip. Fix (compute from the lines, or skip with a reason), then test | `numerical_validation/records.py:68` |
-| `STAT.ROUND_NUMBERS` and `STAT.LAST_TWO_DIGITS`: no test names them. Needed: flag; no flag; skip under 100 amounts; a genuine fee-heavy statement | `numerical_validation/statements.py` |
-| The case agent's transaction tools: the payslip-to-bank-credit evidence. Needed: direction and date filters (including year-less dates), counterparty, an unknown document | `cross_document/tools/transactions.py` **17%**, `comparisons.py` 28%, `reading.py` 32% |
-| `PAY.DEDUCTIONS_SUM`: only the no-flag case | `test_sg_reference_checks` |
+### 2.4 Brittle and weak tests
 
-Lower weight: `CR.TENOR` and `FATCA.TIN_FORMAT` have no test.
+Router and repository tests still assert which mock was called rather than what was stored. 35 tests (6 Nov) assert *only* that a mock was called: 7 in `test_document_repository`, 3 each in `test_sweeper`, `test_case_stage`, `test_doc_worker` and `test_case_auto_analysis`, and the rest across `test_health`, `test_ws` and `test_realtime_listener`. `test_document_repository` and `test_case_repository` also chain mocks 21 and 14 levels deep (`return_value.update.return_value.eq…`), so any query reshuffle breaks them. Only 6 test files use the fake client. Move `document_repository`, `extracted_fields_repository`, `case_pipeline/repository` and `notes_repository` tests to the fake client (`tests/support/fake_supabase.py`) and delete the mock-only tests they replace.
 
-### 2.4 The case analysis agent
+Assertions too weak to fail:
+- `test_health.py::test_lifespan_tolerates_db_check_failure_at_startup`, `test_output_validation.py::test_outside_a_run_there_is_no_ceiling` and `test_claude_calls.py::test_an_ordinary_reply_passes_the_refusal_check` only check that nothing raises;
+- `test_content_guard.py::test_the_exif_software_payload_is_caught` and `test_cross_document_leads.py::test_the_check_code_is_also_read_from_nested_details` assert only `is not None`;
+- `test_case_stage.py::test_finalising_is_permanent_there_is_no_reopen` accepts either 404 or 405;
+- `HeaderFilter.test.tsx` wraps `getByRole` in `toBeTruthy()`, which can never be false because `getBy` already throws.
 
-- `cross_document/agents.py` is at 58%: the hypothesis loop's branches, a judge reply that fails validation, and the run cap.
-- `verify.py` is at 73% and `evidence.py` at 77%.
+Minor: 52 `@pytest.mark.asyncio` markers are redundant under `asyncio_mode = "auto"`.
 
-Code verifies every verdict, so the uncovered branches in `verify.py` come first.
+ok please fix these
 
-### 2.5 Failure and recovery paths
+### 2.5 Fixtures and pinned defects
+
+
+
+### 2.6 Copies that can drift
+
+leave these for now
+
+- **The approval rules exist three times:** the backend (`document_service.approve`), the frontend (`canApproveDocument`) and the Playwright mock (`missingRequiredFields`). Only `required_fields.json` is checked against the backend; the rest stays in step by convention.
+- **Global autouse stubs** in `conftest.py` turn off `start_if_due`, `sync_case_stage` and `is_case_finalised` for every test. Only `test_case_auto_analysis.py` and `test_case_stage.py` run the real ones, so the regression suites never run the real approve → stage → automatic analysis chain.
+- **Stale comments:** `playwright.config.ts` and `mockBackend.ts` still say the mock replaces Dify, which is gone.
+
+### 2.7 Smaller holes
+
+leave for now
 
 | Code | Coverage | Untested |
 |---|---|---|
-| `events/bus.py` | 60% | The Pub/Sub publish path, and `publish` raising on failure (a design rule) |
-| `events/push.py` | 76% | Push token verification: missing, invalid and wrong-account tokens should each give 401 |
-| `workers/detection.py` | 78% | Recovery giving up after the maximum attempts (error saved, earlier report kept, case snapshot pushed) |
-| `document_service.py` | 83% | **`bulk_move` has no test** (lines 270–309: finalised target, locked and in-flight documents, both cases resynced); also some `retry` and `cancel` branches |
-| `routers/upload.py` | 78% | Lines 88–103 (the upload's failure handling) |
-| Approve rollback | none | `events.publish` failing on approve should put the document back to analyzed |
-
-### 2.6 Smaller holes
-
-| Code | Coverage | Note |
-|---|---|---|
-| `case_pipeline/risk/store.py` | 44% | `save`, `latest_many` (the dashboard's risk column) |
-| `notes_repository.py` | 68% | Edit, delete with replies (the placeholder), move |
-| `query_stats.py`, `telemetry.py`, `metrics.py` | 57–79% | The LLM callback's labels and cost, trace propagation (traceparent out on publish, continued on push) |
-| `routers/audit.py` | 73% | The `/audit/cases/{id}/cost` and `/audit/events` routes |
-| `document_repository.flush_syncs` | | A scheduled refresh runs on flush |
+| `CR.TENOR`, `FATCA.TIN_FORMAT` | | No test names them |
+| `telemetry.record_usage` | `telemetry.py` 76% | Tokens and cost set on the exported span (only the no-usage branch runs). The exporter setup (lines 51–94) is fine to leave |
+| `cross_document/tools/comparisons.py` | 80% | Lines 131–159 |
+| `events/bus.py` | 83% | Lines 65–76, 94–103 |
+| Frontend logic | Vitest covers 5 files of about 144; no coverage tooling | `caseSearch`, `caseValidation`, `fileValidation`, `errorText`, `caseStages`, `request.ts`, `caseSocket.ts`, and hooks such as `useFieldEditing`, `useDocumentSelection`, `useFindingReviews` |
+| Coverage gates | `pytest --cov` has no `--cov-fail-under` | The 93% can erode unnoticed |
+| Evals and load tests | | `CLAUDE.md` describes them, but none is tracked in the repo |
 
 `events/emulator_setup.py` (0%) is a local dev tool. Fine to leave.
 
-### 2.7 Frontend
+### 2.8 Frontend selectors
 
-- **No unit tests (no Vitest):** `useCaseSnapshot`, `canApprove`, `useDetection` and the dashboard filters are tested only through the browser.
-- **No Playwright test** for review sign-off or the Accuracy tab.
-- **Selectors are CSS classes:** 7 `data-testid`s in the whole app, so restyling breaks specs.
+The documents table's cells and the dashboard panels are still selected by CSS class, so restyling breaks those specs: 133 CSS-class locators remain, plus 36 `.nth()` and 50 `.first()` calls that depend on order. Give them `data-testid`s.
+its ok
 
-### 2.8 Infrastructure checks CI doesn't run
+### 2.9 Infrastructure checks CI doesn't run
+leave for now
 
 | Check | Command |
 |---|---|
@@ -116,26 +93,17 @@ Code verifies every verdict, so the uncovered branches in `verify.py` come first
 | Compose files | `docker compose --profile observability --profile frontend config -q` |
 | Grafana dashboards | every PromQL query parses (`promtool`) |
 | Images build on a PR | `docker build` per target. Today a broken Dockerfile is found by the deploy, after the merge |
-
-### 2.9 Leftovers from Sprint 4
-
-- **Check codes that don't exist** in `test_regression_case_risk.critical_case`: `PS.CPF_RATE` (the rule is `PAY.CPF_RATE`), `TAX.YEAR_OF_ASSESSMENT`, `REG.ISSUER`. Use the real codes and regenerate `case-risk-sprint4.json`.
-- **Harnesses reused by importing other test modules** (`from tests import ...` in `test_regression_ai_generation` and `test_regression_invalid_output`). With no `tests/__init__.py`, pytest imports each file under two names. Move them to `tests/support/`.
-- `test_regression_case_analysis` waits on `case_pipeline.trace._writer`, a private name.
-- **REG-014** (the detection panel stuck on "Cancelling…"), `MA-013` and `RS-001`, from `docs/regression/REGRESSION_REPORT_SPRINT4.md`: not re-checked in this audit.
+| Lint and types for the tests | CI runs `ruff check app` and `pyright app` only. `ruff check tests` is clean today, but nothing keeps it so |
+| Same Python as CI | Local venv is 3.12.8; CI and the Dockerfile use 3.13 |
 
 ## 3. Sprint 6 plan
 
 | # | Change | Why | Size |
 |---|---|---|---|
-| 1 | **The review repository** (2.1), on an in-memory fake Supabase client that asserts stored rows, plus Playwright for sign-off and the Accuracy tab | Sprint 5's main feature; the officer's record | M |
-| 2 | **Idempotency fixes with twice-delivered tests** (2.2) | Duplicate runs cost tokens and overwrite verdicts | S–M |
-| 3 | **Income and bank statement rules** (2.3): the `PAY.NET` fix, the statistical rules, the transaction tools | The sponsor's highest-risk documents | M |
-| 4 | **Failure paths** (2.5): `bulk_move`, push 401s, publish raising, recovery giving up, the approve rollback | The cloud's behaviour is otherwise checked only by hand | M |
-| 5 | **`verify.py` and the agent's branches** (2.4) | Code is what makes the agent's verdicts trustworthy | M |
-| 6 | **Move the rest of the repository tests to the fake client** (`document_repository`, `extracted_fields_repository`, `case_pipeline/repository`, `notes_repository`); delete the mock-only tests they replace | The biggest brittleness left | L |
-| 7 | **Sprint 4 leftovers** (2.9) | Small, closes the regression story | S |
-| 8 | **CI infrastructure checks** (2.8) | Each has broken silently once | S–M |
-| 9 | **Vitest and `data-testid`s** (2.7) | Logic with no test below the browser | M |
 
-Steps 1 and 6 share the fake client: build it once in step 1.
+| 2 | **Idempotency fixes with twice-delivered tests** (2.2) | Duplicate runs cost tokens and overwrite verdicts | S–M |
+
+| 5 | **Move the remaining repository tests to the fake client; strengthen the weak assertions** (2.4) | The biggest brittleness left | L |
+| 6 | **Smaller holes and copies that can drift** (2.6, 2.7) | Small | S–M |
+| 7 | **CI infrastructure checks** (2.9) | Each has broken silently once | S–M |
+| 8 | **Remaining `data-testid`s** (2.8) | Specs break on restyling | S |

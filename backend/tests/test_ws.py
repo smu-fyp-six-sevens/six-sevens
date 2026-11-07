@@ -204,7 +204,10 @@ async def test_socket_pushes_a_broadcaster_message_ahead_of_a_client_disconnect(
         return_value={"type": "snapshot", "case": {}, "documents": []},
     ):
         task = asyncio.create_task(case_status_socket(mock_ws, "case-1", ticket))
-        await asyncio.sleep(0.01)
+        # Publish only once the socket is listening, or the message is lost.
+        async with asyncio.timeout(2):
+            while not broadcaster.has_subscribers("case-1"):
+                await asyncio.sleep(0)
         broadcaster.publish("case-1", {"type": "snapshot", "documents": ["pushed"]})
         await task
 

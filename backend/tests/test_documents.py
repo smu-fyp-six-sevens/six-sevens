@@ -7,6 +7,7 @@ from unittest.mock import ANY, AsyncMock, call, patch
 import pytest
 from fastapi import HTTPException, UploadFile
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 from starlette.datastructures import Headers
 
 from app.config import settings
@@ -14,7 +15,7 @@ from app.langgraph.extraction_prompts import schema_field_names
 from app.fraud_detection.font_consistency import ExtractedField
 from app.main import app
 from app.models import CaseRecord, DocumentRecord, DocumentStatus, RoutingStatus, compute_fulfilled_requirements
-from app.routers.upload import _ingest_one
+from app.routers.upload import _NO_CASE, _NOT_SAVED, _ingest_one
 
 
 client = TestClient(app)
@@ -103,6 +104,46 @@ def test_upload_batch_marks_queued_and_publishes_uploaded(published_events) -> N
     [event] = published_events
     assert (event.type, event.document_id, event.case_id) == ("document.uploaded", "doc-good", "case-1")
     assert event.detail["filename"] == "good.pdf"
+
+
+def _upload_one_with_row_failure(error: Exception):
+    """Uploads one PDF whose file is stored but whose document row can't be created; returns the response and cleanup."""
+    with (
+        patch("app.routers.upload.case_service.get_case", return_value=_make_case("case-1")),
+        patch("app.routers.upload.storage_service") as storage,
+        patch("app.routers.upload.document_repository.create_document", side_effect=error),
+    ):
+        storage.upload_file.return_value = "case-1/uuid_good.pdf"
+        response = client.post(
+            "/documents/upload-batch", data={"case_id": "case-1"},
+            files=[("files", ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf"))],
+        )
+    return response, storage.delete_file
+
+
+def test_a_document_row_for_a_case_that_no_longer_exists_removes_the_stored_file(published_events) -> None:
+    error = APIError({"code": "23503", "message": "violates foreign key constraint", "details": "", "hint": ""})
+
+    response, delete_file = _upload_one_with_row_failure(error)
+
+    [result] = response.json()["results"]
+    assert (result["success"], result["error"]) == (False, _NO_CASE)
+    delete_file.assert_called_once_with("case-1/uuid_good.pdf")
+    assert published_events == []
+
+
+@pytest.mark.parametrize("error", [
+    APIError({"code": "42501", "message": "permission denied", "details": "", "hint": ""}),
+    RuntimeError("connection reset"),
+])
+def test_a_document_row_that_cannot_be_created_removes_the_stored_file(published_events, error) -> None:
+    response, delete_file = _upload_one_with_row_failure(error)
+
+    [result] = response.json()["results"]
+    # The officer reads a plain sentence, not the server's detail.
+    assert (result["success"], result["error"]) == (False, _NOT_SAVED)
+    delete_file.assert_called_once_with("case-1/uuid_good.pdf")
+    assert published_events == []
 
 
 def test_upload_batch_rejects_no_files() -> None:
@@ -1388,6 +1429,28 @@ def test_approve_document_success() -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "approved"
     mock_repo.approve_document.assert_called_once_with("doc-1")
+
+
+def test_an_approval_whose_event_cannot_be_published_is_undone() -> None:
+    # The approval event is what starts detection: unpublished, the document would sit approved and never scanned.
+    document = _typed_document(classification_confidence=0.97, routing_status=RoutingStatus.MANUAL_REVIEW)
+    with (
+        patch("app.routers._dependencies.document_repository") as dep_repo,
+        patch("app.document_service.document_repository") as repo,
+        patch("app.document_service.extracted_fields_repository") as fields_repo,
+        patch("app.document_service.events.publish", AsyncMock(side_effect=RuntimeError("Pub/Sub unavailable"))),
+    ):
+        dep_repo.get_document.return_value = document
+        repo.approve_document.return_value = document.model_copy(update={"status": DocumentStatus.APPROVED})
+        fields_repo.get_extracted_fields.return_value = [
+            ExtractedField(field_name=name, field_type="string", field_value="x", confidence=0.95)
+            for name in ("individual_name", "company_name", "net_pay")
+        ]
+
+        response = client.post("/documents/doc-1/approve")
+
+    assert response.status_code == 502
+    repo.undo_approval.assert_called_once_with("doc-1", RoutingStatus.MANUAL_REVIEW)
 
 
 def test_approve_document_rejects_unreviewed_low_confidence_field() -> None:

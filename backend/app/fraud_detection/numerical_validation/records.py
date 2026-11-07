@@ -65,16 +65,33 @@ def _check_payslip_sums(
                     f"Deduction lines sum to {_money(total)}, but total deductions shows {_money(total_deductions)}",
                     field="total_deductions", stated=_money(total_deductions), expected=_money(total),
                 ))
-    if total_earnings is not None and total_deductions is not None:
-        expected_net = total_earnings - total_deductions
-        if abs(expected_net - net_pay) > _MONEY_TOLERANCE:
-            findings.append(_finding(
-                "PAY.NET", "impossible",
-                f"Total earnings {_money(total_earnings)} - total deductions {_money(total_deductions)} = "
-                f"{_money(expected_net)}, but net pay shows {_money(net_pay)}",
-                field="net_pay", stated=_money(net_pay), expected=_money(expected_net),
-            ))
+    # A total the payslip doesn't print is taken from its line items, when every line has an amount.
+    earnings_basis = total_earnings if total_earnings is not None else _lines_total(earnings_items)
+    deductions_basis = total_deductions if total_deductions is not None else _lines_total(deductions_items)
+    if earnings_basis is None or deductions_basis is None:
+        if findings:
+            return findings, None
+        return [], skipped(reason="Net pay not compared: no stated totals, and the line items are missing or incomplete")
+    deductions_basis = abs(deductions_basis)
+    expected_net = earnings_basis - deductions_basis
+    if abs(expected_net - net_pay) > _MONEY_TOLERANCE:
+        printed = total_earnings is not None and total_deductions is not None
+        findings.append(_finding(
+            "PAY.NET", "impossible",
+            f"{'Total earnings' if printed else 'Earnings lines'} {_money(earnings_basis)} - "
+            f"{'total deductions' if printed else 'deduction lines'} {_money(deductions_basis)} = "
+            f"{_money(expected_net)}, but net pay shows {_money(net_pay)}",
+            field="net_pay", stated=_money(net_pay), expected=_money(expected_net),
+        ))
     return findings, None
+
+
+def _lines_total(items: Any) -> float | None:
+    """The sum of a list of line items, or None when there are none or one has no readable amount."""
+    amounts = [_as_amount(r) for r in _rows(items)] if items is not None else []
+    if not amounts or any(a is None for a in amounts):
+        return None
+    return sum(a for a in amounts if a is not None)
 
 
 def _as_amount(row: Any) -> float | None:

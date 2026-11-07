@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -78,6 +77,13 @@ class Repo:
     def reject_document(self, document_id):
         self.document.status = DocumentStatus.REJECTED
         return self.document
+
+    def update_status(self, document_id, status, *, expected_current_statuses=None, **_):
+        """The detection worker's claim: it moves the document on only from a status it expects."""
+        if expected_current_statuses is not None and self.document.status not in expected_current_statuses:
+            return False
+        self.document.status = status
+        return True
 
 
 def _call(document: DocumentRecord, fields: list[ExtractedField], method: str, url: str, body: dict | None = None):
@@ -152,14 +158,14 @@ def test_a_document_with_an_unreviewed_low_confidence_field_cannot_be_approved()
 
 @pytest.mark.sprint3
 @pytest.mark.story("SCRUM-26", "MA-009")
-async def test_detection_starts_within_five_seconds_of_approval(monkeypatch):
+async def test_approval_starts_detection_for_that_document(monkeypatch):
     document, fields = _real("BizFile_333996")
     repo = Repo(document)
-    started: list[float] = []
+    started: list[str] = []
     detection_started = asyncio.Event()
 
     async def detection(document_id):
-        started.append(time.monotonic())
+        started.append(document_id)
         detection_started.set()
 
     tasks: list[asyncio.Task] = []
@@ -174,18 +180,19 @@ async def test_detection_starts_within_five_seconds_of_approval(monkeypatch):
     with (
         patch("app.document_service.document_repository", repo),
         patch("app.document_service.extracted_fields_repository") as extracted,
+        patch("app.workers.detection.document_repository", repo),
         patch("app.workers.detection.run_detection", detection),
         patch("app.workers.detection.push_case_snapshot", AsyncMock()),
     ):
         extracted.get_extracted_fields.return_value = fields
-        approved_at = time.monotonic()
         await documents_router.approve_document(document.id, document=document)
+        # The timeout only stops a hang: with the event handled in this process, the run begins as soon as it is awaited.
         await asyncio.wait_for(detection_started.wait(), timeout=5)
         await asyncio.gather(*tasks)
 
-    assert document.status == DocumentStatus.APPROVED
-    [start] = started
-    assert start - approved_at < 5.0
+    assert started == [document.id]
+    # The worker took the document from approved to detecting, so a repeat of the event would find it taken.
+    assert document.status == DocumentStatus.DETECTING
 
 
 @pytest.mark.sprint3

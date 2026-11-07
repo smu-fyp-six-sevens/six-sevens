@@ -40,7 +40,7 @@ test.describe('Case and document notes @SCRUM-81', () => {
     await expect(edited.locator('.note-edited')).toContainText('edited');
 
     await page.reload();
-    await expect(edited.locator('.note-body')).toHaveText('Reworded reasoning.');
+    await expect(edited.getByTestId('note-body')).toHaveText('Reworded reasoning.');
 
     await edited.getByRole('button', { name: 'Delete' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
@@ -66,13 +66,13 @@ test.describe('Case and document notes @SCRUM-81', () => {
     await expect(page.getByRole('alertdialog')).toContainText('The reply to it will stay');
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
 
-    await expect(note.locator(':scope > .note-body')).toHaveText('This note was deleted.');
+    await expect(note.locator(':scope > [data-testid="note-body"]')).toHaveText('This note was deleted.');
     await expect(note).not.toContainText('My reasoning.');
-    await expect(note.getByTestId('note-reply').locator('.note-body')).toHaveText("Bob's reply.");
+    await expect(note.getByTestId('note-reply').getByTestId('note-body')).toHaveText("Bob's reply.");
     await expect(note.getByRole('button', { name: 'Reply' })).toHaveCount(0);
 
     await page.reload();
-    await expect(page.getByTestId('note').locator(':scope > .note-body')).toHaveText('This note was deleted.');
+    await expect(page.getByTestId('note').locator(':scope > [data-testid="note-body"]')).toHaveText('This note was deleted.');
     await expect(page.getByTestId('note-reply')).toContainText("Bob's reply.");
   });
 });
@@ -99,7 +99,7 @@ test.describe('Attach officer notes @sprint4 @SCRUM-81', () => {
 
     const note = page.getByTestId('note');
     await expect(note).toHaveCount(1);
-    await expect(note.locator('.note-body')).toHaveText('Directors match the incumbency certificate.');
+    await expect(note.getByTestId('note-body')).toHaveText('Directors match the incumbency certificate.');
     await expect(note.locator('.note-meta strong')).toHaveText('officer');
     await expect(note.locator('time')).toHaveAttribute('datetime', backend.notes[0].created_at);
     // Labelled with the case itself, never one of its documents.
@@ -114,7 +114,7 @@ test.describe('Attach officer notes @sprint4 @SCRUM-81', () => {
     await page.reload();
 
     await expect(note).toHaveCount(1);
-    await expect(note.locator('.note-body')).toHaveText('Directors match the incumbency certificate.');
+    await expect(note.getByTestId('note-body')).toHaveText('Directors match the incumbency certificate.');
     expect(await snapshotOf(note)).toEqual(before);
   });
 
@@ -127,7 +127,7 @@ test.describe('Attach officer notes @sprint4 @SCRUM-81', () => {
     await page.goto(fixture.documentUrl(payslip));
     await page.getByLabel('New note').fill('Net pay matches the salary credits.');
     await page.getByRole('button', { name: 'Save note' }).click();
-    await expect(page.getByTestId('note').locator('.note-body')).toHaveText('Net pay matches the salary credits.');
+    await expect(page.getByTestId('note').getByTestId('note-body')).toHaveText('Net pay matches the salary credits.');
     expect(backend.requestsTo('POST', `/cases/${fixture.case.id}/notes`)[0].body).toMatchObject({ document_id: payslip.id });
 
     // From the case's notes, picking the document: it shows who wrote it, when, and which document.
@@ -148,7 +148,7 @@ test.describe('Attach officer notes @sprint4 @SCRUM-81', () => {
 
     await page.reload();
     await expect(notes).toHaveCount(2);
-    await expect(attachedNote.locator('.note-body')).toHaveText('CPF figure checked against the CPF statement.');
+    await expect(attachedNote.getByTestId('note-body')).toHaveText('CPF figure checked against the CPF statement.');
     expect(await snapshotOf(attachedNote)).toEqual(before);
 
     // Both are under the payslip, and not under another document of the case.
@@ -182,13 +182,13 @@ test.describe('Attach officer notes @sprint4 @SCRUM-81', () => {
     await note.locator('.note-meta').first().getByRole('button', { name: 'Edit' }).click();
     await note.getByLabel('Edit note').fill('Approved: figures reconcile. Bank confirmed the employer by phone.');
     await note.getByRole('button', { name: 'Save changes' }).click();
-    await expect(note.locator(':scope > .note-body')).toHaveText('Approved: figures reconcile. Bank confirmed the employer by phone.');
+    await expect(note.locator(':scope > [data-testid="note-body"]')).toHaveText('Approved: figures reconcile. Bank confirmed the employer by phone.');
     await expect(note.locator('.note-edited').first()).toContainText('edited');
 
     await note.getByRole('button', { name: 'Reply' }).click();
     await note.getByLabel('Reply to this note').fill('Second check: agreed.');
     await note.getByRole('button', { name: 'Save reply' }).click();
-    await expect(note.getByTestId('note-reply').locator('.note-body')).toHaveText('Second check: agreed.');
+    await expect(note.getByTestId('note-reply').getByTestId('note-body')).toHaveText('Second check: agreed.');
     expect(backend.requestsTo('POST', `/cases/${fixture.case.id}/notes`)[0].body).toMatchObject({ parent_id: 'note-1' });
 
     // The document is untouched: still approved, still locked, and no request ever wrote to it.

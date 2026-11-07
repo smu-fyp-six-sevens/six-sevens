@@ -23,6 +23,10 @@ async def on_analysis_requested(event: Event) -> None:
     if event.case_id is None or not detail.get("run_id"):
         logger.error("Case analysis event %s is missing its case or run id", event.event_id)
         return
+    # Pub/Sub delivers at least once: a repeat of a request already taken (or ended) must not run the Claude calls again.
+    if not await asyncio.to_thread(analysis_repository.claim_run, str(detail["run_id"])):
+        logger.info("Case analysis run %s was already taken or has ended; ignoring the repeat", detail["run_id"])
+        return
     timer = Stopwatch()
     with query_stats.scope(f"case analysis case={event.case_id[:8]}", work="case_analysis") as unit:
         analysis = await analysis_service.run_requested(

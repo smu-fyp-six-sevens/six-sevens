@@ -1,5 +1,6 @@
--- The live Supabase schema (public, plus the storage bucket and its policies), as read on 2026-11-01, plus the case
--- list columns, view and indexes of the same day.
+-- The live Supabase schema (public, plus the storage bucket), as read on 2026-11-01 plus the case list columns, view
+-- and indexes of the same day. The access rules (secret key only, no anon grants or policies) are the target from
+-- 2026-11-07: run sql/2026-11-07_step1_run_claim.sql and sql/2026-11-07_step2_secret_key_only.sql on the live database to match.
 -- A snapshot, not a migration: it rebuilds an empty database (staging, a fresh project). Keep it in step by hand
 -- when the schema changes.
 
@@ -179,6 +180,7 @@ create table public.case_analysis_runs (
     status text not null,
     fingerprint text not null,
     started_at timestamptz not null default now(),
+    worker_started_at timestamptz,
     finished_at timestamptz,
     error text,
     result jsonb not null default '{}'::jsonb,
@@ -340,69 +342,46 @@ grant execute on function public.replace_extracted_fields(uuid, jsonb) to servic
 
 -- Row-level security ------------------------------------------------------------------------------------------------
 
+-- RLS is on for every table and there are no policies: the backend reaches the database only with the secret key
+-- (service_role), which bypasses RLS. anon and authenticated, the roles the publishable key maps to, get no grant and no
+-- policy anywhere. The browser never talks to Supabase directly.
 alter table public.cases enable row level security;
 alter table public.documents enable row level security;
 alter table public.extracted_fields enable row level security;
 alter table public.detection_results enable row level security;
 alter table public.findings enable row level security;
 alter table public.review_sign_offs enable row level security;
-grant select, insert, update, delete on public.review_sign_offs to service_role;
 alter table public.langgraph_trace enable row level security;
 alter table public.case_analysis_runs enable row level security;
 alter table public.risk_scores enable row level security;
 alter table public.case_notes enable row level security;
 alter table public.audit_events enable row level security;
 
--- detection_results, findings, case_notes and audit_events have no policies: only service_role reaches them.
-create policy "backend can insert cases" on public.cases for insert to anon with check (true);
-create policy "backend can read cases" on public.cases for select to anon using (true);
-create policy "backend can update case status" on public.cases for update to public using (true) with check (true);
-
-create policy "anon can insert documents" on public.documents for insert to anon with check (true);
-create policy "anon can read documents" on public.documents for select to anon using (true);
-create policy "anon can update documents" on public.documents for update to anon using (true) with check (true);
-
-create policy "backend can delete extracted fields" on public.extracted_fields for delete to anon using (true);
-create policy "backend can insert extracted fields" on public.extracted_fields for insert to anon with check (true);
-create policy "backend can read extracted fields" on public.extracted_fields for select to anon using (true);
-
-create policy trace_all on public.langgraph_trace for all to anon, authenticated using (true) with check (true);
-
-create policy "case_analysis_runs insert" on public.case_analysis_runs for insert to anon, authenticated with check (true);
-create policy "case_analysis_runs read" on public.case_analysis_runs for select to anon, authenticated using (true);
-create policy "case_analysis_runs update" on public.case_analysis_runs for update to anon, authenticated using (true) with check (true);
-
-create policy "backend can insert risk scores" on public.risk_scores for insert to anon with check (true);
-create policy "backend can read risk scores" on public.risk_scores for select to anon using (true);
-
 -- Grants ------------------------------------------------------------------------------------------------------------
 
--- As they are live. Note: anon holds full CRUD and TRUNCATE on most tables (the open security item), and
--- service_role has no INSERT or UPDATE on case_analysis_runs (the backend writes runs with the publishable key).
+-- Supabase hands new tables to anon, authenticated and service_role by default; take everything back, then give
+-- service_role only what the backend uses. Nobody gets TRUNCATE, and audit_events can be read and added to, never
+-- changed or emptied.
 do $$
 declare t text;
 begin
     foreach t in array array[
-        'cases', 'documents', 'extracted_fields', 'detection_results', 'findings', 'langgraph_trace',
+        'cases', 'documents', 'extracted_fields', 'detection_results', 'findings', 'review_sign_offs', 'langgraph_trace',
         'case_analysis_runs', 'risk_scores', 'case_notes', 'audit_events', 'latest_risk_scores', 'case_stage_counts'
     ] loop
         execute format('revoke all on public.%I from anon, authenticated, service_role', t);
     end loop;
 end $$;
 
-grant select, insert, update, delete, truncate, references, trigger
-    on public.cases, public.documents, public.extracted_fields, public.langgraph_trace, public.risk_scores
-    to anon, authenticated, service_role;
-grant select, insert, update, delete, truncate, references, trigger
-    on public.detection_results, public.findings to service_role;
-grant select, insert, update, truncate, references, trigger on public.case_analysis_runs to anon, authenticated;
-grant select, delete, truncate, references, trigger on public.case_analysis_runs to service_role;
-grant select, insert, update, delete on public.case_notes to service_role;
-grant select, insert, truncate, references, trigger on public.audit_events to service_role;
-grant select, truncate, references, trigger on public.latest_risk_scores to anon, authenticated;
-grant truncate, references, trigger on public.latest_risk_scores to service_role;
-grant select on public.case_stage_counts to anon, authenticated;
-grant select, usage on sequence public.greenlink_case_id_seq to anon, authenticated, service_role;
+grant select, insert, update, delete
+    on public.cases, public.documents, public.extracted_fields, public.detection_results, public.findings,
+       public.review_sign_offs, public.langgraph_trace, public.case_analysis_runs, public.risk_scores,
+       public.case_notes
+    to service_role;
+grant select, insert on public.audit_events to service_role;
+grant select on public.latest_risk_scores, public.case_stage_counts to service_role;
+revoke all on sequence public.greenlink_case_id_seq from anon, authenticated;
+grant select, usage on sequence public.greenlink_case_id_seq to service_role;
 
 -- Realtime ----------------------------------------------------------------------------------------------------------
 
@@ -410,7 +389,6 @@ alter publication supabase_realtime add table public.documents, public.cases, pu
 
 -- Storage -----------------------------------------------------------------------------------------------------------
 
+-- The bucket is private. The backend uploads, downloads, deletes and signs URLs with the secret key, which bypasses
+-- storage RLS, so there are no policies on storage.objects.
 insert into storage.buckets (id, name, public) values ('documents', 'documents', false) on conflict (id) do nothing;
-
-create policy "anon can read documents bucket" on storage.objects for select to anon using (bucket_id = 'documents'::text);
-create policy "anon can upload to documents bucket" on storage.objects for insert to anon with check (bucket_id = 'documents'::text);

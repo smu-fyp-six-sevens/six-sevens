@@ -274,7 +274,7 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
     await expect(traceRow(page, 'Risk score')).toHaveCount(0);
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
     await expect(riskCard(page)).toContainText('Not scored yet.');
-    await expect(riskCard(page).locator('.risk-badge')).toHaveCount(0);
+    await expect(riskCard(page).getByTestId('risk-badge')).toHaveCount(0);
   });
 });
 
@@ -297,7 +297,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await openRisk(page, backend, 'RS-001');
 
     const card = riskCard(page);
-    await expect(card.locator('.risk-badge')).toHaveText('Low Risk');
+    await expect(card.getByTestId('risk-badge')).toHaveText('Low Risk');
     await expect(card.locator('.severity-gauge-value')).toHaveText('0');
     await expect(card).toContainText('No contributing findings.');
     await expect(card.locator('.risk-reason')).toHaveText('Rated Low: detection found nothing worth flagging.');
@@ -311,7 +311,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await expect(card).toContainText('Detection failed on a document.');
     await expect(card).toContainText('2 of 3 documents scanned.');
     await expect(card.locator('.severity-gauge-value')).toHaveCount(0);
-    await expect(card.locator('.risk-badge')).toHaveCount(0);
+    await expect(card.getByTestId('risk-badge')).toHaveCount(0);
     await expect(sectionStatus(page, 'Risk Summary')).toContainText('Detection Failed');
   });
 
@@ -319,7 +319,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await openRisk(page, backend, 'RS-003');
 
     const card = riskCard(page);
-    await expect(card.locator('.risk-badge')).toHaveText('Critical Risk');
+    await expect(card.getByTestId('risk-badge')).toHaveText('Critical Risk');
     await expect(card.locator('.severity-gauge-value')).toHaveText('89');
     await expect(card.locator('.risk-score-level')).toHaveText('Critical Risk · 80–100');
     await expect(card.locator('.risk-reason')).toHaveText('Rated Critical: high-severity findings on 4 documents.');
@@ -330,7 +330,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     const theCase = await openRisk(page, backend, 'RS-004');
 
     const card = riskCard(page);
-    await expect(card.locator('.risk-badge')).toHaveText('Medium Risk');
+    await expect(card.getByTestId('risk-badge')).toHaveText('Medium Risk');
     await expect(card.locator('.risk-score-level')).toHaveText('Medium Risk · 25–49');
     await expect(card).toContainText('1 medium');
     await openTrace(page, theCase);
@@ -343,7 +343,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await openRisk(page, backend, 'RS-005');
 
     const card = riskCard(page);
-    await expect(card.locator('.risk-badge')).toHaveText('High Risk');
+    await expect(card.getByTestId('risk-badge')).toHaveText('High Risk');
     await expect(card.locator('.severity-gauge-value')).toHaveText('50');
     await expect(card.locator('.risk-reason')).toHaveText('Rated High from the combined severity of 1 finding(s).');
   });
@@ -418,6 +418,26 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await expect(card.locator(':scope > .flagged-list .risk-document')).toHaveCount(3);
   });
 
+  test('a sign-off is saved for its group, signed by the officer, and still there after a reload', async ({ page, backend }) => {
+    const theCase = await openRisk(page, backend, 'RS-006');
+    const card = reviewCard(page);
+
+    await card.getByRole('button', { name: /Across documents/ }).click();
+    await card.getByRole('button', { name: 'Save review' }).click();
+
+    await expect(card.getByText('Reviewed (1)')).toBeVisible();
+    expect(backend.requestsTo('PUT', `/cases/${theCase.id}/finding-reviews/sign-offs`).map((r) => r.body)).toEqual([
+      { scope: 'case', document_id: null },
+    ]);
+    await card.getByText('Reviewed (1)').click();
+    await expect(card.getByText('✓ Reviewed by officer · 31 Oct 2026')).toBeVisible();
+
+    await page.reload();
+
+    await expect(reviewCard(page).getByText('Reviewed (1)')).toBeVisible();
+    await expect(reviewCard(page).getByRole('button', { name: /Across documents/ })).toHaveCount(0);
+  });
+
   test('RS-008 / CM-007 the risk summary is reached from case details, and an unscored case shows no score and no findings @RS-008 @CM-007 @sprint2 @SCRUM-83', async ({ page, backend }) => {
     const theCase = makeCase({ greenlink_case_id: 'GLDB-4008', risk: null });
     backend.cases.push(theCase);
@@ -427,7 +447,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
 
     const card = riskCard(page);
     await expect(card).toContainText('Not scored yet.');
-    await expect(card.locator('.risk-badge')).toHaveCount(0);
+    await expect(card.getByTestId('risk-badge')).toHaveCount(0);
     await expect(card).toContainText('The case analysis scores the case once every approved document has been scanned.');
     await expect(card.locator('.severity-gauge-value')).toHaveCount(0);
     await expect(card.locator('.risk-document')).toHaveCount(0);
@@ -439,7 +459,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     const card = riskCard(page);
     await expect(card).toContainText('1 of 2 documents scanned.');
     await expect(sectionStatus(page, 'Risk Summary')).toContainText('1/2 Scanned');
-    await expect(card.locator('.risk-badge')).toHaveCount(0);
+    await expect(card.getByTestId('risk-badge')).toHaveCount(0);
     await expect(card.locator('.severity-gauge-value')).toHaveCount(0);
     await expect(card.locator('.risk-document')).toHaveCount(0);
   });

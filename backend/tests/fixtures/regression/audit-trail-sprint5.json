@@ -1,0 +1,191 @@
+[
+  {
+    "actor": "test-user",
+    "actor_type": "user",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "detail": {
+      "content_type": "image/jpeg",
+      "filename": "POR_UtilityBill_20251028.jpg",
+      "size_bytes": 3
+    },
+    "document_id": "07c41b35-10d7-427c-b407-44a715e54042",
+    "duration_ms": null,
+    "event_id": "trail-00",
+    "occurred_at": "2026-10-27T02:00:00Z",
+    "outcome": "success",
+    "started_at": null,
+    "type": "document.uploaded"
+  },
+  {
+    "actor": "test-user",
+    "actor_type": "user",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "detail": {
+      "content_type": "image/jpeg",
+      "filename": "Company_UtilityBill_45040.pdf",
+      "size_bytes": 3
+    },
+    "document_id": "d24bcc04-badc-4b0d-9e53-bb8c60efba99",
+    "duration_ms": null,
+    "event_id": "trail-01",
+    "occurred_at": "2026-10-27T02:01:00Z",
+    "outcome": "success",
+    "started_at": null,
+    "type": "document.uploaded"
+  },
+  {
+    "actor": "doc-worker",
+    "actor_type": "agent",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "detail": {
+      "classification_confidence": 0.83,
+      "document_type": "proof_of_address",
+      "llm_cache_read_tokens": 0,
+      "llm_cache_saved_usd": 0.0,
+      "llm_cache_write_tokens": 0,
+      "llm_calls": 0,
+      "llm_cost_usd": 0.0,
+      "llm_input_tokens": 0,
+      "llm_output_tokens": 0,
+      "requested_by": "test-user",
+      "run": "document"
+    },
+    "document_id": "07c41b35-10d7-427c-b407-44a715e54042",
+    "duration_ms": 0,
+    "event_id": "trail-02",
+    "occurred_at": "2026-10-27T02:02:00Z",
+    "outcome": "success",
+    "started_at": "2026-10-27T02:02:00Z",
+    "type": "document.analyzed"
+  },
+  {
+    "actor": "test-user",
+    "actor_type": "user",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "detail": {
+      "from_type": "proof_of_address",
+      "to_type": "proof_of_address"
+    },
+    "document_id": "07c41b35-10d7-427c-b407-44a715e54042",
+    "duration_ms": null,
+    "event_id": "trail-03",
+    "occurred_at": "2026-10-27T02:03:00Z",
+    "outcome": "success",
+    "started_at": null,
+    "type": "document.type_corrected"
+  },
+  {
+    "actor": "test-user",
+    "actor_type": "user",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "detail": {
+      "action": "added",
+      "changes": [
+        {
+          "field": "customer_reference",
+          "from": null,
+          "to": "KE-8801-2234"
+        }
+      ],
+      "fields": [
+        "customer_reference"
+      ]
+    },
+    "document_id": "07c41b35-10d7-427c-b407-44a715e54042",
+    "duration_ms": null,
+    "event_id": "trail-04",
+    "occurred_at": "2026-10-27T02:04:00Z",
+    "outcome": "success",
+    "started_at": null,
+    "type": "document.field_edited"
+  },
+  {
+    "actor": "test-user",
+    "actor_type": "user",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "detail": {
+      "action": "saved",
+      "changes": [
+        {
+          "field": "individual_address",
+          "from": "10 Serangoon Avenue #10-40 Singapore 466208",
+          "to": "21 Anchorvale Link #08-12 Singapore 545021"
+        }
+      ],
+      "fields": [
+        "account_number",
+        "account_type",
+        "bill_date",
+        "billing_period",
+        "contract_end_date",
+        "customer_reference",
+        "deposit",
+        "electricity_usage_kwh",
+        "individual_address",
+        "individual_name",
+        "issuer",
+        "mssl_account_number",
+        "outstanding_balance",
+        "payment_due_date",
+        "payment_method",
+        "service_address",
+        "statement_number",
+        "total_amount_payable"
+      ]
+    },
+    "document_id": "07c41b35-10d7-427c-b407-44a715e54042",
+    "duration_ms": null,
+    "event_id": "trail-05",
+    "occurred_at": "2026-10-27T02:05:00Z",
+    "outcome": "success",
+    "started_at": null,
+    "type": "document.field_edited"
+  },
+  {
+    "actor": "test-user",
+    "actor_type": "user",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "detail": {
+      "from_status": "extracting"
+    },
+    "document_id": "d24bcc04-badc-4b0d-9e53-bb8c60efba99",
+    "duration_ms": null,
+    "event_id": "trail-06",
+    "occurred_at": "2026-10-27T02:06:00Z",
+    "outcome": "success",
+    "started_at": null,
+    "type": "document.cancelled"
+  },
+  {
+    "actor": "test-user",
+    "actor_type": "user",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "detail": {
+      "document_type": "proof_of_address",
+      "skip_detection": false
+    },
+    "document_id": "07c41b35-10d7-427c-b407-44a715e54042",
+    "duration_ms": null,
+    "event_id": "trail-07",
+    "occurred_at": "2026-10-27T02:07:00Z",
+    "outcome": "success",
+    "started_at": null,
+    "type": "document.approved"
+  },
+  {
+    "actor": "test-user",
+    "actor_type": "user",
+    "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
+    "detail": {
+      "note_id": "note-1",
+      "reply": false
+    },
+    "document_id": "07c41b35-10d7-427c-b407-44a715e54042",
+    "duration_ms": null,
+    "event_id": "trail-08",
+    "occurred_at": "2026-10-27T02:08:00Z",
+    "outcome": "success",
+    "started_at": null,
+    "type": "note.added"
+  }
+]

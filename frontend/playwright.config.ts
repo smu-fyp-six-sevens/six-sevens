@@ -1,11 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Regression suite (SCRUM-206, SCRUM-246, SCRUM-296). Runs the real frontend against a mocked
+ * Regression suite (SCRUM-206, SCRUM-246, SCRUM-296, SCRUM-323). Runs the real frontend against a mocked
  * backend (e2e/support/mockBackend.ts) — no FastAPI, Supabase or Dify.
  *
  * Test titles carry tags for filtering and reporting:
- *   @sprint1 / @sprint2 / @sprint3 / @sprint4, the Jira story (@SCRUM-6) and the manual test case
+ *   @sprint1 / @sprint2 / @sprint3 / @sprint4 / @sprint5, the Jira story (@SCRUM-6) and the manual test case
  *   ID from the sprint test sheets (@DI-001), e.g.
  *   npx playwright test --grep @sprint1
  *   npx playwright test --grep @DI-008

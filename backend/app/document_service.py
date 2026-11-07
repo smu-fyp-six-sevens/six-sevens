@@ -513,7 +513,8 @@ async def approve(document: DocumentRecord) -> DocumentRecord:
 
     approved = await asyncio.to_thread(document_repository.approve_document, document.id)
     if approved is None:
-        raise Refused("not_found", "Document not found")
+        # Read as analyzed a moment ago, so it was approved, rejected or deleted since (a double click, or two officers).
+        raise Refused("conflict", "This document was just changed by someone else. Refresh to see where it stands.")
 
     skip = skips_detection(document)
     if skip:

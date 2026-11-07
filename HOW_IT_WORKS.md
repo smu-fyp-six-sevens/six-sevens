@@ -180,7 +180,7 @@ Deleting a document removes its fields, flags, trace and file; deleting a case r
 
 ## 7. Configuration
 
-Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, `AUTH_USERS`, `AUTH_SECRET_KEY`. With `EVENT_TRANSPORT=pubsub` (the cloud and the compose stack), `api` and `audit-metrics` refuse to start while `AUTH_SECRET_KEY` is empty.
+Required: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, `AUTH_USERS`, `AUTH_SECRET_KEY`. With `EVENT_TRANSPORT=pubsub` (the cloud and the compose stack), `api` and `audit-metrics` refuse to start while `AUTH_SECRET_KEY` is empty.
 
 | Variable | Default | Effect |
 |---|---|---|

@@ -30,7 +30,7 @@ jobs:
         working-directory: backend
     env:
       SUPABASE_URL: https://example.supabase.co
-      SUPABASE_PUBLISHABLE_KEY: placeholder-key
+      SUPABASE_SECRET_KEY: placeholder-key
       SUPABASE_STORAGE_BUCKET: documents
     steps:
       - name: Checkout repository
@@ -141,6 +141,10 @@ jobs:
       # vite build doesn't type-check, so a type error would otherwise ship.
       - name: Type-check frontend
         run: npm run typecheck
+
+      # The logic below the browser (hooks, approval rules, filters), in a simulated DOM (vitest, src/**/*.test.ts).
+      - name: Run unit tests
+        run: npm test
 
       - name: Build frontend
         run: npm run build

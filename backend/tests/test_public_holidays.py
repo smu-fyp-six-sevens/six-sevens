@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 from app.fraud_detection.font_consistency import ExtractedField
@@ -87,7 +87,11 @@ async def test_giro_check_uses_the_live_list_for_new_years() -> None:
 
 
 async def test_giro_check_says_when_a_years_holidays_are_unknown() -> None:
-    result = await _giro("08 Feb 2027")  # a Monday holiday, but the bundled copy stops at 2026
+    unknown = max(BUNDLED_HOLIDAYS.years) + 1  # the first year the bundled copy doesn't cover
+    day = date(unknown, 2, 8)
+    while day.weekday() == 6:  # a Sunday would be a finding of its own
+        day += timedelta(days=1)
+    result = await _giro(day.strftime("%d %b %Y"))
     assert result.findings == []
     skip = next(s for s in result.skipped_checks if s.check_code == "BS.GIRO_BUSINESS_DAY")
-    assert "2027" in skip.reason and "Sundays" in skip.reason
+    assert str(unknown) in skip.reason and "Sundays" in skip.reason

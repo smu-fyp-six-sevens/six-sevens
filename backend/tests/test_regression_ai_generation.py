@@ -21,9 +21,9 @@ from __future__ import annotations
 import pytest
 
 from app.langgraph.detection.graph import run_detection
-from tests import test_regression_detection as detection_harness
-from tests.test_ai_generation import _png, _scene, _with_checkerboard
-from tests.test_regression_detection import DIGITAL, LAYOUT, Specialist, consulted, findings_from
+from tests.support import detection_harness
+from tests.support.ai_images import png, scene, with_checkerboard
+from tests.support.detection_harness import DIGITAL, LAYOUT, Specialist, consulted, findings_from
 
 # The Sprint 3 harness's fixtures: scripted Claude, the in-memory store, and the cleanup after each run.
 ai = detection_harness.ai
@@ -33,11 +33,11 @@ _clear_detection_memory = detection_harness._clear_detection_memory
 
 def ai_generated_passport_scan() -> bytes:
     # 768 x 700: not one of the preset sizes a generator outputs, so only the pixels give it away.
-    return _png(_with_checkerboard(_scene(noise=0.0, falloff=2.0))[:, :700])
+    return png(with_checkerboard(scene(noise=0.0, falloff=2.0))[:, :700])
 
 
 def clean_passport_scan() -> bytes:
-    return _png(_scene()[:, :700])
+    return png(scene()[:, :700])
 
 
 def _layout_and_digital_checks(ai) -> None:
