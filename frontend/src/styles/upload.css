@@ -250,6 +250,14 @@
   padding-bottom: 24px;
 }
 
+.document-details-page {
+  padding-bottom: 0;
+}
+
+.case-page {
+  padding-bottom: 0;
+}
+
 /* Case pages (components/CaseFrame.tsx): the section menu down the left from under the top bar, the page's header and
    content in the column beside it. The menu is a rail of icons that opens over the page. */
 .case-frame {
@@ -1438,7 +1446,6 @@
    while the page scrolls. Closed, it sits under the top bar (which is at 20); only the opened menu rises above the page. */
 .case-frame-nav {
   z-index: 15;
-  /* A pixel short of the window: page heights are fractional, and without the slack the end of the page nudged the rail. */
   height: calc(100vh - var(--topbar-height) - 1px);
 }
 
@@ -1533,9 +1540,9 @@
   }
 }
 
-/* The rail is sticky inside the frame, and can't leave it. The page's own bottom padding sat outside the frame, so at the
-   end of a page it pushed the rail up by that much. The padding moves into the content column instead, and the frame
-   is at least a window tall, so the rail is always whole and never moves. */
+/* The rail is sticky inside the frame and can't leave it. The page's own bottom padding sat outside the frame, so at the
+   end of a page the rail stopped short of the window's bottom edge, with paper showing under it. The padding moves into
+   the content column, and the frame is at least a window tall, so the rail always runs to the bottom. */
 .shell--upload:has(.case-frame) {
   padding-bottom: 0;
 }

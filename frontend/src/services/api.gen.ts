@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Registry
+         * @description Read-only snapshot of configured agents and the limits currently applied to their pipelines.
+         */
+        get: operations["get_agent_registry_agents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/prompt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Prompt View
+         * @description Return source prompt templates for one role, with per-run inputs marked as placeholders.
+         */
+        get: operations["get_agent_prompt_view_agents__agent_id__prompt_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dev/documents": {
         parameters: {
             query?: never;
@@ -1792,6 +1832,47 @@ export interface components {
             /** Decision Id */
             decision_id: string;
         };
+        /** AgentPrompt */
+        AgentPrompt: {
+            /** Agent Id */
+            agent_id: string;
+            /** Document Type */
+            document_type: string | null;
+            /** Note */
+            note: string;
+            /** Sections */
+            sections: components["schemas"]["PromptSection"][];
+        };
+        /** AgentRecord */
+        AgentRecord: {
+            /** Access Summary */
+            access_summary: string[];
+            /** Call Budget */
+            call_budget: string;
+            /** Group */
+            group: string;
+            /** Id */
+            id: string;
+            /** Limitations */
+            limitations: string;
+            /** Model */
+            model: string;
+            /** Name */
+            name: string;
+            /** Owner */
+            owner: string | null;
+            /**
+             * Prompt Options
+             * @default []
+             */
+            prompt_options: string[];
+            /** Prompt Version */
+            prompt_version: string | null;
+            /** Purpose */
+            purpose: string;
+            /** Tools */
+            tools: string[];
+        };
         /**
          * AnalysisAudit
          * @description What produced a result, so a past run can be reconstructed.
@@ -1964,6 +2045,44 @@ export interface components {
             /** Results */
             results: components["schemas"]["BulkUploadItemResult"][];
         };
+        /**
+         * CacheUse
+         * @description How well prompt caching worked over some runs.
+         */
+        CacheUse: {
+            /**
+             * Cache Read Tokens
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Tokens
+             * @default 0
+             */
+            cache_write_tokens: number;
+            /** Hit Rate */
+            hit_rate: number | null;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Runs
+             * @default 0
+             */
+            runs: number;
+            /**
+             * Runs Without Saving
+             * @default 0
+             */
+            runs_without_saving: number;
+            /**
+             * Saved Usd
+             * @default 0
+             */
+            saved_usd: number;
+        };
         /** CaseAnalysis */
         CaseAnalysis: {
             additional_documents: components["schemas"]["AdditionalDocuments"] | null;
@@ -2081,6 +2200,22 @@ export interface components {
         };
         /** CaseCost */
         CaseCost: {
+            /** @default {
+             *       "cache_read_tokens": 0,
+             *       "cache_write_tokens": 0,
+             *       "input_tokens": 0,
+             *       "runs": 0,
+             *       "runs_without_saving": 0,
+             *       "saved_usd": 0
+             *     } */
+            cache: components["schemas"]["CacheUse"];
+            /**
+             * Cache By Run
+             * @default {}
+             */
+            cache_by_run: {
+                [key: string]: components["schemas"]["CacheUse"];
+            };
             /** Case Analysis Usd */
             case_analysis_usd: number;
             /** Case Id */
@@ -2145,10 +2280,18 @@ export interface components {
             document_id: string | null;
             /** Llm Cache Read Tokens */
             llm_cache_read_tokens: number | null;
+            /** Llm Cache Saved Usd */
+            llm_cache_saved_usd: number | null;
+            /** Llm Cache Write Tokens */
+            llm_cache_write_tokens: number | null;
             /** Llm Calls */
             llm_calls: number | null;
             /** Llm Cost Usd */
             llm_cost_usd: number;
+            /** Llm Input Tokens */
+            llm_input_tokens: number | null;
+            /** Llm Output Tokens */
+            llm_output_tokens: number | null;
             /**
              * Occurred At
              * Format: date-time
@@ -2435,7 +2578,7 @@ export interface components {
          *     is analysed, and is permanent: the case is view-only.
          * @enum {string}
          */
-        CaseStage: "open" | "processing_documents" | "pending_review" | "documents_incomplete" | "fraud_detection" | "ready_for_analysis" | "pending_evaluation" | "case_analysed" | "finalised" | "failed";
+        CaseStage: "open" | "processing_documents" | "pending_review" | "documents_incomplete" | "fraud_detection" | "pending_evaluation" | "case_analysed" | "finalised" | "failed";
         /**
          * CaseSummary
          * @description documents_status, fulfilled_requirements and missing_requirements are all
@@ -3963,6 +4106,13 @@ export interface components {
              */
             occurred_at: string;
         };
+        /** PromptSection */
+        PromptSection: {
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+        };
         /**
          * ProofOfAddressCoverage
          * @description How many of the case's identified individuals (one per accepted
@@ -4442,6 +4592,72 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_agent_registry_agents_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_prompt_view_agents__agent_id__prompt_get: {
+        parameters: {
+            query?: {
+                document_type?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPrompt"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_injection_documents_api_dev_documents_get: {
         parameters: {
             query?: never;

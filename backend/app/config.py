@@ -10,7 +10,7 @@ def _env(name: str, default: str = "") -> str:
     """
     os.environ.get, stripped — a copy-pasted secret easily picks up a
     trailing newline, which is silently harmless for most settings but
-    fatal as an HTTP header value (e.g. SUPABASE_PUBLISHABLE_KEY).
+    fatal as an HTTP header value (e.g. SUPABASE_SECRET_KEY).
     """
     return os.environ.get(name, default).strip()
 
@@ -95,9 +95,7 @@ class Settings:
     ALLOWED_ORIGIN_REGEX: str | None = _env("ALLOWED_ORIGIN_REGEX") or None
 
     SUPABASE_URL: str = _env("SUPABASE_URL")
-    SUPABASE_PUBLISHABLE_KEY: str = _env("SUPABASE_PUBLISHABLE_KEY")
-    # Bypasses RLS — backend-only, for the Realtime subscription
-    # (realtime_listener.py). Never sent to the frontend.
+    # Bypasses RLS: every backend read, write and Storage call uses it. Never sent to the frontend.
     SUPABASE_SECRET_KEY: str = _env("SUPABASE_SECRET_KEY")
     SUPABASE_STORAGE_BUCKET: str = _env("SUPABASE_STORAGE_BUCKET", "documents")
 
@@ -209,6 +207,8 @@ class Settings:
     # --- Per-case analysis (case_pipeline/) ---
     # Kill switch: off falls back to document-level detection and scoring only.
     CASE_ANALYSIS_ENABLED: bool = os.environ.get("CASE_ANALYSIS_ENABLED", "true").lower() == "true"
+    # Runs started automatically per case per hour (each spends about 12k tokens); past it, the officer starts one.
+    CASE_ANALYSIS_AUTO_RUNS_PER_HOUR: int = int(os.environ.get("CASE_ANALYSIS_AUTO_RUNS_PER_HOUR", "4"))
     # Whether cases created here need every required checklist document approved before they can be analysed.
     # Stored on each case when it's created (cases.checklist_enforced). On only in prod (Terraform).
     REQUIRE_COMPLETE_CHECKLIST: bool = os.environ.get("REQUIRE_COMPLETE_CHECKLIST", "false").lower() == "true"

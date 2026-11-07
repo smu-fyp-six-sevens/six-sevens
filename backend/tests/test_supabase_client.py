@@ -13,11 +13,11 @@ def test_build_client_requires_supabase_url(monkeypatch: pytest.MonkeyPatch) -> 
         _build_client()
 
 
-def test_build_client_requires_supabase_publishable_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_client_requires_supabase_secret_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.supabase_client.settings.SUPABASE_URL", "https://example.supabase.co")
-    monkeypatch.setattr("app.supabase_client.settings.SUPABASE_PUBLISHABLE_KEY", "")
+    monkeypatch.setattr("app.supabase_client.settings.SUPABASE_SECRET_KEY", "")
 
-    with pytest.raises(RuntimeError, match="SUPABASE_PUBLISHABLE_KEY is not set"):
+    with pytest.raises(RuntimeError, match="SUPABASE_SECRET_KEY is not set"):
         _build_client()
 
 
@@ -43,17 +43,16 @@ async def test_build_async_supabase_client_requires_supabase_secret_key(
 
 
 @pytest.mark.asyncio
-async def test_build_async_supabase_client_uses_the_secret_key_not_the_publishable_one(
+async def test_build_async_supabase_client_uses_the_secret_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("app.supabase_client.settings.SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setattr("app.supabase_client.settings.SUPABASE_SECRET_KEY", "secret-key")
-    monkeypatch.setattr("app.supabase_client.settings.SUPABASE_PUBLISHABLE_KEY", "publishable-key")
 
     with patch("app.supabase_client.acreate_client", new=AsyncMock()) as mock_acreate_client:
         await build_async_supabase_client()
 
-    # The Realtime subscription needs the secret key; the publishable one would be refused by RLS.
+    # The Realtime subscription needs the secret key.
     mock_acreate_client.assert_awaited_once_with("https://example.supabase.co", "secret-key")
 
 

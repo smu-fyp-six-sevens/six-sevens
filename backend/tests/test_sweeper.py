@@ -4,12 +4,14 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
-from app import auth, sweeper
+from app import auth, detection_results, sweeper
+from app.config import settings
 from app.events import Event, types
 from app.models import DocumentRecord, DocumentStatus
 from app.workers import cases as case_worker
 from app.workers import detection as detection_worker
 from app.workers import documents as doc_worker
+from tests.support.fake_supabase import FakeSupabase
 
 # The real clock: sweep() reads it itself.
 NOW = datetime.now(timezone.utc)
@@ -124,6 +126,34 @@ def test_detection_worker_does_nothing_when_the_run_already_moved_on():
     ):
         asyncio.run(detection_worker.on_recovery_requested(_recovery("detection-worker", "detecting", 1)))
     run.assert_not_awaited()
+
+
+def test_detection_worker_gives_up_past_the_attempt_limit_keeping_the_earlier_report(monkeypatch):
+    # The document had a report from an earlier run; the rerun the sweeper found stuck never finished.
+    results = FakeSupabase(keys={"detection_results": ("document_id",)})
+    monkeypatch.setattr(detection_results, "service_supabase_client", lambda: results)
+    detection_results.save_report("doc-1", {"verdict": "flagged", "summary": "Earlier run.", "findings": []})
+    with (
+        patch("app.document_repository.update_status", return_value=True) as update,
+        patch("app.document_repository.end_unfinished_detection") as end_run,
+        patch("app.workers.detection.run", AsyncMock()) as run,
+        patch("app.workers.detection.langgraph_trace.flush"),
+        patch("app.workers.recovery.report", AsyncMock()) as report,
+        patch("app.workers.detection.push_case_snapshot", AsyncMock()) as snapshot,
+    ):
+        asyncio.run(detection_worker.on_recovery_requested(
+            _recovery("detection-worker", "detecting", settings.RECOVERY_MAX_ATTEMPTS + 1)))
+
+    args, kwargs = update.call_args
+    assert args[1] == DocumentStatus.APPROVED
+    assert kwargs["expected_current_statuses"] == [DocumentStatus.DETECTING]
+    run.assert_not_awaited()
+    report_kept, error = detection_results.get("doc-1")
+    assert report_kept["summary"] == "Earlier run."
+    assert error == f"Detection stopped responding; automatic recovery gave up after {settings.RECOVERY_MAX_ATTEMPTS} attempts."
+    end_run.assert_called_once_with("doc-1", has_report=True)
+    assert report.await_args.args[2:] == (types.RECOVERY_EXHAUSTED, "failed")
+    snapshot.assert_awaited_once_with("case-1", realtime_covers=True)
 
 
 def test_case_worker_marks_a_stuck_run_failed_without_rerunning_it():

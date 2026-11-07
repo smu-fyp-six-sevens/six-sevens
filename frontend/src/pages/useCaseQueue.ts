@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CaseRecord } from '../App';
 import { getCaseCounts, listCasesPage } from '../services/uploadService';
 import type { CaseCounts, CaseStage, CaseRiskFilter, CaseSort } from '../services/uploadService';
-import { toCaseRecord } from '../utils/caseRecord';
+import { toCaseRecord, type CaseRecord } from '../utils/caseRecord';
 
 export interface CaseQueueQuery {
   q: string;

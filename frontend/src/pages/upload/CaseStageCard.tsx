@@ -13,7 +13,6 @@ const TRACK: CaseStage[] = [
   'processing_documents',
   'pending_review',
   'fraud_detection',
-  'ready_for_analysis',
   'pending_evaluation',
   'case_analysed',
   'finalised',
@@ -37,10 +36,11 @@ interface NextStep {
 }
 
 // What the officer should know or do now, and where to go for it.
-function nextStep({ stage, failure, analysisRunning, findingsToReview, missingRequirements }: {
+function nextStep({ stage, failure, analysisRunning, analysisReady, findingsToReview, missingRequirements }: {
   stage: string;
   failure: CaseFailure | null;
   analysisRunning: boolean;
+  analysisReady: boolean;
   findingsToReview: number | null;
   missingRequirements: number;
 }): NextStep {
@@ -60,11 +60,12 @@ function nextStep({ stage, failure, analysisRunning, findingsToReview, missingRe
         link: { label: 'Upload documents', section: 'documents' },
       };
     case 'fraud_detection':
-      return { text: 'Approved documents are being scanned for fraud.', link: { label: 'View approved documents', section: 'documents' } };
-    case 'ready_for_analysis':
-      return analysisRunning
-        ? { text: 'The case analysis is running: cross-document validation and risk scoring.', link: { label: 'View progress', section: 'analysis' } }
-        : { text: 'Every document is scanned. Run the case analysis to score the case.', link: { label: 'Go to case analysis', section: 'analysis' } };
+      if (analysisRunning) {
+        return { text: 'The case analysis is running: cross-document validation and risk scoring.', link: { label: 'View progress', section: 'analysis' } };
+      }
+      return analysisReady
+        ? { text: 'Every document is scanned. The case analysis starts on its own; if it hasn\'t, start it here.', link: { label: 'Go to case analysis', section: 'analysis' } }
+        : { text: 'Approved documents are being scanned for fraud. The case analysis starts once they are done.', link: { label: 'View approved documents', section: 'documents' } };
     case 'pending_evaluation':
       return {
         text: findingsToReview
@@ -106,6 +107,7 @@ export function CaseStageCard({
   onChanged,
   onSelectSection,
   analysisRunning = false,
+  analysisReady = false,
   caseLabel,
   findingsToReview = null,
   missingRequirements = 0,
@@ -116,8 +118,10 @@ export function CaseStageCard({
   failure: CaseFailure | null;
   onChanged: (summary: CaseRequirementCoverage) => void;
   onSelectSection: (section: CaseSection) => void;
-  // Whether a case analysis is running, which keeps the case at Ready for Analysis.
+  // Whether a case analysis is running, which keeps the case at Fraud Detection.
   analysisRunning?: boolean;
+  // Every approved document is scanned, so the case analysis is next.
+  analysisReady?: boolean;
   // The case's number, naming it in the finalise confirmation.
   caseLabel?: string;
   // While the case is analysed: findings still without the officer's verdict. Finalising waits for 0.
@@ -128,7 +132,7 @@ export function CaseStageCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingFinalise, setConfirmingFinalise] = useState(false);
-  const next = nextStep({ stage, failure, analysisRunning, findingsToReview, missingRequirements });
+  const next = nextStep({ stage, failure, analysisRunning, analysisReady, findingsToReview, missingRequirements });
   const position = trackPosition(stage, failure);
   const canFinalise = stage === 'case_analysed';
 

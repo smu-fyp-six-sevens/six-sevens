@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { useDismiss } from './useDismiss';
 import type { KeyboardEvent } from 'react';
 
 interface SelectMenuProps {
@@ -42,25 +43,7 @@ export default function SelectMenu({ name, options, value, disabled = false, onC
     if (isOpen) optionRefs.current[Math.max(options.indexOf(value), 0)]?.focus();
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
-    }
-
-    function closeOnEscape(event: globalThis.KeyboardEvent) {
-      if (event.key === 'Escape') close(true);
-    }
-
-    document.addEventListener('mousedown', closeOnOutsideClick);
-    document.addEventListener('keydown', closeOnEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', closeOnOutsideClick);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [isOpen]);
+  useDismiss(rootRef, isOpen, () => setIsOpen(false), () => close(true));
 
   return (
     <span className="header-filter select-menu" ref={rootRef}>

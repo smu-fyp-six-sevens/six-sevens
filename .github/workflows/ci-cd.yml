@@ -4,11 +4,12 @@ on:
   push:
     branches:
       - main
-    # A push of only docs or workflow files neither tests nor redeploys anything.
+    # A push of only docs, workflow files or .gitignore neither tests nor redeploys anything.
     paths-ignore:
       - '**.md'
       - 'docs/**'
       - '.github/workflows/**'
+      - '.gitignore'
   pull_request:
   workflow_dispatch:
   # Weekly: Snyk again for vulnerabilities published since the dependencies last changed (Monday 09:00 SGT).
@@ -29,7 +30,7 @@ jobs:
         working-directory: backend
     env:
       SUPABASE_URL: https://example.supabase.co
-      SUPABASE_PUBLISHABLE_KEY: placeholder-key
+      SUPABASE_SECRET_KEY: placeholder-key
       SUPABASE_STORAGE_BUCKET: documents
     steps:
       - name: Checkout repository
@@ -140,6 +141,10 @@ jobs:
       # vite build doesn't type-check, so a type error would otherwise ship.
       - name: Type-check frontend
         run: npm run typecheck
+
+      # The logic below the browser (hooks, approval rules, filters), in a simulated DOM (vitest, src/**/*.test.ts).
+      - name: Run unit tests
+        run: npm test
 
       - name: Build frontend
         run: npm run build

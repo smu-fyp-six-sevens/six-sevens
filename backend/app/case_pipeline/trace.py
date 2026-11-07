@@ -12,6 +12,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from .. import telemetry
 from . import repository
 
 logger = logging.getLogger("classifier_pipeline.case_pipeline.trace")
@@ -34,7 +35,9 @@ class RunTrace:
         self.events: list[dict[str, Any]] = []
 
     def record(self, step: str, **fields: Any) -> None:
-        self.events.append({"step": step, "at": round(time.monotonic() - self._started, 2), **fields})
+        if step != "span" and (in_span := telemetry.current_step_id()) is not None:
+            fields = {"in_span": in_span, **fields}
+        self.events.append({"step": step, "at": round(time.monotonic() - self._started, 3), **fields})
 
     def save(self) -> None:
         """Writes the log so far. Called at milestones rather than per event, to keep database writes down."""

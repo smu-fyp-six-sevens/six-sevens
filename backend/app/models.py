@@ -242,8 +242,7 @@ class CaseStage(str, Enum):
     PROCESSING_DOCUMENTS = "processing_documents"  # a document is uploaded, queued, classified or extracted
     PENDING_REVIEW = "pending_review"              # a document waits for the officer to approve or reject it
     DOCUMENTS_INCOMPLETE = "documents_incomplete"  # a required document is missing (or every one was rejected)
-    FRAUD_DETECTION = "fraud_detection"            # an approved document is being scanned for fraud
-    READY_FOR_ANALYSIS = "ready_for_analysis"      # every approved document is scanned; the analysis is not done (or is running)
+    FRAUD_DETECTION = "fraud_detection"            # approved documents are being scanned, then the case analysis runs
     PENDING_EVALUATION = "pending_evaluation"      # analysed; the officer still has findings to mark correct or wrong (precision and recall)
     CASE_ANALYSED = "case_analysed"                # analysed, and every finding has the officer's verdict
     FINALISED = "finalised"                        # an officer closed the case — permanent, view-only

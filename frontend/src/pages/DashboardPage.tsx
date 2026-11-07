@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { CaseRecord } from '../App';
+import type { CaseRecord } from '../utils/caseRecord';
+import type { Risk } from './dashboardRisk';
 import AppHeader from '../components/AppHeader';
+import { ErrorMessage } from '../components/ErrorMessage';
 import HeaderFilter, { type FilterOption } from '../components/HeaderFilter';
 import PeriodMenu, { CUSTOM_RANGE } from '../components/PeriodMenu';
 import CompareMenu from '../components/CompareMenu';
@@ -24,7 +26,6 @@ import { PRESETS, formatPeriod, inPeriod, isoDay, overlap, presetPeriod, type Pe
 
 // A case stage's label (utils/caseStages.ts), so the dashboard and the case queue name and colour cases the same way.
 type Status = string;
-type Risk = 'Critical' | 'High' | 'Medium' | 'Low';
 type Role = 'Manager' | 'Analyst';
 
 // Manager view is kept but hidden for now; flip to true to show the role switch again.
@@ -186,11 +187,14 @@ export default function DashboardPage({
   cases: caseRecords,
   isLoading,
   isRefreshing,
+  error,
   onRefresh,
 }: {
   cases: CaseRecord[];
   isLoading: boolean;
   isRefreshing: boolean;
+  // The last load's failure, if it failed.
+  error?: string | null;
   onRefresh: () => void;
 }) {
   const navigate = useNavigate();
@@ -403,9 +407,10 @@ export default function DashboardPage({
               )}
             </div>
           )}
+          {error && <ErrorMessage className="dashboard-load-error" message={`${error} Use Refresh to try again.`} />}
           {tab === 'Overview' && <CasePipeline counts={stageCounts} total={visibleCases.length} period={rangeLabel} before={before ? { counts: countsByStage(before.statusCounts), total: before.cases.length } : undefined} />}
           {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
-          {!isLoading && !caseRecords.length && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
+          {!isLoading && !caseRecords.length && !error && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
 
           {tab === 'Overview' && <>
           <section className="dashboard-insight-grid">

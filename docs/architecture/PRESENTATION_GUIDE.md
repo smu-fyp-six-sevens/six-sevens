@@ -31,7 +31,7 @@ The fraud-detection backend used to be one FastAPI process doing everything. It'
 3. **Each worker publishes its result as another event.**
 4. **audit-metrics stores every event,** which gives a complete audit trail for free.
 
-It runs on **Cloud Run** (Stage 1), with everything defined in **Terraform**. **Kong** is the single front door. Deploys go through **GitHub Actions** without stored keys, and the system is observed through **Grafana, Managed Prometheus and Cloud Trace**. Stage 2 moves the same services to GKE with Argo CD; that's a configuration change, not a rewrite.
+It runs on **Cloud Run** (Stage 1), with everything defined in **Terraform**. **Kong** is the single front door. Deploys go through **GitHub Actions** without stored keys, and the system is observed through **Grafana, Managed Prometheus and Cloud Trace**. Stage 2 adds a Helm chart, tested in CI, so a bank can run the same services on its own Kubernetes platform.
 
 ## 2. What to show, in order (about 15 minutes)
 
@@ -41,7 +41,7 @@ It runs on **Cloud Run** (Stage 1), with everything defined in **Terraform**. **
 | 2 | Upload a document, approve it, run the case analysis | the frontend URL | The app behaves as before, but each step is now an event |
 | 3 | Cloud Run service list | Cloud Console → Cloud Run | Each service is deployed and scaled on its own (and scales to zero) |
 | 4 | Pub/Sub subscriptions and their filters | Cloud Console → Pub/Sub | Each worker gets only its event types; failures go to the dead-letter topic |
-| 5 | The case's **Claude Cost** tab | the case page → Claude Cost | What each document and the analysis cost, from the audit trail |
+| 5 | The case's **Claude Cost** tab | the case page → Claude Cost | What each document and the analysis cost, from the audit trail, and how much input the prompt cache served |
 | 6 | One trace for that upload | Cloud Console → Trace explorer | One trace crosses api → Pub/Sub → doc-worker → detection-worker |
 | 7 | Grafana: Pipeline, Agents, Cost | the Grafana URL (admin) | Stage timings, per-agent cost and cache hit ratio, estimated against billed cost |
 | 8 | Diagram page 4, then the recovery row on the Pipeline dashboard | draw.io, Grafana | Stuck work recovers itself; the system is resilient, not just split |
@@ -84,8 +84,7 @@ sequenceDiagram
     A->>P: document.approved
     P->>T: push
     T->>P: document.detected
-    O->>A: run case analysis
-    A->>P: case.analysis.requested
+    T->>P: case.analysis.requested (the last document scanned)
     P->>C: push
     C->>P: case.analysis.completed
     P-->>M: every event is stored (audit trail)
@@ -108,7 +107,7 @@ The UI updates live: Supabase Realtime tells api a row changed, and api pushes a
 
 ## 6. Questions to ask the professor
 
-1. **Does Cloud Run with Pub/Sub count as "genuinely decoupled"** for the Cloud Native award, or does it have to be Kubernetes (Stage 2: GKE Autopilot and Argo CD) before November?
+1. **Does Cloud Run with Pub/Sub count as "genuinely decoupled"** for the Cloud Native award, or does Kubernetes have to run, rather than ship as a Helm chart tested in CI?
 2. **Is the event-driven design (one topic, filtered subscriptions, audit trail from events) the right story to lead with,** or should the demo lead with the infrastructure?
 3. **Is the failure demo (self-recovery) worth the time slot** in the final presentation?
 
@@ -120,9 +119,9 @@ The UI updates live: Supabase Realtime tells api a row changed, and api pushes a
 | Why one codebase for six services? | Shared models and repositories without a shared-library release process. The boundary is the event, not the repo. Each service still has its own image, scaling, identity and deploy. |
 | What if a worker crashes mid-run? | Pub/Sub redelivers the message (ack deadline 600 s). If the run left a document stuck, the sweeper asks the owner to recover it, up to 3 times, then marks it failed so the officer can retry. |
 | What if an event is processed twice? | Status changes are compare-and-swap, so the second attempt finds the status already moved and does nothing. The audit trail ignores a repeated event id. |
-| Why not Kubernetes now? | Cloud Run gives the same separation for less operating effort before the deadline. The code already has handler-plus-adapter workers, so GKE is Stage 2 configuration. |
+| Why not Kubernetes now? | Cloud Run gives the same separation for less operating effort, and measured load doesn't need more (detection p95 92 s against a 600 s deadline). For the bank, Stage 2 adds a Helm chart tested in CI, so its platform team can run the same services, with NetworkPolicies walling them off from each other. |
 | How do you know what it costs? | Every Claude call is priced per agent and recorded per run; the Cost dashboard shows estimates live and Google's billed amount from the billing export. |
-| What's not done? | Automatic case analysis (this sprint), a shared Anthropic rate limit across instances, the Stage 2 move, and the items in `PENDING_WORK.md`. |
+| What's not done? | A shared Anthropic rate limit across instances, the Stage 2 move, and the items in `PENDING_WORK.md`. |
 
 ## 8. Limits to be upfront about
 

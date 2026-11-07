@@ -20,6 +20,9 @@ export function useDetection(documentId: string, status: string | undefined, onR
   const [isCancellingDetection, setIsCancellingDetection] = useState(false);
   // The cancel was accepted; the worker stops at its next step, and the document returns to approved a moment later.
   const [isCancelPending, setIsCancelPending] = useState(false);
+  // The document's status as of now, for an answer that lands after the run it cancels has already stopped.
+  const latestStatus = useRef(status);
+  latestStatus.current = status;
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [isRetryingDetection, setIsRetryingDetection] = useState(false);
   // Individual checks: re-run one check, only once a full detection report exists.
@@ -48,7 +51,8 @@ export function useDetection(documentId: string, status: string | undefined, onR
     try {
       // A run still waiting for a worker stops at once, and the document stays approved: read its error now.
       if ((await cancelDetection(documentId)) === 'cancelled') await refreshDetectionReport();
-      else setIsCancelPending(true);
+      // Only while that run is still the current one: a late answer would otherwise outlive it and block the next.
+      else if (latestStatus.current === 'detecting') setIsCancelPending(true);
     } catch (err) {
       // Not a failed run: the cancel itself didn't go through, so the panel keeps showing what it showed.
       setCancelError(err instanceof Error ? err.message : 'Failed to cancel detection.');

@@ -505,9 +505,11 @@ def _check_round_numbers(*, transactions: Any) -> CheckResult:
 
 @check(code="STAT.LAST_TWO_DIGITS", applies=("bank_statement",))
 def _check_last_two_digits(*, transactions: Any) -> CheckResult:
-    """The last two digits (cents) should be close to uniformly distributed."""
+    """The last two digits (cents) should be close to uniformly distributed, once fees and charges (often one fixed amount, many times) are left out."""
     cents = []
     for row in _rows(transactions):
+        if _BANK_CHARGE_KEYWORDS.search(str(row.get("description") or "")):
+            continue
         amount = _field_number(row, "amount")
         if amount is not None and abs(round(amount, 2) - round(amount, 0)) > 0.001:
             cents.append(int(round(abs(amount) * 100)) % 100)

@@ -22,16 +22,12 @@ from ..models import DocumentStatus
 logger = logging.getLogger("classifier_pipeline.langgraph.pipeline")
 
 
-async def _record_run_audit(document_id: str, run: RunContext) -> None:
+def _record_run_audit(document_id: str, run: RunContext) -> None:
     """What the run spent, and every model output that was repaired: the raw reply next to what was used."""
-    # A rerun starts with no trace in memory, and recording into a fresh one would overwrite the saved row.
-    await asyncio.to_thread(trace.resume, document_id)
     trace.record(
         document_id, "run_audit",
         model_calls=run.calls, call_ceiling=run.max_model_calls, output_repairs=run.repairs,
     )
-    # The end of the run: its steps are saved once, here.
-    await asyncio.to_thread(trace.flush, document_id)
 
 
 async def process_document(document_id: str) -> None:
@@ -42,20 +38,24 @@ async def process_document(document_id: str) -> None:
     a non-terminal status, which would leave the frontend polling forever.
     """
     graph = get_document_graph()
-    span = telemetry.get_tracer().start_as_current_span("langgraph.process_document")
-    with span as current_span:
-        current_span.set_attribute("document_id", document_id)
-        try:
-            with run_context(settings.DOCUMENT_MAX_MODEL_CALLS) as run:
-                try:
-                    await graph.ainvoke(
-                        {"document_id": document_id, "attempts": 0},
-                        config={"recursion_limit": settings.LANGGRAPH_RECURSION_LIMIT},
-                    )
-                finally:
-                    await _record_run_audit(document_id, run)
-        except Exception as exc:
-            await _fail_after_error(document_id, exc)
+    try:
+        with trace.steps_into(document_id), telemetry.get_tracer().start_as_current_span("langgraph.process_document") as span:
+            span.set_attribute("document_id", document_id)
+            telemetry.annotate(kind="run", run="Classification and extraction")
+            try:
+                with run_context(settings.DOCUMENT_MAX_MODEL_CALLS) as run:
+                    try:
+                        await graph.ainvoke(
+                            {"document_id": document_id, "attempts": 0},
+                            config={"recursion_limit": settings.LANGGRAPH_RECURSION_LIMIT},
+                        )
+                    finally:
+                        _record_run_audit(document_id, run)
+            except Exception as exc:
+                await _fail_after_error(document_id, exc)
+    finally:
+        # The end of the run: its steps, the root span's included, are saved once, here.
+        await asyncio.to_thread(trace.flush, document_id)
 
 
 async def _fail_after_error(document_id: str, exc: Exception) -> None:
@@ -82,16 +82,22 @@ async def rerun_extraction(document_id: str) -> None:
     re-read; see that handler).
     """
     # The doc-worker's scope counts this run's calls (workers/documents.py).
-    with telemetry.get_tracer().start_as_current_span("langgraph.rerun_extraction") as span:
-        span.set_attribute("document_id", document_id)
-        try:
-            with run_context(settings.DOCUMENT_MAX_MODEL_CALLS) as run:
-                try:
-                    await _rerun_extraction(document_id)
-                finally:
-                    await _record_run_audit(document_id, run)
-        except Exception as exc:
-            await _fail_after_error(document_id, exc)
+    # A rerun starts with no trace in memory, and recording into a fresh one would overwrite the saved row.
+    await asyncio.to_thread(trace.resume, document_id)
+    try:
+        with trace.steps_into(document_id), telemetry.get_tracer().start_as_current_span("langgraph.rerun_extraction") as span:
+            span.set_attribute("document_id", document_id)
+            telemetry.annotate(kind="run", run="Extraction rerun")
+            try:
+                with run_context(settings.DOCUMENT_MAX_MODEL_CALLS) as run:
+                    try:
+                        await _rerun_extraction(document_id)
+                    finally:
+                        _record_run_audit(document_id, run)
+            except Exception as exc:
+                await _fail_after_error(document_id, exc)
+    finally:
+        await asyncio.to_thread(trace.flush, document_id)
 
 
 async def _rerun_extraction(document_id: str) -> None:

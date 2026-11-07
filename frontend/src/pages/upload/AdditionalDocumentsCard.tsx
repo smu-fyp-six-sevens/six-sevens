@@ -81,7 +81,7 @@ export function AdditionalDocumentsCard({
           <div>
             <strong>Not checked yet.</strong>
 
-            <p>Run the case analysis to see which further documents to request from the client.</p>
+            <p>The case analysis says which further documents to request from the client, once it has run.</p>
           </div>
         </div>
       ) : (

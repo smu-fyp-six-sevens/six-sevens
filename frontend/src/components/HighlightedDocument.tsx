@@ -1,16 +1,9 @@
 import { useState } from 'react';
 import HighlightLayer from './HighlightLayer';
-import type { ActivePlace } from './HighlightLayer';
+import type { ActivePlace, HighlightOptions } from './HighlightLayer';
 import PdfPagesView from './PdfPagesView';
 import type { FindingHighlight } from './findingHighlights';
 import type { PreviewKind } from '../services/uploadService';
-
-// How the boxes are drawn: plain (the Risk Summary's review), or X-ray (the document page's inspection mode),
-// where the page is shaded except the flagged areas and the selected finding opens a card beside its box.
-export interface HighlightOptions {
-  shade?: boolean;
-  detail?: boolean;
-}
 
 interface HighlightedDocumentProps extends HighlightOptions {
   filename: string;

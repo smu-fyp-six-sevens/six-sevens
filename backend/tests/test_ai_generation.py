@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import functools
 import io
 import shutil
 import subprocess
@@ -19,42 +18,12 @@ from app.fraud_detection.authenticity.ai_generation import (
     check_ai_generation,
 )
 
+from tests.support.ai_images import png, scene, with_checkerboard
+
 requires_exiftool = pytest.mark.skipif(shutil.which("exiftool") is None, reason="exiftool not installed")
 
 
 # --- fixtures ----------------------------------------------------------------------
-
-@functools.lru_cache(maxsize=None)
-def _scene(n: int = 768, noise: float = 3.0, seed: int = 0, falloff: float = 1.6) -> np.ndarray:
-    """
-    A photo-like RGB image: 1/f^falloff texture (no resampling of its own)
-    plus sensor-like noise. A higher falloff means less fine texture.
-    Built once per argument set (about 0.3 s each) and shared, so the array is read-only.
-    """
-    rng = np.random.default_rng(seed)
-    fy, fx = np.meshgrid(np.fft.fftfreq(n), np.fft.fftfreq(n), indexing="ij")
-    base = np.real(np.fft.ifft2(np.fft.fft2(rng.normal(size=(n, n))) / (np.hypot(fy, fx) + 1 / n) ** falloff))
-    gray = (base - base.min()) / np.ptp(base) * 200 + 20
-    rgb = np.stack([gray, gray * 0.9 + 10, gray * 0.8 + 20], axis=-1)
-    scene = np.clip(rgb + rng.normal(0, noise, rgb.shape), 0, 255)
-    scene.setflags(write=False)
-    return scene
-
-
-def _with_checkerboard(rgb: np.ndarray, period: int = 2, amplitude: float = 1.0, seed: int = 1) -> np.ndarray:
-    """The fixed periodic pattern a generator's upsampling layers leave behind."""
-    rng = np.random.default_rng(seed)
-    cell = rng.normal(0, 1, (period, period))
-    cell -= cell.mean()
-    yy, xx = np.mgrid[0:rgb.shape[0], 0:rgb.shape[1]]
-    return np.clip(rgb + amplitude * cell[yy % period, xx % period][..., None], 0, 255)
-
-
-def _png(rgb: np.ndarray, info: PngImagePlugin.PngInfo | None = None) -> bytes:
-    buffer = io.BytesIO()
-    Image.fromarray(rgb.astype(np.uint8)).save(buffer, "PNG", pnginfo=info)
-    return buffer.getvalue()
-
 
 def _jpeg(rgb: np.ndarray, quality: int, then: int | None = None) -> bytes:
     buffer = io.BytesIO()
@@ -90,8 +59,8 @@ def _indicator(result, name: str):
 # --- AC1: the individual indicators ------------------------------------------------
 
 def test_spectral_peaks_flag_a_generator_checkerboard() -> None:
-    clean = check_ai_generation("doc-1", _png(_scene()))
-    generated = check_ai_generation("doc-1", _png(_with_checkerboard(_scene())))
+    clean = check_ai_generation("doc-1", png(scene()))
+    generated = check_ai_generation("doc-1", png(with_checkerboard(scene())))
 
     assert _indicator(clean, "Spectral Peaks").strength == 0.0
     peaks = _indicator(generated, "Spectral Peaks")
@@ -106,20 +75,20 @@ def test_spectral_peaks_ignore_a_bayer_sensor_trace() -> None:
     """
     yy, xx = np.mgrid[0:768, 0:768]
     bayer = np.where((yy + xx) % 2 == 0, 1.0, -1.0)[..., None]
-    result = check_ai_generation("doc-1", _png(np.clip(_scene() + bayer, 0, 255)))
+    result = check_ai_generation("doc-1", png(np.clip(scene() + bayer, 0, 255)))
     assert _indicator(result, "Spectral Peaks").strength == 0.0
 
 
 def test_spectral_peaks_ignore_jpeg_block_grid() -> None:
     """JPEG's 8x8 blocks are periodic too; a plain JPEG must not read as upsampled."""
-    result = check_ai_generation("doc-1", _jpeg(_scene(), 75))
+    result = check_ai_generation("doc-1", _jpeg(scene(), 75))
     assert _indicator(result, "Spectral Peaks").strength == 0.0
 
 
 def test_noise_level_flags_an_unnaturally_clean_photo() -> None:
     # Smooth enough that, without added noise, its smooth areas really are clean.
-    noisy = check_ai_generation("doc-1", _png(_scene(noise=3.0, falloff=2.0)))
-    clean = check_ai_generation("doc-1", _png(_scene(noise=0.0, falloff=2.0)))
+    noisy = check_ai_generation("doc-1", png(scene(noise=3.0, falloff=2.0)))
+    clean = check_ai_generation("doc-1", png(scene(noise=0.0, falloff=2.0)))
 
     assert _indicator(noisy, "Noise Level").strength == 0.0
     level = _indicator(clean, "Noise Level")
@@ -127,8 +96,8 @@ def test_noise_level_flags_an_unnaturally_clean_photo() -> None:
 
 
 def test_double_compression_finds_the_earlier_quality() -> None:
-    single = check_ai_generation("doc-1", _jpeg(_scene(), 90))
-    double = check_ai_generation("doc-1", _jpeg(_scene(), 60, then=90))
+    single = check_ai_generation("doc-1", _jpeg(scene(), 90))
+    double = check_ai_generation("doc-1", _jpeg(scene(), 60, then=90))
 
     assert _indicator(single, "Double Compression").strength == 0.0
     ghost = _indicator(double, "Double Compression")
@@ -137,13 +106,13 @@ def test_double_compression_finds_the_earlier_quality() -> None:
 
 
 def test_compression_indicators_skip_formats_without_jpeg_history() -> None:
-    indicator = _indicator(check_ai_generation("doc-1", _png(_scene())), "Double Compression")
+    indicator = _indicator(check_ai_generation("doc-1", png(scene())), "Double Compression")
     assert not indicator.assessed
     assert "PNG" in (indicator.reason or "")
 
 
 def test_estimate_quality_recognises_standard_libjpeg_tables() -> None:
-    image = Image.open(io.BytesIO(_jpeg(_scene(256), 83)))
+    image = Image.open(io.BytesIO(_jpeg(scene(256), 83)))
     assert _estimate_quality(image) == (83, True)
 
 
@@ -176,7 +145,7 @@ def test_provenance_unassessed_without_exiftool() -> None:
 def test_stable_diffusion_parameters_chunk_sets_the_score_floor() -> None:
     info = PngImagePlugin.PngInfo()
     info.add_text("parameters", "a bank statement\nSteps: 20, Sampler: Euler a, CFG scale: 7, Seed: 1")
-    result = check_ai_generation("doc-1", _png(_scene(), info))
+    result = check_ai_generation("doc-1", png(scene(), info))
 
     assert result.score == 0.95
     assert result.likelihood == "high"
@@ -185,7 +154,7 @@ def test_stable_diffusion_parameters_chunk_sets_the_score_floor() -> None:
 @requires_exiftool
 def test_iptc_declaration_written_by_exiftool_is_read_back(tmp_path) -> None:
     path = tmp_path / "photo.jpg"
-    path.write_bytes(_jpeg(_scene(), 90))
+    path.write_bytes(_jpeg(scene(), 90))
     subprocess.run(
         ["exiftool", "-overwrite_original",
          "-XMP-iptcExt:DigitalSourceType=http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia",
@@ -199,13 +168,13 @@ def test_iptc_declaration_written_by_exiftool_is_read_back(tmp_path) -> None:
 # --- AC2/AC3: the score and its breakdown --------------------------------------
 
 def test_contributions_add_up_to_the_score() -> None:
-    for data in (_png(_with_checkerboard(_scene())), _jpeg(_scene(), 60, then=90), _png(_scene())):
+    for data in (png(with_checkerboard(scene())), _jpeg(scene(), 60, then=90), png(scene())):
         image = check_ai_generation("doc-1", data).images[0]
         assert sum(i.contribution for i in image.indicators) == pytest.approx(image.score, abs=1e-3)
 
 
 def test_every_indicator_is_recorded_with_value_and_weight() -> None:
-    image = check_ai_generation("doc-1", _jpeg(_with_checkerboard(_scene()), 95)).images[0]
+    image = check_ai_generation("doc-1", _jpeg(with_checkerboard(scene()), 95)).images[0]
     names = {i.indicator for i in image.indicators}
     assert names == {
         "Spectral Peaks", "Noise Level", "Noise Signal Dependence", "Error Level Analysis",
@@ -220,8 +189,8 @@ def test_every_indicator_is_recorded_with_value_and_weight() -> None:
 
 
 def test_generated_image_outscores_a_photo() -> None:
-    photo = check_ai_generation("doc-1", _png(_scene()))
-    generated = check_ai_generation("doc-1", _png(_with_checkerboard(_scene(noise=0.0, falloff=2.0))))
+    photo = check_ai_generation("doc-1", png(scene()))
+    generated = check_ai_generation("doc-1", png(with_checkerboard(scene(noise=0.0, falloff=2.0))))
 
     assert generated.score > photo.score
     assert generated.likelihood in ("medium", "high")
@@ -230,7 +199,7 @@ def test_generated_image_outscores_a_photo() -> None:
 
 def test_indicators_are_logged(caplog) -> None:
     caplog.set_level("INFO", logger="fraud_detection.ai_generation")
-    check_ai_generation("doc-1", _png(_scene()))
+    check_ai_generation("doc-1", png(scene()))
     logged = [r.getMessage() for r in caplog.records]
     assert any("indicator='Spectral Peaks'" in m and "contribution=" in m for m in logged)
     assert any("score=" in m for m in logged)
@@ -239,7 +208,7 @@ def test_indicators_are_logged(caplog) -> None:
 # --- what gets analysed -----------------------------------------------------------
 
 def test_graphics_are_listed_but_not_scored() -> None:
-    result = check_ai_generation("doc-1", _png(_logo()))
+    result = check_ai_generation("doc-1", png(_logo()))
 
     assert result.unable_to_assess
     assert (result.unable_to_assess_reason or "").startswith("Nothing to check: This image is a flat graphic")
@@ -247,7 +216,7 @@ def test_graphics_are_listed_but_not_scored() -> None:
 
 
 def test_pdf_embedded_photo_is_scored_with_its_page() -> None:
-    pdf = _pdf_with_image(_jpeg(_with_checkerboard(_scene()), 95))
+    pdf = _pdf_with_image(_jpeg(with_checkerboard(scene()), 95))
     result = check_ai_generation("doc-1", pdf)
 
     assert not result.unable_to_assess
@@ -269,7 +238,7 @@ def test_pdf_without_images_is_unable_to_assess() -> None:
 
 
 def test_small_embedded_images_are_skipped() -> None:
-    pdf = _pdf_with_image(_png(_scene(64)))
+    pdf = _pdf_with_image(png(scene(64)))
     assert check_ai_generation("doc-1", pdf).unable_to_assess
 
 
@@ -290,7 +259,7 @@ def test_pdf_with_only_graphics_names_them() -> None:
 
 def test_exiftool_missing_degrades_to_pixel_only(monkeypatch) -> None:
     monkeypatch.setattr(ai_generation, "_run_exiftool", lambda blobs, config: None)
-    result = check_ai_generation("doc-1", _png(_scene()))
+    result = check_ai_generation("doc-1", png(scene()))
 
     assert not result.unable_to_assess
     assert _indicator(result, "Provenance").assessed is False
@@ -316,7 +285,7 @@ def _with_tags(monkeypatch, tags: dict) -> None:
 
 def test_capture_signature_recognises_a_phone_photo(monkeypatch) -> None:
     _with_tags(monkeypatch, _IPHONE_TAGS)
-    capture = _indicator(check_ai_generation("doc-1", _camera_jpeg(_scene())), "Capture Signature")
+    capture = _indicator(check_ai_generation("doc-1", _camera_jpeg(scene())), "Capture Signature")
 
     assert capture.value == "camera"
     assert capture.contribution == 0.0
@@ -325,7 +294,7 @@ def test_capture_signature_recognises_a_phone_photo(monkeypatch) -> None:
 
 def test_camera_capture_halves_noise_level(monkeypatch) -> None:
     """A clean low-light phone photo is phone noise reduction, not generation."""
-    clean = _scene(noise=0.0, falloff=2.0)
+    clean = scene(noise=0.0, falloff=2.0)
     _with_tags(monkeypatch, {})
     stripped = _indicator(check_ai_generation("doc-1", _camera_jpeg(clean)), "Noise Level")
     _with_tags(monkeypatch, _IPHONE_TAGS)
@@ -339,20 +308,20 @@ def test_capture_signature_is_unknown_for_a_forwarded_photo(monkeypatch) -> None
     """WhatsApp-style: standard tables at q80, everything stripped."""
     _with_tags(monkeypatch, {})
     # 768x700: not a generator size (768x768 is one).
-    capture = _indicator(check_ai_generation("doc-1", _jpeg(_scene()[:, :700], 80)), "Capture Signature")
+    capture = _indicator(check_ai_generation("doc-1", _jpeg(scene()[:, :700], 80)), "Capture Signature")
     assert capture.value == "unknown"
     assert capture.strength == 0.5
 
 
 def test_capture_signature_flags_a_generator_output_size(monkeypatch) -> None:
     _with_tags(monkeypatch, {})
-    capture = _indicator(check_ai_generation("doc-1", _png(_scene(1024))), "Capture Signature")
+    capture = _indicator(check_ai_generation("doc-1", png(scene(1024))), "Capture Signature")
     assert capture.value == "generator-shaped"
     assert "1024x1024" in capture.detail
 
 
 def test_capture_signature_treats_a_p3_png_as_a_screenshot(monkeypatch) -> None:
     _with_tags(monkeypatch, _IPHONE_TAGS)
-    capture = _indicator(check_ai_generation("doc-1", _png(_scene()[:, :700])), "Capture Signature")
+    capture = _indicator(check_ai_generation("doc-1", png(scene()[:, :700])), "Capture Signature")
     assert capture.value == "unknown"
     assert "screenshot" in capture.detail

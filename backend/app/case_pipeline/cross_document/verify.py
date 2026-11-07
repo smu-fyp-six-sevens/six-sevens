@@ -7,9 +7,9 @@ category fit what the evidence is. The model's own account is never trusted.
 from __future__ import annotations
 
 import re
-import math
 from typing import Any, cast
 
+from ...llm_io import probability
 from ..models import (
     MODEL_CHOOSABLE_CATEGORIES, CrossDocFinding, FindingCategory, Hypothesis, Severity,
 )
@@ -32,17 +32,6 @@ _MAX_CITATIONS = 12
 _ARTICLE = r"(?:\b(?:the|an?)\s+)?"
 
 
-def _probability(value: Any) -> float:
-    """Bound model-supplied confidence and make malformed values explicitly unknown (0)."""
-    if isinstance(value, bool):
-        return 0.0
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return 0.0
-    return min(1.0, max(0.0, number)) if math.isfinite(number) else 0.0
-
-
 def _replace(pattern: re.Pattern, word: str, text: str) -> str:
     """Swaps each match, and any article before it, for 'the <word>', keeping a leading capital."""
 
@@ -57,8 +46,8 @@ def _replace(pattern: re.Pattern, word: str, text: str) -> str:
 def plain_text(text: str) -> str:
     """The model's wording with ref ids, tool names, flags and 'refutation' jargon replaced by plain words."""
     text = _REF_RE.sub("", text)
-    text = _replace(re.compile(_ARTICLE + _TOOL_RE.pattern, re.IGNORECASE), "check", text)
-    text = _replace(re.compile(_ARTICLE + _FLAG_RE.pattern, re.IGNORECASE), "mismatch", text)
+    text = _replace(re.compile(_ARTICLE + f"(?:{_TOOL_RE.pattern})", re.IGNORECASE), "check", text)
+    text = _replace(re.compile(_ARTICLE + f"(?:{_FLAG_RE.pattern})", re.IGNORECASE), "mismatch", text)
     text = _JARGON_RE.sub("cross-check", text)
     return re.sub(r"\s+([,.;:])", r"\1", " ".join(text.split()))
 
@@ -156,7 +145,7 @@ def verify_verdict(
         rationale=plain_text(str(verdict.get("rationale") or ""))[:1200],
         severity=cast(Severity, severity),
         category=category,
-        confidence=_probability(verdict.get("confidence")),
+        confidence=probability(verdict.get("confidence")),
         citations=citations,
         document_ids=document_ids,
         probe_summary=plain_text(str(verdict.get("probe_summary") or ""))[:400],

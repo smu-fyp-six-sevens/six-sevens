@@ -1,6 +1,7 @@
 """
-Runs the per-case analysis on an officer's request: cross-document
-hypotheses, the risk outlook and the plain-language summary. See
+Runs the per-case analysis: cross-document hypotheses, the risk outlook and
+the plain-language summary. It starts on its own once the case's documents
+are all decided and scanned (start_if_due), or on an officer's request. See
 CROSS_DOCUMENT_AND_RISK_PLAN.md.
 """
 
@@ -9,18 +10,19 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections import defaultdict
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 from .. import (
     audit, case_repository, case_stage, detection_results, document_repository, events, finding_keys,
-    findings_repository, read_pool,
+    findings_repository, read_pool, telemetry,
 )
 from ..config import settings
 from ..snapshots import push_case_snapshot
 from ..llm_io import ModelRefused
-from ..models import DocumentRecord
+from ..models import CaseStage, DocumentRecord
 from ..run_context import end_run, start_run
 from . import repository, state
 from .cross_document.evidence import build_context
@@ -100,18 +102,69 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
     reports, _ = await asyncio.to_thread(
         detection_results.get_states, [d.id for d in documents]
     )
-    run_id = str(uuid.uuid4())
+    return await _begin(case_id, state.compute_fingerprint(documents, reports), automatic=False)
+
+
+# Each case's automatic start, one at a time in this process.
+_auto_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+
+async def start_if_due(case_id: str | None) -> None:
+    """
+    Starts the analysis on its own once every document is decided and every approved one is scanned, unless the
+    newest run already covers these inputs (complete, failed, or still running). A run over outdated inputs is
+    replaced: its result is recorded as superseded (repository.finish_run). Called after a detection run ends and
+    after an officer's change to the case's documents. Never raises.
+    """
+    if case_id is None or not settings.CASE_ANALYSIS_ENABLED:
+        return
+    try:
+        async with _auto_locks[case_id]:
+            fingerprint = await asyncio.to_thread(_due_fingerprint, case_id)
+            if fingerprint is not None:
+                await _begin(case_id, fingerprint, automatic=True)
+    except Exception:
+        logger.exception("Failed to start the case analysis of case %s automatically", case_id)
+
+
+def _due_fingerprint(case_id: str) -> str | None:
+    """The fingerprint of the run the case now needs, or None when it needs none. Sync."""
+    case = case_repository.get_case(case_id)
+    if case is None or case.status == CaseStage.FINALISED.value:
+        return None
+    documents = document_repository.list_documents(case_id=case_id)
+    waiting = case_stage.document_stage(
+        documents, requirements_missing=lambda: bool(unapproved_requirements(case, documents)),
+    )
+    if waiting is not None:
+        return None
+    reports, _ = detection_results.get_states([d.id for d in documents])
     fingerprint = state.compute_fingerprint(documents, reports)
+    latest = repository.latest_run_brief(case_id)
+    if latest is not None and latest[2] == fingerprint and (latest[0] != "running" or state.is_live(latest[0], latest[1])):
+        return None
+    since = datetime.now(timezone.utc) - timedelta(hours=1)
+    if repository.count_runs_since(case_id, since) >= settings.CASE_ANALYSIS_AUTO_RUNS_PER_HOUR:
+        logger.warning("Case %s reached %d analysis runs this hour; not starting another automatically",
+                       case_id, settings.CASE_ANALYSIS_AUTO_RUNS_PER_HOUR)
+        return None
+    return fingerprint
+
+
+async def _begin(case_id: str, fingerprint: str, *, automatic: bool) -> CaseAnalysis:
+    """Records a running run and asks the case-worker to run it."""
+    run_id = str(uuid.uuid4())
     await asyncio.to_thread(repository.insert_run, run_id, case_id, fingerprint)
     analysis = CaseAnalysis(
         run_id=run_id, case_id=case_id, status="running", fingerprint=fingerprint,
         started_at=datetime.now(timezone.utc),
     )
+    detail = {"run_id": run_id, "fingerprint": fingerprint, "started_at": analysis.started_at.isoformat()}
     try:
-        await events.publish(events.officer_event(
-            events.types.CASE_ANALYSIS_REQUESTED, case_id=case_id,
-            detail={"run_id": run_id, "fingerprint": fingerprint, "started_at": analysis.started_at.isoformat()},
-        ))
+        await events.publish(
+            events.Event(type=events.types.CASE_ANALYSIS_REQUESTED, case_id=case_id, detail={**detail, "trigger": "automatic"})
+            if automatic else events.officer_event(events.types.CASE_ANALYSIS_REQUESTED, case_id=case_id, detail=detail)
+        )
     except Exception:
         # Nothing will run it, so it must not block the next attempt for the whole time limit.
         analysis.status, analysis.error = "failed", "The analysis could not be started. Run it again."
@@ -148,63 +201,10 @@ async def _execute(
         documents=[{"id": d.id, "filename": d.filename, "type": d.document_type, "status": d.status.value} for d in documents],
     )
     try:
-        context = build_context(case_id, documents, reports)
-        context.trace = trace
-        trace.record("dossier", documents={k: {"id": v.id, "filename": v.filename, "findings": len(v.findings)}
-                                          for k, v in context.docs.items()})
-        result = await run_cross_document_analysis(context)
-        findings = result.get("findings") or []
-        finding_keys.assign_case_fingerprints(findings)
-        trace.save()
-
-        risk = compute_case_risk(documents, reports, failed_ids, findings)
-        document_only = compute_case_risk(documents, reports, failed_ids)
-        without_dedupe = compute_case_risk(documents, reports, failed_ids, findings, dedupe=False)
-        trace.record(
-            "scoring", **scoring_breakdown(risk),
-            cross_document_findings=len(findings),
-            score_without_cross_document=document_only.score, level_without_cross_document=document_only.level,
-            score_without_dedupe=without_dedupe.score, level_without_dedupe=without_dedupe.level,
-        )
-        requests, request_status = await propose_requests_with_status(risk)
-        supporting_documents = recommend_supporting_documents(documents)
-        trace.record("evidence_requests", proposed=[r.model_dump() for r in requests],
-                     supporting_documents=[s.title for s in supporting_documents])
-        outlook = build_outlook(risk, requests)
-        trace.record("outlook", **outlook_trace(risk, requests, outlook))
-        additional = build_additional_documents(risk, requests, outlook, supporting_documents, request_status)
-        trace.record("additional_documents", reason=additional.reason, request_status=request_status,
-                     items=[{"title": i.title, "source": i.source, "affects_score": i.affects_score} for i in additional.items])
-        clean_checks, unrun_checks = _check_outcomes(reports)
-        summary = await write_summary(risk, outlook, clean_checks, unrun_checks)
-        trace.record("summary", **summary.model_dump())
-
-        analysis.findings = findings
-        analysis.outlook = outlook
-        analysis.structured_summary = summary
-        analysis.risk = risk
-        analysis.supporting_documents = supporting_documents
-        analysis.additional_documents = additional
-        analysis.consistent_checks = result.get("consistent_checks") or []
-        agent_decisions = [
-            AgentDecision.model_validate(decision)
-            for decision in result.get("agent_decisions") or []
-        ]
-        analysis.confidence = min(
-            (decision.confidence for decision in agent_decisions),
-            default=0.0,
-        )
-        analysis.clean_checks = clean_checks
-        analysis.audit = AnalysisAudit(
-            models={"analysis": settings.LANGGRAPH_SONNET_MODEL},
-            prompt_version=PROMPT_VERSION,
-            hypotheses_tried=len(result.get("hypotheses") or []),
-            findings_discarded=len(result.get("discarded") or []),
-            tool_calls=result.get("tool_calls") or [],
-            agent_decisions=agent_decisions,
-        )
-        analysis.status = "complete"
-        trace.record("done", status="complete", findings=len(findings))
+        # The root span closes before the trace's last save, in the finally below.
+        with telemetry.steps_into(trace.record), telemetry.get_tracer().start_as_current_span("case_pipeline.run"):
+            telemetry.annotate(kind="run", run="Case analysis")
+            await _analyse(analysis, documents, reports, failed_ids, trace)
     except Exception as exc:
         logger.exception("Case analysis failed for case %s", case_id)
         analysis.status = "failed"
@@ -221,6 +221,71 @@ async def _execute(
         await sync_stage(case_id)
         # The run row's update reaches viewers through Realtime.
         await push_case_snapshot(case_id, realtime_covers=True)
+
+
+async def _analyse(
+    analysis: CaseAnalysis, documents: list[DocumentRecord], reports: dict[str, dict[str, Any]],
+    failed_ids: set[str], trace: RunTrace,
+) -> None:
+    """The run's work: cross-document findings, the score, evidence requests and the summary, onto `analysis`."""
+    case_id = analysis.case_id
+    context = build_context(case_id, documents, reports)
+    context.trace = trace
+    trace.record("dossier", documents={k: {"id": v.id, "filename": v.filename, "findings": len(v.findings)}
+                                      for k, v in context.docs.items()})
+    result = await run_cross_document_analysis(context)
+    findings = result.get("findings") or []
+    finding_keys.assign_case_fingerprints(findings)
+    trace.save()
+
+    risk = compute_case_risk(documents, reports, failed_ids, findings)
+    document_only = compute_case_risk(documents, reports, failed_ids)
+    without_dedupe = compute_case_risk(documents, reports, failed_ids, findings, dedupe=False)
+    trace.record(
+        "scoring", **scoring_breakdown(risk),
+        cross_document_findings=len(findings),
+        score_without_cross_document=document_only.score, level_without_cross_document=document_only.level,
+        score_without_dedupe=without_dedupe.score, level_without_dedupe=without_dedupe.level,
+    )
+    requests, request_status = await propose_requests_with_status(risk)
+    supporting_documents = recommend_supporting_documents(documents)
+    trace.record("evidence_requests", proposed=[r.model_dump() for r in requests],
+                 supporting_documents=[s.title for s in supporting_documents])
+    outlook = build_outlook(risk, requests)
+    trace.record("outlook", **outlook_trace(risk, requests, outlook))
+    additional = build_additional_documents(risk, requests, outlook, supporting_documents, request_status)
+    trace.record("additional_documents", reason=additional.reason, request_status=request_status,
+                 items=[{"title": i.title, "source": i.source, "affects_score": i.affects_score} for i in additional.items])
+    clean_checks, unrun_checks = _check_outcomes(reports)
+    summary = await write_summary(risk, outlook, clean_checks, unrun_checks)
+    trace.record("summary", **summary.model_dump())
+
+    analysis.findings = findings
+    analysis.outlook = outlook
+    analysis.structured_summary = summary
+    analysis.risk = risk
+    analysis.supporting_documents = supporting_documents
+    analysis.additional_documents = additional
+    analysis.consistent_checks = result.get("consistent_checks") or []
+    agent_decisions = [
+        AgentDecision.model_validate(decision)
+        for decision in result.get("agent_decisions") or []
+    ]
+    analysis.confidence = min(
+        (decision.confidence for decision in agent_decisions),
+        default=0.0,
+    )
+    analysis.clean_checks = clean_checks
+    analysis.audit = AnalysisAudit(
+        models={"analysis": settings.LANGGRAPH_SONNET_MODEL},
+        prompt_version=PROMPT_VERSION,
+        hypotheses_tried=len(result.get("hypotheses") or []),
+        findings_discarded=len(result.get("discarded") or []),
+        tool_calls=result.get("tool_calls") or [],
+        agent_decisions=agent_decisions,
+    )
+    analysis.status = "complete"
+    trace.record("done", status="complete", findings=len(findings))
 
 
 async def sync_stage(case_id: str) -> None:

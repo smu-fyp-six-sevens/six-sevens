@@ -183,8 +183,8 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await expect(routingOutcome(page)).toHaveText('Approved');
     expect(backend.requestsTo('POST', `/documents/${cert.id}/approve`)).toHaveLength(1);
     await page.goto(`${fixture.caseUrl}?section=documents`);
-    await page.locator('.documents-table-group--toggle', { hasText: 'Approved' }).click();
-    await expect(page.locator('.documents-card')).toContainText(cert.filename);
+    await page.getByTestId('document-group').filter({ hasText: 'Approved' }).click();
+    await expect(page.getByTestId('documents-card')).toContainText(cert.filename);
   });
 
   test('an unrecognised document starts as Unrecognised and only becomes Other once the officer picks it @DI-others', async ({ page, backend }) => {

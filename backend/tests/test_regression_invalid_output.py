@@ -25,8 +25,8 @@ from app.case_pipeline.readiness import is_ready_for_analysis
 from app.langgraph import trace
 from app.main import app
 from app.models import DocumentStatus
-from tests import test_regression_ai_pipeline as pipeline_harness
-from tests.test_regression_ai_pipeline import classification, extraction, real_extraction, run, steps
+from tests.support import pipeline_harness
+from tests.support.pipeline_harness import classification, extraction, real_extraction, run, steps
 
 # The Sprint 2 harness's fixtures: scripted Claude, the in-memory storage, database and OCR, and the cleanup of
 # each run's trace and text cache.

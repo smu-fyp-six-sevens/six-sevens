@@ -13,12 +13,10 @@ LimCG). Scoring is pure code — no Claude — so nothing is scripted here.
 Each scenario's result is also the shared fixture the Playwright suite
 renders (fixtures/regression/case-risk-sprint4.json, used by
 frontend/e2e/specs/case-analysis.spec.ts). A test below fails if scoring
-drifts from it; regenerate it with REGENERATE_REGRESSION_FIXTURES=1.
+drifts from it; regenerate it with scripts/regenerate_regression_fixtures.py.
 """
 from __future__ import annotations
 
-import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +26,7 @@ from app.case_pipeline.models import CrossDocFinding, FindingCategory
 from app.case_pipeline.risk.case_risk import compute_case_risk, scoring_breakdown
 from app.models import CaseRisk, DocumentRecord, DocumentStatus
 from app.finding_keys import assign_document_fingerprints
+from tests.support.regression_fixtures import check_fixture
 
 FIXTURES = Path(__file__).parent / "fixtures" / "regression"
 CASE_RISK_FIXTURE = FIXTURES / "case-risk-sprint4.json"
@@ -89,18 +88,17 @@ def critical_case():
         payslip.id: _report(_finding(
             1, "external_validation_tool", "high",
             "Employee CPF of $1,920.00 is above the most any band allows at the $8,000 ceiling",
-            check_code="PS.CPF_RATE", stated="1920.00")),
+            check_code="PAY.CPF_CEILING", stated="1920.00")),
         nric.id: _report(
             _finding(1, "numerical_checks_tool", "high", "NRIC S7534567X fails its checksum: the check letter should be D"),
-            _finding(1, "external_validation_tool", "high", "The passport's issuing authority is not one Singapore uses",
-                     check_code="REG.ISSUER", stated="OFSINGAPORE")),
+            _finding(1, "spelling_tool", "high", 'Possible misspelling "OFSINGAPORE" (suggested: "OF SINGAPORE").')),
         incorp.id: _report(
             _finding(1, "date_consistency_tool", "high", "incorporation_date (2027-04-18) is after today's date"),
             _finding(1, "external_validation_tool", "high", "ACRA has no record of UEN 202736160G",
                      check_code="REG.UEN_EXISTS", stated="202736160G")),
         noa.id: _report(_finding(
-            1, "external_validation_tool", "high", "IRAS's assessment year does not match the year of income",
-            check_code="TAX.YEAR_OF_ASSESSMENT", stated="YA 2027")),
+            1, "date_consistency_tool", "high", "Notice is dated 2026-03-14, before its own year of assessment (2027)",
+            check_code="NOA.DATE_LOGIC", stated="2026-03-14")),
         statement.id: _report(),
     }
     cross = CrossDocFinding(
@@ -306,8 +304,4 @@ def test_the_playwright_suites_case_risk_fixture_matches_the_scoring():
         }
         fixture[test_case] = {"risk": risk.model_dump(mode="json"), "scoring": scoring if risk.state == "scored" else None}
 
-    if os.environ.get("REGENERATE_REGRESSION_FIXTURES"):
-        CASE_RISK_FIXTURE.write_text(json.dumps(fixture, indent=2, sort_keys=True) + "\n")
-    assert json.loads(CASE_RISK_FIXTURE.read_text()) == json.loads(json.dumps(fixture)), (
-        "case-risk-sprint4.json is out of date with the scoring — regenerate it (see above)"
-    )
+    check_fixture(CASE_RISK_FIXTURE, fixture)

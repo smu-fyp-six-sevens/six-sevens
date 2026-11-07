@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CaseRecord } from '../App';
+import type { CaseRecord } from '../utils/caseRecord';
 import KebabMenu from './KebabMenu';
 import { updateCase } from '../services/uploadService';
 import { MAX_COMPANY_NAME_LENGTH, validateCompanyName } from '../utils/caseValidation';
@@ -120,7 +120,7 @@ export default function CaseRow({
   }
 
   return (
-    <li className="case-row">
+    <li className="case-row" data-testid="case-row">
       <button
         type="button"
         className="case-row-open"
@@ -131,7 +131,7 @@ export default function CaseRow({
 
         <span className="case-row-name">{caseRecord.applicant}</span>
 
-        <span className="case-row-status">
+        <span className="case-row-status" data-testid="case-row-status">
           <StageMark stage={caseRecord.caseStatus} />
           {caseRecord.status}
           {caseRecord.stuck && (
@@ -143,11 +143,11 @@ export default function CaseRow({
 
         <span className="case-row-risk">
           {caseRecord.riskLevel ? (
-            <span className={`risk-badge risk-badge--${caseRecord.riskLevel.toLowerCase()}`}>
+            <span className={`risk-badge risk-badge--${caseRecord.riskLevel.toLowerCase()}`} data-testid="risk-badge">
               {caseRecord.riskLevel}
             </span>
           ) : (
-            <span className="risk-badge risk-badge--none" title="Not scored yet">Not assessed</span>
+            <span className="risk-badge risk-badge--none" data-testid="risk-badge" title="Not scored yet">Not assessed</span>
           )}
         </span>
 

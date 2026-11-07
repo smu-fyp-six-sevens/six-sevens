@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { CaseRecord } from '../App';
+import type { CaseRecord } from '../utils/caseRecord';
 import {
   describeIssue,
 } from './upload/uploadHelpers';
@@ -93,6 +93,7 @@ export default function UploadPage({
   const rawSection = searchParams.get('section');
   const sectionParam = rawSection === 'approved' ? 'documents' : rawSection;
   const activeSection: CaseSection = isCaseSection(sectionParam) ? sectionParam : 'summary';
+  const [isAnalysisTraceOpen, setIsAnalysisTraceOpen] = useState(false);
   const selectSection = (section: CaseSection) => {
     setSearchParams(section === 'summary' ? {} : { section }, { replace: true });
   };
@@ -189,7 +190,7 @@ export default function UploadPage({
   });
 
   return (
-    <main className="shell shell--upload">
+    <main className="shell shell--upload case-page">
       <AppHeader />
 
       <CaseFrame
@@ -214,7 +215,7 @@ export default function UploadPage({
         }
       >
       <CaseHeader
-        crumbs={[caseQueueCrumb, caseCrumb(selectedCase, { current: true })]}
+        crumbs={[caseQueueCrumb, caseCrumb(selectedCase, { current: true, section: activeSection })]}
         notice={isFinalised ? <FinalisedBanner /> : undefined}
       >
         {isEditingCase ? (
@@ -255,6 +256,9 @@ export default function UploadPage({
                 label={isDeletingCase ? 'Deleting case' : 'Case actions'}
                 disabled={isDeletingCase}
                 items={[
+                  ...(activeSection === 'analysis'
+                    ? [{ id: 'trace', label: 'Case analysis trace', onSelect: () => setIsAnalysisTraceOpen(true) }]
+                    : []),
                   {
                     id: 'report',
                     label: report.isDownloading ? 'Preparing report…' : 'Download report',
@@ -302,6 +306,7 @@ export default function UploadPage({
                 }}
                 onSelectSection={selectSection}
                 analysisRunning={analysisOverview?.status === 'running'}
+                analysisReady={analysisReady}
                 caseLabel={selectedCase.caseNumber ?? undefined}
                 findingsToReview={findingsToReview}
                 missingRequirements={missingRequirements}
@@ -446,6 +451,8 @@ export default function UploadPage({
               analysisReady={analysisReady && !isFinalised}
               overview={analysisOverview}
               missingRequirements={missingRequirements}
+              traceOpen={isAnalysisTraceOpen}
+              onTraceClose={() => setIsAnalysisTraceOpen(false)}
             />
           )}
 

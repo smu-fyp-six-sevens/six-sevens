@@ -1,0 +1,580 @@
+<title>Sprint 5 Regression</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ink: #12203d;
+    --ink-soft: #5b6478;
+    --paper: #f6f4ef;
+    --surface: #fffdf9;
+    --line: #dad5c9;
+    --steel: #3d5a80;
+    --steel-bg: #e6ecf3;
+    --pass: #166d5f;
+    --pass-bg: #e1f1ec;
+    --defect: #b3402a;
+    --defect-bg: #fbe8e2;
+    --deferred: #9a6508;
+    --deferred-bg: #fbf0da;
+    --code-bg: #efece4;
+    --retired: #6b7280;
+    --retired-bg: #eceae4;
+    --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --mono: 'IBM Plex Mono', SFMono-Regular, Consolas, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ink: #e7ebf3;
+      --ink-soft: #9aa4b8;
+      --paper: #121826;
+      --surface: #1a2233;
+      --line: #2e3a50;
+      --steel: #8fb0d8;
+      --steel-bg: #1f2c42;
+      --pass: #5cc2ad;
+      --pass-bg: #15302b;
+      --defect: #f08c73;
+      --defect-bg: #3a211b;
+      --deferred: #e2b04f;
+      --deferred-bg: #36290f;
+      --code-bg: #222c40;
+      --retired: #9aa4b8;
+      --retired-bg: #232a38;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ink: #e7ebf3;
+    --ink-soft: #9aa4b8;
+    --paper: #121826;
+    --surface: #1a2233;
+    --line: #2e3a50;
+    --steel: #8fb0d8;
+    --steel-bg: #1f2c42;
+    --pass: #5cc2ad;
+    --pass-bg: #15302b;
+    --defect: #f08c73;
+    --defect-bg: #3a211b;
+    --deferred: #e2b04f;
+    --deferred-bg: #36290f;
+    --code-bg: #222c40;
+    --retired: #9aa4b8;
+    --retired-bg: #232a38;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 15px/1.55 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 40px 72px;
+    display: grid;
+    gap: 44px;
+  }
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.15; font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 20px; font-weight: 600; }
+  h3 { font-size: 15px; font-weight: 600; }
+  p { margin: 0; }
+  code, .mono { font-family: var(--mono); font-size: 0.88em; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--steel);
+  }
+  .muted { color: var(--ink-soft); }
+  section { display: grid; gap: 16px; }
+  .section-head { display: grid; gap: 4px; }
+
+  /* Header */
+  header { display: grid; gap: 14px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--ink-soft); font-size: 13.5px; }
+  .meta span b { color: var(--ink); font-weight: 500; }
+
+  /* Verdict */
+  .verdict {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .verdict > div { background: var(--surface); padding: 18px 20px; display: grid; gap: 4px; align-content: start; }
+  .figure { font-size: 34px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .figure small { font-size: 16px; font-weight: 500; color: var(--ink-soft); }
+  .figure.pass { color: var(--pass); }
+  .figure.fig-defect { color: var(--defect); }
+  .figure.retired { color: var(--retired); }
+  .label { font-size: 13px; color: var(--ink-soft); }
+
+  /* Sprint bars */
+  .bars { display: grid; gap: 14px; }
+  .bar-row { display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: center; }
+  .bar-name { font-weight: 600; font-size: 14px; }
+  .bar-track { display: flex; height: 26px; border-radius: 6px; overflow: hidden; background: var(--code-bg); }
+  .bar-track span {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 0; white-space: nowrap;
+  }
+  .seg-pass { background: var(--pass); color: var(--surface); }
+  .seg-defect { background: var(--defect); color: var(--surface); }
+  .seg-warn { background: var(--deferred); color: var(--surface); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-soft); padding-left: 162px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+  /* Acceptance criteria */
+  .acs { display: grid; gap: 0; border-top: 1px solid var(--line); }
+  .ac { display: grid; grid-template-columns: 56px 1fr auto; gap: 16px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .ac-id { font-family: var(--mono); font-size: 13px; color: var(--steel); font-weight: 500; }
+  .ac-text { display: grid; gap: 2px; }
+  .ac-text .muted { font-size: 13.5px; }
+
+  /* Pills */
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; font-weight: 600; white-space: nowrap;
+    padding: 3px 10px; border-radius: 999px;
+  }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.pass { background: var(--pass-bg); color: var(--pass); }
+  .pill.defect { background: var(--defect-bg); color: var(--defect); }
+  .pill.deferred { background: var(--deferred-bg); color: var(--deferred); }
+  .pill.pending { background: var(--steel-bg); color: var(--steel); }
+  .pill.fixed { background: var(--pass-bg); color: var(--pass); }
+
+  /* Defects */
+  .defects { display: grid; gap: 12px; }
+  .defect {
+    display: grid; grid-template-columns: 5px 1fr; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  }
+  .defect .stripe { background: var(--sev); }
+  .defect[data-sev="High"] { --sev: var(--defect); }
+  .defect[data-sev="Medium"] { --sev: var(--deferred); }
+  .defect[data-sev="Low"] { --sev: var(--steel); }
+  .defect-body { padding: 16px 20px; display: grid; gap: 10px; }
+  .defect-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .defect-id { font-family: var(--mono); font-weight: 500; font-size: 14px; }
+  .sev { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sev); }
+  .defect-title { font-weight: 600; font-size: 15.5px; }
+  .defect-facts { display: flex; flex-wrap: wrap; gap: 4px 22px; font-size: 13px; color: var(--ink-soft); }
+  .defect-facts b { color: var(--ink); font-weight: 500; }
+  .defect p { max-width: 78ch; }
+
+  /* Filters + table */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .seg-control { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .seg-control button {
+    font: inherit; font-size: 13px; padding: 6px 12px; border: 0; background: transparent; color: var(--ink-soft);
+    cursor: pointer; border-right: 1px solid var(--line);
+  }
+  .seg-control button:last-child { border-right: 0; }
+  .seg-control button[aria-pressed="true"] { background: var(--steel); color: var(--surface); }
+  .seg-control button:focus-visible, .copy:focus-visible, #search:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
+  #search {
+    font: inherit; font-size: 13.5px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--surface); color: var(--ink); min-width: 0; width: 240px; max-width: 100%;
+  }
+  .count { font-size: 13px; color: var(--ink-soft); margin-left: auto; font-variant-numeric: tabular-nums; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13.5px; }
+  th {
+    text-align: left; font-weight: 600; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--ink-soft); padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface);
+    position: sticky; top: 0;
+  }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  td.id { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; font-weight: 500; }
+  td.story { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+  td.tests { font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); word-break: break-word; max-width: 330px; }
+  td.result { white-space: nowrap; }
+  .note { display: block; margin-top: 4px; font-size: 12.5px; color: var(--ink-soft); }
+  .n { font-size: 11.5px; color: var(--ink-soft); font-family: var(--mono); margin-left: 4px; }
+  .empty { padding: 28px; text-align: center; color: var(--ink-soft); }
+
+  /* Two-column notes */
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; }
+  ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
+  ul.plain li { max-width: 70ch; }
+
+  /* Commands */
+  .cmds { display: grid; gap: 10px; }
+  .cmd { display: grid; gap: 6px; }
+  .cmd-line {
+    display: flex; align-items: center; gap: 10px; background: var(--code-bg); border-radius: 8px;
+    padding: 9px 10px 9px 14px; overflow-x: auto;
+  }
+  .cmd-line code { background: none; padding: 0; white-space: nowrap; flex: 1; font-size: 13px; }
+  .copy {
+    font: inherit; font-size: 12px; font-weight: 500; border: 1px solid var(--line); background: var(--surface);
+    color: var(--ink); border-radius: 6px; padding: 4px 10px; cursor: pointer; flex: none;
+  }
+  footer { font-size: 13px; color: var(--ink-soft); border-top: 1px solid var(--line); padding-top: 18px; }
+
+  @media (max-width: 560px) {
+    .ac { grid-template-columns: 1fr; gap: 6px; }
+    .legend { padding-left: 0; }
+    .bar-row { grid-template-columns: 1fr; gap: 6px; }
+    .count { margin-left: 0; width: 100%; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .bar-track span { transition: flex-basis 0.4s ease; }
+  }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow">SCRUM-323 · Sprint 5 Regression Testing</div>
+    <h1>Sprint 5 regression results</h1>
+    <p class="muted" style="max-width: 72ch">
+      Every Sprint 5 manual test case, re-run as automated tests against the latest code: the case overview, dashboard
+      and audit trail, the case report, cross-page checks, and the content guard and prompt-injection defences, with
+      their AI responses scripted.
+    </p>
+    <div class="meta">
+      <span>Run <b>2 Nov 2026</b>, re-run <b>5 Nov</b> after merging main</span>
+      <span>Branch <b class="mono">SCRUM-323-Sprint-5-Regression-Testing</b></span>
+      <span>From main <b class="mono">f7251e7</b></span>
+      <span>Source <b>Test Cases – Sprint 5.xlsx</b></span>
+    </div>
+  </header>
+
+  <section aria-labelledby="summary-h">
+    <div class="section-head">
+      <h2 id="summary-h">Summary</h2>
+      <p class="muted">Counted per test case ID from the sprint sheet. Out of scope: TD-001 – TD-006 (test-data tooling, checked manually, as in Sprints 1 – 4). Rows with only an ID (RS-009 – RS-024, MA-040 – MA-043, FD-029 – FD-032, REG-014 – REG-017) aren't counted until they're written.</p>
+    </div>
+    <div class="verdict">
+      <div><span class="figure">93</span><span class="label">Test cases in scope (of 99 Sprint 5 cases in the sheet)</span></div>
+      <div><span class="figure pass">93</span><span class="label">Automated and passing</span></div>
+      <div><span class="figure pass">2</span><span class="label">Live-run defects fixed and re-tested (AE-014, AE-015)</span></div>
+      <div><span class="figure fig-defect">1</span><span class="label">Open defect (Sprint 4's REG-014), for its owner</span></div>
+    </div>
+    <div class="bars" role="img" aria-label="In scope. Case overview: 10 of 13 passing, 3 needing a decision. Dashboard: 13 of 14 passing, 1 needing a decision. Audit trail: 11 of 11 passing. Case report: 11 of 11 passing. Case stages: 7 of 7 passing. Observability: 5 of 5 passing. Cross-page: 16 of 16 passing. Agentic evaluation: 16 of 16 passing.">
+      <div class="bar-row">
+        <span class="bar-name">Case overview</span>
+        <div class="bar-track"><span class="seg-pass" style="flex: 0 0 76.9%">10</span><span class="seg-warn" style="flex: 0 0 23.1%">3</span></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-name">Dashboard</span>
+        <div class="bar-track"><span class="seg-pass" style="flex: 0 0 92.9%">13</span><span class="seg-warn" style="flex: 0 0 7.1%">1</span></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-name">Audit trail</span>
+        <div class="bar-track"><span class="seg-pass" style="flex: 0 0 100.0%">11</span></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-name">Case report</span>
+        <div class="bar-track"><span class="seg-pass" style="flex: 0 0 100.0%">11</span></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-name">Case stages</span>
+        <div class="bar-track"><span class="seg-pass" style="flex: 0 0 100.0%">7</span></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-name">Observability</span>
+        <div class="bar-track"><span class="seg-pass" style="flex: 0 0 100.0%">5</span></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-name">Cross-page</span>
+        <div class="bar-track"><span class="seg-pass" style="flex: 0 0 100.0%">16</span></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-name">Agentic evaluation</span>
+        <div class="bar-track"><span class="seg-pass" style="flex: 0 0 100.0%">16</span></div>
+      </div>
+      <div class="legend">
+        <span><i style="background: var(--pass)"></i>Passing</span>
+        <span><i style="background: var(--deferred)"></i>Passing; the case describes something else (needs a decision)</span>
+      </div>
+    </div>
+    <div class="verdict">
+      <div>
+        <span class="figure">2931</span>
+        <span class="label">Backend tests (pytest) · 2925 pass, 2 skipped, 4 expected failures (Sprint 6 test audit)<br>314 tagged Sprint 5 · real endpoints, workers and graphs, scripted AI</span>
+      </div>
+      <div>
+        <span class="figure">240</span>
+        <span class="label">Frontend tests (Playwright) · all pass, 1 expected failure (REG-014)<br>41 tagged Sprint 5 · real app against a mocked backend</span>
+      </div>
+      <div>
+        <span class="figure pass">1412</span>
+        <span class="label">Sprint 1 – 4 tests re-run · all pass<br>1275 backend (2 skipped, 2 expected failures), 137 browser</span>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="ac-h">
+    <div class="section-head"><h2 id="ac-h">Acceptance criteria</h2></div>
+    <div class="acs">
+      <div class="ac">
+        <span class="ac-id">AC1</span>
+        <span class="ac-text"><span>All completed Sprint 5 functionality is regression tested</span><span class="muted">All 93 in-scope cases automated, including the detection graph and the content guard (scripted AI responses, real file scans).</span></span>
+        <span class="pill pass">Done</span>
+      </div>
+      <div class="ac">
+        <span class="ac-id">AC2</span>
+        <span class="ac-text"><span>Previously passed Sprint 5 test cases still pass</span><span class="muted">Every case that passed in the live run passes in the suite. Both suites run on every pull request.</span></span>
+        <span class="pill pass">Done</span>
+      </div>
+      <div class="ac">
+        <span class="ac-id">AC3</span>
+        <span class="ac-text"><span>Defects are documented and tracked</span><span class="muted">AE-014, AE-015 and REG-014 below, each with its test case, an example and its owner.</span></span>
+        <span class="pill pass">Done</span>
+      </div>
+      <div class="ac">
+        <span class="ac-id">AC4</span>
+        <span class="ac-text"><span>Regression completed after defects are fixed</span><span class="muted">AE-014 and AE-015 re-tested and passing; Sprints 1 – 4 re-run. REG-014 has a test that reproduces it every time, ready for the fix.</span></span>
+        <span class="pill pending">REG-014 waiting on a fix</span>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="defects-h">
+    <div class="section-head">
+      <h2 id="defects-h">Defects</h2>
+      <p class="muted">No new defects in this regression. The two live-run defects were fixed during the sprint, and the suite keeps both fixed. Sprint 4's REG-014 is still open.</p>
+    </div>
+    <div class="defects" id="defects"></div>
+  </section>
+
+  <section aria-labelledby="cases-h">
+    <div class="section-head">
+      <h2 id="cases-h">Results by test case</h2>
+      <p class="muted">Grouped rows cover a range of IDs; the small number after the ID is how many test cases the row covers.</p>
+    </div>
+    <div class="toolbar">
+      <div class="seg-control" role="group" aria-label="Area">
+        <button type="button" data-area="all" aria-pressed="true">All areas</button>
+        <button type="button" data-area="ov" aria-pressed="false">Case overview</button>
+        <button type="button" data-area="db" aria-pressed="false">Dashboard</button>
+        <button type="button" data-area="au" aria-pressed="false">Audit trail</button>
+        <button type="button" data-area="rp" aria-pressed="false">Case report</button>
+        <button type="button" data-area="st" aria-pressed="false">Case stages</button>
+        <button type="button" data-area="ma" aria-pressed="false">Observability</button>
+        <button type="button" data-area="cd" aria-pressed="false">Cross-page</button>
+        <button type="button" data-area="ae" aria-pressed="false">Agentic evaluation</button>
+      </div>
+      <div class="seg-control" role="group" aria-label="Result">
+        <button type="button" data-status="all" aria-pressed="true">All results</button>
+        <button type="button" data-status="pass" aria-pressed="false">Passing</button>
+        <button type="button" data-status="defect" aria-pressed="false">Defect</button>
+      </div>
+      <input id="search" type="search" placeholder="Search ID, story or scenario" aria-label="Search test cases">
+      <span class="count" id="count" aria-live="polite"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Test case</th><th>Story</th><th>Scenario</th><th>Automated by</th><th>Result</th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="notes-h">
+    <div class="cols">
+      <div style="display: grid; gap: 12px">
+        <h2 id="notes-h">How the AI is tested</h2>
+        <p class="muted">The real code runs end to end: endpoints, workers, the document pipeline with real text extraction and OCR, the content guard's scan of each file, and the detection graph with its real tools. Only Claude's replies are scripted.</p>
+        <ul class="plain">
+          <li><b>What it proves:</b> injected instructions are stopped at upload before any model reads them; the specialists can't dismiss or lower a guard finding even when scripted to try; page forgeries are flagged; the trace keeps what a cancelled run did.</li>
+          <li><b>What it doesn't:</b> whether Claude picks the right tools and ratings on the real documents. That's the manual live run at the end of each sprint.</li>
+          <li><b>Real data in the browser:</b> the Accuracy tab and the Audit Trail render what the backend produced (shared fixtures), and the dashboard's risks are the backend's scoring. A backend test fails if either drifts.</li>
+          <li><b>No credits spent:</b> the tests block any real Claude request, even with a real API key in <code>.env</code>.</li>
+        </ul>
+      </div>
+      <div style="display: grid; gap: 12px">
+        <h2>Needs a decision</h2>
+        <ul class="plain">
+          <li><b>CM-046, CM-047, CM-048 — empty states.</b> Since the redesign the Documents card groups documents by status (CM-041 now matches), but a group shows only while it has documents, so no status has an empty message, and the Approved Documents section is gone. Reword the cases, or give empty groups a message.</li>
+          <li><b>CM-063 — documents behind a flagged check.</b> The Accuracy tab shows how many documents were reviewed, not which. Each document's results per check are on the case's Risk section. Point the case there, or add the list to the tab.</li>
+        </ul>
+        <h2>Observations</h2>
+        <ul class="plain">
+          <li><b>CD-035 (failed live).</b> Test data: page 3 had no amounts, so the cover/terms-page rule left it out of the font check. With transactions on page 3, it is flagged low as expected.</li>
+          <li><b>CD-023 (not tested live).</b> A scan with no readable text can't be approved, so detection never runs on it from the UI. The suite runs it directly: unable to assess.</li>
+          <li><b>AE-001 (live).</b> The live run predates blocking at upload. The suite checks the current rule: Failed, blocked by the content guard, no model call.</li>
+          <li><b>MA-029.</b> A cancelled run can be retried, in the suite and on screen. If the live "broken after that" was the panel stuck on "Cancelling…", that is REG-014.</li>
+          <li><b>Sheet.</b> The Testing tab reuses REG-014 – REG-017 as placeholder IDs; REG-014 is already Sprint 4's defect.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="run-h">
+    <div class="section-head">
+      <h2 id="run-h">Run it yourself</h2>
+      <p class="muted">From the repo folder. Neither suite needs Supabase, the backend server or the AI.</p>
+    </div>
+    <div class="cmds" id="cmds"></div>
+  </section>
+
+  <footer>Generated from <code>docs/regression/REGRESSION_REPORT_SPRINT5.md</code> · test code in <code>frontend/e2e/specs/</code> and <code>backend/tests/test_regression_*.py</code></footer>
+</div>
+
+<script>
+  const DEFECTS = [
+    {
+      id: 'REG-014', sev: 'Low', status: 'Open', statusClass: 'defect', cases: 'Cancel / Retry detection', owner: 'SCRUM-299 (useDetection.ts, Bulbasaurabh)', found: 'Sprint 4 regression',
+      title: 'After a cancel, the detection panel can stay stuck on "Cancelling…"',
+      body: 'The panel sets a cancel-pending flag when the cancel request answers, and clears it when the document leaves detecting. If the worker\'s snapshot reaches the page first, the flag is cleared and then set again, and nothing clears it: a retried run shows a disabled "Cancelling…". The browser test that used to fail about 1 run in 5 is now three tests; the third holds the cancel reply until the snapshot arrives, reproduces the defect every time, and is marked test.fail() until the fix lands.',
+    },
+    {
+      id: 'AE-015', sev: 'Medium', status: 'Fixed, re-tested', statusClass: 'fixed', cases: 'AE-015', owner: 'SCRUM-297', found: 'Live run',
+      title: 'A check under its precision or recall target wasn\'t flagged',
+      body: 'Brightwave Analytics (UAT 2 Run 1): no flag was shown. Fixed during the sprint: a rate under target is red and the check reads "Below target". Kept fixed by test_regression_detection_metrics.py and the Accuracy tab tests.',
+    },
+    {
+      id: 'AE-014', sev: 'Low', status: 'Fixed, re-tested', statusClass: 'fixed', cases: 'AE-014', owner: 'SCRUM-297', found: 'Live run',
+      title: 'A check with no real issues had no recall shown',
+      body: 'Only the checks present were shown. Fixed during the sprint: recall reads "Not measured", never 0% or 100%, with the reason on hover. Kept fixed by test_regression_detection_metrics.py and the Accuracy tab tests.',
+    },
+  ];
+
+  const OV = 'case-management.spec.ts';
+  const DB = 'dashboard.spec.ts';
+  const DM = 'test_regression_detection_metrics.py · dashboard.spec.ts';
+  const AU = 'test_regression_audit_trail.py · audit-trail.spec.ts';
+  const RP = 'test_regression_case_report.py';
+  const OB = 'test_regression_observability.py';
+  const PC = 'test_regression_page_consistency.py';
+  const CG = 'test_regression_content_guard.py';
+  const PI = 'test_regression_prompt_injection.py';
+  const DECIDE = 'Needs a decision';
+  const CASES = [
+    ['ov', 'CM-037 – CM-040', 4, 'SCRUM-299', 'Company name shown; a scored case\'s level and score; "Not scored yet" before scoring; a long name cut with an ellipsis, in full on hover', OV, 'pass'],
+    ['ov', 'CM-041 – CM-042', 2, 'SCRUM-299', 'Documents grouped by status; a document moves to the Approved or Rejected group when its status changes', OV, 'pass'],
+    ['ov', 'CM-043 – CM-045', 3, 'SCRUM-299', 'Each document\'s type, name and status; "Extracting…" under Pending Approval while processing; selecting a document opens it', OV, 'pass'],
+    ['ov', 'CM-046', 1, 'SCRUM-299', 'A status with no documents says so', OV, 'pass', DECIDE, 'An empty group isn\'t shown at all.'],
+    ['ov', 'CM-047', 1, 'SCRUM-299', 'The approved documents\' empty message', OV, 'pass', DECIDE, 'The Approved Documents section was removed in the redesign.'],
+    ['ov', 'CM-048', 1, 'SCRUM-299', 'A case with no documents: every required document listed as Missing', OV, 'pass', DECIDE, 'No empty groups to show.'],
+    ['ov', 'CM-049', 1, 'SCRUM-299', 'The open section is kept after a reload', OV, 'pass'],
+    ['db', 'CM-050 – CM-052', 3, 'SCRUM-297', 'Cases in view; counts by risk level; each level drawn as a bar of the whole', DB, 'pass'],
+    ['db', 'CM-053 – CM-056', 4, 'SCRUM-297', 'Counts follow the status filter; an unscored case shows a dash and why; a row opens its case; the case queue opens', DB, 'pass'],
+    ['db', 'CM-057 – CM-059', 3, 'SCRUM-297', 'A newly scored or deleted case is reflected on refresh; empty state when nothing matches', DB, 'pass'],
+    ['db', 'CM-060 – CM-062', 3, 'SCRUM-297', 'Spelling 4 wrong of 10 (precision 60%); "Below target" in red, "On target" otherwise; "Few reviews" under 5', `${DM} · test_finding_reviews.py`, 'pass'],
+    ['db', 'CM-063', 1, 'SCRUM-297', 'The documents behind a flagged check', 'test_regression_detection_metrics.py', 'pass', DECIDE, 'Per-document results are on the case page, not the Accuracy tab.'],
+    ['au', 'CM-064 – CM-067', 4, 'SCRUM-298', 'This case\'s trail only; upload, classification (system, started by the officer) and type confirmation, each with time and officer', `${AU} · test_audit_trail.py`, 'pass'],
+    ['au', 'CM-068 – CM-070', 3, 'SCRUM-298', 'A field added and one edited, with their values; a cancelled run, marked cancelled', AU, 'pass'],
+    ['au', 'CM-071 – CM-074', 4, 'SCRUM-298', 'A note and an approval name the officer; edits in time order; the whole trail oldest first', AU, 'pass'],
+    ['rp', 'CM-075, CM-079', 2, 'SCRUM-82', 'The case menu downloads a PDF named by the case, at any stage', `${RP} · case-management.spec.ts`, 'pass'],
+    ['rp', 'CM-076 – CM-078', 3, 'SCRUM-82', 'Only what the stage has; the latest stage after analysis; identical repeats apart from the time', `${RP} · test_case_report.py`, 'pass'],
+    ['rp', 'CM-080 – CM-085', 6, 'SCRUM-82', 'No documents; a missing required document not shown as received; latest details and notes; a new upload; long names; special characters', RP, 'pass'],
+    ['st', 'CM-086 – CM-088', 3, 'SCRUM-80', 'Current stage shown; Finalised after finalising, locked; the change recorded by the officer', 'case-status.spec.ts · test_case_stage.py', 'pass'],
+    ['st', 'CM-089 – CM-092', 4, 'SCRUM-80', 'The queue updated; Finalised shown; no finalising before analysis; the same stage on the case page, queue and dashboard', 'case-status.spec.ts · test_case_stage.py', 'pass'],
+    ['ma', 'MA-028, MA-031, MA-032', 3, 'SCRUM-55', 'Each specialist\'s tool calls in order with times and arguments; the run\'s results; why each check ran and each finding was kept or dismissed', OB, 'pass'],
+    ['ma', 'MA-029', 1, 'SCRUM-55', 'A cancelled run keeps its tool calls and "Cancelled by loan officer", and can be run again', `${OB} · detection.spec.ts`, 'pass', null, 'The live "broken after that" doesn\'t reproduce; see REG-014.'],
+    ['ma', 'MA-039', 1, 'SCRUM-55', 'The trace is read back from storage after a restart', OB, 'pass'],
+    ['cd', 'CD-022 – CD-024', 3, 'SCRUM-282', 'Single page skipped; no readable text is unable to assess; two or more pages checked', `${PC} · test_page_consistency.py`, 'pass', null, 'CD-023 not tested live: such a scan can\'t be approved.'],
+    ['cd', 'CD-025 – CD-030', 6, 'SCRUM-282', 'Missing, repeated and out-of-order page numbers; disagreeing or wrong page totals flagged; consistent numbering clean', PC, 'pass'],
+    ['cd', 'CD-031 – CD-034', 4, 'SCRUM-282', 'A changed UEN; a carried-forward balance that doesn\'t match; a page of another size or orientation', PC, 'pass'],
+    ['cd', 'CD-035', 1, 'SCRUM-282', 'A page in entirely different fonts raises a low finding', PC, 'pass', null, 'Failed live: test data (page 3 had no amounts).'],
+    ['cd', 'CD-036 – CD-037', 2, 'SCRUM-282', 'A terms-and-conditions last page left out of the font check; a duplicated page flagged', PC, 'pass'],
+    ['ae', 'AE-001 – AE-005', 5, 'SCRUM-288', 'An instruction in white text, metadata, an image or look-alike letters stops the document at upload, says where, no model reads it; a retry blocks it again', `${CG} · test_content_guard.py`, 'pass'],
+    ['ae', 'AE-006 – AE-007', 2, 'SCRUM-288', 'A genuine payslip goes on as usual; ordinary hidden wording goes to manual review', CG, 'pass'],
+    ['ae', 'AE-008 – AE-012', 5, 'SCRUM-288', 'The finding can\'t be dismissed or lowered; counts as tampering (high, 8 points); none on a genuine payslip; runs first; a missing guard result is never clean', `${PI} · test_prompt_injection.py`, 'pass'],
+    ['ae', 'AE-013', 1, 'SCRUM-297', 'Precision and recall per check and overall (59% and 93%)', DM, 'pass'],
+    ['ae', 'AE-014 – AE-015', 2, 'SCRUM-297', 'No real issues: recall "Not measured"; a check under target flagged, one meeting both not', DM, 'pass', null, 'Failed live, fixed and re-tested.'],
+    ['ae', 'AE-016', 1, 'SCRUM-283', 'Each specialist\'s confidence and the run\'s findings saved with the completed run', OB, 'pass'],
+  ];
+
+  const LABEL = { pass: 'Pass', defect: 'Defect' };
+  const AREA = { ov: 'Case overview', db: 'Dashboard', au: 'Audit trail', rp: 'Case report', st: 'Case stages', ma: 'Observability', cd: 'Cross-page', ae: 'Agentic evaluation' };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  document.getElementById('defects').innerHTML = DEFECTS.map((d) => `
+    <article class="defect" data-sev="${esc(d.sev)}">
+      <div class="stripe"></div>
+      <div class="defect-body">
+        <div class="defect-top">
+          <span class="defect-id">${esc(d.id)}</span>
+          <span class="sev">${esc(d.sev)}</span>
+          <span class="pill ${esc(d.statusClass)}">${esc(d.status)}</span>
+        </div>
+        <h3 class="defect-title">${esc(d.title)}</h3>
+        <p>${esc(d.body)}</p>
+        <div class="defect-facts">
+          <span>Test case <b>${esc(d.cases)}</b></span>
+          <span>Owner <b>${esc(d.owner)}</b></span>
+          <span>Found in <b>${esc(d.found)}</b></span>
+        </div>
+      </div>
+    </article>`).join('');
+  const state = { area: 'all', status: 'all', q: '' };
+  const tbody = document.getElementById('rows');
+  const countEl = document.getElementById('count');
+
+  function render() {
+    const q = state.q.trim().toLowerCase();
+    const shown = CASES.filter(([area, id, , story, scenario, tests, status, reg]) =>
+      (state.area === 'all' || area === state.area) &&
+      (state.status === 'all' || status === state.status) &&
+      (!q || [id, story, scenario, tests, reg || ''].join(' ').toLowerCase().includes(q)));
+    const total = shown.reduce((sum, row) => sum + row[2], 0);
+    countEl.textContent = `${total} test case${total === 1 ? '' : 's'} in ${shown.length} row${shown.length === 1 ? '' : 's'}`;
+    tbody.innerHTML = shown.length ? shown.map(([area, id, n, story, scenario, tests, status, reg, note]) => `
+      <tr>
+        <td class="id">${esc(id)}${n > 1 ? `<span class="n">×${n}</span>` : ''}<span class="note">${AREA[area]}</span></td>
+        <td class="story">${esc(story)}</td>
+        <td>${esc(scenario)}${note ? `<span class="note">${esc(note)}</span>` : ''}</td>
+        <td class="tests">${esc(tests)}</td>
+        <td class="result">
+          <span class="pill ${status}">${status === 'defect' && reg ? esc(reg) : LABEL[status]}</span>
+          ${status === 'pass' && reg ? `<span class="note"><span class="pill deferred">${esc(reg)}</span></span>` : ''}
+        </td>
+      </tr>`).join('') : '<tr><td colspan="5" class="empty">No test cases match these filters.</td></tr>';
+  }
+
+  document.querySelectorAll('[data-area], [data-status]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const key = button.dataset.area ? 'area' : 'status';
+      state[key] = button.dataset[key];
+      button.parentElement.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+      render();
+    });
+  });
+  document.getElementById('search').addEventListener('input', (e) => { state.q = e.target.value; render(); });
+  render();
+
+  const COMMANDS = [
+    ['Activate the project\'s Python (repo folder)', 'source .venv/bin/activate'],
+    ['Backend: all Sprint 5 regression tests', 'cd backend && python -m pytest -m sprint5'],
+    ['Frontend: all Sprint 5 browser tests', 'cd frontend && npm run test:e2e:sprint5'],
+    ['Frontend: one test case, e.g. CM-060', 'cd frontend && npx playwright test --grep @CM-060'],
+    ['Frontend: open the last run\'s report', 'cd frontend && npx playwright show-report'],
+  ];
+  document.getElementById('cmds').innerHTML = COMMANDS.map(([label, cmd], i) => `
+    <div class="cmd">
+      <span class="label">${esc(label)}</span>
+      <div class="cmd-line"><code id="cmd-${i}">${esc(cmd)}</code><button type="button" class="copy" data-i="${i}">Copy</button></div>
+    </div>`).join('');
+  document.getElementById('cmds').addEventListener('click', (e) => {
+    const button = e.target.closest('.copy');
+    if (!button) return;
+    const code = document.getElementById('cmd-' + button.dataset.i);
+    const done = () => { button.textContent = 'Copied'; setTimeout(() => { button.textContent = 'Copy'; }, 1500); };
+    const select = () => { const r = document.createRange(); r.selectNodeContents(code); const s = getSelection(); s.removeAllRanges(); s.addRange(r); button.textContent = 'Selected'; };
+    try {
+      navigator.clipboard.writeText(code.textContent).then(done, select);
+    } catch {
+      select();
+    }
+  });
+</script>

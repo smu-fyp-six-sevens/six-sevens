@@ -1,5 +1,5 @@
 import type { CaseAnalysisOverview, CaseRisk, CaseRiskFinding, DocumentCaseMatch, DocumentRecord } from '../../services/uploadService';
-import { formatDocumentType } from '../../services/uploadService';
+import { formatDocumentLabel, formatDocumentType } from '../../services/uploadService';
 import { Rate } from '../../components/Rate';
 import { RATE_MEANING, belowTargetNote, formatCheck } from '../../utils/checkLabels';
 import { InfoLabel } from '../../components/InfoTip';
@@ -145,7 +145,7 @@ export function CaseOverview({
                 <ul className="case-overview-document-list">
                   {recentDocuments.map((document) => {
                     const status = documentStatus(document);
-                    return <li key={document.id}><span className="case-overview-document-icon" aria-hidden="true">{fileExtension(document.filename)}</span><span className="case-overview-document-copy"><strong>{document.filename}</strong><small>{document.document_type ? formatDocumentType(document.document_type) : 'Type not classified'} · {dateLabel(document.uploaded_at)}</small></span><span className={`case-overview-document-status case-overview-document-status--${status.tone}`}>{status.label}</span></li>;
+                    return <li key={document.id}><span className="case-overview-document-icon" aria-hidden="true">{fileExtension(document.filename)}</span><span className="case-overview-document-copy"><strong>{document.filename}</strong><small>{document.document_type ? formatDocumentLabel(document) : 'Type not classified'} · {dateLabel(document.uploaded_at)}</small></span><span className={`case-overview-document-status case-overview-document-status--${status.tone}`}>{status.label}</span></li>;
                   })}
                 </ul>
               ) : (

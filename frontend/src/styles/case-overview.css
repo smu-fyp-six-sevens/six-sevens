@@ -181,7 +181,7 @@
 .severity-legend-current .severity-legend-range { color: var(--ink-soft); }
 
 /* Case Summary page: the severity card and Case Status side by side on top; stacked when there's no room. */
-.case-summary-top { display: grid; grid-template-columns: minmax(460px, 2fr) minmax(0, 3fr); gap: 14px; align-items: stretch; margin-bottom: 18px; }
+.case-summary-top { display: grid; grid-template-columns: minmax(400px, 1fr) minmax(0, 2fr); gap: 14px; align-items: stretch; margin-bottom: 18px; }
 .case-summary-top > .case-status-card { display: flex; flex-direction: column; margin: 0; }
 /* As tall as the severity card beside it: the steps sit in the middle of the room under the text. */
 .case-summary-top > .case-status-card .case-status-track { margin-block: auto; padding-top: 14px; }

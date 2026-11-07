@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useDismiss } from './useDismiss';
 import RangeCalendar from './RangeCalendar';
 import { formatPeriod, overlap, type Period } from '../utils/dateRange';
 
@@ -27,25 +28,7 @@ export default function CompareMenu({ period, compare, onCompare, onStop }: Comp
     triggerRef.current?.focus();
   }
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setStep('closed');
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') close();
-    }
-
-    document.addEventListener('mousedown', closeOnOutsideClick);
-    document.addEventListener('keydown', closeOnEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', closeOnOutsideClick);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [isOpen]);
+  useDismiss(rootRef, isOpen, () => setStep('closed'), close);
 
   return (
     <span className="header-filter select-menu period-menu" ref={rootRef}>

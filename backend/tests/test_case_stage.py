@@ -133,9 +133,9 @@ def test_a_case_that_does_not_enforce_the_checklist_is_not_held_by_it() -> None:
               return_value=[_document(DocumentStatus.DETECTED)]),
         patch("app.case_stage.document_repository.attach_extracted_fields"),
         patch("app.case_stage.unapproved_requirements") as unapproved,
-        patch("app.case_stage.analysis_stage", return_value=case_stage.StageResult(CaseStage.READY_FOR_ANALYSIS)),
+        patch("app.case_stage.analysis_stage", return_value=case_stage.StageResult(CaseStage.FRAUD_DETECTION)),
     ):
-        assert case_stage.derive(_case()) == case_stage.StageResult(CaseStage.READY_FOR_ANALYSIS)
+        assert case_stage.derive(_case()) == case_stage.StageResult(CaseStage.FRAUD_DETECTION)
 
     unapproved.assert_not_called()
 
@@ -161,12 +161,12 @@ def test_failure_of_names_the_earliest_failed_step(documents, failed_ids, expect
 @pytest.mark.parametrize(
     ("analysis", "expected"),
     [
-        (None, case_stage.StageResult(CaseStage.READY_FOR_ANALYSIS)),
-        (_analysis("running"), case_stage.StageResult(CaseStage.READY_FOR_ANALYSIS)),
+        (None, case_stage.StageResult(CaseStage.FRAUD_DETECTION)),
+        (_analysis("running"), case_stage.StageResult(CaseStage.FRAUD_DETECTION)),
         (_analysis("failed", fingerprint="current"), case_stage.StageResult(CaseStage.FAILED, CaseFailure.CASE_ANALYSIS)),
-        (_analysis("failed", fingerprint="before-the-documents-changed"), case_stage.StageResult(CaseStage.READY_FOR_ANALYSIS)),
+        (_analysis("failed", fingerprint="before-the-documents-changed"), case_stage.StageResult(CaseStage.FRAUD_DETECTION)),
         (_analysis("complete", fingerprint="current"), case_stage.StageResult(CaseStage.CASE_ANALYSED)),
-        (_analysis("complete", fingerprint="before-the-documents-changed"), case_stage.StageResult(CaseStage.READY_FOR_ANALYSIS)),
+        (_analysis("complete", fingerprint="before-the-documents-changed"), case_stage.StageResult(CaseStage.FRAUD_DETECTION)),
     ],
 )
 def test_once_every_document_is_scanned_the_analysis_decides(analysis, expected) -> None:
@@ -372,7 +372,7 @@ def test_saving_a_verdict_brings_the_case_stage_up_to_date() -> None:
     sync.assert_called_once_with("case-1")
 
 
-@pytest.mark.parametrize("status", ["open", "pending_review", "fraud_detection", "ready_for_analysis", "pending_evaluation", "failed", "finalised"])
+@pytest.mark.parametrize("status", ["open", "pending_review", "fraud_detection", "pending_evaluation", "failed", "finalised"])
 def test_only_an_analysed_case_can_be_finalised(status) -> None:
     with patch("app.case_stage.case_repository") as repo:
         repo.get_case.return_value = _case(status)
@@ -391,9 +391,9 @@ def test_the_stage_only_moves_from_the_stage_it_was_read_at() -> None:
         update = mock_client.table.return_value.update
         update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
 
-        assert case_repository.set_status("case-1", "fraud_detection", "ready_for_analysis") is False
+        assert case_repository.set_status("case-1", "fraud_detection", "pending_evaluation") is False
 
-    update.assert_called_once_with({"status": "ready_for_analysis"})
+    update.assert_called_once_with({"status": "pending_evaluation"})
     update.return_value.eq.assert_called_once_with("id", "case-1")
     update.return_value.eq.return_value.eq.assert_called_once_with("status", "fraud_detection")
 
@@ -496,16 +496,20 @@ async def test_a_change_to_the_case_row_pushes_a_fresh_snapshot() -> None:
 
     live = CaseBroadcaster()
     viewer = live.subscribe("case-1")
-    with (
-        patch.object(realtime_listener, "broadcaster", live),
-        patch.object(realtime_listener, "DEBOUNCE_SECONDS", 0.01),
-        patch("app.realtime_listener.case_service.build_case_snapshot", return_value={"type": "snapshot"}),
-    ):
-        realtime_listener._on_change({"data": {"table": "cases", "record": {"id": "case-1", "status": "fraud_detection"}}})
-        await asyncio.sleep(0.1)
-    realtime_listener._pending.clear()
+    try:
+        with (
+            patch.object(realtime_listener, "broadcaster", live),
+            patch.object(realtime_listener, "DEBOUNCE_SECONDS", 0.01),
+            patch("app.realtime_listener.case_service.build_case_snapshot", return_value={"type": "snapshot"}),
+        ):
+            realtime_listener._on_change(
+                {"data": {"table": "cases", "record": {"id": "case-1", "status": "fraud_detection"}}}
+            )
+            snapshot = await asyncio.wait_for(viewer.get(), timeout=2)  # as soon as the debounce has passed
+    finally:
+        realtime_listener._pending.clear()
 
-    assert viewer.get_nowait() == {"type": "snapshot"}
+    assert snapshot == {"type": "snapshot"}
 
 
 def test_startup_brings_every_case_up_to_date_and_skips_one_that_fails() -> None:

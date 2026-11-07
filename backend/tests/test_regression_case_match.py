@@ -14,7 +14,6 @@ is deterministic (no AI), so these run the real check_case_match.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -28,6 +27,7 @@ from app.case_match import (
     check_case_match,
 )
 from app.models import CaseRecord, DocumentRecord
+from tests.support.regression_fixtures import check_fixture
 
 FIXTURES = Path(__file__).parent / "fixtures" / "regression"
 
@@ -206,7 +206,7 @@ def test_the_playwright_suites_foreign_company_case_match_matches_the_backend(an
     """
     Harbor Light's source-of-wealth statement filed into the Anchorpoint case, and the case match the real
     check_case_match gives it: what the document page's "Sent to manual review" triage shows. Regenerate with
-    REGENERATE_REGRESSION_FIXTURES=1.
+    scripts/regenerate_regression_fixtures.py.
     """
     case, documents = anchorpoint
     other = _foreign(_by_name(harbor_light, "C014_SourceWealth_BS"), case)
@@ -216,8 +216,4 @@ def test_the_playwright_suites_foreign_company_case_match_matches_the_backend(an
         "case_match": result.model_dump(mode="json"),
     }
 
-    if os.environ.get("REGENERATE_REGRESSION_FIXTURES"):
-        FOREIGN_COMPANY_FIXTURE.write_text(json.dumps(fixture, indent=2, sort_keys=True) + "\n")
-    assert json.loads(FOREIGN_COMPANY_FIXTURE.read_text()) == fixture, (
-        "case-match-foreign-company.json is out of date with check_case_match — regenerate it (see above)"
-    )
+    check_fixture(FOREIGN_COMPANY_FIXTURE, fixture)

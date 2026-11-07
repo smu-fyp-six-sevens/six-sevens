@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from . import case_service, case_stage, document_repository, events, extracted_fields_repository, monitoring
+from .case_pipeline import service as analysis_service
 from .config import settings
 from .events import officer_event, types
 from .extracted_fields_repository import normalise_field_name
@@ -203,12 +204,16 @@ def field_changes(before: dict[str, object], after: dict[str, object]) -> list[d
 
 
 async def _resync_case(case_id: str) -> None:
-    """Updates the stage and pushes a snapshot, for any change to a case's document set. Never raises."""
+    """
+    Updates the stage and pushes a snapshot, for any change to a case's document set, and starts the case
+    analysis if the change completed the set. Never raises.
+    """
     try:
         await asyncio.to_thread(case_stage.sync_case_stage, case_id)
     except Exception:
         logger.exception("Failed to update the stage of case %s", case_id)
     await push_case_snapshot(case_id)
+    await analysis_service.start_if_due(case_id)
 
 
 async def _finalised_cases(case_ids: set[str]) -> set[str]:
@@ -231,6 +236,7 @@ async def delete(document: DocumentRecord) -> None:
         )
     await asyncio.to_thread(document_repository.remove_document, document)
     await _audit(types.DOCUMENT_DELETED, document, filename=document.filename)
+    await analysis_service.start_if_due(document.case_id)
 
 
 async def move(document: DocumentRecord, case_id: str) -> None:
@@ -507,7 +513,8 @@ async def approve(document: DocumentRecord) -> DocumentRecord:
 
     approved = await asyncio.to_thread(document_repository.approve_document, document.id)
     if approved is None:
-        raise Refused("not_found", "Document not found")
+        # Read as analyzed a moment ago, so it was approved, rejected or deleted since (a double click, or two officers).
+        raise Refused("conflict", "This document was just changed by someone else. Refresh to see where it stands.")
 
     skip = skips_detection(document)
     if skip:
@@ -569,6 +576,7 @@ async def reject(document: DocumentRecord) -> DocumentRecord:
         raise Refused("not_found", "Document not found")
     fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document.id)
     await _audit(types.DOCUMENT_REJECTED, document, document_type=document.document_type)
+    await analysis_service.start_if_due(document.case_id)
     return present(rejected, fields)
 
 
@@ -695,4 +703,5 @@ async def cancel(document: DocumentRecord) -> DocumentRecord:
         raise Refused("conflict", "Document can only be cancelled while queued, processing, or extracting.")
     # The status is already CANCELLED, so the worker's own writes no longer match; this also stops its run.
     await _audit(types.DOCUMENT_CANCELLED, document, from_status=document.status.value)
+    await analysis_service.start_if_due(document.case_id)
     return await _reread(document.id)

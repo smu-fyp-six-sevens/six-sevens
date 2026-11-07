@@ -1,6 +1,8 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../support/test';
+import type { CaseRisk } from '../../src/services/uploadService/types';
 import { makeCase, makeDocument } from '../support/mockBackend';
+import { readRegressionFixture } from '../support/fixtures';
 
 /**
  * The /dashboard: every case (not only the officer's), a loading screen instead of the sample cases on first load,
@@ -13,6 +15,14 @@ async function openAllTime(page: Page) {
   await page.getByRole('button', { name: 'Date range' }).click();
   await page.getByRole('button', { name: 'All time' }).click();
 }
+
+// The clock stands still at midday in Singapore, so the calendar's "today", the last-30-days preset and the cases made
+// "now" read the same on every run: not a run near midnight, nor one on another timezone.
+const FIXED_NOW = new Date('2026-11-05T04:00:00Z');
+test.use({ timezoneId: 'Asia/Singapore' });
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(FIXED_NOW);
+});
 
 test.describe('Dashboard', () => {
   test("lists every case, whoever created it, and none of the sample cases", async ({ page, backend }) => {
@@ -74,11 +84,11 @@ test.describe('Dashboard', () => {
     await expect(page.getByText('Cedar Holdings')).toBeVisible();
     await expect(page.getByText('Acme Pte Ltd')).toHaveCount(0);
     await expect(page.getByText('Bolt Logistics')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Filter by status (9 selected)' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Filter by status (8 selected)' })).toBeVisible();
   });
 
   test('a custom range picked on the calendar narrows the dashboard to it', async ({ page, backend }) => {
-    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: new Date().toISOString() }));
+    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: FIXED_NOW.toISOString() }));
     await page.goto('/dashboard');
     await expect(page.getByText('Acme Pte Ltd')).toBeVisible();
 
@@ -95,7 +105,7 @@ test.describe('Dashboard', () => {
   });
 
   test('compare picks the first period, then a second one outside it, and shows both', async ({ page, backend }) => {
-    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: new Date().toISOString() }));
+    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: FIXED_NOW.toISOString() }));
     await page.goto('/dashboard');
     const compare = page.getByRole('button', { name: 'Compare two periods' });
 
@@ -123,7 +133,7 @@ test.describe('Dashboard', () => {
   });
 
   test('a comparison picked after the first period becomes this period, so changes read as now against before', async ({ page, backend }) => {
-    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: new Date().toISOString() }));
+    backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd', created_at: FIXED_NOW.toISOString() }));
     await page.goto('/dashboard');
     const compare = page.getByRole('button', { name: 'Compare two periods' });
 
@@ -149,7 +159,7 @@ test.describe('Dashboard', () => {
   });
 });
 
-const NOW = new Date().toISOString();
+const NOW = FIXED_NOW.toISOString();
 
 test.describe('Dashboard case pipeline', () => {
   test('every stage is a step with its count, and Failed stands apart from the line', async ({ page, backend }) => {
@@ -160,7 +170,7 @@ test.describe('Dashboard case pipeline', () => {
     await page.goto('/dashboard');
 
     const steps = page.locator('.case-pipeline-step');
-    await expect(steps).toHaveCount(10);
+    await expect(steps).toHaveCount(9);
     const count = (stage: string) => steps.filter({ hasText: stage }).locator('.case-pipeline-count');
     await expect(count('Pending Review')).toHaveText('3');
     await expect(count('Missing Documents')).toHaveText('1');
@@ -168,5 +178,196 @@ test.describe('Dashboard case pipeline', () => {
     await expect(steps.last()).toContainText('Failed');
     await expect(steps.last()).toHaveClass(/case-pipeline-step--apart/);
     await expect(page.locator('.case-pipeline')).toContainText('4 cases in view');
+  });
+});
+
+/**
+ * Sprint 5 regression (SCRUM-323), "Test Cases - Sprint 5.xlsx" Case Management sheet, Overall Case Dashboard
+ * (SCRUM-297): CM-050 – CM-063, and the Agentic Evaluation sheet's precision and recall cases AE-013 – AE-015.
+ * Each scored case carries a risk the backend computed (case-risk-sprint4.json), and the Accuracy tab is served the
+ * figures GET /detection-metrics computes for the sheet's reviews (detection-metrics-sprint5.json, from
+ * test_regression_detection_metrics.py): 10 spelling findings, 4 marked wrong; 2 font findings; a numbers check on
+ * target; and a metadata check with nothing real to measure recall against.
+ */
+test.describe('Overall case dashboard @sprint5 @SCRUM-297', () => {
+  const RISKS = readRegressionFixture<Record<string, { risk: CaseRisk }>>('case-risk-sprint4.json');
+  const scored = (id: string, company: string, rsCase: string) =>
+    makeCase({ id, greenlink_case_id: `GLDB-${id}`, company_name: company, status: 'case_analysed', risk: RISKS[rsCase].risk });
+  // One case at each level, and one not yet analysed.
+  const brightwaveCases = () => [
+    scored('8001', 'Brightwave Analytics Pte Ltd', 'RS-003'),
+    scored('8002', 'Northwind Freight Pte Ltd', 'RS-005'),
+    scored('8003', 'Lumen Dental Clinic', 'RS-004'),
+    scored('8004', 'Keppel Bay Traders', 'RS-001'),
+    makeCase({ id: '8005', greenlink_case_id: 'GLDB-8005', company_name: 'Tanjong Print Works' }),
+  ];
+  // The Overview's Risk overview: each level's count, and its segment of the bar (titled with its cases).
+  const riskCount = (page: Page, level: string) =>
+    page.locator('.risk-overview-legend li', { hasText: new RegExp(`${level}$`) }).locator('strong');
+  const riskSegment = (page: Page, level: string) => page.locator(`.risk-overview-bar i[title^="${level}:"]`);
+  const pipelineTotal = (page: Page) => page.locator('.case-pipeline .panel-heading p');
+  const attentionRow = (page: Page, caseNumber: string) => page.getByRole('button', { name: new RegExp(`^Open case ${caseNumber}:`) });
+
+  async function showOnlyStatus(page: Page, status: string) {
+    await page.getByRole('button', { name: /^Filter by status/ }).click();
+    const list = page.getByRole('group', { name: 'status filter' });
+    await list.getByRole('button', { name: 'Unselect all' }).click();
+    await list.getByLabel(status).check();
+    await page.keyboard.press('Escape');
+  }
+
+  test('CM-050 the dashboard shows the total number of cases @CM-050', async ({ page, backend }) => {
+    backend.cases.push(...brightwaveCases());
+
+    await openAllTime(page);
+
+    await expect(pipelineTotal(page)).toHaveText(/^5 cases in view/);
+  });
+
+  test('CM-051 / CM-052 cases are counted by risk level, each drawn as its share of the bar @CM-051 @CM-052', async ({ page, backend }) => {
+    backend.cases.push(...brightwaveCases());
+
+    await openAllTime(page);
+
+    for (const level of ['Critical', 'High', 'Medium', 'Low', 'Not scored']) {
+      await expect(riskCount(page, level)).toHaveText('1');
+      // One case of five each: equal segments.
+      await expect(riskSegment(page, level)).toHaveCSS('flex-grow', '1');
+    }
+    await expect(riskSegment(page, 'Critical')).toHaveAttribute('title', 'Critical: GLDB-8001');
+  });
+
+  test('CM-053 the counts and chart follow the status filter @CM-053', async ({ page, backend }) => {
+    backend.cases.push(...brightwaveCases());
+    await openAllTime(page);
+    await expect(riskCount(page, 'Critical')).toHaveText('1');
+
+    await showOnlyStatus(page, 'Awaiting Documents');
+
+    await expect(pipelineTotal(page)).toHaveText(/^1 case in view/);
+    for (const level of ['Critical', 'High', 'Medium', 'Low']) {
+      await expect(riskCount(page, level)).toHaveText('0');
+      await expect(riskSegment(page, level)).toHaveCount(0);
+    }
+    await expect(riskCount(page, 'Not scored')).toHaveText('1');
+  });
+
+  test('CM-054 a case not yet scored says so, not a risk @CM-054', async ({ page, backend }) => {
+    backend.cases.push(...brightwaveCases());
+    await openAllTime(page);
+
+    const unscored = attentionRow(page, 'GLDB-8005');
+    await expect(unscored.locator('.attention-risk')).toHaveText('Not scored');
+    await expect(unscored.locator('.attention-risk [title]')).toHaveAttribute('title', 'Shown once the case has been analysed');
+    await expect(unscored.locator('.risk-score')).toHaveCount(0);
+    await expect(attentionRow(page, 'GLDB-8001').locator('.risk-level')).toHaveText(RISKS['RS-003'].risk.level!);
+  });
+
+  test('CM-055 clicking a case opens its details @CM-055', async ({ page, backend }) => {
+    backend.cases.push(...brightwaveCases());
+    await openAllTime(page);
+
+    await attentionRow(page, 'GLDB-8001').click();
+
+    await expect(page).toHaveURL(/\/cases\/GLDB-8001/);
+    await expect(page.getByRole('heading', { name: /Brightwave Analytics Pte Ltd/ })).toBeVisible();
+  });
+
+  test('CM-056 the full case listing opens from the dashboard @CM-056', async ({ page, backend }) => {
+    backend.cases.push(...brightwaveCases());
+    await openAllTime(page);
+
+    await page.getByRole('link', { name: 'Open case queue' }).click();
+
+    await expect(page).toHaveURL(/\/cases$/);
+    await expect(page.getByText('Tanjong Print Works')).toBeVisible();
+  });
+
+  test('CM-057 a newly scored case is counted once the dashboard is refreshed @CM-057', async ({ page, backend }) => {
+    backend.cases.push(...brightwaveCases());
+    await openAllTime(page);
+    await expect(riskCount(page, 'High')).toHaveText('1');
+
+    Object.assign(backend.cases.find((c) => c.id === '8005')!, { status: 'case_analysed', risk: RISKS['RS-006'].risk });
+    await page.getByRole('button', { name: 'Refresh cases' }).click();
+
+    await expect(riskCount(page, 'High')).toHaveText('2');
+    await expect(riskCount(page, 'Not scored')).toHaveText('0');
+  });
+
+  test('CM-058 a deleted case leaves the counts once the dashboard is refreshed @CM-058', async ({ page, backend }) => {
+    backend.cases.push(...brightwaveCases());
+    await openAllTime(page);
+    await expect(pipelineTotal(page)).toHaveText(/^5 cases in view/);
+
+    backend.cases = backend.cases.filter((c) => c.id !== '8001');
+    await page.getByRole('button', { name: 'Refresh cases' }).click();
+
+    await expect(pipelineTotal(page)).toHaveText(/^4 cases in view/);
+    await expect(riskCount(page, 'Critical')).toHaveText('0');
+  });
+
+  test('CM-059 when no case matches the filters the dashboard says so @CM-059', async ({ page, backend }) => {
+    backend.cases.push(...brightwaveCases());
+    await openAllTime(page);
+
+    await showOnlyStatus(page, 'Finalised');
+
+    await expect(pipelineTotal(page)).toHaveText(/^0 cases in view/);
+    await expect(page.getByText('Nothing is waiting on an officer in this date and status selection.')).toBeVisible();
+    await page.getByRole('navigation', { name: 'Dashboard sections' }).getByRole('button', { name: /^Cases/ }).click();
+    await expect(page.getByText('No cases in this date and status selection.')).toBeVisible();
+  });
+
+  test.describe('Accuracy tab', () => {
+    const METRICS = readRegressionFixture<{ overall: { by_check: { check_name: string }[] } }>('detection-metrics-sprint5.json');
+    const checkRow = (page: Page, check: string) =>
+      page.locator('.accuracy-table tbody tr', { has: page.locator('.flag-name', { hasText: new RegExp(`^${check}$`) }) });
+
+    test.beforeEach(async ({ page, backend }) => {
+      backend.detectionMetrics = structuredClone(METRICS);
+      await openAllTime(page);
+      await page.getByRole('navigation', { name: 'Dashboard sections' }).getByRole('button', { name: /^Accuracy/ }).click();
+    });
+
+    test('CM-060 each check shows its counts and precision: spelling 4 wrong of 10 @CM-060', async ({ page }) => {
+      const spelling = checkRow(page, 'Spelling');
+
+      await expect(spelling.locator('.review-mix-total')).toHaveText('10 reviews');
+      await expect(spelling.locator('.review-mix-counts')).toContainText('6 correct');
+      await expect(spelling.locator('.review-mix-counts')).toContainText('4 wrong');
+      await expect(spelling.locator('[data-label="Precision"]')).toHaveText('60%');
+    });
+
+    test('CM-061 / AE-015 a check under target is flagged and shown in red; one meeting both is On target @CM-061 @AE-015', async ({ page }) => {
+      await expect(checkRow(page, 'Spelling').locator('[data-label="Flags"]')).toContainText('Below target');
+      await expect(checkRow(page, 'Spelling').locator('[data-label="Precision"] .rate--below')).toHaveText('60%');
+      await expect(checkRow(page, 'Numerical checks').locator('[data-label="Flags"]')).toContainText('On target');
+      await expect(checkRow(page, 'Numerical checks').locator('.rate--below')).toHaveCount(0);
+    });
+
+    test('CM-062 a check with fewer than 5 reviews is marked Few reviews @CM-062', async ({ page }) => {
+      const font = checkRow(page, 'Font consistency');
+
+      await expect(font.locator('.review-mix-total')).toHaveText('2 reviews');
+      await expect(font.locator('[data-label="Flags"]')).toHaveText('Few reviews');
+    });
+
+    test('AE-013 precision and recall are shown for each check and the whole system @AE-013', async ({ page }) => {
+      await expect(page.locator('.accuracy-table tbody tr')).toHaveCount(METRICS.overall.by_check.length);
+      const overall = page.getByRole('region', { name: 'Detection accuracy overall' });
+      await expect(overall.locator('.accuracy-card').nth(0)).toContainText('59%');
+      await expect(overall.locator('.accuracy-card').nth(0)).toContainText('13 correct of 22 reviewed findings');
+      await expect(overall.locator('.accuracy-card').nth(1)).toContainText('93%');
+      await expect(overall.locator('.accuracy-card').nth(1)).toContainText('13 caught of 14 real issues');
+      await expect(checkRow(page, 'Numerical checks').locator('[data-label="Recall"]')).toHaveText('83%');
+    });
+
+    test('AE-014 a check with no real issues shows recall as Not measured, never 0% or 100% @AE-014', async ({ page }) => {
+      const metadata = checkRow(page, 'Metadata');
+
+      await expect(metadata.locator('[data-label="Recall"]')).toHaveText('Not measured');
+      await expect(metadata.locator('[data-label="Precision"]')).toHaveText('0%');
+    });
   });
 });

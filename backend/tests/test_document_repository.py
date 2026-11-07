@@ -175,14 +175,17 @@ def test_approve_document_accepts_it_and_resyncs_the_case() -> None:
         patch("app.document_repository.supabase_client") as mock_client,
         patch("app.case_stage.sync_case_stage") as mock_case_service,
     ):
-        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = (
             _execute_result([_row(status="approved", routing_status="accepted")])
         )
 
         approved = document_repository.approve_document("doc-1")
 
-    mock_client.table.return_value.update.assert_called_once_with({"status": "approved", "routing_status": "accepted"})
-    mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "doc-1")
+    update = mock_client.table.return_value.update
+    update.assert_called_once_with({"status": "approved", "routing_status": "accepted"})
+    # Only an analyzed document is approved, so a second approval at once matches nothing.
+    update.return_value.eq.assert_called_once_with("id", "doc-1")
+    update.return_value.eq.return_value.eq.assert_called_once_with("status", "analyzed")
     assert approved is not None and approved.status == DocumentStatus.APPROVED
     mock_case_service.assert_called_once_with("case-1")
 
@@ -208,7 +211,7 @@ def test_approve_document_returns_none_when_nothing_was_updated() -> None:
         patch("app.document_repository.supabase_client") as mock_client,
         patch("app.case_stage.sync_case_stage") as mock_case_service,
     ):
-        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = (
             _execute_result([])
         )
 
@@ -621,3 +624,27 @@ def test_every_documents_status_is_read_a_page_at_a_time() -> None:
            "uploaded_at": "2026-08-26T00:00:00Z", "queued_at": None, "processing_started_at": None}
     with patch("app.document_repository.fetch_all", return_value=[row, row]):
         assert len(document_repository.list_all_document_statuses()) == 2
+
+
+# --- The case stage refresh a request leaves behind -----------------------------------------------------------
+
+
+def test_flushing_runs_the_requests_scheduled_refreshes_now_and_leaves_other_requests_alone(monkeypatch) -> None:
+    from app import document_repository
+
+    synced: list[str] = []
+    monkeypatch.setattr(document_repository, "SYNC_DEBOUNCE_SECONDS", 60)  # far enough off that only a flush runs it
+    monkeypatch.setattr(document_repository, "_sync_now", synced.append)
+    mine = document_repository.track_request_syncs()
+    document_repository._sync_case("case-1")
+    document_repository._sync_case("case-1")  # a second write shares the pending refresh
+    document_repository._sync_case("case-other")
+    try:
+        document_repository.flush_syncs({"case-1"})
+
+        assert synced == ["case-1"]
+        assert mine == {"case-1", "case-other"}
+        assert "case-1" not in document_repository._sync_timers
+        assert "case-other" in document_repository._sync_timers  # another request's, not flushed here
+    finally:
+        document_repository.flush_syncs({"case-other"})

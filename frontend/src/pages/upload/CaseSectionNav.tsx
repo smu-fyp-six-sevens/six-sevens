@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useDismiss } from '../../components/useDismiss';
 import { CASE_SECTIONS, SECTIONS_WITH_STATUS, type CaseSection, type SectionStatus } from './caseSections';
 import { Icon } from '../../components/Icon';
 
@@ -11,7 +12,7 @@ export function CaseSectionNav({
   statusesLoading,
   onSelect,
 }: {
-  // None on a document page, which belongs to the case rather than to one section.
+  // A document page belongs to the case rather than to one section.
   activeSection: CaseSection | null;
   // The snapshot hasn't arrived, so the status lines show a placeholder instead of a wrong "None Uploaded".
   statusesLoading: boolean;
@@ -24,21 +25,7 @@ export function CaseSectionNav({
   // Closed, only the icons show (the status becomes a dot on the icon).
   const collapsed = !open;
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: MouseEvent) => {
-      if (!navRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
+  useDismiss(navRef, open, () => setOpen(false));
 
   return (
     <nav ref={navRef} className={`case-nav${open ? ' case-nav--open' : ''}`} aria-label="Case sections">

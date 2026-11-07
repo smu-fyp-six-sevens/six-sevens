@@ -263,3 +263,34 @@ export function isClassificationConfirmed(
   }
   return confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD;
 }
+
+// The fields Extraction read under the threshold, by name: not yet reviewed, since "Save fields" marks each field it
+// saves as human-verified.
+export function lowConfidenceFieldNames(fields: Record<string, unknown> | null): string[] {
+  return Object.entries(fields ?? {})
+    .filter(([, raw]) => {
+      const confidence = raw && typeof raw === 'object' ? (raw as { confidence?: unknown }).confidence : null;
+      return typeof confidence === 'number' && confidence < EXTRACTION_CONFIDENCE_THRESHOLD;
+    })
+    .map(([fieldName]) => fieldName)
+    .sort();
+}
+
+// Mirrors document_service.approve in the backend, which the approve endpoint enforces: an analysed document whose
+// type is confirmed, with information extracted, no required field missing, every low-confidence field reviewed, and,
+// for a document set to Other, its fields saved (they come from no schema).
+export function canApproveDocument(
+  document: Pick<
+    DocumentRecord,
+    'status' | 'document_type' | 'classification_confidence' | 'extracted_fields' | 'missing_required_fields' | 'fields_reviewed_at'
+  >,
+): boolean {
+  return (
+    document.status === 'analyzed' &&
+    isClassificationConfirmed(document) &&
+    hasExtractedInformation(document.extracted_fields) &&
+    (document.missing_required_fields?.length ?? 0) === 0 &&
+    lowConfidenceFieldNames(document.extracted_fields).length === 0 &&
+    !(document.document_type === 'unrecognised' && !document.fields_reviewed_at)
+  );
+}

@@ -195,15 +195,23 @@ async def test_an_unusable_extraction_stops_the_document_and_keeps_what_was_stor
     documents_repo.update_extracted_fields.assert_not_called()
 
 
-async def test_a_rerun_audit_loads_the_saved_trace_before_recording() -> None:
+async def test_a_rerun_loads_the_saved_trace_before_recording_and_saves_it_last() -> None:
+    from contextlib import nullcontext
+
     from app.langgraph import pipeline
 
     order: list[str] = []
-    with patch.object(pipeline, "trace") as trace:
+    with (
+        patch.object(pipeline, "trace") as trace,
+        patch.object(pipeline, "_rerun_extraction", AsyncMock()),
+    ):
+        trace.steps_into.return_value = nullcontext()
         trace.resume.side_effect = lambda _id: order.append("resume")
         trace.record.side_effect = lambda *_a, **_k: order.append("record")
-        await pipeline._record_run_audit("d", run_context.RunContext())
-    assert order == ["resume", "record"]
+        trace.flush.side_effect = lambda _id: order.append("flush")
+        await pipeline.rerun_extraction("d")
+    # The root span has closed by the save, so its own step is saved too.
+    assert order == ["resume", "record", "flush"]
 
 
 # --- a low-confidence guess can still be sent back -----------------------------------------------

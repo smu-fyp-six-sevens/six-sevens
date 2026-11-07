@@ -29,6 +29,20 @@ def _skip_case_stage_sync(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_automatic_case_analysis(monkeypatch: pytest.MonkeyPatch):
+    """
+    Detection runs and an officer's document changes may start the case analysis, which reads the case back.
+    Tests of those aren't about it; test_case_auto_analysis.py exercises the real one.
+    """
+    from app.case_pipeline import service
+
+    async def _skip(case_id):
+        return None
+
+    monkeypatch.setattr(service, "start_if_due", _skip)
+
+
+@pytest.fixture(autouse=True)
 def _cases_are_not_finalised(monkeypatch: pytest.MonkeyPatch):
     """
     Every route that changes a document or case first checks its case isn't
@@ -186,10 +200,10 @@ async def _refuse_real_realtime(*args, **kwargs):
     )
 
 
-# --- Regression suite tags (SCRUM-206, SCRUM-246, SCRUM-296) ----------------
+# --- Regression suite tags (SCRUM-206, SCRUM-246, SCRUM-296, SCRUM-323) -----
 # Existing tests that also serve as regression tests for a sprint's manual test
 # cases, tagged here centrally (rather than editing each file) so that
-# `pytest -m sprint1` … `-m sprint4` run each sprint's full set. The
+# `pytest -m sprint1` … `-m sprint5` run each sprint's full set. The
 # regression-specific test files tag themselves with @pytest.mark.sprintN.
 # Keys are a test file, or file::test_name for a single test.
 _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
@@ -270,6 +284,23 @@ _EXISTING_REGRESSION_TESTS: dict[str, list[tuple[str, str, str]]] = {
     "test_registry_lookups.py": [("sprint4", "SCRUM-256", "CD-008 / CD-009")],
     # SCRUM-67 AI-generated content (FD-027 / FD-028), the deterministic layer under ai_generation_tool
     "test_ai_generation.py": [("sprint4", "SCRUM-67", "FD-027 / FD-028")],
+    # --- Sprint 5 (SCRUM-323) ---
+    # SCRUM-282 Cross-page consistency (CD-022 – CD-037), the deterministic layer under page_consistency_tool
+    "test_page_consistency.py": [("sprint5", "SCRUM-282", "CD-022 – CD-037")],
+    # SCRUM-288 Agentic guardrails (AE-001 – AE-012): the content guard at ingest, and detection's injection check
+    "test_content_guard.py": [("sprint5", "SCRUM-288", "AE-001 – AE-007")],
+    "test_prompt_injection.py": [("sprint5", "SCRUM-288", "AE-008 – AE-012")],
+    # SCRUM-297 Detection accuracy: precision, recall and flags per check (CM-060 – CM-063, AE-013 – AE-015)
+    "test_finding_reviews.py": [("sprint5", "SCRUM-297", "CM-060 – CM-063 / AE-013 – AE-015")],
+    # SCRUM-55 Agent observability: a cancelled run keeps its error and can be retried (MA-029)
+    "test_events.py::test_an_officer_cancel_saves_the_error_and_ends_the_run": [("sprint5", "SCRUM-55", "MA-029")],
+    "test_detection.py::test_retry_detection_relaunches_after_a_cancelled_run": [("sprint5", "SCRUM-55", "MA-029")],
+    # SCRUM-298 Case audit trail: each entry names its officer and what changed (CM-064 – CM-074)
+    "test_audit_trail.py": [("sprint5", "SCRUM-298", "CM-064 – CM-072")],
+    # SCRUM-82 Export case report (CM-075 – CM-085)
+    "test_case_report.py": [("sprint5", "SCRUM-82", "CM-075 – CM-085")],
+    # SCRUM-80 Case stages (CM-086 – CM-092)
+    "test_case_stage.py": [("sprint5", "SCRUM-80", "CM-086 – CM-092")],
 }
 
 
