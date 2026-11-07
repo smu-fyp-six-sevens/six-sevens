@@ -701,9 +701,15 @@ class UpdateNoteRequest(BaseModel):
 
 ReviewScope = Literal["document", "case"]
 ReviewVerdict = Literal["correct", "wrong"]
-# Why a finding is a false alarm, as the review offers them in one click.
-FalseAlarmReason = Literal[
+# The one-click reasons a review offers when an officer says the agents got a finding wrong. For a finding the agents kept,
+# that it is a false alarm: why. For one they set aside, that it is real after all: why they were wrong to set it aside.
+FALSE_ALARM_REASONS = (
     "normal_for_document", "within_tolerance", "tool_misread", "explained_elsewhere", "not_relevant", "other",
+)
+SET_ASIDE_REASONS = ("explanation_not_valid", "part_of_a_pattern", "other")
+ReviewReason = Literal[
+    "normal_for_document", "within_tolerance", "tool_misread", "explained_elsewhere", "not_relevant",
+    "explanation_not_valid", "part_of_a_pattern", "other",
 ]
 MAX_REVIEW_NOTE_LENGTH = 1000
 
@@ -731,8 +737,8 @@ class FindingReview(BaseModel):
     agent_decision: Literal["accepted", "not_assessed", "overridden", "dismissed"] | None = None
     severity: str | None = None
     verdict: ReviewVerdict | None = None
-    # Why a finding marked wrong is a false alarm.
-    reason: FalseAlarmReason | None = None
+    # Why the officer says the agents got it wrong: a false alarm (verdict wrong), or one they set aside that is real.
+    reason: ReviewReason | None = None
     note: str | None = None
     reviewer: str
     created_at: datetime
@@ -757,8 +763,10 @@ class SetFindingVerdictRequest(_ReviewPlace):
 
     fingerprint: str = Field(min_length=1, max_length=100)
     verdict: ReviewVerdict | None = None
-    # A false alarm (wrong) always says why: one of the one-click reasons, and for "other" a note.
-    reason: FalseAlarmReason | None = None
+    # Saying the agents got a finding wrong says why (the router checks which reasons fit, as only it knows what the
+    # agents did): a false alarm on a finding they kept, or a real issue among the ones they set aside. "Other" needs a
+    # note. Agreeing with the agents (a set-aside finding left alone) has neither.
+    reason: ReviewReason | None = None
     note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_LENGTH)
 
     @field_validator("note")
@@ -767,14 +775,13 @@ class SetFindingVerdictRequest(_ReviewPlace):
         return (value.strip() or None) if value is not None else None
 
     @model_validator(mode="after")
-    def a_false_alarm_says_why(self) -> "SetFindingVerdictRequest":
-        if self.verdict == "wrong":
-            if self.reason is None:
-                raise ValueError("A false alarm needs a reason")
-            if self.reason == "other" and self.note is None:
-                raise ValueError("Say what the reason was when it is 'other'")
-        elif self.reason is not None or self.note is not None:
-            raise ValueError("A reason and a note go with a false alarm only")
+    def a_note_goes_with_other(self) -> "SetFindingVerdictRequest":
+        if self.verdict is None and (self.reason is not None or self.note is not None):
+            raise ValueError("A reason and a note go with a verdict")
+        if self.reason is None and self.note is not None:
+            raise ValueError("A note goes with a reason")
+        if self.reason == "other" and self.note is None:
+            raise ValueError("Say what the reason was when it is 'other'")
         return self
 
 

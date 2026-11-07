@@ -399,6 +399,93 @@ def test_a_false_alarm_must_say_why_and_other_needs_a_note(repos) -> None:
     assert findings_repo.set_verdict.call_args.args[3:] == ("other", "Stamp is a watermark")
 
 
+@pytest.mark.parametrize("set_aside", [{"agent_decision": "dismissed"}, {"agent_decision": "accepted", "severity": "info"}])
+def test_agreeing_with_the_agents_that_a_finding_is_set_aside_needs_no_reason(repos, set_aside) -> None:
+    """Unticking a set-aside finding saves "wrong" (a false alarm, as the agents said): nothing to give a reason for."""
+    findings_repo, _ = repos
+    findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+        "id": f"row:{fingerprint}", "check_name": "spelling_tool", "summary": "A finding", **set_aside,
+    }
+    response = client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "wrong"}]})
+
+    assert response.status_code == 200
+    assert findings_repo.set_verdict.call_args.args[1:] == ("wrong", TEST_USER, None, None)
+
+
+def test_a_false_alarm_on_a_finding_the_agents_kept_still_needs_a_reason(repos) -> None:
+    findings_repo, _ = repos
+    findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+        "id": f"row:{fingerprint}", "check_name": "spelling_tool", "summary": "A finding",
+        "agent_decision": "accepted", "severity": "medium",
+    }
+    response = client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "wrong"}]})
+
+    assert response.status_code == 422 and "needs a reason" in response.json()["detail"]
+    findings_repo.set_verdict.assert_not_called()
+
+
+def _set_aside_rows(findings_repo) -> None:
+    findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+        "id": f"row:{fingerprint}", "check_name": "spelling_tool", "summary": "A finding", "agent_decision": "dismissed",
+    }
+
+
+def test_saying_a_set_aside_finding_is_real_needs_a_reason_from_its_own_list(repos) -> None:
+    """Ticking a set-aside finding: the agents were wrong to set it aside, so it is real (correct), and why."""
+    findings_repo, _ = repos
+    _set_aside_rows(findings_repo)
+    real = {**_VERDICT, "verdict": "correct"}
+
+    # No reason, or one that only fits a false alarm: refused, nothing saved.
+    assert client.put(_VERDICTS, json={"verdicts": [real]}).status_code == 422
+    assert client.put(_VERDICTS, json={"verdicts": [{**real, "reason": "tool_misread"}]}).status_code == 422
+    assert client.put(_VERDICTS, json={"verdicts": [{**real, "reason": "other"}]}).status_code == 422  # other needs a note
+    findings_repo.set_verdict.assert_not_called()
+
+    response = client.put(_VERDICTS, json={"verdicts": [{**real, "reason": "explanation_not_valid"}]})
+    assert response.status_code == 200
+    assert findings_repo.set_verdict.call_args.args[1:] == ("correct", TEST_USER, "explanation_not_valid", None)
+
+    response = client.put(_VERDICTS, json={"verdicts": [{**real, "reason": "other", "note": "Same payee on three documents"}]})
+    assert response.status_code == 200
+    assert findings_repo.set_verdict.call_args.args[3:] == ("other", "Same payee on three documents")
+
+
+def test_a_set_aside_finding_left_alone_takes_no_reason(repos) -> None:
+    findings_repo, _ = repos
+    _set_aside_rows(findings_repo)
+
+    assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "wrong", "reason": "tool_misread"}]}).status_code == 422
+    assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "wrong"}]}).status_code == 200
+
+
+def test_a_kept_finding_found_real_takes_no_reason_and_a_set_aside_reason_does_not_fit_a_false_alarm(repos) -> None:
+    findings_repo, _ = repos
+    findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+        "id": f"row:{fingerprint}", "check_name": "spelling_tool", "summary": "A finding", "agent_decision": "accepted",
+    }
+
+    assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "correct"}]}).status_code == 200
+    assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "correct", "reason": "explanation_not_valid"}]}).status_code == 422
+    assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "wrong", "reason": "explanation_not_valid"}]}).status_code == 422
+    assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "wrong", "reason": "tool_misread"}]}).status_code == 200
+
+
+def test_a_group_mixing_both_saves_nothing_when_one_kept_finding_lacks_a_reason(repos) -> None:
+    findings_repo, _ = repos
+    findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+        "id": f"row:{fingerprint}", "check_name": "spelling_tool", "summary": "A finding",
+        "agent_decision": "dismissed" if fingerprint == "set-aside:1" else "accepted",
+    }
+    response = client.put(_VERDICTS, json={"verdicts": [
+        {**_VERDICT, "fingerprint": "set-aside:1", "verdict": "wrong"},
+        {**_VERDICT, "fingerprint": "kept:1", "verdict": "wrong"},
+    ]})
+
+    assert response.status_code == 422
+    findings_repo.set_verdict.assert_not_called()
+
+
 def test_a_missed_issue_needs_a_note_and_is_saved_as_feedback(repos) -> None:
     findings_repo, _ = repos
     findings_repo.add_missed.return_value = "row-1"

@@ -3430,6 +3430,13 @@
             "title": "Document Ids",
             "type": "array"
           },
+          "feedback_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Feedback Ids",
+            "type": "array"
+          },
           "fingerprint": {
             "default": "",
             "title": "Fingerprint",
@@ -3478,7 +3485,8 @@
           "document_ids",
           "probe_summary",
           "breach_flags",
-          "fingerprint"
+          "fingerprint",
+          "feedback_ids"
         ],
         "title": "CrossDocFinding",
         "type": "object"
@@ -4783,6 +4791,8 @@
                   "tool_misread",
                   "explained_elsewhere",
                   "not_relevant",
+                  "explanation_not_valid",
+                  "part_of_a_pattern",
                   "other"
                 ],
                 "type": "string"
@@ -7427,6 +7437,8 @@
                   "tool_misread",
                   "explained_elsewhere",
                   "not_relevant",
+                  "explanation_not_valid",
+                  "part_of_a_pattern",
                   "other"
                 ],
                 "type": "string"

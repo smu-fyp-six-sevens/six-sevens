@@ -5,7 +5,7 @@ import type {
   CaseFindingReviews,
   CaseStage,
   DetectionMetrics,
-  FalseAlarmReason,
+  ReviewReason,
   FeedbackDetail,
   ReviewScope,
   ReviewVerdict,
@@ -26,8 +26,9 @@ export interface FindingVerdictInput {
   documentId: string | null;
   fingerprint: string;
   verdict: ReviewVerdict | null;
-  // Why a false alarm (verdict wrong) is one: required with it, and for 'other' a note too.
-  reason?: FalseAlarmReason | null;
+  // Why the agents got it wrong: required with a false alarm (wrong) or a set-aside finding found real (correct), and for
+  // 'other' a note too.
+  reason?: ReviewReason | null;
   note?: string | null;
 }
 
@@ -43,8 +44,9 @@ export async function setFindingVerdicts(caseId: string, verdicts: FindingVerdic
         document_id: review.documentId,
         fingerprint: review.fingerprint,
         verdict: review.verdict,
-        reason: review.verdict === 'wrong' ? (review.reason ?? null) : null,
-        note: review.verdict === 'wrong' && review.reason === 'other' ? (review.note?.trim() ?? null) : null,
+        // The reason the officer gave for the agents getting it wrong: a false alarm (wrong), or a set-aside finding that is real.
+        reason: review.verdict ? (review.reason ?? null) : null,
+        note: review.verdict && review.reason === 'other' ? (review.note?.trim() ?? null) : null,
       })),
     }),
   });

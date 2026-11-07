@@ -570,7 +570,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(section).toContainText('2 high · 3 medium · 1 low');
 
     // The documents are a card of their own, listed collapsed until reviewed (the low-only bank statement
-    // included); the cross-document group, with a green "No findings" badge, waits to be saved like the rest.
+    // included); the cross-document group, with a green "Clean" badge, waits to be saved like the rest.
     const review = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
     await expect(section.locator('.risk-document')).toHaveCount(0);
     const documents = review.locator('.risk-document');
@@ -580,7 +580,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(documents.nth(1)).toContainText('C011_BankStatement.pdf');
     await expect(review.getByText(/^Reviewed \(/)).toHaveCount(0);
     await expect(documents.nth(2)).toContainText('Across documents');
-    await expect(documents.nth(2).locator('.risk-document-none')).toHaveText('✓ No findings');
+    await expect(documents.nth(2).locator('.risk-document-none')).toHaveText('Clean');
     await expect(review.locator('.risk-findings')).toHaveCount(0);
 
     // Opening a document reviews it beside the document: its findings list highs before mediums (the repeated

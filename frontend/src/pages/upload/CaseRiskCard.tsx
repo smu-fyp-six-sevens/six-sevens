@@ -10,7 +10,7 @@ import type {
   ReviewScope,
 } from '../../services/uploadService';
 import { formatDocumentType } from '../../services/uploadService';
-import type { FalseAlarmReason, ReviewVerdict } from '../../services/uploadService';
+import type { ReviewReason, ReviewVerdict } from '../../services/uploadService';
 import { formatCheck as formatTool } from '../../utils/checkLabels';
 import type { GroupReviewStatus } from './FindingReviewControls';
 import { GroupReviewBar, MetricsLine, MissedIssues, ReasonChips, ReviewSummary } from './FindingReviewControls';
@@ -249,7 +249,7 @@ export function CaseRiskCard({
   // Ticks (the agents got it wrong) the officer changed but hasn't saved, by row key. A row without one shows its saved
   // verdict. The reasons given for false alarms, likewise.
   const [drafts, setDrafts] = useState<Record<string, boolean>>({});
-  const [reasonDrafts, setReasonDrafts] = useState<Record<string, FalseAlarmReason | null>>({});
+  const [reasonDrafts, setReasonDrafts] = useState<Record<string, ReviewReason | null>>({});
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   // Showing the confirm for "Save all reviews": every group's Save review in one go.
   const [confirmSaveAll, setConfirmSaveAll] = useState(false);
@@ -344,8 +344,9 @@ export function CaseRiskCard({
     return drafts[tick.key] ?? savedTick(tick);
   }
 
-  // Why a ticked scored finding is a false alarm: the officer's pick, else the saved one.
-  function reasonOf(tick: ReturnType<typeof ticks>[number]): FalseAlarmReason | null {
+  // Why a ticked finding is one the agents got wrong (a false alarm, or a set-aside one that is real): the officer's pick,
+  // else the saved one.
+  function reasonOf(tick: ReturnType<typeof ticks>[number]): ReviewReason | null {
     return reasonDrafts[tick.key] !== undefined ? reasonDrafts[tick.key] : (verdictFor(allReviews, tick.shown)?.reason ?? null);
   }
 
@@ -354,9 +355,10 @@ export function CaseRiskCard({
     return noteDrafts[tick.key] ?? verdictFor(allReviews, tick.shown)?.note ?? '';
   }
 
-  // A ticked false alarm is complete once it has a reason, and for "Other" a note.
+  // A ticked finding (the agents got it wrong) is complete once it has a reason, and for "Other" a note. Unticked, the
+  // officer agrees with the agents and there is nothing to explain.
   function lacksReason(tick: ReturnType<typeof ticks>[number]): boolean {
-    if (tick.setAside || !isTicked(tick)) return false;
+    if (!isTicked(tick)) return false;
     const reason = reasonOf(tick);
     return reason === null || (reason === 'other' && noteOf(tick).trim() === '');
   }
@@ -398,8 +400,8 @@ export function CaseRiskCard({
       return {
         members: tick.members,
         verdict: verdictOf(tick, ticked),
-        reason: ticked && !tick.setAside ? reasonOf(tick) : null,
-        note: ticked && !tick.setAside && reasonOf(tick) === 'other' ? noteOf(tick).trim() : null,
+        reason: ticked ? reasonOf(tick) : null,
+        note: ticked && reasonOf(tick) === 'other' ? noteOf(tick).trim() : null,
       };
     });
   }
@@ -459,11 +461,15 @@ export function CaseRiskCard({
             {count} {severity}
           </span>
         ))}
+        {document.dismissed.length > 0 && (
+          <span className="risk-severity risk-severity--dismissed">{document.dismissed.length} set aside</span>
+        )}
         {missedFor(document).length > 0 && (
           <span className="risk-severity risk-severity--missed">{missedFor(document).length} missed</span>
         )}
-        {document.findings.length === 0 && document.dismissed.length === 0 && missedFor(document).length === 0 && (
-          <span className="risk-document-none">✓ No findings</span>
+        {/* Nothing scored against it and nothing reported missed: clean, whatever the specialists set aside. */}
+        {document.findings.length === 0 && missedFor(document).length === 0 && (
+          <span className="risk-document-none">Clean</span>
         )}
         {reviews.data && (
           <ReviewTag status={groupStatus(document)} latest={latestVerdict(document)} />
@@ -577,6 +583,7 @@ export function CaseRiskCard({
                   {detail && <span className="risk-finding-rationale">{detail}</span>}
                   {reviews.data && isTicked(tick) && (
                     <ReasonChips
+                      kind="false_alarm"
                       reason={reasonOf(tick)}
                       note={noteOf(tick)}
                       disabled={saving}
@@ -630,9 +637,20 @@ export function CaseRiskCard({
                   <span className="risk-finding-check">{formatTool(finding.tool)}</span>
                   <span className="risk-finding-summary">{finding.summary}</span>
                   {finding.reason && <span className="risk-finding-rationale">Why set aside: {finding.reason}</span>}
-                    {reviews.data && !readOnly && (
-                      <span className="risk-finding-rationale">Tick it if it is a real issue after all.</span>
-                    )}
+                  {reviews.data && !readOnly && !isTicked(tick) && (
+                    <span className="risk-finding-rationale">Tick it if it is a real issue after all.</span>
+                  )}
+                  {reviews.data && isTicked(tick) && (
+                    <ReasonChips
+                      kind="set_aside"
+                      reason={reasonOf(tick)}
+                      note={noteOf(tick)}
+                      disabled={saving}
+                      readOnly={readOnly}
+                      onChange={(reason) => setReasonDrafts((current) => ({ ...current, [tick.key]: reason }))}
+                      onNoteChange={(note) => setNoteDrafts((current) => ({ ...current, [tick.key]: note }))}
+                    />
+                  )}
                   <AppliedFeedback ids={finding.feedback_ids} />
                 </span>
               </li>
@@ -731,11 +749,12 @@ export function CaseRiskCard({
                 Based on {scored.documents_scanned}{' '}
                 {scored.documents_scanned === 1 ? 'document' : 'documents'}
               </span>
-              {findings.length > 0 && (
+              {(findings.length > 0 || dismissedFindings.length > 0) && (
                 <span>
-                  {countBySeverity(findings)
-                    .map(([severity, count]) => `${count} ${severity}`)
-                    .join(' · ')}
+                  {[
+                    ...countBySeverity(findings).map(([severity, count]) => `${count} ${severity}`),
+                    ...(dismissedFindings.length > 0 ? [`${dismissedFindings.length} set aside`] : []),
+                  ].join(' · ')}
                 </span>
               )}
               {scored.reasons.map((reason) => (
@@ -803,7 +822,7 @@ export function CaseRiskCard({
                   <>
                     {missingReasons > 0 && (
                       <span className="group-review-incomplete" role="status">
-                        {missingReasons === 1 ? '1 false alarm needs a reason' : `${missingReasons} false alarms need a reason`}
+                        {missingReasons === 1 ? '1 finding needs a reason' : `${missingReasons} findings need a reason`}
                       </span>
                     )}
                     <button

@@ -72,6 +72,8 @@ class CrossDocFinding(BaseModel):
     breach_flags: list[str] = Field(default_factory=list)
     # Set by finding_keys once the run's findings are final; names its row in the findings table.
     fingerprint: str = ""
+    # The officer feedback (finding_feedback ids) the analysis was shown for this kind of finding.
+    feedback_ids: list[str] = Field(default_factory=list)
 
 
 class EvidenceRequest(BaseModel):

@@ -739,8 +739,8 @@
 }
 
 .group-review-status--saved {
-  background: var(--teal-bg);
-  color: var(--teal);
+  background: var(--steel-a10);
+  color: var(--steel-dark);
 }
 
 .group-review-status--unsaved {
@@ -800,7 +800,7 @@
   font-weight: 600;
 }
 
-/* Detection found nothing on this document: a green badge in the severity badges' place. */
+/* Detection found nothing on this document ("Clean"): a green badge in the severity badges' place. */
 .risk-document-none {
   padding: 2px 8px;
   border-radius: 4px;
@@ -1235,9 +1235,10 @@
   white-space: nowrap;
 }
 
+/* Reviewed is steel, not green: green is for a document with nothing found (Clean), and the two sit side by side. */
 .risk-review-tag--saved {
-  background: var(--teal-bg);
-  color: var(--teal);
+  background: var(--steel-a10);
+  color: var(--steel-dark);
 }
 
 .risk-review-tag--unsaved {

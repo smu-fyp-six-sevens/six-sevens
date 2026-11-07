@@ -15,7 +15,7 @@ from typing import Any, Literal, cast
 from pydantic import BaseModel
 
 from .feedback_scrub import scrub
-from .models import FalseAlarmReason, ReviewScope, ReviewVerdict
+from .models import ReviewReason, ReviewScope, ReviewVerdict
 from .supabase_client import service_supabase_client
 
 TABLE = "finding_feedback"
@@ -33,6 +33,9 @@ REASON_LABELS: dict[str, str] = {
     "tool_misread": "The tool misread the document",
     "explained_elsewhere": "Explained by another document",
     "not_relevant": "Not relevant to this application",
+    # Why a finding the specialists set aside was real after all.
+    "explanation_not_valid": "The explanation for setting it aside does not hold",
+    "part_of_a_pattern": "Part of a wider pattern",
     "other": "Other reason",
 }
 
@@ -79,7 +82,7 @@ def _item(row: dict[str, Any]) -> FeedbackItem:
 def save(
     *, source_key: str, case_id: str, document_id: str | None, scope: ReviewScope, kind: Literal["verdict", "missed"],
     check_name: str, check_code: str | None, document_type: str | None, verdict: ReviewVerdict | None,
-    reason: FalseAlarmReason | None, summary: str, note: str | None, reviewer: str, names: list[str],
+    reason: ReviewReason | None, summary: str, note: str | None, reviewer: str, names: list[str],
 ) -> None:
     """Saves (or replaces) the feedback this key names, scrubbed of confidential details."""
     service_supabase_client().table(TABLE).upsert({

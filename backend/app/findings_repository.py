@@ -205,7 +205,7 @@ def sign_off(case_id: str, scope: ReviewScope, document_id: str | None, reviewer
 def find_current(case_id: str, scope: ReviewScope, document_id: str | None, fingerprint: str) -> dict[str, Any] | None:
     """The finding this fingerprint names in the case now, or None when a later run replaced it."""
     query = (
-        service_supabase_client().table(TABLE).select("id, document_id, check_name, check_code, summary")
+        service_supabase_client().table(TABLE).select("id, document_id, check_name, check_code, summary, agent_decision, severity")
         .eq("case_id", case_id).eq("scope", scope).eq("fingerprint", fingerprint)
     )
     query = query.eq("document_id", document_id) if document_id is not None else query.is_("document_id", "null")

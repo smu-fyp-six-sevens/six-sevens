@@ -3,18 +3,19 @@ import { Link } from 'react-router-dom';
 import { getFindingFeedback } from '../../services/uploadService';
 import type { FeedbackDetail } from '../../services/uploadService';
 import { formatCheck } from '../../utils/checkLabels';
-import { falseAlarmReasonLabel } from '../../utils/falseAlarmReasons';
+import { reviewReasonLabel } from '../../utils/reviewReasons';
 import { officerName } from '../../lib/officers';
 
 // What an officer decided on the finding this item is about, in a few words.
 function itemVerdict(item: FeedbackDetail): string {
   if (item.kind === 'missed') return 'Missed by this check';
-  if (item.verdict === 'correct') return 'Confirmed real';
+  // A "real" verdict with a reason is a finding the specialists set aside that the officer found real after all.
+  if (item.verdict === 'correct') return item.reason ? 'Set aside wrongly' : 'Confirmed real';
   return 'False alarm';
 }
 
 function FeedbackItem({ item }: { item: FeedbackDetail }) {
-  const reason = item.reason_label ?? falseAlarmReasonLabel(item.reason as never);
+  const reason = item.reason_label ?? reviewReasonLabel(item.reason as never);
   return (
     <li>
       <details className="applied-feedback-item">

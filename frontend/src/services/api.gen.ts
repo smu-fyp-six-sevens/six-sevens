@@ -2837,6 +2837,8 @@ export interface components {
             confidence: number;
             /** Document Ids */
             document_ids: string[];
+            /** Feedback Ids */
+            feedback_ids: string[];
             /**
              * Fingerprint
              * @default
@@ -3298,7 +3300,7 @@ export interface components {
             /** Note */
             note: string | null;
             /** Reason */
-            reason: ("normal_for_document" | "within_tolerance" | "tool_misread" | "explained_elsewhere" | "not_relevant" | "other") | null;
+            reason: ("normal_for_document" | "within_tolerance" | "tool_misread" | "explained_elsewhere" | "not_relevant" | "explanation_not_valid" | "part_of_a_pattern" | "other") | null;
             /** Reviewer */
             reviewer: string;
             /**
@@ -4259,7 +4261,7 @@ export interface components {
             /** Note */
             note?: string | null;
             /** Reason */
-            reason?: ("normal_for_document" | "within_tolerance" | "tool_misread" | "explained_elsewhere" | "not_relevant" | "other") | null;
+            reason?: ("normal_for_document" | "within_tolerance" | "tool_misread" | "explained_elsewhere" | "not_relevant" | "explanation_not_valid" | "part_of_a_pattern" | "other") | null;
             /**
              * Scope
              * @enum {string}

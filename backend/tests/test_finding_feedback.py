@@ -113,3 +113,14 @@ async def test_a_specialist_is_shown_feedback_before_its_first_turn_and_records_
     system = model.ainvoke.call_args.args[0][0]
     assert "Fonts differ on stamps" in "".join(block["text"] for block in system.content)
     assert update["feedback_shown"] == {"font_consistency_tool": [shown["font_consistency_tool"][0].id]}
+
+
+def test_a_set_aside_finding_found_real_is_shown_as_set_aside_wrongly_with_its_reason() -> None:
+    text = detection_feedback.render({"metadata_tool": [
+        _item(1, verdict="correct", reason="part_of_a_pattern", summary="Author field blank", note="Same on three payslips"),
+        _item(2, verdict="correct", reason=None, summary="Edited after issue"),
+    ]})
+    assert "SET ASIDE WRONGLY, it was real (Part of a wider pattern)" in text
+    assert "Same on three payslips" in text
+    # A plain confirmation (no reason) still reads as one.
+    assert "CONFIRMED real" in text

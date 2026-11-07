@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import type { FalseAlarmReason, FindingReview, MetricsSummary, ReviewScope } from '../../services/uploadService';
+import type { ReviewReason, FindingReview, MetricsSummary, ReviewScope } from '../../services/uploadService';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { Rate } from '../../components/Rate';
 import { RATE_MEANING, belowTargetNote, formatCheck } from '../../utils/checkLabels';
 import { InfoLabel } from '../../components/InfoTip';
 import { officerName } from '../../lib/officers';
 import { Icon } from '../../components/Icon';
-import { FALSE_ALARM_REASONS, falseAlarmReasonLabel } from '../../utils/falseAlarmReasons';
+import { FALSE_ALARM_REASONS, SET_ASIDE_REASONS, reviewReasonLabel } from '../../utils/reviewReasons';
 
 export type GroupReviewStatus = 'not_reviewed' | 'saved' | 'unsaved';
 
@@ -60,7 +60,7 @@ export function GroupReviewBar({
       <div className="group-review-actions">
         {incomplete > 0 && (
           <span className="group-review-incomplete" role="status">
-            {incomplete === 1 ? '1 false alarm needs a reason' : `${incomplete} false alarms need a reason`}
+            {incomplete === 1 ? '1 finding needs a reason' : `${incomplete} findings need a reason`}
           </span>
         )}
         <span className={`group-review-status group-review-status--${status}`}>
@@ -79,9 +79,10 @@ export function GroupReviewBar({
   );
 }
 
-// Under a finding ticked as a false alarm: why, in one click, which is required; "Other" also needs a note. Read-only,
-// it shows the saved reason.
+// Under a ticked finding: why the agents got it wrong, in one click, which is required; "Other" also needs a note. On a
+// finding they kept it is a false alarm; on one they set aside it is a real issue. Read-only, it shows the saved reason.
 export function ReasonChips({
+  kind,
   reason,
   note,
   disabled,
@@ -89,26 +90,32 @@ export function ReasonChips({
   onChange,
   onNoteChange,
 }: {
-  reason: FalseAlarmReason | null;
+  kind: 'false_alarm' | 'set_aside';
+  reason: ReviewReason | null;
   note: string;
   disabled: boolean;
   readOnly: boolean;
-  onChange: (reason: FalseAlarmReason) => void;
+  onChange: (reason: ReviewReason) => void;
   onNoteChange: (note: string) => void;
 }) {
+  const setAside = kind === 'set_aside';
   if (readOnly) {
-    const label = falseAlarmReasonLabel(reason);
+    const label = reviewReasonLabel(reason);
     return label ? (
       <span className="false-alarm-reason">
-        False alarm: {label}
+        {setAside ? 'Set aside wrongly' : 'False alarm'}: {label}
         {note && ` — ${note}`}
       </span>
     ) : null;
   }
   return (
-    <span className="false-alarm-reasons" role="group" aria-label="Why is this a false alarm?">
-      <span className="false-alarm-reasons-label">False alarm because (required)</span>
-      {FALSE_ALARM_REASONS.map((entry) => (
+    <span
+      className="false-alarm-reasons"
+      role="group"
+      aria-label={setAside ? 'Why were the agents wrong to set this aside?' : 'Why is this a false alarm?'}
+    >
+      <span className="false-alarm-reasons-label">{setAside ? 'Real issue because (required)' : 'False alarm because (required)'}</span>
+      {(setAside ? SET_ASIDE_REASONS : FALSE_ALARM_REASONS).map((entry) => (
         <button
           key={entry.value}
           type="button"

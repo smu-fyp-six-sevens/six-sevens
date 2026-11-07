@@ -244,6 +244,7 @@ def contributing_from_cross_document(
         category=finding.category.value,
         source="cross_document",
         fingerprint=finding.fingerprint,
+        feedback_ids=finding.feedback_ids,
     )
 
 

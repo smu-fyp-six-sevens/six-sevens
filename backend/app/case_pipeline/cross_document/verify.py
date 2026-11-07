@@ -150,4 +150,6 @@ def verify_verdict(
         document_ids=document_ids,
         probe_summary=plain_text(str(verdict.get("probe_summary") or ""))[:400],
         breach_flags=flags,
+        # What the analysis was shown for this kind of finding (none for the kinds code decides).
+        feedback_ids=context.feedback_ids.get(category.value, []),
     ), ""

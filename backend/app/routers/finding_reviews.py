@@ -30,6 +30,7 @@ from ..feedback_scrub import names_in
 from ..auth import CurrentUser
 from ..events import officer_event, types
 from ..models import (
+    FALSE_ALARM_REASONS, SET_ASIDE_REASONS,
     CaseFindingReviews, CaseRecord, CaseStage, DetectionMetrics, FindingReview, ReportMissedIssueRequest,
     SetFindingVerdictsRequest, SignOffRequest, UpdateMissedIssueRequest,
 )
@@ -110,6 +111,33 @@ async def _withdraw_feedback(source_key: str) -> None:
         logger.exception("Failed to withdraw feedback %s", source_key)
 
 
+def _check_reason(verdict: str | None, reason: str | None, row: dict) -> None:
+    """
+    Saying the agents got a finding wrong says why. For one they kept (not dismissed, not info) that is a false alarm: a
+    "wrong" verdict with one of the false-alarm reasons. For one they set aside it is a real issue: a "correct" verdict
+    with one of the set-aside reasons. Agreeing with them (a kept finding left real, a set-aside one left wrong) has no
+    reason, so none is asked for or accepted.
+    """
+    set_aside = row.get("agent_decision") == "dismissed" or row.get("severity") == "info"
+    if verdict == "wrong" and not set_aside:
+        allowed, needs = FALSE_ALARM_REASONS, "A false alarm needs a reason."
+    elif verdict == "correct" and set_aside:
+        allowed, needs = SET_ASIDE_REASONS, "A finding the specialists set aside needs a reason when it is real."
+    else:
+        allowed, needs = (), None
+    if needs is None:
+        if reason is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="That verdict agrees with the agents, so it has no reason.",
+            )
+        return
+    if reason is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=needs)
+    if reason not in allowed:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="That reason does not fit this finding.")
+
+
 async def _review_in_case(case_id: str, review_id: UUID) -> FindingReview:
     review = await asyncio.to_thread(findings_repository.get_review, str(review_id))
     if review is None or review.case_id != case_id:
@@ -186,6 +214,7 @@ async def set_finding_verdicts(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="A finding was replaced by a newer run. Reload the case and review again.",
                 )
+            _check_reason(item.verdict, item.reason, row)
             targets.append((item.scope, document_id, row["id"]))
             found.append(row)
         for (_, _, row_id), item in zip(targets, request.verdicts):

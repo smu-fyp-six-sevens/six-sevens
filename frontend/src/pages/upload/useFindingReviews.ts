@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
   CaseFindingReviews,
-  FalseAlarmReason,
+  ReviewReason,
   FindingReview,
   FindingVerdictInput,
   ReviewScope,
@@ -41,7 +41,7 @@ function reviewDocument(finding: ReviewTarget): string | null {
 export interface VerdictRow {
   members: ReviewTarget[];
   verdict: ReviewVerdict;
-  reason?: FalseAlarmReason | null;
+  reason?: ReviewReason | null;
   note?: string | null;
 }
 

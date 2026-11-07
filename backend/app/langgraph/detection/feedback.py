@@ -42,6 +42,9 @@ async def feedback_for(tools: list[str], case_id: str, document_type: str | None
 def _line(item: FeedbackItem) -> str:
     if item.kind == "missed":
         said = "MISSED by this check"
+    elif item.verdict == "correct" and item.reason:
+        # A finding the specialists set aside that the officer found real: the agents were wrong to set it aside.
+        said = f"SET ASIDE WRONGLY, it was real ({REASON_LABELS.get(item.reason, item.reason)})"
     elif item.verdict == "correct":
         said = "CONFIRMED real"
     else:
