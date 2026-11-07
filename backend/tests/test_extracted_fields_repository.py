@@ -99,6 +99,10 @@ def db(monkeypatch) -> FakeSupabase:
     return fake
 
 
+def _without_id(field: ExtractedField) -> tuple:
+    return (field.field_name, field.field_type, field.field_value, field.confidence)
+
+
 def _field_row(document_id: str, name: str, value, field_type: str, confidence: float, **extra) -> dict:
     return {
         "document_id": document_id, "field_name": name, "field_type": field_type, "field_value": value,
@@ -113,9 +117,10 @@ def test_get_extracted_fields_returns_only_that_documents_fields(db) -> None:
 
     fields = extracted_fields_repository.get_extracted_fields("doc-1")
 
-    assert sorted(fields, key=lambda f: f.field_name) == [
-        ExtractedField(field_name="individual_name", field_type="string", field_value="Jane Tan", confidence=0.95),
-        ExtractedField(field_name="net_pay", field_type="number", field_value=5000, confidence=0.9),
+    assert all(field.id for field in fields)  # each field carries its row id, which the officer's edits address
+    assert sorted(_without_id(f) for f in fields) == [
+        ("individual_name", "string", "Jane Tan", 0.95),
+        ("net_pay", "number", 5000, 0.9),
     ]
 
 
@@ -138,9 +143,7 @@ def test_get_extracted_fields_for_documents_groups_rows_by_document_id(db) -> No
 
     assert set(by_document) == {"doc-1", "doc-2"}
     assert len(by_document["doc-1"]) == 2
-    assert by_document["doc-2"] == [
-        ExtractedField(field_name="bank_name", field_type="string", field_value="OCBC", confidence=0.8)
-    ]
+    assert [_without_id(f) for f in by_document["doc-2"]] == [("bank_name", "string", "OCBC", 0.8)]
 
 
 def test_add_extracted_field_stores_a_human_verified_row(db) -> None:
