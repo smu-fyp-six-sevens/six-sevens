@@ -184,6 +184,8 @@ export type CaseAnalysisOverview = Schemas['CaseAnalysisOverview'];
 export type WaitingDocument = Schemas['WaitingDocument'];
 // A run's headline, cited reasons and "would help" line (backend case_pipeline/risk/summary.py).
 export type AnalysisSummary = Schemas['AnalysisSummary'];
+export type AdverseMediaCheck = Schemas['AdverseMediaCheck'];
+export type AdverseMediaSource = Schemas['AdverseMediaSource'];
 // One row of GET /cases/{id}/analysis/runs, newest first.
 export type CaseAnalysisRunItem = Schemas['CaseAnalysisRunItem'];
 export type CrossDocFinding = Schemas['CrossDocFinding'];
