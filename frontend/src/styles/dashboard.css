@@ -337,7 +337,7 @@
 /* Needs attention: one row per waiting case, opening it. */
 .attention-list { display: grid; margin: 0 -8px; padding: 0; list-style: none; }
 .attention-list li + li { border-top: 1px solid var(--line); }
-.attention-row { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(120px, 1.35fr) minmax(0, 1fr) auto 64px; align-items: center; gap: 14px; width: 100%; padding: 11px 8px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; }
+.attention-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 1fr) minmax(118px, .62fr) 64px; align-items: center; gap: 14px; width: 100%; padding: 11px 8px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; }
 button.attention-row { cursor: pointer; }
 button.attention-row:hover { background: var(--slate-97); }
 button.attention-row:focus-visible { outline: 2px solid var(--steel); outline-offset: -2px; }

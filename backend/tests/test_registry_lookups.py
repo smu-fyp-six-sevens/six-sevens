@@ -83,6 +83,10 @@ def _codes(result, code: str) -> list:
     return [f for f in result.findings if f.check_code == code]
 
 
+def _skipped_codes(result, code: str) -> list:
+    return [check for check in result.skipped_checks if check.check_code == code]
+
+
 @pytest.fixture
 def ocbc_registry():
     datasets = {"d_3f960c10fed6145404ca7b821f263b87": [_OCBC_BASIC], "d_5c4ef48b025fdfbc80056401f06e3df9": [_OCBC_DETAIL]}
@@ -432,13 +436,14 @@ def test_ura_unit_numbers_are_read_as_singapore_prints_them() -> None:
 
 
 
-async def test_a_home_address_without_a_unit_at_a_building_ura_does_not_approve_is_a_signal(ura_key) -> None:
-    # OCBC Centre given as a home with no unit: a condo home has a unit, and offices are never approved.
+async def test_a_home_address_without_a_unit_cannot_be_checked_at_unit_level(ura_key) -> None:
+    # Without a unit, URA cannot identify which dwelling to check; do not infer fraud from the omission.
     with patch("app.fraud_detection.external_validation.registry_lookups.onemap.addresses_at_postal_code",
                _onemap("65", "CHULIA STREET", "049513", "OCBC CENTRE")), _zone("COMMERCIAL"), _ura(False):
         result = await verify_against_registries(
             "d", [_field("individual_address", "65 Chulia Street OCBC Centre Singapore 049513")], "nric")
-    assert [f.severity for f in _codes(result, "REG.UNIT_MISSING")] == ["signal"]
+    assert _codes(result, "REG.UNIT_MISSING") == []
+    assert len(_skipped_codes(result, "REG.UNIT_MISSING")) == 1
 
 
 async def test_an_approved_landed_house_needs_no_unit(ura_key) -> None:
@@ -449,7 +454,7 @@ async def test_an_approved_landed_house_needs_no_unit(ura_key) -> None:
     assert result.findings == []
 
 
-async def test_hdb_units_are_checked_against_the_blocks_storeys_and_need_a_unit() -> None:
+async def test_hdb_units_are_checked_against_the_blocks_storeys_but_missing_unit_is_unverified() -> None:
     row = [{"blk_no": "22", "street": "BEDOK STH AVE 1", "residential": "Y", "commercial": "N", "max_floor_lvl": "14"}]
 
     async def run(text: str):
@@ -460,7 +465,9 @@ async def test_hdb_units_are_checked_against_the_blocks_storeys_and_need_a_unit(
     assert (await run("Blk 22 Bedok South Avenue 1 #14-11 Singapore 460022")).findings == []
     too_high = _codes(await run("Blk 22 Bedok South Avenue 1 #15-11 Singapore 460022"), "REG.UNIT_STOREY")
     assert [f.severity for f in too_high] == ["impossible"] and "14 storeys" in too_high[0].summary
-    assert len(_codes(await run("Blk 22 Bedok South Avenue 1 Singapore 460022"), "REG.UNIT_MISSING")) == 1
+    missing_unit = await run("Blk 22 Bedok South Avenue 1 Singapore 460022")
+    assert _codes(missing_unit, "REG.UNIT_MISSING") == []
+    assert len(_skipped_codes(missing_unit, "REG.UNIT_MISSING")) == 1
 
 
 # --- URA approved use x zone: each zone class, with and without a unit -------------------------------------------
@@ -515,9 +522,10 @@ async def test_a_home_address_in_an_industrial_zone_is_inconsistent_whatever_ura
 
 
 @pytest.mark.parametrize("zone", [None, "RESIDENTIAL", "WHITE", "COMMERCIAL"])
-async def test_a_home_with_no_unit_at_a_building_ura_does_not_approve_is_a_unit_missing_signal(ura_key, zone) -> None:
+async def test_a_home_with_no_unit_at_a_building_ura_does_not_approve_is_unverified(ura_key, zone) -> None:
     result = await _home("2 Marina Boulevard Singapore 018987", zone, approved=False)
-    assert [f.severity for f in _codes(result, "REG.UNIT_MISSING")] == ["signal"], zone
+    assert _codes(result, "REG.UNIT_MISSING") == [], zone
+    assert len(_skipped_codes(result, "REG.UNIT_MISSING")) == 1, zone
     assert _codes(result, "REG.RESIDENTIAL_ADDRESS") == []
 
 

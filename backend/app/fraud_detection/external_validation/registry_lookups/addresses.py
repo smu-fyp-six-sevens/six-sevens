@@ -2,7 +2,8 @@
 
 REG.POSTAL_CODE_EXISTS; REG.ADDRESS_MATCH (block and street are at that postal code); REG.RESIDENTIAL_ADDRESS (a home
 can be lived in); REG.COMPANY_ADDRESS_RESIDENTIAL (company at a home, only a signal: the Home Office Schemes allow it);
-REG.UNIT_STOREY (an HDB unit is no higher than its block); REG.UNIT_MISSING (a home in flats or a condo has a unit number).
+REG.UNIT_STOREY (an HDB unit is no higher than its block). An address without a unit number cannot be checked at
+unit level and is returned as a skipped check, not a fraud finding.
 
 Best source first: an HDB block by HDB's register; a private building by URA's approved-use answer for the unit ("Y" is
 an approved home, "NA" a non-home or a unit URA has no record of), then by zoning (Business 1/2 allows no homes;
@@ -15,7 +16,7 @@ Home address, private building:
 * unit not approved, shophouse zone                  fine
 * unit not approved, Residential zone or no zone     signal
 * unit not approved, any other zone                  implausible
-* no unit given, not approved                        signal (REG.UNIT_MISSING)
+* no unit given                                       skipped (REG.UNIT_MISSING)
 Company address: HDB flats only, a unit URA approves, or (only if URA gave no answer) a purely Residential zone: signal.
 """
 
@@ -194,6 +195,7 @@ async def _building_use(address: _Address, results: list[dict]) -> Outcome:
     if building.get("BLK_NO") and building.get("ROAD_NAME"):
         block = await hdb.hdb_block(str(building["BLK_NO"]), str(building["ROAD_NAME"]))
     findings: list[RegistryFinding] = []
+    skips: list[SkippedCheck] = []
     unit = ura.unit_of(address.text)
     if block is not None:
         # An HDB block: HDB's register says exactly what's in it.
@@ -205,11 +207,10 @@ async def _building_use(address: _Address, results: list[dict]) -> Outcome:
                 hdb.SOURCE, address, expected=f"a storey from 1 to {block.max_floor}",
             ))
         if address.residential and block.residential and unit is None:
-            findings.append(_finding(
-                "REG.UNIT_MISSING", "signal",
-                f"{address.label} gives no unit number, but HDB block {block.block} {block.street} is a block of "
-                f"flats: a home there has one{address.also}",
-                hdb.SOURCE, address, expected="a unit number (#storey-unit)",
+            skips.append(SkippedCheck(
+                check_code="REG.UNIT_MISSING",
+                reason=(f"{address.field}: HDB block {block.block} {block.street} is residential, but no unit "
+                        "number was provided, so the specific dwelling could not be checked"),
             ))
         if address.residential and not block.residential:
             findings.append(_finding(
@@ -227,7 +228,7 @@ async def _building_use(address: _Address, results: list[dict]) -> Outcome:
                 severity_note="Allowed under HDB's Home Office Scheme for small businesses; worth confirming against "
                               "the company's size and activity",
             ))
-        return findings, []
+        return findings, skips
 
     zone, zone_skip = await _zone(address, building)
     approved, ura_skip = await _approved_use(address, building)
@@ -247,14 +248,12 @@ async def _building_use(address: _Address, results: list[dict]) -> Outcome:
                               "zone boundary can read as its neighbour's zone",
             ))
         elif approved is False and unit is None and zone not in SHOPHOUSE_ZONES:
-            # A landed house is approved without a unit; a condominium only with one, and an office never.
-            findings.append(_finding(
-                "REG.UNIT_MISSING", "signal",
-                f"{address.label} gives no unit number, and URA has no approval for residential use for {building_name}"
-                f"{zoned} as given: a home in a condominium has a unit number, and a building with none approved "
-                f"isn't a home{address.also}",
-                ura.SOURCE, address, expected="a unit number (#storey-unit), or a house approved for residential use",
-                severity_note="URA's approved-use data leaves out shophouse homes and developments without TOP",
+            # Without a unit number, URA's unit-level response cannot establish
+            # whether this particular dwelling is approved for residential use.
+            skips.append(SkippedCheck(
+                check_code="REG.UNIT_MISSING",
+                reason=(f"{address.field}: no unit number was provided for {building_name}{zoned}, so URA's "
+                        "unit-level residential-use check could not identify the dwelling"),
             ))
         elif approved is False and unit and zone not in SHOPHOUSE_ZONES:
             # "implausible" needs a KNOWN zone that is neither meant for homes nor shophouse land: with no zone
