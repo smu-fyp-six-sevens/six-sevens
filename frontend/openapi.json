@@ -726,6 +726,84 @@
         "title": "AdditionalDocuments",
         "type": "object"
       },
+      "AdverseMediaCheck": {
+        "description": "A web search for recent sanctions, regulatory action or negative news about the applicant company. It is a\ndue-diligence aid for the officer only: it never feeds the risk score or creates a finding.",
+        "properties": {
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "query": {
+            "default": "",
+            "title": "Query",
+            "type": "string"
+          },
+          "reused": {
+            "default": false,
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/AdverseMediaSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "clean",
+              "concerns",
+              "skipped",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "query",
+          "summary",
+          "sources",
+          "checked_at",
+          "reused"
+        ],
+        "title": "AdverseMediaCheck",
+        "type": "object"
+      },
+      "AdverseMediaSource": {
+        "description": "One page the adverse-media search cited, so an officer can read it themselves.",
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "url"
+        ],
+        "title": "AdverseMediaSource",
+        "type": "object"
+      },
       "AgentDecision": {
         "description": "One model agent's decision and its bounded self-reported confidence.",
         "properties": {
@@ -1469,6 +1547,16 @@
               }
             ]
           },
+          "adverse_media": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdverseMediaCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "audit": {
             "$ref": "#/components/schemas/AnalysisAudit"
           },
@@ -1618,6 +1706,7 @@
           "additional_documents",
           "consistent_checks",
           "clean_checks",
+          "adverse_media",
           "audit",
           "trace",
           "stale"

@@ -8,7 +8,7 @@ from typing import Any
 from ..models import CaseRisk, SupportingDocumentRecommendation
 from ..supabase_client import supabase_client
 from ..supabase_rows import row as _row
-from .models import AnalysisAudit, AnalysisSummary, CaseAnalysis, CrossDocFinding, RiskOutlook
+from .models import AdverseMediaCheck, AnalysisAudit, AnalysisSummary, CaseAnalysis, CrossDocFinding, RiskOutlook
 
 _TABLE = "case_analysis_runs"
 # What a snapshot or summary needs from a run: no trace, outlook or audit, which are large.
@@ -44,6 +44,7 @@ def _to_analysis(row: dict) -> CaseAnalysis:
         supporting_documents=[SupportingDocumentRecommendation(**s) for s in result.get("supporting_documents") or []],
         consistent_checks=[str(c) for c in result.get("consistent_checks") or []],
         clean_checks=[str(c) for c in result.get("clean_checks") or []],
+        adverse_media=AdverseMediaCheck(**result["adverse_media"]) if result.get("adverse_media") else None,
         audit=AnalysisAudit(**(result.get("audit") or {})),
         trace=row.get("trace") or [],
     )
@@ -101,6 +102,19 @@ def latest_run_brief(case_id: str) -> tuple[str, datetime, str] | None:
     return str(row["status"]), datetime.fromisoformat(str(row["started_at"])), str(row["fingerprint"])
 
 
+def latest_adverse_media(case_id: str) -> AdverseMediaCheck | None:
+    """The media check of the case's newest complete run that has one, without reading the rest of the result."""
+    rows = (
+        supabase_client.table(_TABLE).select("adverse_media:result->adverse_media").eq("case_id", case_id)
+        .eq("status", "complete").order("started_at", desc=True).limit(5).execute().data or []
+    )
+    for row in rows:
+        stored = _row(row).get("adverse_media")
+        if stored:
+            return AdverseMediaCheck(**stored)
+    return None
+
+
 def count_runs_since(case_id: str, since: datetime) -> int:
     rows = (
         supabase_client.table(_TABLE).select("run_id").eq("case_id", case_id)
@@ -146,6 +160,7 @@ def finish_run(analysis: CaseAnalysis) -> bool:
         "supporting_documents": [s.model_dump(mode="json") for s in analysis.supporting_documents],
         "consistent_checks": analysis.consistent_checks,
         "clean_checks": analysis.clean_checks,
+        "adverse_media": analysis.adverse_media.model_dump(mode="json") if analysis.adverse_media else None,
         "audit": analysis.audit.model_dump(mode="json"),
     }
     supabase_client.table(_TABLE).update({

@@ -124,6 +124,37 @@ class AnalysisAudit(BaseModel):
 AnalysisStatus = Literal["running", "complete", "failed", "superseded"]
 
 
+class AdverseMediaSource(BaseModel):
+    """One page the adverse-media search cited, so an officer can read it themselves."""
+
+    title: str
+    url: str
+
+
+# clean: searched and found nothing concerning. concerns: found something worth a look. skipped: no company name to
+# search, or the feature is off. failed: the search could not run.
+AdverseMediaStatus = Literal["clean", "concerns", "skipped", "failed"]
+
+
+class AdverseMediaCheck(BaseModel):
+    """
+    A web search for recent sanctions, regulatory action or negative news about the applicant company. It is a
+    due-diligence aid for the officer only: it never feeds the risk score or creates a finding.
+    """
+
+    status: AdverseMediaStatus
+    # The company name that was searched.
+    query: str = ""
+    # One plain line for the officer: what the search found, or why it didn't run.
+    summary: str = ""
+    sources: list[AdverseMediaSource] = Field(default_factory=list)
+    # When the search ran. A reused check keeps its original time, so the officer can see how old it is.
+    checked_at: datetime | None = None
+    # True when this run used the case's cached check (searched under CACHE_HOURS ago, same company) instead of
+    # searching again (adverse_media.reuse_recent).
+    reused: bool = False
+
+
 class SummaryReason(BaseModel):
     text: str
     # The contributing finding (CaseRisk.contributing_findings) the reason rests on. A document's finding ids are
@@ -162,6 +193,9 @@ class CaseAnalysis(BaseModel):
     consistent_checks: list[str] = Field(default_factory=list)
     # Detection checks (tool names) that examined the documents and raised nothing.
     clean_checks: list[str] = Field(default_factory=list)
+    # A web search for recent adverse media about the company. Informational only; never scored. None on an older
+    # run from before the check existed, or when the feature is off.
+    adverse_media: AdverseMediaCheck | None = None
     audit: AnalysisAudit = Field(default_factory=AnalysisAudit)
     # Step-by-step log of the run, for debugging. Includes hypotheses that were tried and dropped.
     trace: list[dict[str, Any]] = Field(default_factory=list)

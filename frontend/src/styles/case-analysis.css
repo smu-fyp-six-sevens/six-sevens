@@ -207,6 +207,54 @@
   font-size: 13px;
 }
 
+/* Media check (pages/upload/AnalysisSummaryBlock.tsx): a due-diligence note, never part of the score. Shown whole,
+   never clamped: the backend's prompt keeps it to one short sentence. */
+.analysis-brief-media {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--slate-88);
+  border-left: 3px solid var(--teal);
+  border-radius: 8px;
+  background: var(--white);
+  font-size: 13px;
+}
+
+.analysis-brief-media--concerns {
+  border-left-color: var(--amber, #b7791f);
+  background: var(--amber-tint, #fdf6ec);
+}
+
+.analysis-brief-media--muted {
+  border-left-color: var(--slate-88);
+  color: var(--ink-soft);
+}
+
+.analysis-brief-media-text span[aria-label='clear'] {
+  color: var(--teal);
+  font-weight: 700;
+}
+
+.analysis-brief-media-when {
+  flex-basis: 100%;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.analysis-brief-media-sources {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+}
+
+.analysis-brief-media-sources a {
+  color: var(--steel);
+}
+
 /* Previous runs (pages/upload/PreviousRuns.tsx) */
 .analysis-run-list {
   display: grid;
