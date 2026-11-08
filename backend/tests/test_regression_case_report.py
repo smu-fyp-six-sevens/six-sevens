@@ -3,7 +3,7 @@ Regression tests (SCRUM-323) for the case report — "Test Cases - Sprint 5.xlsx
 Report (SCRUM-82): CM-075 – CM-085.
 
 Each test downloads the report through the real GET /cases/{id}/report.pdf, which runs the real gather() and
-render() (case_report.py), and reads the PDF it returns. The case is the real GLDB-02 Anchorpoint case captured from
+render() (app/case_report/), and reads the PDF it returns. The case is the real GLDB-02 Anchorpoint case captured from
 Supabase, with its documents and their extracted fields; its summary (checklist, stage) is built by the real
 case_service.build_summary from those documents. Only the database reads are in memory. A finished case analysis
 carries the risk the real scoring computes (test_regression_case_views.py's scored case).
@@ -71,13 +71,13 @@ class ReportCase:
 
 def wire(monkeypatch, case: ReportCase) -> ReportCase:
     """Puts the case in place of the database reads gather() makes."""
-    monkeypatch.setattr(case_report.case_service, "get_case_summary", lambda case_id: case.summary())
-    monkeypatch.setattr(case_report.document_repository, "list_documents", case.list_documents)
-    monkeypatch.setattr(case_report.extracted_fields_repository, "get_extracted_fields_for_documents", case.fields_for)
-    monkeypatch.setattr(case_report.analysis_service, "get_current", lambda case_id: case.analysis)
-    monkeypatch.setattr(case_report.analysis_repository, "list_runs", lambda case_id: [])
-    monkeypatch.setattr(case_report.notes_repository, "list_notes", lambda case_id: case.notes)
-    monkeypatch.setattr(case_report.audit, "list_events", lambda **kwargs: [])
+    monkeypatch.setattr(case_report.data.case_service, "get_case_summary", lambda case_id: case.summary())
+    monkeypatch.setattr(case_report.data.document_repository, "list_documents", case.list_documents)
+    monkeypatch.setattr(case_report.data.extracted_fields_repository, "get_extracted_fields_for_documents", case.fields_for)
+    monkeypatch.setattr(case_report.data.analysis_service, "get_current", lambda case_id: case.analysis)
+    monkeypatch.setattr(case_report.data.analysis_repository, "list_runs", lambda case_id: [])
+    monkeypatch.setattr(case_report.data.notes_repository, "list_notes", lambda case_id: case.notes)
+    monkeypatch.setattr(case_report.data.audit, "list_events", lambda **kwargs: [])
     return case
 
 
