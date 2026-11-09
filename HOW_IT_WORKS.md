@@ -55,7 +55,7 @@ The officer can edit or delete fields, correct the document type (which re-runs 
 The case page also shows the **requirements checklist** (required types, proof of address per person, both sides of each ID).
 
 ### Step 5: The Detection Agent (`approved` → `detecting` → `detected`)
-Approval publishes `document.approved`; the detection-worker runs it, **two runs at a time** per process (`DETECTION_CONCURRENCY`); the rest wait, shown as "Approved". A cancel or retry is an event too. The run ends with `document.detected` or `detection.failed`.
+Approval publishes `document.approved`; the detection-worker runs it, **two runs at a time** per process (`DETECTION_CONCURRENCY`); the rest wait, shown as "Approved". A cancel or retry is an event too. The run ends with `document.detected` or `detection.failed`. Before a run starts, the worker claims the document with a compare-and-swap to `detecting` (from `approved`; a retry may also start from `detected`), so a redelivered approval finds it taken and does nothing; a repeat while the run is still going in the same process is ignored without touching the database. The case-worker likewise claims the analysis run (`case_analysis_runs.worker_started_at`), and an approval only goes through from `analyzed`, so two at once publish one event.
 
 1. **Load context.** The document and its fields are fetched once and shared by every tool in the run. The file's contents are read too (`fraud_detection/shared/file_facts.py`): its kind, page count, whether a PDF has selectable text, and the size of each distinct embedded image.
 2. **Lead plans (Sonnet).** One brief per specialist. The lead sees those file facts and says which checks do not apply.
@@ -254,7 +254,7 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 **Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks, cancel and rerun; every finding stored with the agents' decision and the officer's verdict (dismissed ones included); the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; case notes; cost logging and per-case Claude cost (every run: retries, reruns, cancelled and failed runs, earlier analyses, deleted documents); the service split on Cloud Run (roles, domain events, Pub/Sub push, audit trail, stuck-work recovery, `/metrics`, Grafana, traces, alerts), Kong, the compose stack, Terraform, and CI/CD that deploys every green push to `main` (`CLOUD_ARCHITECTURE_PLAN.md`).
 
-**Not built:** the Output Aggregator; the case dashboard (`/dashboard` is mock data). Open items are in `PENDING_WORK.md` and the cloud plan's section 9.
+**Not built:** open items are in `PENDING_WORK.md` and the cloud plan's section 9.
 
 ## 10. Known rough edges
 

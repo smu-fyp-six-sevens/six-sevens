@@ -33,6 +33,13 @@ class _LazyReader:
 reader = _LazyReader()
 
 
+def _bbox(box) -> list[float]:
+    """RapidOCR's four corner points as [x0, y0, x1, y1]."""
+    xs = [float(point[0]) for point in box]
+    ys = [float(point[1]) for point in box]
+    return [round(min(xs), 1), round(min(ys), 1), round(max(xs), 1), round(max(ys), 1)]
+
+
 def extract_image_with_ocr(image, page_number: int = 1) -> dict:
     if isinstance(image, Image.Image):
         image = np.array(image.convert("RGB"))
@@ -47,11 +54,13 @@ def extract_image_with_ocr(image, page_number: int = 1) -> dict:
     if result.boxes is not None:
         # boxes/txts/scores are produced together by the same detection pass.
         assert result.txts is not None and result.scores is not None
-        for text, confidence in zip(result.txts, result.scores):
+        for box, text, confidence in zip(result.boxes, result.txts, result.scores):
             elements.append({
                 "text": text,
                 "confidence": float(confidence),
-                "extraction_method": "ocr"
+                "extraction_method": "ocr",
+                # Where the line sits, [x0, y0, x1, y1] in the image's pixels from the top-left.
+                "bbox": _bbox(box),
             })
 
     return {

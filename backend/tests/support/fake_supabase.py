@@ -6,7 +6,7 @@ It answers the part of the query builder the repositories use:
 * select with "*", columns, "alias:column", JSON paths ("result->risk->score") and an inner join to another table
   ("cases!inner(id)"), which joins on this table's "<table, singular>_id" column (findings.case_id -> cases.id) and
   lets a filter name the joined table's columns ("cases.created_at");
-* eq, is_ (only "null"), not_.is_, gte, lt, in_, filter(path, "cs", json) for JSON containment, order, limit, range;
+* eq, neq, is_ (only "null"), not_.is_, gte, lt, in_, filter(path, "cs", json) for JSON containment, order, limit, range;
 * insert, update and delete (each returning the rows it wrote, as PostgREST does with return=representation), upsert
   on the table's key (or on_conflict), updating only the columns given;
 * rpc, answered by a function the test registers.
@@ -29,6 +29,7 @@ Row = dict[str, Any]
 @dataclass
 class Result:
     data: Any
+    count: int | None = None  # the rows the query matched before limit and range, when select asked for a count
 
 
 def _path(row: Row, path: str) -> Any:
@@ -66,10 +67,12 @@ class Query:
         self._values: Any = None
         self._on_conflict: tuple[str, ...] | None = None
         self._negate_next = False
+        self._count = False
 
     # --- what the query does ---------------------------------------------------------------------------
 
-    def select(self, columns: str = "*") -> Query:
+    def select(self, columns: str = "*", count: Any = None) -> Query:
+        self._count = count is not None
         self._columns = columns
         self._joins = [item.split("!")[0] for item in _split_top_level(columns) if "!inner(" in item]
         return self
@@ -113,6 +116,9 @@ class Query:
 
     def eq(self, column: str, value: Any) -> Query:
         return self._where(lambda row: self._value(row, column) == value)
+
+    def neq(self, column: str, value: Any) -> Query:
+        return self._where(lambda row: self._value(row, column) != value)
 
     def is_(self, column: str, value: str) -> Query:
         if value != "null":
@@ -177,11 +183,12 @@ class Query:
             return Result(copy.deepcopy(matched))
         for column, desc in reversed(self._order):
             matched.sort(key=lambda row, column=column: (self._value(row, column) is None, self._value(row, column)), reverse=desc)
+        total = len(matched)
         if self._range is not None:
             matched = matched[self._range[0] : self._range[1] + 1]
         if self._limit is not None:
             matched = matched[: self._limit]
-        return Result([self._project(row) for row in matched])
+        return Result([self._project(row) for row in matched], total if self._count else None)
 
     def _listed(self) -> list[Row]:
         return self._values if isinstance(self._values, list) else [self._values]

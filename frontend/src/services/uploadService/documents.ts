@@ -8,7 +8,9 @@ import type {
   ContentGuardResponse,
   DocumentDownloadResponse,
   DocumentRecord,
+  LocatedValue,
   PreviewKind,
+  ValueToLocate,
 } from './types';
 
 export async function deleteDocument(documentId: string): Promise<void> {
@@ -31,6 +33,18 @@ export async function getDocument(documentId: string): Promise<DocumentRecord> {
   await assertOk(response, 'Failed to fetch document');
 
   return (await response.json()) as DocumentRecord;
+}
+
+// Where each value is printed on the document, found the way numerical and date findings are placed (in the forms
+// it is likely printed in, beside its field's label; through OCR for a photo or a scan).
+export async function locateValues(documentId: string, values: ValueToLocate[]): Promise<LocatedValue[]> {
+  const response = await authFetch(`/documents/${documentId}/locate-values`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values }),
+  });
+  await assertOk(response, 'Failed to find the values on the document');
+  return ((await response.json()) as { values: LocatedValue[] }).values;
 }
 
 export async function getContentGuard(documentId: string): Promise<ContentGuardResponse> {

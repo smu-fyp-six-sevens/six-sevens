@@ -122,6 +122,27 @@ export default function XrayView({
     return () => window.removeEventListener('keydown', onKeyDown, true);
   });
 
+  // A click elsewhere closes the card: on this page around the boxes, or on plain text beside the document. This
+  // document's own boxes, card and bar keep it open; so does a click in another document beside it (the compare
+  // view), which only closes that one's card; and so does a control beside it (the findings list's "Next place", a
+  // tick), which moves or keeps the card itself.
+  useEffect(() => {
+    if (!activeId) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target as Element | null;
+      const stage = target?.closest('.xray-stage');
+      if (stage) {
+        if (stage !== stageRef.current) return;
+        if (target?.closest('.finding-highlight, .finding-card, .xray-bar')) return;
+      } else if (target?.closest('button, a, input, select, textarea, label, [role="button"]')) {
+        return;
+      }
+      onSelect(null);
+    }
+    window.addEventListener('pointerdown', onPointerDown, true);
+    return () => window.removeEventListener('pointerdown', onPointerDown, true);
+  });
+
   const status = !ready
     ? 'Loading the document…'
     : stops.length === 0

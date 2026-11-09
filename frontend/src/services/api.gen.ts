@@ -1300,6 +1300,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{document_id}/locate-values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Locate Document Values
+         * @description Where each value is printed on the document, found the way numerical and date findings are placed (in the
+         *     forms it is likely printed in, beside its field's label), for boxing it in the officer's compare view. A photo
+         *     or a scan is searched through its OCR'd lines (text_lines, worked out once and cached). Reads only.
+         */
+        post: operations["locate_document_values_documents__document_id__locate_values_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{document_id}/move": {
         parameters: {
             query?: never;
@@ -2680,6 +2702,19 @@ export interface components {
          * @enum {string}
          */
         CheckOutcome: "match" | "mismatch";
+        /**
+         * CitedValue
+         * @description One document's side of a cross-document finding: the field it was compared on and the value it holds, so the
+         *     officer can be shown that value on the document (the compare view finds it in the page's text).
+         */
+        CitedValue: {
+            /** Document Id */
+            document_id: string;
+            /** Field */
+            field: string;
+            /** Value */
+            value: string;
+        };
         /** CompanyNameConsistencyResult */
         CompanyNameConsistencyResult: {
             /** Company Name */
@@ -2772,8 +2807,12 @@ export interface components {
             category: string | null;
             /** Check Code */
             check_code: string | null;
+            /** Cited Values */
+            cited_values: components["schemas"]["CitedValue"][];
             /** Document Id */
             document_id: string;
+            /** Document Ids */
+            document_ids: string[];
             /** Document Type */
             document_type: string | null;
             /**
@@ -2830,6 +2869,8 @@ export interface components {
             category: components["schemas"]["FindingCategory"];
             /** Citations */
             citations: string[];
+            /** Cited Values */
+            cited_values: components["schemas"]["CitedValue"][];
             /**
              * Confidence
              * @default 0
@@ -3823,6 +3864,31 @@ export interface components {
             /** Top */
             top: number;
         };
+        /** LocateValuesRequest */
+        LocateValuesRequest: {
+            /** Values */
+            values: components["schemas"]["ValueToLocate"][];
+        };
+        /** LocatedValue */
+        LocatedValue: {
+            /** Id */
+            id: string;
+            /** Locations */
+            locations: components["schemas"]["ValueLocation"][];
+            /** Page Size */
+            page_size: number[] | null;
+            /**
+             * Units
+             * @default pt
+             * @enum {string}
+             */
+            units: "pt" | "px";
+        };
+        /** LocatedValues */
+        LocatedValues: {
+            /** Values */
+            values: components["schemas"]["LocatedValue"][];
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Password */
@@ -4567,6 +4633,25 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** ValueLocation */
+        ValueLocation: {
+            /** Bbox */
+            bbox: number[];
+            /** Page */
+            page: number;
+        };
+        /** ValueToLocate */
+        ValueToLocate: {
+            /**
+             * Field
+             * @default value
+             */
+            field: string;
+            /** Id */
+            id: string;
+            /** Value */
+            value: string;
         };
         /**
          * WaitingDocument
@@ -6960,6 +7045,43 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    locate_document_values_documents__document_id__locate_values_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocateValuesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocatedValues"];
                 };
             };
             /** @description Validation Error */

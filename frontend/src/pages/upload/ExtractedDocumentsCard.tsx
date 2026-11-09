@@ -1,4 +1,4 @@
-import type { DocumentRecord } from '../../services/uploadService';
+import type { AdditionalDocument, DocumentRecord } from '../../services/uploadService';
 import {
   TERMINAL_DOCUMENT_STATUSES,
   canCancelDocument,
@@ -14,6 +14,7 @@ import { useDetectionOutcome } from './useDetectionOutcome';
 import { useState } from 'react';
 import { CANCELLED_REASON, documentGroup, missingAdditional, missingRequirements, type Coverage, type DocumentGroup } from './documentChecklist';
 import { REQUIRED_DOCUMENT_TYPES } from '../../services/uploadService';
+import { requestKey, requestedDocumentName } from './requestedDocument';
 import type { useDocumentRowActions } from './useDocumentRowActions';
 import type { useDocumentSelection } from './useDocumentSelection';
 import { ErrorMessage } from '../../components/ErrorMessage';
@@ -38,6 +39,12 @@ interface ExtractedDocumentsCardProps {
   rowActions: DocumentRowActions;
   // A finalised case: documents can be opened, but nothing in the list can be changed.
   readOnly?: boolean;
+  // What the latest case analysis asks the client for (the Additional Documents tab), listed so they are uploaded here.
+  requestedDocuments?: AdditionalDocument[];
+  // The group to open first, when the officer came here for it (the Additional Documents tab's Upload in Documents).
+  initialGroup?: GroupId;
+  // Goes to one request on the Additional Documents tab (by requestKey), where it says why it is asked for.
+  onOpenRequest?: (key: string) => void;
 }
 
 // Extracted documents awaiting the officer: bulk select, approve, move and delete, plus per-row retry and cancel.
@@ -53,6 +60,9 @@ export function ExtractedDocumentsCard({
   selection,
   rowActions,
   readOnly = false,
+  requestedDocuments = [],
+  initialGroup,
+  onOpenRequest,
 }: ExtractedDocumentsCardProps) {
   const {
     allExtractedSelected,
@@ -79,10 +89,11 @@ export function ExtractedDocumentsCard({
   const pendingDocuments = [...groups.processing, ...groups.pending];
 
   // Only one category is open at a time. Until the officer picks one, the first category that has rows is open, other
-  // than Additional (optional documents aren't what the officer came to do). Opening one closes the rest; opening
+  // than Optional (optional documents aren't what the officer came to do). Opening one closes the rest; opening
   // the open one closes it. A choice whose category has since emptied falls back to that first one.
   const present: GroupId[] = [
     missing.length > 0 && 'missing',
+    requestedDocuments.length > 0 && 'requested',
     optionalMissing.length > 0 && 'additional',
     groups.review.length > 0 && 'review',
     pendingDocuments.length > 0 && 'pending',
@@ -90,7 +101,7 @@ export function ExtractedDocumentsCard({
     rejectedDocuments.length > 0 && 'rejected',
   ].filter((id): id is GroupId => id !== false);
   const defaultGroup = present.find((id) => id !== 'additional') ?? null;
-  const [chosenGroup, setChosenGroup] = useState<GroupId | null | undefined>(undefined);
+  const [chosenGroup, setChosenGroup] = useState<GroupId | null | undefined>(initialGroup);
   const openGroup = chosenGroup === undefined || (chosenGroup !== null && !present.includes(chosenGroup)) ? defaultGroup : chosenGroup;
   const toggle = (id: GroupId) => setChosenGroup(openGroup === id ? null : id);
 
@@ -248,9 +259,37 @@ export function ExtractedDocumentsCard({
           </>
         )}
 
+        {requestedDocuments.length > 0 && (
+          <div className="checklist-requested">
+            <GroupToggle id="requested" label="Requested" count={requestedDocuments.length} note="by the case analysis" open={openGroup === 'requested'} onToggle={toggle} />
+            {openGroup === 'requested' && requestedDocuments.map((item) => (
+              <div key={requestKey(item)} className="checklist-missing-row checklist-requested-row" data-testid="requested-document">
+                <span className="document-select-cell" aria-hidden="true">
+                  <span className="row-mark row-mark--missing" />
+                </span>
+                {/* The document's name, and the request as the Additional tab heads it, linking to it there. */}
+                <span className="document-type-cell">{requestedDocumentName(item.title)}</span>
+                <span className="document-filename">
+                  {onOpenRequest ? (
+                    <button type="button" className="checklist-request-link" onClick={() => onOpenRequest(requestKey(item))}>
+                      <span className="checklist-request-link-text">{item.title}</span>
+                      <span className="checklist-request-link-arrow" aria-hidden="true">→</span>
+                    </button>
+                  ) : (
+                    <span className="document-filename-line checklist-hint">{item.title}</span>
+                  )}
+                </span>
+                <span className="document-status-cell">
+                  <span className="status-pill status-pill--requested">Requested</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {optionalMissing.length > 0 && (
           <div className="checklist-additional">
-            <GroupToggle id="additional" label="Additional" count={optionalMissing.length} note="only if the case needs them" open={openGroup === 'additional'} onToggle={toggle} />
+            <GroupToggle id="additional" label="Optional" count={optionalMissing.length} open={openGroup === 'additional'} onToggle={toggle} />
             {openGroup === 'additional' && optionalMissing.map((label) => (
               <div key={label} className="checklist-missing-row checklist-optional-row" data-testid="optional-document">
                 <span className="document-select-cell" aria-hidden="true">
@@ -508,7 +547,7 @@ function DecidedRow({
   );
 }
 
-type GroupId = DocumentGroup | 'missing' | 'additional' | 'approved' | 'rejected';
+export type GroupId = DocumentGroup | 'missing' | 'requested' | 'additional' | 'approved' | 'rejected';
 
 // A group's label as a button that folds and unfolds it; the chevron sits in the first column, over the marks. The group's
 // colour (documents-table.css, by id) is how a category reads at a glance.

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 
 from app.case_broadcaster import CaseBroadcaster
 
@@ -43,7 +42,6 @@ def test_unsubscribe_leaves_other_subscribers_for_the_same_case_intact() -> None
     assert broadcaster._subscribers["case-1"] == {queue_b}
 
 
-@pytest.mark.asyncio
 async def test_publish_delivers_the_snapshot_to_every_subscriber_of_that_case() -> None:
     broadcaster = CaseBroadcaster()
     queue_a = broadcaster.subscribe("case-1")

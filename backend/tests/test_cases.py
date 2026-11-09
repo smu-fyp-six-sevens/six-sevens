@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from tests.conftest import TEST_USER
@@ -16,6 +17,7 @@ from app.models import (
     CaseSearchResult,
     CaseStage,
     CaseSummary,
+    DocumentRecord,
     DocumentStatus,
 )
 
@@ -369,6 +371,29 @@ def test_delete_case_calls_case_service_delete_case() -> None:
     assert response.status_code == 204
     assert response.content == b""
     mock_case_service.delete_case.assert_called_once_with("case-1")
+
+
+def test_deleting_a_case_puts_each_of_its_documents_on_the_record_too(published_events) -> None:
+    documents = [
+        DocumentRecord(id=f"doc-{n}", case_id="case-1", filename=f"file-{n}.pdf", status=DocumentStatus.DETECTED,
+                       uploaded_at=datetime.now(timezone.utc))
+        for n in (1, 2)
+    ]
+    with (
+        patch("app.routers._dependencies.case_service") as mock_dep_case_service,
+        patch("app.routers.cases.case_service"),
+        patch("app.routers.cases.document_repository") as mock_doc_repo,
+    ):
+        mock_dep_case_service.get_case.return_value = _make_case("case-1")
+        mock_doc_repo.list_documents.return_value = documents
+
+        assert client.delete("/cases/case-1").status_code == 204
+
+    deleted = [e for e in published_events if e.type == "document.deleted"]
+    assert sorted((e.document_id, e.detail["filename"]) for e in deleted) == [
+        ("doc-1", "file-1.pdf"), ("doc-2", "file-2.pdf"),
+    ]
+    assert [e.detail["documents"] for e in published_events if e.type == "case.deleted"] == [2]
 
 
 def test_delete_case_not_found() -> None:

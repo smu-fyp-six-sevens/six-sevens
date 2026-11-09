@@ -21,7 +21,6 @@ def test_build_client_requires_supabase_secret_key(monkeypatch: pytest.MonkeyPat
         _build_client()
 
 
-@pytest.mark.asyncio
 async def test_build_async_supabase_client_requires_supabase_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -31,7 +30,6 @@ async def test_build_async_supabase_client_requires_supabase_url(
         await build_async_supabase_client()
 
 
-@pytest.mark.asyncio
 async def test_build_async_supabase_client_requires_supabase_secret_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -42,7 +40,6 @@ async def test_build_async_supabase_client_requires_supabase_secret_key(
         await build_async_supabase_client()
 
 
-@pytest.mark.asyncio
 async def test_build_async_supabase_client_uses_the_secret_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

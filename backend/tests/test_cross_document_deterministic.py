@@ -159,6 +159,14 @@ def test_a_different_id_number_is_flagged_high() -> None:
     assert "ID number" in findings[0].summary
 
 
+def test_a_finding_records_each_documents_value_unmasked_for_the_compare_view() -> None:
+    finding = run_deterministic_checks(_context(*_person_docs(id_number="S8417611G"))).findings[0]
+
+    # The summary masks the ID numbers; the officer's side-by-side view needs the real ones to find on the page.
+    assert "S8417611G" not in finding.summary
+    assert {(c.document_id, c.value) for c in finding.cited_values} == {("nric", "S8427269H"), ("cbr", "S8417611G")}
+
+
 def test_a_different_birth_date_race_sex_or_nationality_is_flagged() -> None:
     docs = _person_docs(date_of_birth="14/02/1984", race="CHINESE", sex="M", nationality="Malaysian")
     findings = run_deterministic_checks(_context(*docs)).findings

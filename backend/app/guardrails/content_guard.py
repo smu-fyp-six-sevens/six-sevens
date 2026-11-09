@@ -316,13 +316,17 @@ def hidden_runs(file_bytes: bytes) -> list[dict[str, Any]]:
                 # several spans reads whole; one further down the page starts a new run.
                 top, size = span["bbox"][1], float(span.get("size") or 0)
                 if current is None or top - current["bottom"] > _RUN_BREAK_LINES * max(size, 1.0):
-                    current = {"page": page_number, "why": set(), "spans": []}
+                    current = {"page": page_number, "why": set(), "spans": [], "box": pymupdf.Rect(span["bbox"])}
                     runs.append(current)
                 current["why"].add(why)
                 current["spans"].append(text)
                 current["bottom"] = span["bbox"][3]
+                current["box"] |= pymupdf.Rect(span["bbox"])
     for run in runs:
         run.pop("bottom", None)
+        # Where the run sits on its page (points, top-left), for the preview to box; off the page, it is clipped.
+        box = run.pop("box")
+        run["bbox"] = [round(v, 2) for v in box]
         run["why"] = sorted(run["why"])
         run["text"] = " ".join(run["spans"])
     return [run for run in runs if sum(ch.isalnum() for ch in run["text"]) >= 3]
@@ -376,12 +380,16 @@ def image_texts(file_bytes: bytes) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
         candidates: dict[int, tuple[int, int]] = {}  # xref -> (pixels, first page), so a repeated logo is read once
+        rects: dict[int, list[float]] = {}  # xref -> where it is drawn on that first page (points), for the preview
         for page_number, page in enumerate(cast(Iterable[pymupdf.Page], doc), start=1):
             if not cast(str, page.get_text("text")).strip():
                 continue
             for xref, _smask, width, height, *_ in page.get_images(full=True):
                 if min(width, height) >= _MIN_IMAGE_PX and xref not in candidates:
                     candidates[xref] = (width * height, page_number)
+                    drawn = page.get_image_rects(xref)
+                    if drawn:
+                        rects[xref] = [round(v, 2) for v in drawn[0]]
         largest = sorted(candidates.items(), key=lambda item: -item[1][0])[:_MAX_IMAGES_OCRED]
         for xref, (_, page_number) in largest:
             try:
@@ -391,7 +399,7 @@ def image_texts(file_bytes: bytes) -> list[dict[str, Any]]:
                 continue
             lines = _ocr_lines(image, page_number)
             if lines:
-                found.append({"page": page_number, "text": "\n".join(lines)})
+                found.append({"page": page_number, "text": "\n".join(lines), "bbox": rects.get(xref)})
     return found
 
 
@@ -447,8 +455,8 @@ def scan(
                     errors.append(f"{unreadable} embedded image(s) could not be read")
                 for image in images:
                     spans.extend(
-                        {"quote": hit["quote"], "where": "image", "page": image["page"], "caught_by": "dictionary",
-                         "score": hit["score"], "removed": False}
+                        {"quote": hit["quote"], "where": "image", "page": image["page"], "bbox": image.get("bbox"),
+                         "caught_by": "dictionary", "score": hit["score"], "removed": False}
                         for hit in instruction_hits(image["text"])
                     )
                 checks_run.insert(1, "image_text")
@@ -459,7 +467,7 @@ def scan(
         hidden_normalised.append(" ".join(normalise(run["text"]).lower().split()))
         span = {
             "quote": " ".join(run["text"].split())[:_MAX_QUOTE_CHARS], "where": "hidden", "page": run["page"],
-            "why_hidden": run["why"],
+            "why_hidden": run["why"], "bbox": run.get("bbox"),
         }
         if hits:
             removable = [t for t in run["spans"] if len(t) >= _MIN_REMOVABLE_CHARS]

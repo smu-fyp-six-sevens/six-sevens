@@ -24,7 +24,7 @@ function contributing(overrides: Partial<CaseRiskFinding> & Pick<CaseRiskFinding
   return {
     filename: 'document.pdf', document_type: null, tool: null, check_code: null, severity: 'medium', summary: '',
     rationale: '', points: 0, unreviewed: false, fingerprint: `fp-${overrides.finding_id}`, category: null, source: 'document', repeat_of: null,
-    also_on: 0, feedback_ids: [], ...overrides,
+    also_on: 0, feedback_ids: [], document_ids: [], cited_values: [], ...overrides,
   };
 }
 
@@ -47,7 +47,7 @@ function analysis(runId: string, overrides: Partial<CaseAnalysis> = {}): CaseAna
     risk,
     findings: [{
       id: 'xdoc-1', hypothesis_id: 'h1', summary: ADDRESS, rationale: 'The two addresses differ.', severity: 'high',
-      category: 'cross_document_variance', citations: [], document_ids: ['doc-bizfile'], probe_summary: '', breach_flags: [], confidence: 0.8,
+      category: 'cross_document_variance', citations: [], document_ids: ['doc-bizfile'], cited_values: [], probe_summary: '', breach_flags: [], confidence: 0.8,
       fingerprint: 'fp-xdoc-1', feedback_ids: [],
     }],
     ...overrides,

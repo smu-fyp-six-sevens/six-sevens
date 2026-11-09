@@ -30,7 +30,6 @@ def _document(**attrs):
     return type("Document", (), attrs)()
 
 
-@pytest.mark.asyncio
 async def test_font_consistency_tool_findings_include_summary() -> None:
     """Regression: every tool's findings must carry 'summary' — specialists._collect_node
     and the Lead Investigator's review prompt both index it unconditionally, and a tool
@@ -61,7 +60,6 @@ async def test_font_consistency_tool_findings_include_summary() -> None:
     assert output["findings"][0]["locations"] == [{"page": 1, "bbox": [0, 0, 1, 1], "text": "x"}]
 
 
-@pytest.mark.asyncio
 async def test_spelling_tool_findings_include_summary() -> None:
     result = SpellingAnomalyResult(
         document_id="doc-1",
@@ -79,7 +77,6 @@ async def test_spelling_tool_findings_include_summary() -> None:
     assert output["findings"][0]["summary"] == 'Possible misspelling "Helllo" (suggested: "hello").'
 
 
-@pytest.mark.asyncio
 async def test_spelling_tool_locates_the_word_on_the_page_for_the_preview() -> None:
     import pymupdf
 
@@ -109,7 +106,6 @@ async def test_spelling_tool_locates_the_word_on_the_page_for_the_preview() -> N
     assert first[1] < 100 < first[3] and second[1] < 140 < second[3]
 
 
-@pytest.mark.asyncio
 async def test_spelling_tool_reports_a_repeated_word_as_one_finding_with_its_count() -> None:
     result = SpellingAnomalyResult(
         document_id="doc-1",
@@ -152,7 +148,6 @@ def test_metadata_tool_findings_include_summary() -> None:
     assert output["findings"][0]["summary"]
 
 
-@pytest.mark.asyncio
 async def test_image_manipulation_tool_maps_indicators_to_findings() -> None:
     result = ImageManipulationResult(
         document_id="doc-1",
@@ -188,7 +183,6 @@ async def test_image_manipulation_tool_maps_indicators_to_findings() -> None:
     assert "evidence" not in finding
 
 
-@pytest.mark.asyncio
 async def test_layout_anomalies_tool_findings_carry_their_area_and_page_size() -> None:
     # A 300 DPI photo: PyMuPDF sizes its page in points from the DPI (1200 px -> 288 pt), so the
     # preview needs that page size, not the image's pixels, to place the bbox.
@@ -226,7 +220,6 @@ async def test_layout_anomalies_tool_findings_carry_their_area_and_page_size() -
     assert finding["page_size"] == [288.0, 192.0]
 
 
-@pytest.mark.asyncio
 async def test_image_manipulation_tool_reports_unable_to_assess() -> None:
     result = ImageManipulationResult(
         document_id="doc-1",
@@ -248,7 +241,6 @@ async def test_image_manipulation_tool_reports_unable_to_assess() -> None:
     assert output["findings"] == []
 
 
-@pytest.mark.asyncio
 async def test_image_tampering_tool_maps_indicators_to_findings() -> None:
     result = ImageTamperingResult(
         document_id="doc-1",
@@ -302,7 +294,6 @@ async def _tampering_output(reason: str) -> dict:
         return await tools.image_tampering_tool.ainvoke({"document_id": "doc-1"})
 
 
-@pytest.mark.asyncio
 async def test_image_tampering_tool_with_no_images_has_nothing_to_check() -> None:
     # A document with no embedded images passes: there is nothing to tamper with.
     output = await _tampering_output("No embedded images found across 1 page(s)")
@@ -312,7 +303,6 @@ async def test_image_tampering_tool_with_no_images_has_nothing_to_check() -> Non
     assert output["findings"] == []
 
 
-@pytest.mark.asyncio
 async def test_image_tampering_tool_that_cannot_open_the_file_is_unable_to_assess() -> None:
     output = await _tampering_output("Failed to open document as a PDF: ValueError: bad")
     assert output["unable_to_assess"] is True
@@ -364,7 +354,6 @@ def _balance_fields() -> list[ExtractedField]:
     ]
 
 
-@pytest.mark.asyncio
 async def test_numerical_checks_tool_surfaces_non_bank_statement_findings() -> None:
     # Regression: the tool used to filter for check_code == "BS.RUNNING_BALANCE"
     # only, silently dropping every other document type's findings (FS.*, CR.*, etc).
@@ -376,7 +365,6 @@ async def test_numerical_checks_tool_surfaces_non_bank_statement_findings() -> N
     assert output["findings"][0]["check_code"] == "FS.BALANCES"
 
 
-@pytest.mark.asyncio
 async def test_numerical_checks_tool_uses_the_specialists_bindings_without_a_binder_call() -> None:
     fields = [
         ExtractedField(field_name="closing", field_type="number", field_value="1000", confidence=0.95),
@@ -404,7 +392,6 @@ def test_field_checks_hide_the_document_type_from_the_agent() -> None:
         assert list(tool.tool_call_schema.model_json_schema()["properties"]) == ["bindings"]
 
 
-@pytest.mark.asyncio
 async def test_external_validation_tool_runs_the_static_reference_checks_for_the_type() -> None:
     fields = [
         ExtractedField(field_name="gst_amount", field_type="number", field_value="1.00", confidence=0.95),
@@ -456,7 +443,6 @@ def _ai_image(score: float, likelihood: str):
     )
 
 
-@pytest.mark.asyncio
 async def test_ai_generation_tool_reports_only_medium_and_high_images() -> None:
     result = _ai_result(_ai_image(0.6, "medium"), _ai_image(0.1, "low"))
     with (
@@ -474,7 +460,6 @@ async def test_ai_generation_tool_reports_only_medium_and_high_images() -> None:
     assert [c["indicator"] for c in finding["contributors"]] == ["Spectral Peaks", "Noise Level"]
 
 
-@pytest.mark.asyncio
 async def test_ai_generation_tool_reports_declared_file_provenance() -> None:
     from app.fraud_detection.authenticity.ai_generation import AIIndicator
 
@@ -493,7 +478,6 @@ async def test_ai_generation_tool_reports_declared_file_provenance() -> None:
     assert "trainedalgorithmicmedia" in output["findings"][0]["summary"]
 
 
-@pytest.mark.asyncio
 async def test_ai_generation_tool_reports_unable_to_assess() -> None:
     result = _ai_result(unable="No raster images of at least 128px to analyse")
     with (

@@ -178,7 +178,6 @@ def test_refresh_frame_triggers_an_immediate_rebuilt_snapshot() -> None:
     assert {doc["id"] for doc in second["documents"]} == {"doc-1", "doc-2"}
 
 
-@pytest.mark.asyncio
 async def test_socket_pushes_a_broadcaster_message_ahead_of_a_client_disconnect() -> None:
     """
     Drives case_status_socket directly (not via TestClient) so the
@@ -215,7 +214,6 @@ async def test_socket_pushes_a_broadcaster_message_ahead_of_a_client_disconnect(
     mock_ws.close.assert_not_awaited()  # WebSocketDisconnect path — nothing left to close
 
 
-@pytest.mark.asyncio
 async def test_socket_logs_and_returns_on_unexpected_error() -> None:
     ticket = auth.create_ws_ticket()
     mock_ws = AsyncMock()
@@ -232,7 +230,6 @@ async def test_socket_logs_and_returns_on_unexpected_error() -> None:
     mock_ws.close.assert_awaited_once()
 
 
-@pytest.mark.asyncio
 async def test_socket_swallows_runtime_error_from_close_on_already_closed_connection() -> None:
     ticket = auth.create_ws_ticket()
     mock_ws = AsyncMock()

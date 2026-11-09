@@ -19,13 +19,14 @@ import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews
 import type { VerdictRow } from './useFindingReviews';
 import { compareFindings } from './uploadHelpers';
 import DocumentReviewModal from './DocumentReviewModal';
+import CrossDocCompareModal from './CrossDocCompareModal';
 import type { ReviewLink } from './DocumentReviewModal';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { SCORE_BANDS } from './scoreBands';
 import { SeverityGauge, SeverityLegend } from './SeverityGauge';
 import { readingOrder } from '../../components/findingHighlights';
-import type { HighlightArea } from '../../components/findingHighlights';
+import type { FindingHighlight, HighlightArea } from '../../components/findingHighlights';
 import { Icon } from '../../components/Icon';
 
 // The group cross-document findings sit in: they belong to the case, not to one document.
@@ -66,6 +67,28 @@ function ScoreGauge({ score, level }: { score: number; level: string }) {
       </div>
     </div>
   );
+}
+
+// Why a finding has no box on the document: it's about the file rather than the page, or it's on the page but the
+// search couldn't pin it down (printed in another form, or in too many places).
+function unplacedNote(finding: CaseRiskFinding): string {
+  const aboutTheFile =
+    finding.tool === 'metadata_tool' ||
+    (finding.tool === 'prompt_injection_tool' && /^(The file name|Metadata field)\b/.test(finding.summary));
+  if (aboutTheFile) return "About the file's details, not a place on the page";
+  if (finding.tool === 'ai_generation_tool' && /\.(png|jpe?g|webp|heic|tiff?)$/i.test(finding.filename)) {
+    return 'About the whole image';
+  }
+  return "On the document, but couldn't pinpoint where";
+}
+
+// A row's findings as one to compare: the first one's summary and severity, with every document and value any of
+// them rests on (a row merges identical findings).
+function comparable(members: CaseRiskFinding[]): CaseRiskFinding {
+  const [first] = members;
+  const documentIds = [...new Set(members.flatMap((member) => member.document_ids ?? []))];
+  const citedValues = members.flatMap((member) => member.cited_values ?? []);
+  return { ...first, document_ids: documentIds, cited_values: citedValues };
 }
 
 interface FindingRow {
@@ -246,6 +269,8 @@ export function CaseRiskCard({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // The document open for review beside its findings, by id.
   const [reviewing, setReviewing] = useState<string | null>(null);
+  // A cross-document finding open with its documents side by side.
+  const [comparing, setComparing] = useState<CaseRiskFinding | null>(null);
   // Ticks (the agents got it wrong) the officer changed but hasn't saved, by row key. A row without one shows its saved
   // verdict. The reasons given for false alarms, likewise.
   const [drafts, setDrafts] = useState<Record<string, boolean>>({});
@@ -515,6 +540,26 @@ export function CaseRiskCard({
 
   // Select all and Save review, the group's findings with a tick each, then the issues reported as missed. With
   // `link`, beside the document: a finding the checks placed can be shown on it, and the one picked there stands out.
+  // Beside the document, the rows run by severity, then by where on the document each first appears (page, then top
+  // to bottom), so a severity's findings follow the pages; a row with nothing placed goes last in its severity.
+  // Without the document, by severity then points.
+  function rowsInPageOrder(rows: FindingRow[], located?: Map<string, FindingHighlight>): FindingRow[] {
+    if (!located) return rows;
+    const firstPlace = (row: FindingRow) =>
+      row.members
+        .map(reportFindingId)
+        .flatMap((id) => located.get(id)?.areas ?? [])
+        .sort(readingOrder)[0];
+    const rank = (row: FindingRow) => {
+      const index = SEVERITY_ORDER.indexOf(row.finding.severity);
+      return index < 0 ? SEVERITY_ORDER.length : index;
+    };
+    return [...rows].sort((a, b) => {
+      const [placeA, placeB] = [firstPlace(a), firstPlace(b)];
+      return rank(a) - rank(b) || (placeA && placeB ? readingOrder(placeA, placeB) : placeA ? -1 : placeB ? 1 : 0);
+    });
+  }
+
   function renderGroupBody(document: DocumentGroup, link?: ReviewLink) {
     const all = ticks(document);
     const tickFor = new Map(all.map((tick) => [tick.key, tick]));
@@ -536,7 +581,7 @@ export function CaseRiskCard({
           />
         )}
         <ul className="risk-findings">
-          {document.rows.map((row) => {
+          {rowsInPageOrder(document.rows, link?.located).map((row) => {
             const tick = tickFor.get(`${document.documentId}:${row.finding.finding_id}`)!;
             const { finding, count } = row;
             const detail = finding.unreviewed
@@ -593,6 +638,16 @@ export function CaseRiskCard({
                     />
                   )}
                   <AppliedFeedback ids={finding.feedback_ids} />
+                  {document.scope === 'case' && comparable(row.members).document_ids.length >= 2 && (
+                    <button
+                      type="button"
+                      className="risk-compare-button"
+                      onClick={() => setComparing(comparable(row.members))}
+                    >
+                      <Icon name="documents" size={14} />
+                      Compare documents
+                    </button>
+                  )}
                   {finding.repeat_of && (
                     <span className="risk-finding-rationale">
                       Also found on another document; counted once there, not again here.
@@ -612,7 +667,7 @@ export function CaseRiskCard({
                         onShow={(p) => link.showOnDocument(p.id, p.area)}
                       />
                     ) : (
-                      <span className="risk-finding-unplaced">Not tied to one place on the document</span>
+                      <span className="risk-finding-unplaced">{unplacedNote(finding)}</span>
                     ))}
                 </span>
               </li>
@@ -878,6 +933,10 @@ export function CaseRiskCard({
         </section>
       )}
 
+      {comparing && (
+        <CrossDocCompareModal finding={comparing} documents={caseDocuments} onClose={() => setComparing(null)} />
+      )}
+
       {reviewingGroup && (
         <DocumentReviewModal
           documentId={reviewingGroup.documentId}
@@ -889,7 +948,7 @@ export function CaseRiskCard({
             </>
           }
           onClose={closeReview}
-          order={reviewingGroup.rows.map((row) => row.members.map(reportFindingId))}
+          order={(located) => rowsInPageOrder(reviewingGroup.rows, located).map((row) => row.members.map(reportFindingId))}
         >
           {(link) => renderGroupBody(reviewingGroup, link)}
         </DocumentReviewModal>

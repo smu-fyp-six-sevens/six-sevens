@@ -204,6 +204,14 @@ async def delete_case(case_id: str, case: CaseRecord = Depends(get_editable_case
         detail="Failed to delete the case. Check Supabase table access.",
         log=("Failed to delete case %s", case_id),
     )
+    # Each document goes on the record too, as it would deleted alone: the trail names what was in the case.
+    await asyncio.gather(*(
+        events.record(officer_event(
+            types.DOCUMENT_DELETED, document_id=document.id, case_id=case_id,
+            detail={"filename": document.filename, "with_case": True},
+        ))
+        for document in documents
+    ))
     await events.record(officer_event(
         types.CASE_DELETED, case_id=case_id,
         detail={"company_name": case.company_name, "documents": len(documents)},

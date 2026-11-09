@@ -301,7 +301,6 @@ def _consistency_tool(documents: list[DocumentRecord]):
     return next(t for t in build_consistency_tools(kit) if t.name == "company_name_consistency_tool")
 
 
-@pytest.mark.asyncio
 async def test_tool_reports_each_discrepancy() -> None:
     doc = _company("bank_statement", "ACME Trading Pte Ltd", "bs")
     other = _company("certificate_of_incumbency", "ACME Holdings Pte Ltd", "inc")
@@ -315,7 +314,6 @@ async def test_tool_reports_each_discrepancy() -> None:
     assert discrepancy["conflicting"] == "ACME Holdings Pte Ltd"
 
 
-@pytest.mark.asyncio
 async def test_tool_says_same_when_names_differ_only_by_legal_suffix() -> None:
     doc = _company("bank_statement", "ACME Trading Pte Ltd", "bs")
     other = _company("certificate_of_incumbency", "ACME Trading Pte. Ltd.", "inc")
@@ -325,7 +323,6 @@ async def test_tool_says_same_when_names_differ_only_by_legal_suffix() -> None:
     assert output["same"] and output["discrepancies"] == []
 
 
-@pytest.mark.asyncio
 async def test_tool_has_nothing_to_compare_when_no_other_document_has_a_name() -> None:
     doc = _company("bank_statement", "ACME Pte Ltd", "bs")
 

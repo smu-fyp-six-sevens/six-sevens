@@ -121,9 +121,13 @@ async def test_lifespan_tolerates_db_check_failure_at_startup() -> None:
         patch("app.main.check_db_connection") as mock_check,
     ):
         mock_check.side_effect = RuntimeError("connection refused")
+        started = False
 
         async with lifespan(app):
-            pass
+            started = True
+
+    mock_check.assert_called_once_with()
+    assert started
 
 
 

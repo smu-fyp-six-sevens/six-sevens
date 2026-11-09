@@ -415,6 +415,19 @@ def _delete_document_children(document_ids: list[str]) -> None:
     trace.forget(document_ids)
 
 
+def text_lines_cache_path(document_id: str) -> str:
+    """Where text_lines caches the positions of a document's text; removed with the document."""
+    return f"text-lines/{document_id}.json"
+
+
+def _remove_text_lines(document_id: str) -> None:
+    """The document's cached text positions (text_lines), best-effort: most documents never had one made."""
+    try:
+        storage_service.delete_files([text_lines_cache_path(document_id)])
+    except Exception:
+        logger.exception("Failed to delete the cached text lines of document %s", document_id)
+
+
 def remove_document(document: DocumentRecord) -> None:
     """
     Permanently removes a document: the stored file, then the documents row, which takes every row keyed by it
@@ -433,6 +446,8 @@ def remove_document(document: DocumentRecord) -> None:
                 document.id,
                 document.storage_path,
             )
+    if document.storage_path:
+        _remove_text_lines(document.id)
     result = service_supabase_client().table("documents").delete().eq("id", document.id).execute()
     if not result.data:
         raise RuntimeError(f"Document {document.id} was not deleted")
@@ -452,6 +467,8 @@ def remove_documents(documents: list[DocumentRecord]) -> None:
     document_ids = [document.id for document in documents]
     _delete_document_children(document_ids)
     storage_paths = [document.storage_path for document in documents if document.storage_path]
+    # With each file, the cache of where its text sits (text_lines), if one was made.
+    storage_paths += [text_lines_cache_path(document.id) for document in documents if document.storage_path]
     if storage_paths:
         try:
             storage_service.delete_files(storage_paths)
@@ -555,8 +572,3 @@ def list_document_statuses(case_ids: list[str]) -> list[DocumentRecord]:
         documents.extend(DocumentRecord(**item) for item in rows)
     return documents
 
-
-def list_all_document_statuses() -> list[DocumentRecord]:
-    """Every document's status columns, a page of 1,000 per query: what the queue's status counts roll up."""
-    rows = fetch_all(lambda: supabase_client.table("documents").select(_STATUS_COLUMNS), "id")
-    return [DocumentRecord(**item) for item in rows]

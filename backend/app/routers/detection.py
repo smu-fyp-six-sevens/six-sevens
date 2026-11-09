@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from ..langgraph import trace as langgraph_trace
 from ..langgraph.detection import tools as detection_tools
 from ..models import DocumentRecord, DocumentStatus, skips_detection
-from .. import case_service, detection_results, document_repository, events, extracted_fields_repository, storage_service
+from .. import case_service, detection_results, document_repository, events, extracted_fields_repository, storage_service, text_lines
 from ..events import Stopwatch, officer_event, types
 from ..cpu_pool import run_cpu
 from ..snapshots import push_case_snapshot
@@ -338,8 +338,8 @@ _PLACED_REPORTS_KEPT = 64
 
 
 async def _with_finding_locations(document_id: str, report: dict) -> dict:
-    """The report with the findings it can't place itself (numerical, date and registry findings) placed
-    on the page for the preview to highlight. Best effort: the report is returned as stored if the file
+    """The report with the findings it can't place itself (numerical, date and registry findings, and quoted
+    hidden or instruction text) placed on the page for the preview to highlight, on a photo or scan too. Best effort: the report is returned as stored if the file
     can't be read."""
     if not detection_tools.needs_locations(report):
         return report
@@ -350,7 +350,11 @@ async def _with_finding_locations(document_id: str, report: dict) -> dict:
         document = await get_document_or_404(document_id)
         file_bytes = await _download_document_bytes(document)
         fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields_dict, document_id)
-        placed = await run_cpu(detection_tools.add_missing_locations, report, file_bytes, fields)
+        # A photo or a scan is searched through its OCR'd lines (worked out once, then cached: text_lines).
+        text_pages = None
+        if detection_tools.needs_text_lines(file_bytes):
+            text_pages = (await asyncio.to_thread(text_lines.get_or_build, document))["pages"]
+        placed = await run_cpu(detection_tools.add_missing_locations, report, file_bytes, fields, text_pages)
     except Exception:
         logger.warning("Could not place the findings of document %s's report", document_id, exc_info=True)
         return report

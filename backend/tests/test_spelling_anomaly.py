@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
 
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.spelling.spelling_anomaly import (
@@ -276,7 +275,6 @@ def _stub_ingestion(mock_ingest, raw_text: str = "Helllo there") -> None:
     }
 
 
-@pytest.mark.asyncio
 async def test_a_company_name_printed_on_the_document_is_not_reported_as_a_misspelling() -> None:
     # The name is in the document's own extracted fields, so it is a known term; a misspelt company name
     # is a case-level finding (comparing the case's documents), not a spelling one.
@@ -291,7 +289,6 @@ async def test_a_company_name_printed_on_the_document_is_not_reported_as_a_missp
     assert result.anomalies == []
 
 
-@pytest.mark.asyncio
 async def test_check_spelling_anomalies_unable_to_assess_on_extraction_failure() -> None:
     with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
         mock_ingest.side_effect = RuntimeError("corrupt file")
@@ -303,7 +300,6 @@ async def test_check_spelling_anomalies_unable_to_assess_on_extraction_failure()
     assert result.anomalies == []
 
 
-@pytest.mark.asyncio
 async def test_check_spelling_anomalies_unable_to_assess_on_empty_text() -> None:
     with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
         mock_ingest.return_value = {"raw_text": "   ", "pages": []}
@@ -314,7 +310,6 @@ async def test_check_spelling_anomalies_unable_to_assess_on_empty_text() -> None
     assert result.anomalies == []
 
 
-@pytest.mark.asyncio
 async def test_check_spelling_anomalies_no_candidates_returns_empty_not_unable() -> None:
     with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
         _stub_ingestion(mock_ingest, raw_text="Please review the escrow schedule.")
@@ -325,7 +320,6 @@ async def test_check_spelling_anomalies_no_candidates_returns_empty_not_unable()
     assert result.anomalies == []
 
 
-@pytest.mark.asyncio
 async def test_check_spelling_anomalies_flags_typo_and_suppresses_proper_noun() -> None:
     with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
         _stub_ingestion(mock_ingest, raw_text="Helllo Mr Kowalski")
@@ -336,7 +330,6 @@ async def test_check_spelling_anomalies_flags_typo_and_suppresses_proper_noun() 
     assert words == {"Helllo"}
 
 
-@pytest.mark.asyncio
 async def test_check_spelling_anomalies_skips_word_matching_extracted_field() -> None:
     with patch("app.fraud_detection.spelling.spelling_anomaly.ingest_document") as mock_ingest:
         # "Kowalski" would normally be a (suppressed) proper-noun candidate
@@ -356,7 +349,6 @@ async def test_check_spelling_anomalies_skips_word_matching_extracted_field() ->
     assert result.anomalies == []
 
 
-@pytest.mark.asyncio
 async def test_check_spelling_anomalies_reports_a_repeated_word_once_with_its_count() -> None:
     # The same unrecognised word in four places (a letterhead line repeated on each page, and in
     # lower case once) is one anomaly with occurrences=4, not four.

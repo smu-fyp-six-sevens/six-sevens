@@ -10,10 +10,14 @@ from contextlib import contextmanager
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from .. import document_service, storage_service
+from .. import document_service, storage_service, text_lines
 from ..config import settings
+from ..cpu_pool import run_cpu
+from ..langgraph.detection import tools as detection_tools
 from ..langgraph import trace as langgraph_trace
 from ..models import (
+    LocatedValues,
+    LocateValuesRequest,
     AddExtractedFieldRequest,
     BulkApproveRequest,
     BulkApproveResponse,
@@ -272,6 +276,25 @@ async def get_document_download_url(
     )
 
     return DocumentDownloadResponse(document_id=document.id, signed_url=signed_url, expires_in=expires_in)
+
+
+@router.post("/{document_id}/locate-values", response_model=LocatedValues)
+async def locate_document_values(
+    document_id: str, request: LocateValuesRequest, document: DocumentRecord = Depends(get_document_or_404)
+) -> LocatedValues:
+    """Where each value is printed on the document, found the way numerical and date findings are placed (in the
+    forms it is likely printed in, beside its field's label), for boxing it in the officer's compare view. A photo
+    or a scan is searched through its OCR'd lines (text_lines, worked out once and cached). Reads only."""
+    if document.storage_path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document has no stored file")
+    values = [value.model_dump() for value in request.values]
+    with bad_gateway_on_error("Failed to find the values on the document.", "Failed to locate values on document %s", document_id):
+        file_bytes = await asyncio.to_thread(storage_service.download_file, document.storage_path)
+        text_pages = None
+        if detection_tools.needs_text_lines(file_bytes):
+            text_pages = (await asyncio.to_thread(text_lines.get_or_build, document))["pages"]
+        located = await run_cpu(detection_tools.locate_values, file_bytes, values, text_pages)
+    return LocatedValues.model_validate({"values": located})
 
 
 @router.get("/{document_id}/content-guard", response_model=ContentGuardResponse)

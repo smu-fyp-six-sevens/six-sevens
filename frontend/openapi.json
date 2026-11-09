@@ -2974,6 +2974,30 @@
         "title": "CheckOutcome",
         "type": "string"
       },
+      "CitedValue": {
+        "description": "One document's side of a cross-document finding: the field it was compared on and the value it holds, so the\nofficer can be shown that value on the document (the compare view finds it in the page's text).",
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "field",
+          "value"
+        ],
+        "title": "CitedValue",
+        "type": "object"
+      },
       "CompanyNameConsistencyResult": {
         "properties": {
           "company_name": {
@@ -3249,9 +3273,23 @@
             ],
             "title": "Check Code"
           },
+          "cited_values": {
+            "items": {
+              "$ref": "#/components/schemas/CitedValue"
+            },
+            "title": "Cited Values",
+            "type": "array"
+          },
           "document_id": {
             "title": "Document Id",
             "type": "string"
+          },
+          "document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Document Ids",
+            "type": "array"
           },
           "document_type": {
             "anyOf": [
@@ -3354,7 +3392,9 @@
           "source",
           "also_on",
           "repeat_of",
-          "feedback_ids"
+          "feedback_ids",
+          "document_ids",
+          "cited_values"
         ],
         "title": "ContributingFinding",
         "type": "object"
@@ -3414,6 +3454,13 @@
               "type": "string"
             },
             "title": "Citations",
+            "type": "array"
+          },
+          "cited_values": {
+            "items": {
+              "$ref": "#/components/schemas/CitedValue"
+            },
+            "title": "Cited Values",
             "type": "array"
           },
           "confidence": {
@@ -3483,6 +3530,7 @@
           "confidence",
           "citations",
           "document_ids",
+          "cited_values",
           "probe_summary",
           "breach_flags",
           "fingerprint",
@@ -6225,6 +6273,85 @@
         "title": "LayoutElement",
         "type": "object"
       },
+      "LocateValuesRequest": {
+        "properties": {
+          "values": {
+            "items": {
+              "$ref": "#/components/schemas/ValueToLocate"
+            },
+            "maxItems": 20,
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "title": "LocateValuesRequest",
+        "type": "object"
+      },
+      "LocatedValue": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "locations": {
+            "items": {
+              "$ref": "#/components/schemas/ValueLocation"
+            },
+            "title": "Locations",
+            "type": "array"
+          },
+          "page_size": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Size"
+          },
+          "units": {
+            "default": "pt",
+            "enum": [
+              "pt",
+              "px"
+            ],
+            "title": "Units",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "units",
+          "page_size",
+          "locations"
+        ],
+        "title": "LocatedValue",
+        "type": "object"
+      },
+      "LocatedValues": {
+        "properties": {
+          "values": {
+            "items": {
+              "$ref": "#/components/schemas/LocatedValue"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "title": "LocatedValues",
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "password": {
@@ -8063,6 +8190,53 @@
           "ctx"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "ValueLocation": {
+        "properties": {
+          "bbox": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Bbox",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "bbox"
+        ],
+        "title": "ValueLocation",
+        "type": "object"
+      },
+      "ValueToLocate": {
+        "properties": {
+          "field": {
+            "default": "value",
+            "maxLength": 120,
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 64,
+            "title": "Id",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 400,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "value"
+        ],
+        "title": "ValueToLocate",
         "type": "object"
       },
       "WaitingDocument": {
@@ -12547,6 +12721,75 @@
           }
         },
         "summary": "Get Document Langgraph Trace",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/{document_id}/locate-values": {
+      "post": {
+        "description": "Where each value is printed on the document, found the way numerical and date findings are placed (in the\nforms it is likely printed in, beside its field's label), for boxing it in the officer's compare view. A photo\nor a scan is searched through its OCR'd lines (text_lines, worked out once and cached). Reads only.",
+        "operationId": "locate_document_values_documents__document_id__locate_values_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocateValuesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocatedValues"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Locate Document Values",
         "tags": [
           "documents"
         ]

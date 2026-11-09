@@ -66,7 +66,8 @@ export function CaseSectionNav({
               >
                 <span className="case-nav-icon" aria-hidden="true">
                   <Icon name={section.icon} size={16} />
-                  {collapsed && status && (
+                  {/* Waiting (idle) has no dot: a dot only appears once there is something to say. */}
+                  {collapsed && status && status.tone !== 'idle' && (
                     <span className={`case-nav-dot case-nav-dot--${status.tone} case-nav-badge`} />
                   )}
                 </span>
@@ -76,7 +77,7 @@ export function CaseSectionNav({
                   <span className="case-nav-label">{section.label}</span>
                   {status && (
                     <span className="case-nav-status">
-                      <span className={`case-nav-dot case-nav-dot--${status.tone}`} aria-hidden="true" />
+                      {status.tone !== 'idle' && <span className={`case-nav-dot case-nav-dot--${status.tone}`} aria-hidden="true" />}
                       {status.text}
                     </span>
                   )}

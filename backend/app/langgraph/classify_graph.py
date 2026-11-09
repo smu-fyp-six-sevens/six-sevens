@@ -58,14 +58,6 @@ def _raw_text(state: DocumentGraphState) -> str:
     return text_cache.get(state["document_id"]) or ""
 
 
-def _called_tool_names(messages: list) -> set[str]:
-    names: set[str] = set()
-    for message in messages:
-        if isinstance(message, AIMessage):
-            names.update(tc["name"] for tc in (message.tool_calls or []))
-    return names
-
-
 # A tool result that says the call was refused, not run (so it doesn't count as the tool's one use).
 _NOT_RUN = "Not run: "
 

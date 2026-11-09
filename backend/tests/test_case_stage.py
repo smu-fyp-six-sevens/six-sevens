@@ -484,13 +484,12 @@ def test_finalising_is_permanent_there_is_no_reopen() -> None:
     with patch("app.routers._dependencies.case_service.get_case", return_value=_case("finalised")):
         response = client.post("/cases/case-1/reopen")
 
-    assert response.status_code in (404, 405)
+    assert response.status_code == 404  # no such route, rather than one that refuses
 
 
 # --- Live updates ------------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_a_change_to_the_case_row_pushes_a_fresh_snapshot() -> None:
     import asyncio
 

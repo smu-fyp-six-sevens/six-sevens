@@ -24,8 +24,8 @@ interface DocumentReviewModalProps {
   heading: ReactNode;
   onClose: () => void;
   // The report finding ids of each row of the findings list, in its order, so the document numbers and steps
-  // through them the same way.
-  order: string[][];
+  // through them the same way. Given where each finding is placed, since the list orders by it.
+  order: (located: Map<string, FindingHighlight>) => string[][];
   // The document's findings, with their review ticks and Save, beside the document.
   children: (link: ReviewLink) => ReactNode;
 }
@@ -109,7 +109,7 @@ export default function DocumentReviewModal({
               previewUrl={previewUrl}
               error={error}
               highlights={highlights}
-              order={order}
+              order={order(located)}
               activeId={activeId}
               activeArea={activeArea}
               onSelect={selectFromDocument}

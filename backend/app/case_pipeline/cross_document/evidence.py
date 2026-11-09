@@ -14,7 +14,7 @@ from typing import Any
 
 from ...fraud_detection.numerical_validation.common import _as_number, _rows
 from ...fraud_detection.shared.field_values import decode_field_value
-from ...models import APPROVED_STATUSES, DocumentRecord
+from ...models import APPROVED_STATUSES, CitedValue, DocumentRecord
 from ..categories import category_for_finding
 from ..models import FindingCategory
 from ..trace import RunTrace
@@ -119,6 +119,24 @@ class CaseContext:
 
     def resolve(self, key_or_id: str) -> DocView | None:
         return self.docs.get(key_or_id) or self.by_id(key_or_id)
+
+    def cited_values(self, citations: list[str]) -> list[CitedValue]:
+        """Each citation's document, field and value, for showing the officer where it is. Only plain values (text
+        and numbers) can be found on a page; a table or a computed summary is left out."""
+        out: list[CitedValue] = []
+        for citation in citations:
+            entry = self.ledger.refs.get(citation)
+            if entry is None:
+                continue
+            view = self.docs.get(entry["doc_key"])
+            value = entry.get("value")
+            if view is None or isinstance(value, (dict, list, tuple, set)) or value is None or isinstance(value, bool):
+                continue
+            text = " ".join(str(value).split())[:200]
+            cited = CitedValue(document_id=view.id, field=str(entry["field"]), value=text)
+            if text and cited not in out:
+                out.append(cited)
+        return out
 
 
 def build_context(

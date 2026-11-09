@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from ..models import AdditionalDocuments, CaseRisk, SupportingDocumentRecommendation
+from ..models import AdditionalDocuments, CaseRisk, CitedValue, SupportingDocumentRecommendation
 
 
 class FindingCategory(str, Enum):
@@ -66,6 +66,9 @@ class CrossDocFinding(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     citations: list[str] = Field(default_factory=list)
     document_ids: list[str] = Field(default_factory=list)
+    # Each cited document's field and value (from the ledger, unmasked), for the officer's side-by-side view.
+    # Empty on runs from before it was recorded.
+    cited_values: list[CitedValue] = Field(default_factory=list)
     # What the refutation probe returned, in the investigator's words.
     probe_summary: str = ""
     # Set by code when a tool result carried a hard breach.
