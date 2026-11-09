@@ -5,15 +5,17 @@ import { analysisFindingAnchor, checkedAndFine } from './analysisSummary';
 // A due-diligence aid, not a score: a web search for recent sanctions, regulatory action or negative news about
 // the company. Every run that has the check says what happened; a skipped or failed one says why, quietly. Only a
 // run from before the check existed shows nothing.
-// When the search ran, and whether this run used the case's cached result rather than searching again.
+// Which company was searched (the name its documents give, not necessarily the case's title), when, and whether this
+// run used the case's cached result rather than searching again.
 function CheckedWhen({ check }: { check: AdverseMediaCheck }) {
   if (!check.checked_at) return null;
   const when = new Date(check.checked_at).toLocaleString('en-SG', {
     day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
   });
   // A former name is searched too: companies often rename after a scandal, so older coverage uses the old name.
-  const former = check.former_names.length > 0 ? `, also as ${check.former_names.join(', ')}` : '';
-  return <span className="analysis-brief-media-when">Searched {when}{former}{check.reused && ' (cached)'}</span>;
+  const former = check.former_names.length > 0 ? ` (also as ${check.former_names.join(', ')})` : '';
+  const company = check.query ? ` “${check.query}”${former}` : '';
+  return <span className="analysis-brief-media-when">Searched{company} on {when}{check.reused && ' (cached)'}</span>;
 }
 
 function AdverseMedia({ check }: { check: AdverseMediaCheck | null | undefined }) {

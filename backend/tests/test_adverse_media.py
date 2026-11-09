@@ -311,3 +311,73 @@ async def test_a_search_past_the_time_limit_is_failed_not_waited_on() -> None:
         result = await adverse_media.run_adverse_media_check("Acme Trading Pte Ltd")
 
     assert result.status == "failed"
+
+
+# --- Which company is searched: the one its documents name, not the case's free-text title --------------------
+
+
+def _doc(doc_id: str, kind: str, status: str = "detected"):
+    document = MagicMock()
+    document.id, document.document_type, document.status.value = doc_id, kind, status
+    return document
+
+
+def _company_on_file(documents, fields: dict[str, dict]):
+    from app.case_pipeline import service
+
+    with patch.object(service.extracted_fields_repository, "get_extracted_fields_dict", side_effect=lambda i: fields.get(i, {})):
+        return service._company_on_file(documents)
+
+
+def test_the_business_profile_names_the_company_before_the_certificate() -> None:
+    name, former = _company_on_file(
+        [_doc("coi", "certificate_of_incorporation"), _doc("profile", "certificate_of_incumbency")],
+        {"profile": {"company_name": "Acme Trading Pte. Ltd.", "company_former_name": "Zenith Bay Pte. Ltd."},
+         "coi": {"company_name": "Acme Trading Private Limited", "company_former_name": "Old Acme Pte. Ltd."}},
+    )
+
+    assert name == "Acme Trading Pte. Ltd."
+    # Former names from both documents, the business profile's first.
+    assert former == ["Zenith Bay Pte. Ltd.", "Old Acme Pte. Ltd."]
+
+
+def test_without_a_business_profile_the_certificate_names_the_company() -> None:
+    name, _ = _company_on_file([_doc("coi", "certificate_of_incorporation")], {"coi": {"company_name": "Acme Pte Ltd"}})
+
+    assert name == "Acme Pte Ltd"
+
+
+def test_a_rejected_document_does_not_name_the_company() -> None:
+    name, former = _company_on_file(
+        [_doc("profile", "certificate_of_incumbency", status="rejected")],
+        {"profile": {"company_name": "Wrong Co Pte Ltd", "company_former_name": "Wrong Old Co"}},
+    )
+
+    assert (name, former) == (None, [])
+
+
+async def test_the_case_name_is_searched_only_when_no_document_names_the_company() -> None:
+    from app.case_pipeline import service
+
+    searched: list[str | None] = []
+
+    async def check(company, former):
+        searched.append(company)
+        return adverse_media.AdverseMediaCheck(status="clean", query=company or "")
+
+    case = MagicMock(company_name="Case 67")
+    trace = MagicMock()
+    for documents, fields in [
+        ([_doc("profile", "certificate_of_incumbency")], {"profile": {"company_name": "Acme Trading Pte. Ltd."}}),
+        ([_doc("payslip", "payslip")], {}),
+    ]:
+        with (
+            patch.object(service.extracted_fields_repository, "get_extracted_fields_dict", side_effect=lambda i, f=fields: f.get(i, {})),
+            patch.object(service.case_repository, "get_case", return_value=case),
+            patch.object(service.repository, "latest_adverse_media", return_value=None),
+            patch.object(service, "run_adverse_media_check", side_effect=check),
+        ):
+            await service._media_check("case-1", documents, trace)
+
+    # The documents' company, never the placeholder title, until no document names one.
+    assert searched == ["Acme Trading Pte. Ltd.", "Case 67"]

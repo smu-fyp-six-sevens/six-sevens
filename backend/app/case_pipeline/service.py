@@ -305,16 +305,24 @@ async def _media_check(case_id: str, documents: list[DocumentRecord], trace: Run
     The run's media check: the case's cached one when it ran within the last CACHE_HOURS for the same company (no
     search, no cost), otherwise a new web search. A due-diligence aid only, never scored. Never raises: None if even the
     lookup failed, so the run carries on without it.
+
+    The company searched is the one its documents name (business profile, else certificate of incorporation), as case
+    matching takes it: the case's own name is free text an officer types (often a placeholder), so it is only the
+    fallback for a case with neither document.
     """
     try:
-        case = await asyncio.to_thread(case_repository.get_case, case_id)
-        company = case.company_name if case else None
-        former = former_names_of(company, await asyncio.to_thread(_former_names_on_file, documents))
+        on_file, former_on_file = await asyncio.to_thread(_company_on_file, documents)
+        if on_file:
+            company, source = on_file, "documents"
+        else:
+            case = await asyncio.to_thread(case_repository.get_case, case_id)
+            company, source = (case.company_name if case else None), "case name"
+        former = former_names_of(company, former_on_file)
         previous = await asyncio.to_thread(repository.latest_adverse_media, case_id)
         check = reuse_recent(previous, company, former_names=former) or await run_adverse_media_check(company, former)
         trace.record(
             "adverse_media", status=check.status, reused=check.reused, sources=len(check.sources),
-            former_names=check.former_names, summary=check.summary,
+            company=check.query, company_from=source, former_names=check.former_names, summary=check.summary,
         )
         return check
     except Exception:
@@ -322,19 +330,28 @@ async def _media_check(case_id: str, documents: list[DocumentRecord], trace: Run
         return None
 
 
-# Where a company's former name is recorded: its business profile (ACRA), then its certificate of incorporation.
-_FORMER_NAME_DOCUMENTS = ("certificate_of_incumbency", "certificate_of_incorporation")
+# Where the company's name and former names are recorded, most reliable first: its business profile (ACRA), then its
+# certificate of incorporation.
+_COMPANY_DOCUMENTS = ("certificate_of_incumbency", "certificate_of_incorporation")
 
 
-def _former_names_on_file(documents: list[DocumentRecord]) -> list[str]:
-    """The former names the case's company documents give (company_former_name), business profile first. Sync."""
-    names: list[str] = []
-    for kind in _FORMER_NAME_DOCUMENTS:
+def _company_on_file(documents: list[DocumentRecord]) -> tuple[str | None, list[str]]:
+    """
+    The company name the case's company documents give (the first one found, business profile first) and every former
+    name they give (company_former_name). Rejected documents don't count. Sync.
+    """
+    name: str | None = None
+    former: list[str] = []
+    for kind in _COMPANY_DOCUMENTS:
         for document in documents:
-            if document.document_type == kind and document.status.value != "rejected":
-                value = (extracted_fields_repository.get_extracted_fields_dict(document.id) or {}).get("company_former_name")
-                names += value if isinstance(value, list) else [value] if value else []
-    return names
+            if document.document_type != kind or document.status.value == "rejected":
+                continue
+            fields = extracted_fields_repository.get_extracted_fields_dict(document.id) or {}
+            stated = " ".join(str(fields.get("company_name") or "").split())
+            name = name or stated or None
+            value = fields.get("company_former_name")
+            former += value if isinstance(value, list) else [value] if value else []
+    return name, former
 
 
 async def sync_stage(case_id: str) -> None:

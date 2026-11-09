@@ -127,7 +127,7 @@ test.describe('Case analysis summary and earlier runs', () => {
     await expect(media).toContainText('Media check');
     await expect(media).toContainText('nothing concerning about the company in the last three weeks');
     // When the search ran, and that this run used the case's cached search rather than searching again.
-    await expect(media.locator('.analysis-brief-media-when')).toContainText('Searched 27 Oct 2026');
+    await expect(media.locator('.analysis-brief-media-when')).toContainText('Searched “Acme Trading Pte Ltd” on 27 Oct 2026');
     await expect(media.locator('.analysis-brief-media-when')).toContainText('(cached)');
   });
 
@@ -151,7 +151,7 @@ test.describe('Case analysis summary and earlier runs', () => {
     await expect(media).toContainText('MAS issued an enforcement notice');
     await expect(media.locator('.analysis-brief-media-when')).not.toContainText('(cached)');
     // A former name searched too is named, so the officer knows the old name was covered.
-    await expect(media.locator('.analysis-brief-media-when')).toContainText('also as Zenith Bay Engineering Pte. Ltd.');
+    await expect(media.locator('.analysis-brief-media-when')).toContainText('Searched “Acme Trading Pte Ltd” (also as Zenith Bay Engineering Pte. Ltd.) on');
     await expect(media.getByRole('link', { name: 'MAS enforcement notice' })).toHaveAttribute(
       'href', 'https://mas.gov.sg/notice',
     );
