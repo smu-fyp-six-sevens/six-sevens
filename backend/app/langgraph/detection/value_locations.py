@@ -89,11 +89,15 @@ def open_with_form_values(file_bytes: bytes) -> pymupdf.Document:
     page's text search finds what was typed into the form."""
     doc = pymupdf.open(stream=file_bytes, filetype="pdf")
     for page in pages(doc):
-        for widget in page.widgets() or []:
+        for annot in page.widgets() or []:
+            # pymupdf types what widgets() yields as a plain annotation; it is a form field (Widget).
+            widget = cast(pymupdf.Widget, annot)
             value = widget.field_value
             if not isinstance(value, str) or not value.strip() or widget.field_type_string not in ("Text", "ComboBox"):
                 continue
-            box = widget.rect
+            if widget.rect is None:
+                continue
+            box = pymupdf.Rect(widget.rect)
             text = " ".join(value.split())
             # A field whose value is already drawn into the page (it has an appearance) is found as it is.
             if text.lower() in " ".join(page.get_textbox(box).split()).lower():

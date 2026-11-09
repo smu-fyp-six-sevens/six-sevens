@@ -122,8 +122,10 @@ class CaseContext:
         out: list[CitedValue] = []
         for citation in citations:
             entry = self.ledger.refs.get(citation)
-            view = self.docs.get(entry["doc_key"]) if entry else None
-            value = entry.get("value") if entry else None
+            if entry is None:
+                continue
+            view = self.docs.get(entry["doc_key"])
+            value = entry.get("value")
             if view is None or isinstance(value, (dict, list, tuple, set)) or value is None or isinstance(value, bool):
                 continue
             text = " ".join(str(value).split())[:200]
