@@ -221,7 +221,10 @@ def record_usage(span, response) -> None:
         span.set_attribute("llm.cache_write_tokens", used.cache_write + used.cache_write_1h)
         cost = pricing.cost(
             used.model, used.uncached_input, used.output, used.cache_read, used.cache_write, used.cache_write_1h,
+            used.web_searches,
         )
+        if used.web_searches:
+            span.set_attribute("llm.web_searches", used.web_searches)
         span.set_attribute("llm.cost_usd", round(cost.usd, 6))
     except Exception:
         logger.debug("Failed to record token usage on span", exc_info=True)

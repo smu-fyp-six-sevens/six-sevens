@@ -362,7 +362,7 @@ async def test_the_media_check_runs_while_the_cross_document_check_does(
 
     media_started = asyncio.Event()
 
-    async def media_check(case_id, trace):
+    async def media_check(case_id, documents, trace):
         media_started.set()
         return None
 

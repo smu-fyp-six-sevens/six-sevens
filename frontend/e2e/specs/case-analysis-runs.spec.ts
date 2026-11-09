@@ -72,7 +72,7 @@ const latest = analysis(LATEST, {
   adverse_media: {
     status: 'clean', query: 'Acme Trading Pte Ltd',
     summary: 'The web search found nothing concerning about the company in the last three weeks.',
-    sources: [], checked_at: '2026-10-27T02:03:00Z', reused: true,
+    sources: [], checked_at: '2026-10-27T02:03:00Z', reused: true, former_names: [],
   },
 });
 const earlier = analysis(EARLIER, { started_at: '2026-10-26T02:00:00Z', structured_summary: EARLIER_SUMMARY, stale: true });
@@ -138,7 +138,7 @@ test.describe('Case analysis summary and earlier runs', () => {
         status: 'concerns', query: 'Acme Trading Pte Ltd',
         summary: 'MAS issued an enforcement notice against the company last week.',
         sources: [{ title: 'MAS enforcement notice', url: 'https://mas.gov.sg/notice' }],
-        checked_at: '2026-10-27T02:03:00Z', reused: false,
+        checked_at: '2026-10-27T02:03:00Z', reused: false, former_names: ['Zenith Bay Engineering Pte. Ltd.'],
       },
     });
     const brief = await openAnalysis(page, backend);
@@ -150,6 +150,8 @@ test.describe('Case analysis summary and earlier runs', () => {
     await expect(media).toHaveClass(/analysis-brief-media--concerns/);
     await expect(media).toContainText('MAS issued an enforcement notice');
     await expect(media.locator('.analysis-brief-media-when')).not.toContainText('(cached)');
+    // A former name searched too is named, so the officer knows the old name was covered.
+    await expect(media.locator('.analysis-brief-media-when')).toContainText('also as Zenith Bay Engineering Pte. Ltd.');
     await expect(media.getByRole('link', { name: 'MAS enforcement notice' })).toHaveAttribute(
       'href', 'https://mas.gov.sg/notice',
     );

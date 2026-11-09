@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 from .. import (
+    extracted_fields_repository,
     audit, case_repository, case_stage, detection_results, document_repository, events, finding_keys,
     findings_repository, read_pool, telemetry,
 )
@@ -25,7 +26,7 @@ from ..llm_io import ModelRefused
 from ..models import CaseStage, DocumentRecord
 from ..run_context import end_run, start_run
 from . import repository, state
-from .adverse_media import reuse_recent, run_adverse_media_check
+from .adverse_media import former_names_of, reuse_recent, run_adverse_media_check
 from .cross_document.evidence import build_context
 from .cross_document.agents import PROMPT_VERSION
 from .cross_document.graph import run_cross_document_analysis
@@ -235,7 +236,7 @@ async def _analyse(
     trace.record("dossier", documents={k: {"id": v.id, "filename": v.filename, "findings": len(v.findings)}
                                       for k, v in context.docs.items()})
     # The media check doesn't depend on the documents, so it runs while the cross-document check does.
-    media_check = asyncio.create_task(_media_check(case_id, trace))
+    media_check = asyncio.create_task(_media_check(case_id, documents, trace))
     try:
         result = await run_cross_document_analysis(context)
         findings = result.get("findings") or []
@@ -299,7 +300,7 @@ async def _analyse(
         media_check.cancel()
 
 
-async def _media_check(case_id: str, trace: RunTrace) -> AdverseMediaCheck | None:
+async def _media_check(case_id: str, documents: list[DocumentRecord], trace: RunTrace) -> AdverseMediaCheck | None:
     """
     The run's media check: the case's cached one when it ran within the last CACHE_HOURS for the same company (no
     search, no cost), otherwise a new web search. A due-diligence aid only, never scored. Never raises: None if even the
@@ -308,13 +309,32 @@ async def _media_check(case_id: str, trace: RunTrace) -> AdverseMediaCheck | Non
     try:
         case = await asyncio.to_thread(case_repository.get_case, case_id)
         company = case.company_name if case else None
+        former = former_names_of(company, await asyncio.to_thread(_former_names_on_file, documents))
         previous = await asyncio.to_thread(repository.latest_adverse_media, case_id)
-        check = reuse_recent(previous, company) or await run_adverse_media_check(company)
-        trace.record("adverse_media", status=check.status, reused=check.reused, sources=len(check.sources))
+        check = reuse_recent(previous, company, former_names=former) or await run_adverse_media_check(company, former)
+        trace.record(
+            "adverse_media", status=check.status, reused=check.reused, sources=len(check.sources),
+            former_names=check.former_names, summary=check.summary,
+        )
         return check
     except Exception:
         logger.exception("Adverse-media check failed for case %s", case_id)
         return None
+
+
+# Where a company's former name is recorded: its business profile (ACRA), then its certificate of incorporation.
+_FORMER_NAME_DOCUMENTS = ("certificate_of_incumbency", "certificate_of_incorporation")
+
+
+def _former_names_on_file(documents: list[DocumentRecord]) -> list[str]:
+    """The former names the case's company documents give (company_former_name), business profile first. Sync."""
+    names: list[str] = []
+    for kind in _FORMER_NAME_DOCUMENTS:
+        for document in documents:
+            if document.document_type == kind and document.status.value != "rejected":
+                value = (extracted_fields_repository.get_extracted_fields_dict(document.id) or {}).get("company_former_name")
+                names += value if isinstance(value, list) else [value] if value else []
+    return names
 
 
 async def sync_stage(case_id: str) -> None:

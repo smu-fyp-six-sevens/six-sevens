@@ -70,7 +70,7 @@ def set_info(roles: Iterable[str]) -> None:
 
 def record_llm(
     agent: str, model: str, uncached_input: int, output: int, cache_read: int, cache_write: int, seconds: float | None,
-    *, cache_write_1h: int = 0,
+    *, cache_write_1h: int = 0, web_searches: int = 0,
 ) -> pricing.Cost:
     """Counts one finished call; returns its cost."""
     llm_calls.labels(agent, model, "ok").inc()
@@ -81,7 +81,7 @@ def record_llm(
     for kind, n in tokens:
         if n:
             llm_tokens.labels(agent, model, kind).inc(n)
-    cost = pricing.cost(model, uncached_input, output, cache_read, cache_write, cache_write_1h)
+    cost = pricing.cost(model, uncached_input, output, cache_read, cache_write, cache_write_1h, web_searches)
     llm_cost.labels(agent, model).inc(cost.usd)
     llm_cache_savings.labels(agent, model).inc(cost.saved_by_cache_usd)
     if seconds is not None:

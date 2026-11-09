@@ -1802,6 +1802,8 @@ export interface components {
         AdverseMediaCheck: {
             /** Checked At */
             checked_at: string | null;
+            /** Former Names */
+            former_names: string[];
             /**
              * Query
              * @default

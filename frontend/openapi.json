@@ -741,6 +741,13 @@
             ],
             "title": "Checked At"
           },
+          "former_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Former Names",
+            "type": "array"
+          },
           "query": {
             "default": "",
             "title": "Query",
@@ -777,6 +784,7 @@
         "required": [
           "status",
           "query",
+          "former_names",
           "summary",
           "sources",
           "checked_at",

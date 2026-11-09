@@ -145,6 +145,9 @@ class AdverseMediaCheck(BaseModel):
     status: AdverseMediaStatus
     # The company name that was searched.
     query: str = ""
+    # Former names of the company (from its business profile or certificate of incorporation) also searched, in one
+    # search of the check's limit: companies often rename after a scandal, so older coverage uses the old name.
+    former_names: list[str] = Field(default_factory=list)
     # One plain line for the officer: what the search found, or why it didn't run.
     summary: str = ""
     sources: list[AdverseMediaSource] = Field(default_factory=list)

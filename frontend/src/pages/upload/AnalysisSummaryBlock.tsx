@@ -11,7 +11,9 @@ function CheckedWhen({ check }: { check: AdverseMediaCheck }) {
   const when = new Date(check.checked_at).toLocaleString('en-SG', {
     day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
   });
-  return <span className="analysis-brief-media-when">Searched {when}{check.reused && ' (cached)'}</span>;
+  // A former name is searched too: companies often rename after a scandal, so older coverage uses the old name.
+  const former = check.former_names.length > 0 ? `, also as ${check.former_names.join(', ')}` : '';
+  return <span className="analysis-brief-media-when">Searched {when}{former}{check.reused && ' (cached)'}</span>;
 }
 
 function AdverseMedia({ check }: { check: AdverseMediaCheck | null | undefined }) {
