@@ -97,6 +97,12 @@ export default function UploadPage({
   const selectSection = (section: CaseSection) => {
     setSearchParams(section === 'summary' ? {} : { section }, { replace: true });
   };
+  // From the Additional Documents tab: the Documents tab, at its upload, with the requested documents listed open.
+  const openGroupParam = searchParams.get('open');
+  const uploadRequested = () => {
+    setSearchParams({ section: 'documents', open: 'requested' }, { replace: true });
+    window.scrollTo({ top: 0 });
+  };
 
   const [reportError, setReportError] = useState<string | null>(null);
   const report = useCaseReportDownload(selectedCase.id, selectedCase.caseNumber, setReportError);
@@ -429,6 +435,9 @@ export default function UploadPage({
                   selection={selection}
                   rowActions={rowActions}
                   readOnly={isFinalised}
+                  requestedDocuments={additionalDocuments?.items ?? []}
+                  initialGroup={openGroupParam === 'requested' ? 'requested' : undefined}
+                  onOpenRequest={(key) => setSearchParams({ section: 'additional', request: key }, { replace: true })}
                 />
               </section>
 
@@ -461,6 +470,8 @@ export default function UploadPage({
             <AdditionalDocumentsCard
               additionalDocuments={additionalDocuments}
               analysed={risk !== null}
+              onUpload={isFinalised ? undefined : uploadRequested}
+              highlightedRequest={searchParams.get('request')}
             />
           )}
 

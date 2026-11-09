@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 
 /**
- * The Documents card's categories (Missing, Additional, Needs Review, Pending Approval, Approved, Rejected) open one
+ * The Documents card's categories (Missing, Requested, Optional, Needs Review, Pending Approval, Approved, Rejected) open one
  * at a time, so a test that looks at a row opens the category holding it first.
  */
 

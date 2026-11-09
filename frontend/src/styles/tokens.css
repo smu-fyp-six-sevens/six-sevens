@@ -176,4 +176,10 @@
   --risk-medium-text: #a14a22;
   --risk-high: #c4442a;
   --risk-critical: #7f1414;
+
+  /* Documents the case analysis requests: violet, a colour no other document group uses. */
+  --violet: #6b4fbb;
+  --violet-dark: #4f3896;
+  --violet-bg: #f2eefb;
+  --violet-76: #cdbff0;
 }

@@ -1,5 +1,7 @@
 import type { AdditionalDocument, AdditionalDocuments, RecommendationItem } from '../../services/uploadService';
+import { useEffect, useRef } from 'react';
 import { Icon } from '../../components/Icon';
+import { requestKey } from './requestedDocument';
 
 const formatMoney = (value: number) =>
   value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -47,13 +49,27 @@ function scoreEffect(item: AdditionalDocument): string {
 }
 
 // Produced by the case analysis run (backend risk/additional_documents.py): checklist rules and the agent's requests.
+// With `onUpload` (left out once the case is finalised), the officer goes to the Documents tab to upload what the
+// client sends back: the upload, extraction and approval all happen there, where these requests are listed too.
 export function AdditionalDocumentsCard({
   additionalDocuments,
   analysed,
+  onUpload,
+  highlightedRequest = null,
 }: {
   additionalDocuments: AdditionalDocuments | null;
   analysed: boolean;
+  onUpload?: () => void;
+  // The request the officer followed a link to (requestKey), from the Documents tab's Requested group.
+  highlightedRequest?: string | null;
 }) {
+  // The linked request is scrolled into view once it is on the page (the requests can arrive after the card mounts).
+  const highlightedRef = useRef<HTMLDivElement>(null);
+  const highlightedPresent = (additionalDocuments?.items ?? []).some((item) => requestKey(item) === highlightedRequest);
+  useEffect(() => {
+    if (highlightedPresent) highlightedRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }, [highlightedPresent, highlightedRequest]);
+
   const items: AdditionalDocument[] = additionalDocuments?.items ?? [];
   const reason = additionalDocuments?.reason ?? null;
   const canMoveScore = items.some((item) => item.affects_score);
@@ -68,8 +84,17 @@ export function AdditionalDocumentsCard({
         </div>
 
         {items.length > 0 && (
-          <span className="summary-count">
-            {items.length} {items.length === 1 ? 'request' : 'requests'}
+          <span className="additional-documents-actions">
+            <span className="summary-count">
+              {items.length} {items.length === 1 ? 'request' : 'requests'}
+            </span>
+
+            {onUpload && (
+              <button type="button" className="analysis-action" onClick={onUpload}>
+                <Icon name="upload" size={15} />
+                Upload in Documents
+              </button>
+            )}
           </span>
         )}
       </div>
@@ -146,7 +171,12 @@ export function AdditionalDocumentsCard({
           ) : (
             <div className="flagged-list">
               {items.map((item) => (
-                <div key={`${item.source}-${item.title}`} className="flagged-item">
+                <div
+                  key={requestKey(item)}
+                  ref={requestKey(item) === highlightedRequest ? highlightedRef : undefined}
+                  className={`flagged-item${requestKey(item) === highlightedRequest ? ' flagged-item--highlighted' : ''}`}
+                  aria-current={requestKey(item) === highlightedRequest ? 'true' : undefined}
+                >
                   <div className="flagged-item-main">
                     <strong>{item.title}</strong>
 
