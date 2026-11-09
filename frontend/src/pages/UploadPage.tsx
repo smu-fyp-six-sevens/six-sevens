@@ -18,7 +18,7 @@ import { CaseAnalysisCard } from './upload/CaseAnalysisCard';
 import { CaseRiskCard } from './upload/CaseRiskCard';
 import { CaseOverview } from './upload/CaseOverview';
 import { SeverityCard } from './upload/SeverityGauge';
-import { SeverityCardSkeleton } from '../components/Skeletons';
+import { DocumentsSectionSkeleton, SeverityCardSkeleton } from '../components/Skeletons';
 import { CaseSectionNav } from './upload/CaseSectionNav';
 import { useCaseReportDownload } from './upload/useCaseReportDownload';
 import { CharacterCount } from '../components/CharacterCount';
@@ -335,7 +335,9 @@ export default function UploadPage({
             />
           )}
 
-          {activeSection === 'documents' && (
+          {activeSection === 'documents' && !snapshotLoaded && <DocumentsSectionSkeleton />}
+
+          {activeSection === 'documents' && snapshotLoaded && (
             <div className="upload-view">
               <section className="upload-main">
                 {!isFinalised && (

@@ -105,3 +105,69 @@
   }
 }
 
+
+/* The Documents section (DocumentsSectionSkeleton): heading, upload box, then the checklist's rows. */
+.skeleton-documents > div {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton-dropzone {
+  height: 140px;
+  margin: 8px 0 12px;
+  border: 1px dashed var(--slate-86);
+  border-radius: 12px;
+  background: var(--slate-97);
+}
+
+.skeleton-documents-card {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.skeleton-documents-head {
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skeleton-documents-row {
+  display: grid;
+  grid-template-columns: 18px minmax(120px, 1.3fr) minmax(160px, 2.6fr) 90px;
+  align-items: center;
+  gap: 18px;
+  min-height: 52px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skeleton-documents-row:last-child {
+  border-bottom: 0;
+}
+
+.skeleton-documents-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+
+.skeleton-documents-pill {
+  width: 90px;
+  height: 20px;
+  border-radius: 999px;
+}
+
+@media (max-width: 700px) {
+  .skeleton-documents-row {
+    grid-template-columns: 18px minmax(0, 1fr) 70px;
+  }
+
+  .skeleton-documents-row > :nth-child(3) {
+    display: none;
+  }
+
+  .skeleton-documents-pill {
+    width: 70px;
+  }
+}

@@ -148,6 +148,7 @@ def verify_verdict(
         confidence=probability(verdict.get("confidence")),
         citations=citations,
         document_ids=document_ids,
+        cited_values=context.cited_values(citations),
         probe_summary=plain_text(str(verdict.get("probe_summary") or ""))[:400],
         breach_flags=flags,
     ), ""

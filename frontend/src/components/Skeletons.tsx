@@ -87,6 +87,36 @@ export function CasePageSkeleton({ label = 'Loading case…' }: { label?: string
   );
 }
 
+// The Documents section while the case's first snapshot arrives: the heading, the upload box and the checklist's
+// rows, so the page reads as loading rather than as a case with every document missing.
+export function DocumentsSectionSkeleton() {
+  return (
+    <div className="upload-view skeleton-documents" role="status" aria-busy="true" data-testid="documents-skeleton">
+      <span className="sr-only">Loading the case's documents…</span>
+
+      <div aria-hidden="true">
+        <Bar size="title" />
+        <Bar size="medium" />
+        <div className="skeleton-dropzone" />
+
+        <div className="skeleton-card skeleton-documents-card">
+          <div className="skeleton-documents-head">
+            <Bar size="short" />
+          </div>
+          {Array.from({ length: 8 }, (_, index) => (
+            <div key={index} className="skeleton-documents-row">
+              <span className="skeleton-bar skeleton-documents-dot" />
+              <Bar size="medium" />
+              <Bar size="line" />
+              <span className="skeleton-bar skeleton-documents-pill" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // The body of a document page (its fields next to the preview).
 export function DocumentBodySkeleton() {
   return (

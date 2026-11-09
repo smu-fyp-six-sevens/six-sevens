@@ -359,6 +359,14 @@ export class MockBackend {
   uploadOutcomes: Record<string, UploadOutcome> = {};
   /** When set, upload-batch waits for this before answering (to observe "Uploading"). */
   uploadGate: Promise<void> | null = null;
+  /** Where a value is printed (POST /documents/:id/locate-values), per document id then value; a value not listed
+   * isn't found. The matching itself is the backend's (value_locations) and tested there. */
+  valueLocations: Record<string, Record<string, { page: number; bbox: number[] }[]>> = {};
+  /** When true, a document's preview is a real one-page PDF (595×842pt) rather than about:blank, so boxes drawn over
+   * its page can be seen. */
+  servePreviews = false;
+  /** When set, a case page's WebSocket sends no snapshot until this settles (to observe the page while it loads). */
+  snapshotGate: Promise<void> | null = null;
   /** When set, a detection cancel is recorded at once but answered only after this (to have the worker's snapshot arrive first). */
   cancelGate: Promise<void> | null = null;
   /** Backend-computed checklists for exact document sets (see ChecklistVariant); loadFixture registers them. */
@@ -377,12 +385,19 @@ export class MockBackend {
 
   async install(page: Page): Promise<void> {
     await page.route(`${API_URL}/**`, (route) => this.handle(route));
+    await page.route('https://storage.mock/**', (route) =>
+      route.fulfill({ status: 200, headers: { ...corsHeaders(), 'content-type': 'application/pdf' }, body: MINIMAL_PDF }),
+    );
     await page.routeWebSocket(/\/ws\/cases\//, (ws) => {
       const caseId = decodeURIComponent(new URL(ws.url()).pathname.split('/').pop() ?? '');
       this.sockets.set(caseId, ws);
-      ws.send(JSON.stringify(this.snapshot(caseId)));
+      const send = async () => {
+        if (this.snapshotGate) await this.snapshotGate;
+        ws.send(JSON.stringify(this.snapshot(caseId)));
+      };
+      void send();
       // caseSocket.ts's refresh() sends a bare text frame asking for a snapshot.
-      ws.onMessage(() => ws.send(JSON.stringify(this.snapshot(caseId))));
+      ws.onMessage(() => void send());
     });
   }
 
@@ -1113,7 +1128,17 @@ export class MockBackend {
       // A signed Storage URL for the file. The document page's side-by-side preview asks for one
       // (?inline=true) as soon as it loads; about:blank renders an empty preview without another request.
       if (method === 'GET' && rest === '/download') {
-        return json({ document_id: documentId, signed_url: 'about:blank', expires_in: 3600 });
+        const signedUrl = this.servePreviews ? `https://storage.mock/${documentId}.pdf` : 'about:blank';
+        return json({ document_id: documentId, signed_url: signedUrl, expires_in: 3600 });
+      }
+      // Like routers/documents.py locate_document_values.
+      if (method === 'POST' && rest === '/locate-values') {
+        const { values } = (body ?? { values: [] }) as { values: { id: string; field: string; value: string }[] };
+        return json({
+          values: values.map((value) => ({
+            id: value.id, units: 'pt', page_size: null, locations: this.valueLocations[documentId]?.[value.value] ?? [],
+          })),
+        });
       }
       // Same answers as routers/detection.py get_case_match.
       if (method === 'GET' && rest === '/detection/case-match') {

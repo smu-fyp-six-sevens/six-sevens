@@ -522,23 +522,6 @@
   background: var(--red);
 }
 
-/* The risk scale, as on .risk-badge--* in case-summary.css. */
-.case-nav-dot--risk-low {
-  background: var(--risk-low);
-}
-
-.case-nav-dot--risk-medium {
-  background: var(--risk-medium);
-}
-
-.case-nav-dot--risk-high {
-  background: var(--risk-high);
-}
-
-.case-nav-dot--risk-critical {
-  background: var(--risk-critical);
-}
-
 @keyframes case-nav-pulse {
   50% {
     opacity: 0.35;
@@ -1469,12 +1452,16 @@
   margin-bottom: 0;
 }
 
-/* The sections share what height is left between them, so a taller window spreads them and a short one packs them. */
+/* The Menu button and the sections sit at one even spacing from the top; a tall window leaves its spare height at the
+   foot rather than spreading the sections apart (which left Menu hugging Summary and wide gaps below). */
 .case-nav:not(.case-nav--open) ul {
-  flex: 1;
-  justify-content: space-between;
-  gap: 2px;
-  min-height: min-content;
+  flex: none;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.case-nav:not(.case-nav--open) .case-nav-toggle {
+  margin-bottom: 12px;
 }
 
 .case-nav:not(.case-nav--open) .case-nav-item,
@@ -1538,6 +1525,14 @@
   .case-nav:not(.case-nav--open) .case-nav-item {
     padding-top: 2px;
     padding-bottom: 2px;
+  }
+
+  .case-nav:not(.case-nav--open) ul {
+    gap: 2px;
+  }
+
+  .case-nav:not(.case-nav--open) .case-nav-toggle {
+    margin-bottom: 2px;
   }
 }
 

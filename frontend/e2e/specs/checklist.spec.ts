@@ -342,3 +342,22 @@ test.describe('Documents are listed A to Z by type', () => {
     ]);
   });
 });
+
+test.describe('While the case loads', () => {
+  test('the section shows a loading placeholder, not a list of everything missing', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'harbor-light');
+    let release!: () => void;
+    backend.snapshotGate = new Promise((resolve) => { release = resolve; });
+    await page.goto(`${fixture.caseUrl}?section=documents`);
+
+    // The whole section is a loading placeholder: no upload box, no checklist, nothing listed as missing.
+    await expect(page.getByTestId('documents-skeleton')).toBeVisible();
+    await expect(card(page)).toHaveCount(0);
+    await expect(page.getByTestId('missing-document')).toHaveCount(0);
+
+    release();
+    await expect(page.getByTestId('documents-skeleton')).toHaveCount(0);
+    await expect(card(page).getByTestId('document-group').first()).toBeVisible();
+    await expect(progress(page)).toContainText(`of ${REQUIRED.length} required`);
+  });
+});

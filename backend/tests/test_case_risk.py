@@ -581,3 +581,22 @@ def test_a_repeat_does_not_use_up_the_documents_noise_cap() -> None:
 
     # a scores the shared UEN (3); b scores its own two mediums in full (6), not scaled down by the repeat.
     assert risk.points == 9
+
+
+def test_a_cross_document_finding_carries_its_documents_and_their_values_to_the_officer() -> None:
+    from app.case_pipeline.models import CrossDocFinding, FindingCategory
+    from app.case_pipeline.risk.case_risk import contributing_from_cross_document
+    from app.models import CitedValue
+
+    cited = [CitedValue(document_id="doc-a", field="uen", value="201812345A"),
+             CitedValue(document_id="doc-b", field="uen", value="201634564N")]
+    finding = CrossDocFinding(
+        id="xd-det-1", hypothesis_id="deterministic", summary="The UEN differs.", rationale="", severity="high",
+        category=FindingCategory.IDENTITY_ENTITY_CONFLICT, document_ids=["doc-a", "doc-b"], cited_values=cited,
+    )
+
+    contributing = contributing_from_cross_document(finding, {"doc-a": _document("doc-a")})
+
+    # The compare view lets the officer pick any two of these, and boxes each one's value on its page.
+    assert contributing.document_ids == ["doc-a", "doc-b"]
+    assert contributing.cited_values == cited

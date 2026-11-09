@@ -10,6 +10,17 @@ is preferred on the same line as its field's label, and a zero only counts there
 whole list ("transaction 24 repeats transaction 13") boxes the rows its summary names. An address,
 printed over several lines, is found by its postal code and boxed up to its first words. A value that
 still matches in more than a few places is too common to point at, so it gets no box.
+
+Text the content guard quoted (hidden text, and text worded as an instruction to the AI) is found the same way,
+by its words, when the guard didn't keep where it was.
+
+A fillable PDF form keeps what was typed into it in its form fields, drawn by the viewer over the page, not in the
+page's text: each field's value is written into the page (invisibly, inside the field's box) before searching, so
+it is found like any other text.
+
+A photo or a scan has no text layer: its OCR lines (app/text_lines.py) are written into a stand-in PDF, each line
+stretched over its box and scaled to an A4 width so the distances above still hold, the same search runs on that,
+and the boxes are scaled back to the image's pixels.
 """
 
 from __future__ import annotations
@@ -23,6 +34,10 @@ import pymupdf
 from ...fraud_detection.shared.pdf_pages import pages
 
 TOOLS = ("numerical_checks_tool", "date_consistency_tool", "external_validation_tool")
+# Findings quoting text on the page that the content guard may not have placed.
+QUOTE_TOOLS = ("hidden_text_tool", "prompt_injection_tool")
+_QUOTE_WORDS = (12, 5)  # the quote's first words tried, longest first
+_OCR_PAGE_WIDTH = 595.0  # an OCR'd page is laid out at an A4 width in points
 
 _MAX_MATCHES = 3
 _MIN_LENGTH = 4
@@ -35,7 +50,106 @@ _NUMBER = re.compile(r"^\(?-?(?:S?\$)?\s*-?[\d,]*\.?\d+\)?$")
 
 
 def needs_locations(finding: dict) -> bool:
-    return finding.get("tool") in TOOLS and "locations" not in finding
+    if "locations" in finding:
+        return False
+    if finding.get("tool") in TOOLS:
+        return True
+    # Hidden text and visible instructions to the AI are in the text; metadata, a file name or an image's text is not.
+    on_page = finding.get("tool") == "hidden_text_tool" or finding.get("where") in ("hidden", "visible")
+    return finding.get("tool") in QUOTE_TOOLS and on_page and not finding.get("bbox") and bool(_quote(finding))
+
+
+def _quote(finding: dict) -> str:
+    return " ".join(str(finding.get("quote") or finding.get("text") or "").replace("…", " ").split())
+
+
+def locate_quote(doc: pymupdf.Document, finding: dict) -> dict:
+    """A finding quoting text on the page, with `locations`: its first words where they are printed (on its page,
+    when it names one). Empty when they aren't found, or are found too often to point at."""
+    words = _quote(finding).split()
+    page_number = finding.get("page")
+    for count in _QUOTE_WORDS:
+        if len(words) < min(count, 3):
+            continue
+        text = " ".join(words[:count])
+        hits = [
+            (index, rect)
+            for index, page in enumerate(pages(doc))
+            if not isinstance(page_number, int) or index + 1 == page_number
+            for rect in page.search_for(text)
+        ]
+        if hits:
+            locations = [_location(page, rect) for page, rect in hits] if len(hits) <= _MAX_MATCHES else []
+            return {**finding, "bbox_units": "pt", "locations": locations}
+    return {**finding, "locations": []}
+
+
+def open_with_form_values(file_bytes: bytes) -> pymupdf.Document:
+    """The PDF with each filled form field's value written into its page, invisibly, inside the field's box, so the
+    page's text search finds what was typed into the form."""
+    doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+    for page in pages(doc):
+        for widget in page.widgets() or []:
+            value = widget.field_value
+            if not isinstance(value, str) or not value.strip() or widget.field_type_string not in ("Text", "ComboBox"):
+                continue
+            box = widget.rect
+            text = " ".join(value.split())
+            # A field whose value is already drawn into the page (it has an appearance) is found as it is.
+            if text.lower() in " ".join(page.get_textbox(box).split()).lower():
+                continue
+            size = max(min(box.height * 0.7, 11.0), 1.0)
+            length = pymupdf.get_text_length(text, fontname="helv", fontsize=size)
+            if length <= 0 or box.width <= 0:
+                continue
+            baseline = pymupdf.Point(box.x0 + 2, box.y1 - (box.height - size) / 2 - size * 0.2)
+            # Squeezed to fit a field narrower than its text; otherwise as long as it is, from the field's left edge.
+            squeeze = min(1.0, (box.width - 4) / length) if box.width > 4 else 1.0
+            page.insert_text(
+                baseline, text, fontsize=size, fontname="helv", render_mode=3,
+                morph=(baseline, pymupdf.Matrix(squeeze, 1)),
+            )
+    return doc
+
+
+def doc_from_text_lines(text_pages: list[dict]) -> tuple[pymupdf.Document, list[float]]:
+    """A stand-in PDF of OCR'd pages: each line written (invisibly) over its box, the page scaled to an A4 width.
+    Returns it with each page's scale, points per pixel."""
+    doc = pymupdf.open()
+    scales = []
+    for text_page in text_pages:
+        width, height = (float(v) for v in text_page["size"])
+        scale = _OCR_PAGE_WIDTH / width if width > 0 else 1.0
+        page = doc.new_page(width=width * scale, height=height * scale)
+        for line in text_page["lines"]:
+            x0, y0, x1, y1 = (float(v) * scale for v in line["bbox"])
+            size = max((y1 - y0) * 0.85, 1.0)
+            length = pymupdf.get_text_length(line["text"], fontname="helv", fontsize=size)
+            if length <= 0 or x1 <= x0:
+                continue
+            baseline = pymupdf.Point(x0, y1 - (y1 - y0) * 0.22)
+            page.insert_text(
+                baseline, line["text"], fontsize=size, fontname="helv", render_mode=3,
+                morph=(baseline, pymupdf.Matrix((x1 - x0) / length, 1)),
+            )
+        scales.append(scale)
+    return doc, scales
+
+
+def in_image_units(finding: dict, text_pages: list[dict], scales: list[float]) -> dict:
+    """A finding placed on the stand-in PDF, with its boxes back in the OCR'd image's pixels."""
+    locations = finding.get("locations") or []
+    if not locations:
+        return finding
+    first = text_pages[locations[0]["page"] - 1]
+    return {
+        **finding,
+        "bbox_units": first["units"],
+        "page_size": list(first["size"]),
+        "locations": [
+            {**loc, "bbox": [round(v / scales[loc["page"] - 1], 1) for v in loc["bbox"]]} for loc in locations
+        ],
+    }
 
 
 def locate(doc: pymupdf.Document, finding: dict, fields: dict) -> dict:
@@ -220,7 +334,8 @@ def _date_forms(text: str) -> list[str]:
 
 
 def _is_zero(text: str) -> bool:
-    return not re.sub(r"[^1-9]", "", text)
+    """A number that is zero ("0", "$0.00", "(0.00)"): too common to point at unless beside its label. Text is not."""
+    return _NUMBER.match(text.strip()) is not None and not re.sub(r"[^1-9]", "", text)
 
 
 def _hits(doc: pymupdf.Document, candidate: str) -> list[tuple[int, pymupdf.Rect]]:

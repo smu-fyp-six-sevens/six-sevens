@@ -561,6 +561,9 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     backend.cases.push(harbor);
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
     await openSection(page, 'Risk summary');
+    // The menu's Risk dot turns green once the case is scored, whatever the level (the level is in its text).
+    const riskItem = page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: /^Risk Summary/ });
+    await expect(riskItem.locator('.case-nav-badge')).toHaveClass(/case-nav-dot--done/);
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section.getByTestId('risk-badge')).toHaveText('High Risk');
@@ -1522,6 +1525,8 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
 
     await expect(groupToggle(page, 'Missing')).toBeVisible();
     await expect(page.getByTestId('missing-document').locator('.status-pill').first()).toHaveText('Missing');
+    // Every section is still waiting (only documents missing, nothing scored or analysed), so the menu shows no dots.
+    await expect(sectionNav(page).locator('.case-nav-badge')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^View / })).toHaveCount(0);
     for (const group of ['Needs Review', 'Pending Approval', 'Approved', 'Rejected']) await expect(groupToggle(page, group)).toHaveCount(0);
   });

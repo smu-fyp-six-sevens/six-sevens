@@ -1,4 +1,4 @@
-import type { CaseAnalysisOverview, CaseRisk, CaseRiskLevel, WaitingDocument } from '../../services/uploadService';
+import type { CaseAnalysisOverview, CaseRisk, WaitingDocument } from '../../services/uploadService';
 import { REQUIRED_DOCUMENT_TYPES } from '../../services/uploadService';
 import type { IconName } from '../../components/Icon';
 
@@ -31,7 +31,7 @@ export function isCaseSection(value: string | null): value is CaseSection {
 }
 
 // done: nothing left to do · action: the officer has something to do · progress: waiting on the pipeline.
-export type SectionTone = 'done' | 'action' | 'progress' | 'error' | 'idle' | `risk-${Lowercase<CaseRiskLevel>}`;
+export type SectionTone = 'done' | 'action' | 'progress' | 'error' | 'idle';
 
 export interface SectionStatus {
   tone: SectionTone;
@@ -150,7 +150,8 @@ export function caseSectionStatuses({
     ? { tone: 'idle', text: 'Not Scored' }
     : risk.state === 'scored' && risk.level
       ? {
-          tone: `risk-${risk.level.toLowerCase() as Lowercase<CaseRiskLevel>}`,
+          // Scored is done, like any other section's finished step: the level itself is in the text, not the dot.
+          tone: 'done',
           text: risk.score != null ? `${risk.level} · ${risk.score}` : risk.level,
         }
       : risk.state === 'failed'
