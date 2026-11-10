@@ -31,6 +31,7 @@ from ... import metrics, telemetry
 from ...fraud_detection.shared.field_catalogue import render_field_catalogue
 from ...fraud_detection.shared.file_facts import render_file_facts
 from ...fraud_detection.numerical_validation.runner import render_check_roles
+from ...feedback_repository import FeedbackGroup
 from ...guardrails.envelope import fence
 from ...llm_contracts import SpecialistAssessment, ToolResult
 from ... import run_context
@@ -64,7 +65,8 @@ def _is_hard_breach(finding: dict) -> bool:
     return finding.get("severity_hint") == "impossible" and not finding.get("needs_review")
 
 
-_SPECIALIST_RECURSION_LIMIT = 12
+# Three steps a tool round (agent, tools, feedback), plus the wrap-up turn and collect, with room to spare.
+_SPECIALIST_RECURSION_LIMIT = 16
 # Tool rounds (one round = one agent turn that calls tools) before the specialist must wrap up.
 _MAX_TOOL_ROUNDS = 3
 
@@ -236,6 +238,10 @@ Binding rules for numerical_checks_tool and external_validation_tool. Each takes
 {catalogue}"""
 
 
+def _merge(old: dict | None, new: dict | None) -> dict:
+    return {**(old or {}), **(new or {})}
+
+
 class SpecialistState(TypedDict, total=False):
     # document_id/specialist/brief/document_type are always supplied by
     # run_specialist's initial ainvoke() below.
@@ -245,8 +251,10 @@ class SpecialistState(TypedDict, total=False):
     document_type: Required[str]
     messages: Annotated[list, add_messages]
     report: dict
-    # The feedback ids the specialist was shown, per tool (what each finding of that tool can say it applied).
-    feedback_shown: dict[str, list[str]]
+    # Officer feedback for this specialist's checks, read once on its first turn, by check code (or tool).
+    feedback: dict[str, list[FeedbackGroup]]
+    # The feedback ids it was shown, per check code (or tool): what each finding of that code was shown.
+    feedback_shown: Annotated[dict[str, list[str]], _merge]
 
 
 async def _pre_run(spec: Specialist, document_id: str) -> list:
@@ -327,16 +335,12 @@ def _make_agent_node(spec: Specialist):
                 file_contents=fence(render_file_facts(await detection_tools.file_facts(state["document_id"])), "file_facts"),
                 brief=state.get("brief") or "Review this document within your expertise.",
             )
-            # Officer feedback from other cases. Looking it up never stops a review: without it, the review goes on.
-            shown: dict[str, list[str]] = {}
+            # Officer feedback from other cases, read once for the run. Looking it up never stops a review.
+            loaded: dict[str, list[FeedbackGroup]] = {}
             try:
                 document = await detection_tools._document(state["document_id"])
                 if document is not None:
-                    items = await detection_feedback.feedback_for(
-                        [tool.name for tool in spec.tools], document.case_id, state.get("document_type"),
-                    )
-                    dynamic_text += detection_feedback.render(items)
-                    shown = detection_feedback.ids_by_tool(items)
+                    loaded = await detection_feedback.load([tool.name for tool in spec.tools], document.case_id)
             except Exception:
                 logger.exception("Failed to look up feedback for document %s", state["document_id"])
             if spec.uses_field_catalogue:
@@ -349,19 +353,22 @@ def _make_agent_node(spec: Specialist):
                     )
                 )
                 dynamic_text += _FIELD_CATALOGUE_PROMPT.format(catalogue=fence(catalogue, "field_list") + "\n\n" + checks)
+            pre_run = await _pre_run(spec, state["document_id"])
+            # The must-run tool's result carries its feedback like any other result (after the cache breakpoint).
+            pre_run, shown = _with_feedback(pre_run, loaded, {})
             seed = [
                 SystemMessage(content=[
                     {"type": "text", "text": static_text, "cache_control": {"type": "ephemeral"}},
                     {"type": "text", "text": dynamic_text},
                 ]),
                 HumanMessage(content="Begin your review."),
-                *(await _pre_run(spec, state["document_id"])),
+                *pre_run,
             ]
             response = await _invoke(
                 lambda: cache_gate.run(f"detection_specialist:{spec.name}", lambda: first_model.ainvoke(seed))
             )
             telemetry.record_usage(span, response)
-            return {"messages": [*seed, response], "feedback_shown": shown}
+            return {"messages": [*seed, response], "feedback": loaded, "feedback_shown": shown}
 
     return agent_node
 
@@ -379,11 +386,53 @@ def _budget_exhausted() -> bool:
     return context is not None and context.exhausted
 
 
+def _result_text(content: Any) -> str:
+    """The tool's own output: the first block, when officer feedback was appended after it (_with_feedback)."""
+    if isinstance(content, list) and content:
+        return message_text(content[:1])
+    return message_text(content)
+
+
+def _with_feedback(
+    messages: list, loaded: dict[str, list[FeedbackGroup]], shown: dict[str, list[str]],
+) -> tuple[list, dict[str, list[str]]]:
+    """
+    The messages, each tool result with the feedback for the check codes it fired appended as a second block, and
+    the ids newly shown per code. A code already shown this run isn't shown again.
+    """
+    out: list = []
+    new_shown: dict[str, list[str]] = {}
+    for message in messages:
+        result = _read_tool_message(message) if isinstance(message, ToolMessage) and loaded else None
+        if result is None:
+            out.append(message)
+            continue
+        keys = detection_feedback.keys_for_result(result.tool or message.name or "", (f.model_dump() for f in result.findings))
+        block, ids = detection_feedback.for_result(loaded, keys, [*shown, *new_shown])
+        if not block:
+            out.append(message)
+            continue
+        new_shown.update(ids)
+        out.append(message.model_copy(update={"content": [
+            {"type": "text", "text": _result_text(message.content)}, {"type": "text", "text": block.lstrip()},
+        ]}))
+    return out, new_shown
+
+
+def _feedback_node(state: SpecialistState) -> dict:
+    """After each tool round: the new results carry their checks' feedback before the specialist reads them."""
+    messages = state.get("messages") or []
+    last_call = max((i for i, m in enumerate(messages) if isinstance(m, AIMessage)), default=-1)
+    results, shown = _with_feedback(messages[last_call + 1:], state.get("feedback") or {}, state.get("feedback_shown") or {})
+    # Same ids, so add_messages replaces the results in place.
+    return {"messages": results, "feedback_shown": shown} if shown else {"feedback_shown": {}}
+
+
 def _read_tool_message(message: ToolMessage) -> ToolResult | None:
     """A tool's result as the contract, or None when the message is an error or not a result at all."""
     if getattr(message, "status", "success") == "error":
         return None
-    text = message_text(message.content)
+    text = _result_text(message.content)
     raw = parse_json_object(text)
     checked = validate(ToolResult, raw, site=f"tool {message.name or 'unknown'}", raw=text)
     if checked.value is None:
@@ -415,9 +464,9 @@ def _read_assessment(final: Any) -> tuple[SpecialistAssessment, str]:
     return SpecialistAssessment(), "failed"
 
 
-def _applied(finding: dict, state: SpecialistState) -> dict:
-    """The feedback the specialist was shown for this finding's check, which the finding then says it applied."""
-    ids = (state.get("feedback_shown") or {}).get(finding.get("tool") or "")
+def _shown(finding: dict, state: SpecialistState) -> dict:
+    """The feedback the specialist was shown for this finding's check code (or its tool, when it has no code)."""
+    ids = (state.get("feedback_shown") or {}).get(detection_feedback.finding_key(finding))
     return {"feedback_ids": ids} if ids else {}
 
 
@@ -484,7 +533,7 @@ def _collect_node(state: SpecialistState) -> dict:
             # The whole finding, so the findings table keeps what the tool returned.
             dismissed.append({
                 **finding,
-                **_applied(finding, state),
+                **_shown(finding, state),
                 "id": finding_id,
                 "reason": assessed.rationale or "Dismissed as a false positive.",
                 "confidence": assessed.confidence,
@@ -503,7 +552,7 @@ def _collect_node(state: SpecialistState) -> dict:
             rationale = f"Not dismissed: the check shows this value is impossible. Specialist's note: {rationale}"
         merged.append({
             **finding,
-            **_applied(finding, state),
+            **_shown(finding, state),
             "severity": severity,
             "rationale": rationale,
             "ai_accepted": ai_accepted,
@@ -542,10 +591,12 @@ def build_specialist_graph(spec: Specialist):
     graph = StateGraph(SpecialistState)
     graph.add_node("agent", _make_agent_node(spec))
     graph.add_node("tools", ToolNode([guard_tool(t) for t in spec.tools], handle_tool_errors=True))
+    graph.add_node("feedback", _feedback_node)
     graph.add_node("collect", _collect_node)
     graph.set_entry_point("agent")
     graph.add_conditional_edges("agent", _should_continue, {"tools": "tools", "collect": "collect"})
-    graph.add_edge("tools", "agent")
+    graph.add_edge("tools", "feedback")
+    graph.add_edge("feedback", "agent")
     graph.add_edge("collect", END)
     return graph.compile(checkpointer=False)
 

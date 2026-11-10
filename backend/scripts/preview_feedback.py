@@ -1,14 +1,16 @@
 """
-Shows what officer feedback the agents would see for a check, without calling a model (no credits).
+Shows what officer feedback the agents would see, without calling a model (no credits).
 
-Reads finding_feedback the way a specialist's first turn does (feedback_repository.similar, then detection/feedback.render)
-and prints the exact prompt block and the ids a finding would record as applied. Read-only: it writes nothing.
+Reads finding_feedback the way a specialist does (feedback_repository.counts, through detection/feedback.load) and
+prints, per check code, the block a tool result would carry and the ids a finding of that code would record as shown.
+Read-only: it writes nothing.
 
-    python scripts/preview_feedback.py --check metadata_tool --case-id <a case id other than the feedback's own>
-    python scripts/preview_feedback.py --check metadata_tool --case-id x --doc-type payslip
+    python scripts/preview_feedback.py --check numerical_checks_tool --case-id <a case id other than the feedback's own>
     python scripts/preview_feedback.py --cross-document --case-id <a case id other than the feedback's own>
 
---cross-document shows what the case analysis (planner and judge) would be shown, for the categories the model decides.
+--check is a tool name; every code it has feedback for is shown, then the tool's own (code-less findings and missed
+issues). --cross-document shows what the case analysis (planner and judge) would be shown, for the categories the
+model decides.
 
 Feedback from the case you pass is left out (an agent only learns from other cases), so use any id the feedback didn't
 come from. To try it with test rows, run backend/sql/dev/seed_feedback_test.sql first.
@@ -30,19 +32,20 @@ from app.supabase_client import service_supabase_client  # noqa: E402
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--check", help="the detection check (tool) name, e.g. metadata_tool")
+    parser.add_argument("--check", help="the detection tool name, e.g. numerical_checks_tool")
     parser.add_argument("--cross-document", action="store_true", help="preview the case analysis's feedback instead")
     parser.add_argument("--case-id", required=True, help="the case the document is in; its own feedback is left out")
-    parser.add_argument("--doc-type", default=None, help="the document's type, so feedback on the same type comes first")
     args = parser.parse_args()
     if not args.cross_document and not args.check:
         parser.error("give --check, or --cross-document")
 
     # The lookup treats a failure as "no feedback" so a review never stops; here that would read as nothing to learn from.
     try:
-        service_supabase_client().table("finding_feedback").select("id").limit(1).execute()
+        service_supabase_client().rpc(
+            "feedback_counts", {"p_scope": "document", "p_check_names": [], "p_exclude_case_id": ""},
+        ).execute()
     except Exception as error:
-        print(f"Can't read finding_feedback ({str(error)[:120]}). Run its CREATE TABLE from backend/sql/schema.sql first.")
+        print(f"Can't read feedback_counts ({str(error)[:120]}). Run finding_feedback's migration first (schema.sql).")
         return 1
 
     if args.cross_document:
@@ -52,20 +55,21 @@ async def main() -> int:
             print("No feedback from other cases for the case analysis: its prompts would have no feedback section.")
             return 0
         print(block)
-        print("\nA finding of each kind would record as applied:")
+        print("\nA finding of each kind would record as shown:")
         for category, ids in cross_document_feedback.ids_by_category(by_category).items():
             print(f"  {category}: {', '.join(ids)}")
         return 0
 
-    shown = await detection_feedback.feedback_for([args.check], args.case_id, args.doc_type)
-    block = detection_feedback.render(shown)
-    if not block:
-        print(f"No feedback for {args.check} from other cases: the specialist's prompt would have no feedback section.")
+    loaded = await detection_feedback.load([args.check], args.case_id)
+    if not loaded:
+        print(f"No feedback for {args.check} from other cases: its results would carry no feedback.")
         return 0
+    # As if one result fired every code there is feedback for.
+    block, ids = detection_feedback.for_result(loaded, [*(k for k in loaded if k != args.check), args.check], [])
     print(block)
-    print("\nA finding of this check would record as applied:")
-    for feedback_id in detection_feedback.ids_by_tool(shown)[args.check]:
-        print(f"  {feedback_id}")
+    print("\nA finding of each code would record as shown:")
+    for key, shown in ids.items():
+        print(f"  {key}: {', '.join(shown)}")
     return 0
 
 

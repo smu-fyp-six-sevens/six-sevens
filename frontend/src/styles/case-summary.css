@@ -1385,78 +1385,84 @@
   font-size: 12px;
 }
 
-/* The officer feedback an agent applied to a finding, opened on demand. */
-.applied-feedback {
+/* The officer feedback an agent was shown for a finding, opened on demand. */
+.shown-feedback {
   margin-top: 6px;
   font-size: 12px;
 }
 
-.applied-feedback > summary {
+.shown-feedback > summary {
   color: var(--steel);
   font-weight: 600;
   cursor: pointer;
 }
 
-.applied-feedback-note {
+.shown-feedback-note {
   margin: 6px 0 0;
   color: var(--text-muted);
 }
 
-.applied-feedback-list {
+.shown-feedback-lesson-label {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.shown-feedback-list {
   display: grid;
   gap: 4px;
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
 }
 
-.applied-feedback-item {
+.shown-feedback-item {
   padding: 6px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--white);
 }
 
-.applied-feedback-item > summary {
+.shown-feedback-item > summary {
   display: flex;
   align-items: baseline;
   gap: 8px;
   cursor: pointer;
 }
 
-.applied-feedback-verdict {
+.shown-feedback-verdict {
   flex-shrink: 0;
   color: var(--ink);
   font-weight: 700;
 }
 
-.applied-feedback-verdict--wrong {
+.shown-feedback-verdict--wrong {
   color: var(--risk-medium-ink);
 }
 
-.applied-feedback-verdict--correct,
-.applied-feedback-verdict--missed {
+.shown-feedback-verdict--correct,
+.shown-feedback-verdict--missed {
   color: var(--steel-dark);
 }
 
-.applied-feedback-summary {
+.shown-feedback-summary {
   min-width: 0;
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
 
-.applied-feedback-detail {
+.shown-feedback-detail {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 2px 12px;
   margin: 8px 0 2px;
 }
 
-.applied-feedback-detail dt {
+.shown-feedback-detail dt {
   color: var(--text-muted);
 }
 
-.applied-feedback-detail dd {
+.shown-feedback-detail dd {
   margin: 0;
   color: var(--ink);
   overflow-wrap: anywhere;

@@ -146,7 +146,7 @@ export async function getDetectionMetrics(filters: DetectionMetricsFilters = {})
   return (await response.json()) as DetectionMetrics;
 }
 
-// The feedback items an agent applied to a finding, opened: the officer's reason and note (confidential details already
+// The feedback items an agent was shown for a finding, opened: the officer's reason and note (confidential details already
 // removed) and the case each came from. One a later officer withdrew is no longer listed.
 export async function getFindingFeedback(ids: string[]): Promise<FeedbackDetail[]> {
   if (ids.length === 0) return [];

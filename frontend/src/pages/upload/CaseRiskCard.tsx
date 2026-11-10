@@ -14,7 +14,7 @@ import type { ReviewReason, ReviewVerdict } from '../../services/uploadService';
 import { formatCheck as formatTool } from '../../utils/checkLabels';
 import type { GroupReviewStatus } from './FindingReviewControls';
 import { GroupReviewBar, MetricsLine, MissedIssues, ReasonChips, ReviewSummary } from './FindingReviewControls';
-import { AppliedFeedback } from './AppliedFeedback';
+import { ShownFeedback } from './ShownFeedback';
 import { findingScope, useFindingReviews, verdictFor } from './useFindingReviews';
 import type { VerdictRow } from './useFindingReviews';
 import { compareFindings } from './uploadHelpers';
@@ -637,7 +637,7 @@ export function CaseRiskCard({
                       onNoteChange={(note) => setNoteDrafts((current) => ({ ...current, [tick.key]: note }))}
                     />
                   )}
-                  <AppliedFeedback ids={finding.feedback_ids} />
+                  <ShownFeedback ids={finding.feedback_ids} />
                   {document.scope === 'case' && comparable(row.members).document_ids.length >= 2 && (
                     <button
                       type="button"
@@ -706,7 +706,7 @@ export function CaseRiskCard({
                       onNoteChange={(note) => setNoteDrafts((current) => ({ ...current, [tick.key]: note }))}
                     />
                   )}
-                  <AppliedFeedback ids={finding.feedback_ids} />
+                  <ShownFeedback ids={finding.feedback_ids} />
                 </span>
               </li>
             );

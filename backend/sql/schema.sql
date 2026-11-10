@@ -153,13 +153,14 @@ create table public.findings (
 );
 
 -- What officers taught the agents (app/feedback_repository.py). One row per verdict or missed issue an officer
--- saved, with the confidential details taken out (app/feedback_scrub.py). Unlike findings, it is not replaced when a
--- run finishes: it survives re-runs, and is deleted only when the officer clears the verdict or the missed issue.
--- Before a specialist reviews a document it is shown up to 5 items for the same check from other cases.
+-- saved, with the confidential details taken out (app/feedback_scrub.py) and nothing touching a protected attribute
+-- (bias.py). Unlike findings, it is not replaced when a run finishes: it survives re-runs, and goes when the officer
+-- clears the verdict or the missed issue, or with its case. The agents read it counted (feedback_counts).
 --   source_key: names what the item is about, so saving again replaces it: 'v:<case>:<document or case>:<fingerprint>'
 --               for a verdict, 'm:<findings row id>' for a missed issue.
+--   check_name: the tool for a detection item, the category for a case-analysis one; check_code the finding's code.
 --   verdict:    'correct' (the finding was real: a confirmation), 'wrong' (a false alarm), null for a missed issue.
--- case_id is kept without a foreign key, so an item outlives its case (the link to it then finds none).
+-- document_id is set null when the document goes, so a re-uploaded document doesn't take its case's lessons with it.
 create table public.finding_feedback (
     id uuid not null default gen_random_uuid(),
     source_key text not null,
@@ -179,6 +180,8 @@ create table public.finding_feedback (
     updated_at timestamptz not null default now(),
     constraint finding_feedback_pkey primary key (id),
     constraint finding_feedback_source_key unique (source_key),
+    constraint finding_feedback_case_id_fkey foreign key (case_id) references public.cases(id) on delete cascade,
+    constraint finding_feedback_document_id_fkey foreign key (document_id) references public.documents(id) on delete set null,
     constraint finding_feedback_scope_check check (scope = any (array['document'::text, 'case'::text])),
     constraint finding_feedback_kind_check check (kind = any (array['verdict'::text, 'missed'::text])),
     constraint finding_feedback_verdict_check check (verdict = any (array['correct'::text, 'wrong'::text])),
@@ -295,6 +298,8 @@ create index review_sign_offs_document_idx on public.review_sign_offs (document_
 create index cases_risk_idx on public.cases (risk_rank, created_at desc);
 create index findings_reviewed_idx on public.findings (case_id) where reviewer is not null;
 create index finding_feedback_check_idx on public.finding_feedback (check_name, scope, updated_at desc);
+create index finding_feedback_case_idx on public.finding_feedback (case_id);
+create index finding_feedback_document_idx on public.finding_feedback (document_id);
 
 -- Trigger -----------------------------------------------------------------------------------------------------------
 
@@ -375,6 +380,105 @@ revoke all on function public.sync_findings(text, uuid, jsonb) from public, anon
 grant execute on function public.sync_findings(text, uuid, jsonb) to service_role;
 revoke all on function public.replace_extracted_fields(uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.replace_extracted_fields(uuid, jsonb) to service_role;
+
+-- Read functions (backend only) -------------------------------------------------------------------------------------
+
+-- Officer feedback from other cases, counted (feedback_repository.counts): one row per check (check_name, and
+-- check_code when the finding had one) and lesson, with how many cases taught it (each case once), how many cases
+-- gave each reason, the latest notes and summaries, and the ids behind it. Newest lesson first.
+--   lesson: 'false_alarm', 'confirmed', 'set_aside_wrongly' (a set-aside finding found real) or 'missed'.
+create function public.feedback_counts(p_scope text, p_check_names text[], p_exclude_case_id text)
+returns table (
+    check_name text, check_code text, lesson text, cases integer, reasons jsonb, notes text[], summaries text[],
+    ids uuid[], latest timestamptz
+)
+language sql
+stable
+set search_path = ''
+as $$
+    with lessons as (
+        select f.id, f.case_id, f.check_name, f.check_code, f.reason, f.note, f.summary, f.updated_at,
+            case
+                when f.kind = 'missed' then 'missed'
+                when f.verdict = 'wrong' then 'false_alarm'
+                when f.reason is not null then 'set_aside_wrongly'
+                else 'confirmed'
+            end as lesson
+        from public.finding_feedback f
+        where f.scope = p_scope and f.check_name = any(p_check_names) and f.case_id <> p_exclude_case_id
+    ),
+    by_reason as (
+        select l.check_name, l.check_code, l.lesson, l.reason, count(distinct l.case_id)::integer as cases
+        from lessons l
+        where l.reason is not null
+        group by l.check_name, l.check_code, l.lesson, l.reason
+    )
+    select
+        l.check_name, l.check_code, l.lesson, count(distinct l.case_id)::integer,
+        coalesce((
+            select jsonb_object_agg(r.reason, r.cases) from by_reason r
+            where r.check_name = l.check_name and r.check_code is not distinct from l.check_code and r.lesson = l.lesson
+        ), '{}'::jsonb),
+        coalesce((array_agg(l.note order by l.updated_at desc) filter (where coalesce(l.note, '') <> ''))[1:5], '{}'),
+        coalesce((array_agg(l.summary order by l.updated_at desc) filter (where l.summary <> ''))[1:5], '{}'),
+        (array_agg(l.id order by l.updated_at desc))[1:10],
+        max(l.updated_at)
+    from lessons l
+    group by l.check_name, l.check_code, l.lesson
+    order by max(l.updated_at) desc;
+$$;
+
+revoke all on function public.feedback_counts(text, text[], text) from public, anon, authenticated;
+grant execute on function public.feedback_counts(text, text[], text) to service_role;
+
+-- What the classifier learns (corrections_repository.type_corrections): each pair of types officers changed a
+-- document from and to since p_since, with the cases it happened in. Labels only; a type confirmed unchanged is not a
+-- correction, and neither is one to or from unrecognised.
+create function public.type_corrections(p_since timestamptz)
+returns table (from_type text, to_type text, cases integer)
+language sql
+stable
+set search_path = ''
+as $$
+    select e.detail->>'from_type', e.detail->>'to_type', count(distinct e.case_id)::integer
+    from public.audit_events e
+    where e.action = 'document.retyped' and e.actor_type = 'user' and e.outcome = 'success'
+        and e.occurred_at >= p_since
+        and coalesce(e.detail->>'from_type', '') not in ('', 'unrecognised')
+        and coalesce(e.detail->>'to_type', '') not in ('', 'unrecognised')
+        and e.detail->>'from_type' <> e.detail->>'to_type'
+    group by 1, 2;
+$$;
+
+-- What the extractor learns (corrections_repository.field_edits): per document type, the fields officers added (a
+-- change from nothing) and deleted (a change to nothing) since p_since, with the cases. Field names only, never values.
+-- Events from before document.field_edited carried document_type can't be grouped, so they are left out.
+create function public.field_edit_counts(p_since timestamptz, p_document_type text)
+returns table (document_type text, field_name text, edit text, cases integer)
+language sql
+stable
+set search_path = ''
+as $$
+    select
+        e.detail->>'document_type', c->>'field',
+        case when coalesce(c->'from', 'null'::jsonb) = 'null'::jsonb then 'added' else 'deleted' end,
+        count(distinct e.case_id)::integer
+    from public.audit_events e
+    cross join lateral jsonb_array_elements(
+        case when jsonb_typeof(e.detail->'changes') = 'array' then e.detail->'changes' else '[]'::jsonb end
+    ) c
+    where e.action = 'document.field_edited' and e.actor_type = 'user' and e.occurred_at >= p_since
+        and e.detail->>'document_type' = p_document_type
+        and coalesce(c->>'field', '') <> ''
+        -- Exactly one side absent: an added or a deleted field, not an edited value.
+        and (coalesce(c->'from', 'null'::jsonb) = 'null'::jsonb) <> (coalesce(c->'to', 'null'::jsonb) = 'null'::jsonb)
+    group by 1, 2, 3;
+$$;
+
+revoke all on function public.type_corrections(timestamptz) from public, anon, authenticated;
+grant execute on function public.type_corrections(timestamptz) to service_role;
+revoke all on function public.field_edit_counts(timestamptz, text) from public, anon, authenticated;
+grant execute on function public.field_edit_counts(timestamptz, text) to service_role;
 
 -- Row-level security ------------------------------------------------------------------------------------------------
 

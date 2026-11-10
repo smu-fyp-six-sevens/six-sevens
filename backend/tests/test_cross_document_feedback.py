@@ -1,7 +1,7 @@
 # ruff: noqa: F811
 """
 Officer feedback in the cross-document analysis (case_pipeline/cross_document/feedback.py), with Claude scripted: what
-is looked up, what the planner and the judge are shown, what a finding records as applied, and that none of it can stop
+is looked up, what the planner and the judge are shown, what a finding records as shown, and that none of it can stop
 a run or get past the bias screen.
 """
 from __future__ import annotations
@@ -10,21 +10,22 @@ from unittest.mock import patch
 
 from langchain_core.messages import HumanMessage
 
+from app import feedback_repository
 from app.case_pipeline.cross_document import agents, feedback
 from app.case_pipeline.cross_document.graph import run_cross_document_analysis
 from app.case_pipeline.cross_document.verify import verify_verdict
 from app.case_pipeline.models import Hypothesis, PlannedCheck
 from app.case_pipeline.risk.case_risk import contributing_from_cross_document
-from app.feedback_repository import FeedbackItem
+from app.feedback_repository import FeedbackGroup
+from tests.support.fake_supabase import FakeSupabase
 from tests.test_case_analysis_agent import SALARY_CHECKS, calls, claude, context, hypothesis_item  # noqa: F401
 
 
-def item(n: int, **overrides) -> FeedbackItem:
-    return FeedbackItem(**{
-        "id": f"00000000-0000-0000-0000-{n:012d}", "case_id": f"case-{n}", "scope": "case", "kind": "verdict",
-        "check_name": "behavioural_anomaly", "verdict": "wrong", "reason": "explained_elsewhere",
-        "summary": "Round-number deposits look like structuring", "reviewer": "officer",
-        "updated_at": "2026-10-23T02:00:00+00:00", **overrides,
+def group(n: int, **overrides) -> FeedbackGroup:
+    return FeedbackGroup(**{
+        "check_name": "behavioural_anomaly", "lesson": "false_alarm", "cases": 2,
+        "reasons": {"explained_elsewhere": 2}, "summaries": ["Round-number deposits look like structuring"],
+        "ids": [f"00000000-0000-0000-0000-{n:012d}"], "latest": "2026-10-23T02:00:00+00:00", **overrides,
     })
 
 
@@ -35,38 +36,41 @@ def last_message(model) -> str:
 # --- what is looked up ---------------------------------------------------------------------------------------------
 
 
-async def test_feedback_is_looked_up_for_the_categories_the_model_decides_from_other_cases() -> None:
-    with patch.object(
-        feedback.feedback_repository, "similar", side_effect=lambda cat, scope, case: [item(1, check_name=cat)]
-    ) as similar:
+async def test_feedback_is_looked_up_once_for_the_categories_the_model_decides_from_other_cases() -> None:
+    groups = [group(1), group(2, check_name="unsupported_claim", lesson="missed", reasons={})]
+    with patch.object(feedback.feedback_repository, "counts", return_value=groups) as counts:
         shown = await feedback.load_feedback("case-9")
 
-    asked = sorted(c.args for c in similar.call_args_list)
-    assert asked == [("behavioural_anomaly", "case", "case-9"), ("unsupported_claim", "case", "case-9")]
+    counts.assert_called_once_with(["behavioural_anomaly", "unsupported_claim"], "case", "case-9")
     assert set(shown) == {"behavioural_anomaly", "unsupported_claim"}
 
 
 async def test_feedback_that_touches_a_protected_attribute_is_never_shown() -> None:
-    biased = item(2, summary="The director's age makes the loan look risky", note="Typically a Malay-owned firm")
-    with patch.object(feedback.feedback_repository, "similar", return_value=[item(1), biased]):
+    fake = FakeSupabase()
+    fake.functions["feedback_counts"] = lambda params: [group(1, notes=[
+        "Typically a Malay-owned firm", "Normal for a foreign applicant", "Rent is always a round amount",
+    ], summaries=["The director's age makes the loan look risky"]).model_dump()]
+    with patch.object(feedback_repository, "service_supabase_client", return_value=fake):
         shown = await feedback.load_feedback("case-9")
 
-    assert [i.id for i in shown["behavioural_anomaly"]] == [item(1).id]
+    [kept] = shown["behavioural_anomaly"]
+    assert kept.notes == ["Rent is always a round amount"] and kept.summaries == []
+    assert "Malay" not in feedback.render(shown) and "foreign" not in feedback.render(shown)
 
 
 async def test_a_failed_lookup_gives_no_feedback_instead_of_failing_the_analysis() -> None:
-    with patch.object(feedback.feedback_repository, "similar", side_effect=RuntimeError("db down")):
+    with patch.object(feedback.feedback_repository, "counts", side_effect=RuntimeError("db down")):
         assert await feedback.load_feedback("case-9") == {}
 
 
-def test_feedback_is_rendered_as_fenced_data_that_cannot_override_the_rules() -> None:
+def test_feedback_is_rendered_as_fenced_counts_that_cannot_override_the_rules() -> None:
     text = feedback.render({"behavioural_anomaly": [
-        item(1), item(2, verdict="correct", reason=None, summary="Circular transfers confirmed"),
-        item(3, kind="missed", verdict=None, reason=None, summary="", note="Loan drawdown was never repaid"),
+        group(1), group(2, lesson="confirmed", cases=1, reasons={}, summaries=["Circular transfers confirmed"]),
+        group(3, lesson="missed", cases=1, reasons={}, summaries=[], notes=["Loan drawdown was never repaid"]),
     ]})
     assert 'source="officer_feedback"' in text
-    assert "FALSE ALARM (Explained by another document)" in text
-    assert "CONFIRMED real" in text and "MISSED by the analysis" in text and "never repaid" in text
+    assert "FALSE ALARM in 2 cases (Explained by another document in 2)" in text
+    assert "CONFIRMED real in 1 case" in text and "MISSED by the analysis in 1 case" in text and "never repaid" in text
     assert "never overrides" in text and "bias rule" in text
     assert feedback.render({}) == ""
 
@@ -75,7 +79,7 @@ def test_feedback_is_rendered_as_fenced_data_that_cannot_override_the_rules() ->
 
 
 async def test_the_planner_and_the_judge_are_both_shown_the_feedback(context, claude) -> None:
-    context.feedback_text = feedback.render({"behavioural_anomaly": [item(1)]})
+    context.feedback_text = feedback.render({"behavioural_anomaly": [group(1)]})
     model = claude(
         calls("submit_hypotheses", confidence=0.7, hypotheses=[
             hypothesis_item("Salary is not what the payslip says", SALARY_CHECKS),
@@ -101,12 +105,12 @@ async def test_with_no_feedback_the_prompts_are_unchanged(context, claude) -> No
 
 async def test_a_run_looks_feedback_up_once_and_records_what_it_showed(context, claude) -> None:
     model = claude(calls("submit_hypotheses", confidence=0.1, hypotheses=[]))
-    shown = {"behavioural_anomaly": [item(1), item(2)]}
+    shown = {"behavioural_anomaly": [group(1), group(2, lesson="confirmed")]}
     with patch("app.case_pipeline.cross_document.graph.load_feedback", return_value=shown) as lookup:
         await run_cross_document_analysis(context)
 
     lookup.assert_awaited_once_with("case-1")
-    assert context.feedback_ids == {"behavioural_anomaly": [item(1).id, item(2).id]}
+    assert context.feedback_ids == {"behavioural_anomaly": [*group(1).ids, *group(2).ids]}
     assert "officer_feedback" in last_message(model)
     [noted] = [e for e in context.trace.events if e["step"] == "feedback"]
     assert noted["shown"] == {"behavioural_anomaly": 2}
@@ -170,7 +174,7 @@ def test_a_finding_of_a_kind_with_no_feedback_records_none(context) -> None:
 def test_feedback_cannot_make_a_verdict_stand_that_the_code_rejects(context) -> None:
     hypothesis, verdict, calls_made = _verdict_inputs(context)
     context.feedback_ids = {"unsupported_claim": ["fb-1"]}
-    context.feedback_text = feedback.render({"unsupported_claim": [item(1, verdict="correct", reason=None)]})
+    context.feedback_text = feedback.render({"unsupported_claim": [group(1, check_name="unsupported_claim", lesson="confirmed")]})
     verdict["citations"] = ["ref:made_up"]
 
     finding, why = verify_verdict(context, hypothesis, verdict, calls_made)

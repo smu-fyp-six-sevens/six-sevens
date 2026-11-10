@@ -1390,7 +1390,7 @@ export interface paths {
         };
         /**
          * Get Finding Feedback
-         * @description Feedback items the agents applied to a finding, opened: the officer's reason and note (confidential details already
+         * @description Feedback items the agents were shown for a finding, opened: the officer's reason and note (confidential details already
          *     removed) and the original case. An item an officer has since withdrawn is no longer listed.
          */
         get: operations["get_finding_feedback_finding_feedback_get"];

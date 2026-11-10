@@ -466,7 +466,7 @@ def _specialist_graph(name: str):
     return build_specialist_graph(SPECIALISTS[name])
 
 
-_SPECIALIST_NODES = {"agent", "tools", "collect"}
+_SPECIALIST_NODES = {"agent", "tools", "feedback", "collect"}
 _GRAPHS = [
     pytest.param(_classify_graph, {"rule_classify", "agent", "tools", "validate", "repair"}, id="classify"),
     pytest.param(

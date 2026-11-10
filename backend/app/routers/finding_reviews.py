@@ -170,7 +170,7 @@ async def _record_saved(case_id: str, verdicts: list[tuple[str, str | None, str 
 @router.get("/finding-feedback", response_model=list[feedback_repository.FeedbackDetail])
 async def get_finding_feedback(user: CurrentUser, ids: list[UUID] = Query(default=[], max_length=50)) -> list[feedback_repository.FeedbackDetail]:
     """
-    Feedback items the agents applied to a finding, opened: the officer's reason and note (confidential details already
+    Feedback items the agents were shown for a finding, opened: the officer's reason and note (confidential details already
     removed) and the original case. An item an officer has since withdrawn is no longer listed.
     """
     with bad_gateway_on_error("Failed to load the feedback. Check Supabase table access.", "Failed to load feedback %s", ids):

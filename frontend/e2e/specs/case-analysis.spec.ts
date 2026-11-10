@@ -460,7 +460,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     ]);
   });
 
-  test('a finding shows the feedback the agent applied, and each item opens the reason and the original case', async ({ page, backend }) => {
+  test('a finding shows the feedback the agent was shown, and each item opens the reason and the original case', async ({ page, backend }) => {
     const base = CASE_RISK['RS-006'].risk;
     const [first, ...rest] = base.contributing_findings;
     const feedbackId = '00000000-0000-0000-0000-00000000000a';
@@ -476,7 +476,8 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
 
     await reviewCard(page).locator('.risk-document', { hasText: first.filename }).getByRole('button').click();
     const dialog = page.getByRole('dialog', { name: `Review findings on ${first.filename}` });
-    await dialog.getByText('Applied 1 piece of officer feedback from other cases').click();
+    await dialog.getByText('Feedback the agent was shown: 1 item from other cases').click();
+    await expect(dialog.getByText('False alarm in 1 case')).toBeVisible();
     await dialog.getByText('False alarm', { exact: true }).click();
 
     await expect(dialog.getByText('The tool misread the document')).toBeVisible();
