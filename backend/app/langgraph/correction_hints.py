@@ -61,6 +61,12 @@ def label(document_type: str) -> str:
     return _LABEL.get(document_type, document_type.replace("_", " "))
 
 
+def a(document_type: str) -> str:
+    """The type's label with its article: "a payslip", "an NRIC", "an employment letter"."""
+    name = label(document_type)
+    return f"{'an' if name[:1].lower() in 'aeiou' or name == 'NRIC' else 'a'} {name}"
+
+
 def _cases(n: int) -> str:
     return f"{n} case" if n == 1 else f"{n} cases"
 
@@ -86,8 +92,8 @@ def type_hint(guess: str | None, corrections: Iterable[TypeCorrection], shown: I
             continue
         signal = SIGNALS.get((pair.from_type, pair.to_type))
         lines.append(
-            f"- Officers corrected a {label(pair.from_type)} to a {label(pair.to_type)} in {_cases(pair.cases)}."
-            + (f" A {label(pair.to_type)} {signal}." if signal else f" Check it isn't a {label(pair.to_type)}.")
+            f"- Officers corrected {a(pair.from_type)} to {a(pair.to_type)} in {_cases(pair.cases)}."
+            + (f" {a(pair.to_type)[:1].upper()}{a(pair.to_type)[1:]} {signal}." if signal else f" Check it isn't {a(pair.to_type)}.")
         )
     if not lines:
         return ""

@@ -53,6 +53,12 @@ def test_a_pair_with_no_signal_just_names_the_confusion() -> None:
     assert "Check it isn't a proof of address." in hint
 
 
+def test_the_hint_reads_as_english() -> None:
+    hint = correction_hints.type_hint("passport", [_pair("passport", "nric")])
+    assert "corrected a passport to an NRIC in 2 cases. An NRIC carries" in hint
+    assert correction_hints.a("employment_letter") == "an employment letter"
+
+
 def test_a_guess_with_no_recurring_pair_gets_no_hint() -> None:
     assert correction_hints.type_hint("payslip", [_pair()]) == ""
     assert correction_hints.type_hint(None, [_pair()]) == ""

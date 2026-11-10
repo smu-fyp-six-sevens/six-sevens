@@ -87,6 +87,7 @@
           "to": "KE-8801-2234"
         }
       ],
+      "document_type": "proof_of_address",
       "fields": [
         "customer_reference"
       ]
@@ -112,6 +113,7 @@
           "to": "21 Anchorvale Link #08-12 Singapore 545021"
         }
       ],
+      "document_type": "proof_of_address",
       "fields": [
         "account_number",
         "account_type",
