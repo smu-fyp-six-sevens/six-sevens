@@ -65,8 +65,8 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
     for (const label of ADDITIONAL) {
       await expect(page.getByTestId('missing-document').filter({ hasText: label })).toHaveCount(0);
     }
-    await openGroup(page, 'Additional');
-    await expect(additionalNote(page)).toContainText('only if the case needs them');
+    await openGroup(page, 'Optional');
+    await expect(additionalNote(page)).not.toContainText('only if the case needs them');
     await expect(additionalNote(page)).toContainText('Company Proof of Address');
     await expect(additionalNote(page)).not.toContainText('List of Loans');
   });
@@ -96,7 +96,7 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
 
     // DI-034: every required document, and only some of the optional ones.
     removeDocuments('Company_UtilityBill');
-    await openGroup(page, 'Additional');
+    await openGroup(page, 'Optional');
     await expect(additionalNote(page)).toContainText('Company Proof of Address');
     await expect(additionalNote(page)).not.toContainText('List of Loans');
     await expect(progress(page)).toContainText(`${REQUIRED.length} of ${REQUIRED.length} required`);
@@ -104,7 +104,7 @@ test.describe('Classify optional documents @sprint2 @SCRUM-114', () => {
 
     // DI-032: none of the optional documents at all.
     removeDocuments('LoanFacility', 'LoanOffer', 'FacilityLetter', 'SimS_SourceOfWealth', 'Wealth_Statement_scan');
-    await openGroup(page, 'Additional');
+    await openGroup(page, 'Optional');
     for (const label of ADDITIONAL) {
       await expect(additionalNote(page)).toContainText(label);
     }
@@ -247,12 +247,12 @@ test.describe('Documents categories open one at a time', () => {
 
   test('Additional is never the one opened on load: the next category opens instead, or none', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'harbor-light');
-    // Every required document received: no Missing group, so Additional is the first category with rows.
+    // Every required document received: no Missing group, so Optional is the first category with rows.
     fixture.case.fulfilled_requirements = [...REQUIRED_VALUES, ...fixture.case.fulfilled_requirements];
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
     await expect(group(page, 'Missing')).toHaveCount(0);
-    await expect(group(page, 'Additional')).toHaveAttribute('aria-expanded', 'false');
+    await expect(group(page, 'Optional')).toHaveAttribute('aria-expanded', 'false');
     // The next category, Needs Review, is the one open.
     await expect(group(page, 'Needs Review')).toHaveAttribute('aria-expanded', 'true');
   });
@@ -262,7 +262,7 @@ test.describe('Documents categories open one at a time', () => {
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
     const edge = (name: string) => group(page, name).evaluate((el) => getComputedStyle(el).getPropertyValue('--group-edge').trim());
-    const edges = await Promise.all(['Missing', 'Additional', 'Needs Review', 'Pending Approval'].map(edge));
+    const edges = await Promise.all(['Missing', 'Optional', 'Needs Review', 'Pending Approval'].map(edge));
     expect(new Set(edges).size).toBe(4);
 
     await group(page, 'Pending Approval').click();
@@ -340,5 +340,24 @@ test.describe('Documents are listed A to Z by type', () => {
       'z_nric.png', // NRIC (Proof of Address)
       'e_new.pdf', // not classified yet
     ]);
+  });
+});
+
+test.describe('While the case loads', () => {
+  test('the section shows a loading placeholder, not a list of everything missing', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'harbor-light');
+    let release!: () => void;
+    backend.snapshotGate = new Promise((resolve) => { release = resolve; });
+    await page.goto(`${fixture.caseUrl}?section=documents`);
+
+    // The whole section is a loading placeholder: no upload box, no checklist, nothing listed as missing.
+    await expect(page.getByTestId('documents-skeleton')).toBeVisible();
+    await expect(card(page)).toHaveCount(0);
+    await expect(page.getByTestId('missing-document')).toHaveCount(0);
+
+    release();
+    await expect(page.getByTestId('documents-skeleton')).toHaveCount(0);
+    await expect(card(page).getByTestId('document-group').first()).toBeVisible();
+    await expect(progress(page)).toContainText(`of ${REQUIRED.length} required`);
   });
 });

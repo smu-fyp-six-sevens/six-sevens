@@ -393,6 +393,8 @@ def test_remove_document_deletes_the_file_and_the_row_which_cascades(db) -> None
     # The cross-document findings resting on it go; every row keyed by it cascades from the documents delete.
     mock_findings.delete_case_findings_citing.assert_called_once_with(["doc-1"])
     mock_storage.delete_file.assert_called_once_with("case-1/doc-1_statement.pdf")
+    # And the cache of where its text sits (text_lines), if one was made.
+    mock_storage.delete_files.assert_called_once_with(["text-lines/doc-1.json"])
     assert [row["id"] for row in db.rows("documents")] == ["doc-2"]
 
 
@@ -460,8 +462,9 @@ def test_remove_documents_batches_the_file_and_row_deletes(db, synced) -> None:
         document_repository.remove_documents(documents)
 
     mock_findings.delete_case_findings_citing.assert_called_once_with(["doc-1", "doc-2"])
+    # Each file goes with the cache of where its text sits, in the same batch.
     mock_storage.delete_files.assert_called_once_with(
-        ["case-1/doc-1_statement.pdf", "case-1/doc-2_statement.pdf"]
+        ["case-1/doc-1_statement.pdf", "case-1/doc-2_statement.pdf", "text-lines/doc-1.json", "text-lines/doc-2.json"]
     )
     assert [row["id"] for row in db.rows("documents")] == ["doc-3"]
     # Batch removal skips the per-document case resync: callers doing this in bulk delete the case right after.

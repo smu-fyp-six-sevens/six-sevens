@@ -101,6 +101,16 @@ def test_invisible_white_and_tiny_text_are_hidden() -> None:
     }
 
 
+def test_a_hidden_run_keeps_where_it_sits_so_the_preview_can_box_it() -> None:
+    def draw(page: pymupdf.Page) -> None:
+        page.insert_text((50, 130), "white text on the white page", fontsize=11, color=(1, 1, 1))
+
+    [run] = hidden_runs(_pdf(draw))
+    x0, y0, x1, y1 = run["bbox"]
+    # Points from the top-left, around the line written at baseline y=130.
+    assert 49 <= x0 < x1 and y0 < 130 <= y1 + 3 and y1 - y0 < 20
+
+
 def test_white_text_on_a_coloured_box_is_visible() -> None:
     def draw(page: pymupdf.Page) -> None:
         page.draw_rect(pymupdf.Rect(40, 85, 320, 115), color=None, fill=(0, 0, 0.5))
@@ -379,6 +389,9 @@ def test_an_instruction_inside_an_embedded_image_is_read_and_blocks_the_document
     assert result["risk"] == "high" and result["checks_run"] == ["hidden_text", "image_text", "dictionary"]
     [span] = result["spans"]
     assert span["where"] == "image" and span["page"] == 1 and span["caught_by"] == "dictionary"
+    # Where the image is drawn (inside the rectangle it was placed in, keeping its proportions), so the preview boxes it.
+    x0, y0, x1, y1 = span["bbox"]
+    assert 40 <= x0 < x1 <= 560 and (y0, y1) == (120.0, 160.0)
     assert removals == []  # not in the text the models read; the block keeps it from the vision model
     reason = content_guard.blocking_reason(result)
     assert reason is not None and reason.startswith("Blocked by the content guard: text inside an image on page 1")

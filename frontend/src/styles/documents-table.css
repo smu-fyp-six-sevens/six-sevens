@@ -734,6 +734,7 @@
    Pending Approval yellow, Approved green, Rejected slate. The band carries it as a bar down its left edge, its label
    and its count; the rows' marks carry it into the list. */
 .documents-table-group--missing { --group-ink: var(--steel-dark); --group-bg: var(--steel-a10); --group-edge: var(--steel); }
+.documents-table-group--requested { --group-ink: var(--violet-dark); --group-bg: var(--violet-bg); --group-edge: var(--violet); }
 .documents-table-group--additional { --group-ink: var(--ink-soft); --group-bg: var(--stone-94); --group-edge: var(--slate-86); }
 .documents-table-group--review { --group-ink: var(--red); --group-bg: var(--red-bg); --group-edge: var(--red-53); }
 .documents-table-group--pending { --group-ink: var(--orange-27); --group-bg: var(--amber-bg); --group-edge: var(--amber); }
@@ -788,4 +789,56 @@
 .checklist-missing-row:not(.checklist-optional-row) .status-pill {
   background: var(--steel-a10);
   color: var(--steel-dark);
+}
+
+/* A requested document's way back to its request: plain text with an arrow, the link showing on hover. */
+.checklist-request-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.checklist-request-link-arrow {
+  flex: none;
+  color: var(--violet);
+  transition: transform 0.15s;
+}
+
+.checklist-request-link:hover {
+  color: var(--violet-dark);
+}
+
+.checklist-request-link:hover .checklist-request-link-text {
+  text-decoration: underline;
+  text-decoration-color: var(--violet-76);
+  text-underline-offset: 3px;
+}
+
+.checklist-request-link:hover .checklist-request-link-arrow {
+  transform: translateX(3px);
+}
+
+.checklist-request-link:focus-visible {
+  outline: none;
+  border-radius: 3px;
+  box-shadow: 0 0 0 3px var(--violet-76);
+}
+
+/* Requested rows are missing rows too; their mark and status take the group's violet instead of Missing's steel. */
+.checklist-requested-row .row-mark--missing {
+  border-color: var(--violet);
+}
+
+.checklist-requested-row .status-pill.status-pill--requested {
+  background: var(--violet-bg);
+  color: var(--violet-dark);
 }

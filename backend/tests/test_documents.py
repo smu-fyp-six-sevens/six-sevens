@@ -353,6 +353,34 @@ def test_get_content_guard_without_a_saved_result_is_unchecked() -> None:
     assert response.json() == {"checked": False, "risk": None, "blocked": False, "error": None, "findings": []}
 
 
+def test_locate_values_boxes_each_value_on_the_document() -> None:
+    import pymupdf
+
+    pdf = pymupdf.open()
+    pdf.new_page().insert_text((72, 140), "UEN 201812345A")
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.routers.documents.storage_service") as mock_storage,
+        patch("app.routers.documents.run_cpu", new=lambda fn, *args: _sync(fn(*args))),
+    ):
+        mock_dep_repo.get_document.return_value = _make_document("doc-1")
+        mock_storage.download_file.return_value = pdf.tobytes()
+
+        response = client.post("/documents/doc-1/locate-values", json={"values": [
+            {"id": "a", "field": "uen", "value": "201812345A"}, {"id": "b", "field": "uen", "value": "209999999Z"},
+        ]})
+
+    assert response.status_code == 200
+    found, missing = response.json()["values"]
+    assert (found["id"], found["units"], len(found["locations"])) == ("a", "pt", 1)
+    assert found["locations"][0]["page"] == 1
+    assert (missing["id"], missing["locations"]) == ("b", [])
+
+
+async def _sync(value):
+    return value
+
+
 def test_get_document_download_url() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,

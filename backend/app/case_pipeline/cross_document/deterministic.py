@@ -108,6 +108,7 @@ def _finding(
             document_ids.append(view.id)
     files = ", ".join(view.filename for i in document_ids if (view := context.by_id(i)) is not None)
     identity = flag == _IDENTIFIER
+    citations = list(dict.fromkeys(citations))
     return CrossDocFinding(
         id=f"xd-det-{n}",
         hypothesis_id="deterministic",
@@ -116,8 +117,9 @@ def _finding(
         severity="high" if identity else "medium",
         category=FindingCategory.IDENTITY_ENTITY_CONFLICT if identity else FindingCategory.CROSS_DOCUMENT_VARIANCE,
         confidence=1.0,
-        citations=list(dict.fromkeys(citations)),
+        citations=citations,
         document_ids=document_ids,
+        cited_values=context.cited_values(citations),
         breach_flags=[flag],
     )
 

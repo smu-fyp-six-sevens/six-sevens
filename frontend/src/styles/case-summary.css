@@ -1303,3 +1303,51 @@
   border-radius: 6px;
   background: var(--amber-bg);
 }
+
+/* The request count and the way to the Documents tab's upload, side by side in the card's header. */
+.additional-documents-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* The way to the Documents tab's upload, in the ink of the header's + (New case) button. */
+.additional-documents-actions .analysis-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ink);
+  transition: opacity 0.12s;
+}
+
+.additional-documents-actions .analysis-action:hover:not(:disabled) {
+  background: var(--ink);
+  opacity: 0.85;
+}
+
+/* The request count in the Requested group's violet, as the Documents tab shows these requests. */
+.additional-documents-actions .summary-count {
+  background: var(--violet-bg);
+  color: var(--violet-dark);
+}
+
+/* The request the officer followed a link to from the Documents tab: tinted and edged in the Requested group's
+   violet, after a brief flash. */
+.flagged-item--highlighted {
+  background: var(--violet-bg);
+  box-shadow: inset 4px 0 0 var(--violet);
+  animation: request-highlight 1.6s ease-out;
+}
+
+@keyframes request-highlight {
+  0%,
+  30% {
+    background: var(--violet-76);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flagged-item--highlighted {
+    animation: none;
+  }
+}

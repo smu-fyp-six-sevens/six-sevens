@@ -57,6 +57,18 @@ def test_a_verdict_with_cited_evidence_from_two_documents_and_a_probe_stands(con
     assert (finding.id, finding.severity, finding.category) == ("xd-h1", "medium", FindingCategory.BEHAVIOURAL_ANOMALY)
     assert finding.document_ids == ["id-payslip_1", "id-bank_statement_1"]
     assert (finding.citations, finding.confidence) == (citations, 0.7)
+    # Each cited document's field and value, for the officer's side-by-side view.
+    assert [(c.document_id, c.field, c.value) for c in finding.cited_values] == [
+        ("id-payslip_1", "net_pay", "value"), ("id-bank_statement_1", "transactions", "value"),
+    ]
+
+
+def test_a_cited_table_or_computed_summary_is_not_a_value_to_find_on_the_page(context) -> None:
+    plain = context.ledger.issue(PAYSLIP, "net_pay", 4200.5)
+    table = context.ledger.issue(STATEMENT, "transactions", [{"amount": 1}])
+    missing = context.ledger.issue(NOA, "assessable_income", None)
+
+    assert [(c.field, c.value) for c in context.cited_values([plain, table, missing, "ref:unknown"])] == [("net_pay", "4200.5")]
 
 
 # --- Discarded --------------------------------------------------------------------------------------------------

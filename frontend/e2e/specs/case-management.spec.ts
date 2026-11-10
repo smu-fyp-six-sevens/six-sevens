@@ -561,6 +561,9 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     backend.cases.push(harbor);
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
     await openSection(page, 'Risk summary');
+    // The menu's Risk dot turns green once the case is scored, whatever the level (the level is in its text).
+    const riskItem = page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: /^Risk Summary/ });
+    await expect(riskItem.locator('.case-nav-badge')).toHaveClass(/case-nav-dot--done/);
 
     const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
     await expect(section.getByTestId('risk-badge')).toHaveText('High Risk');
@@ -716,6 +719,52 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
       /Total bank borrowings\s*1,291,530\.00\s*1,850,790\.00\s*\+559,260\.00 \(\+43\.3%\)/,
     ]);
     await expect(section.getByRole('button', { name: 'View' })).toHaveCount(0);
+  });
+
+  test('Upload in Documents takes the officer to the Documents tab with the requested documents listed', async ({ page, backend }) => {
+    const harbor = makeCase({ greenlink_case_id: 'GLDB-2006', ...CASE_VIEWS.recommendations });
+    backend.cases.push(harbor);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=additional`);
+
+    await page.getByRole('button', { name: 'Upload in Documents' }).click();
+
+    await expect(page).toHaveURL(/section=documents/);
+    await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
+    const requested = page.getByTestId('documents-card').getByTestId('document-group').filter({ hasText: 'Requested' });
+    await expect(requested).toHaveAttribute('aria-expanded', 'true');
+    const rows = page.getByTestId('requested-document');
+    await expect(rows).toHaveCount(2);
+    // Each is named as the app names that type of document.
+    await expect(rows.first().locator('.document-type-cell')).toHaveText('Purchase Order');
+    await expect(rows.nth(1).locator('.document-type-cell')).toHaveText('Loan Statement');
+    await expect(rows.first()).toContainText('Requested');
+
+    // Each row links its request, as the Additional tab heads it, back to that request there, highlighted.
+    await rows.nth(1).getByRole('button', { name: 'Bank Loan Statements or Bank Loan Repayment Schedules' }).click();
+    await expect(page).toHaveURL(/section=additional/);
+    const highlighted = page.locator('.flagged-item--highlighted');
+    await expect(highlighted).toHaveCount(1);
+    await expect(highlighted).toContainText('Bank Loan Statements or Bank Loan Repayment Schedules');
+    await expect(highlighted).toBeInViewport();
+  });
+
+  test('the Documents tab lists the requested documents, folded, when the officer goes there directly', async ({ page, backend }) => {
+    const harbor = makeCase({ greenlink_case_id: 'GLDB-2007', ...CASE_VIEWS.recommendations });
+    backend.cases.push(harbor);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
+
+    const requested = page.getByTestId('documents-card').getByTestId('document-group').filter({ hasText: 'Requested' });
+    await expect(requested).toContainText('by the case analysis');
+    await expect(requested).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('a finalised case offers no Upload in Documents', async ({ page, backend }) => {
+    const harbor = makeCase({ greenlink_case_id: 'GLDB-2008', status: 'finalised', ...CASE_VIEWS.recommendations });
+    backend.cases.push(harbor);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=additional`);
+
+    await expect(page.getByText('2 requests')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Upload in Documents' })).toHaveCount(0);
   });
 });
 
@@ -1476,6 +1525,8 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
 
     await expect(groupToggle(page, 'Missing')).toBeVisible();
     await expect(page.getByTestId('missing-document').locator('.status-pill').first()).toHaveText('Missing');
+    // Every section is still waiting (only documents missing, nothing scored or analysed), so the menu shows no dots.
+    await expect(sectionNav(page).locator('.case-nav-badge')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^View / })).toHaveCount(0);
     for (const group of ['Needs Review', 'Pending Approval', 'Approved', 'Rejected']) await expect(groupToggle(page, group)).toHaveCount(0);
   });

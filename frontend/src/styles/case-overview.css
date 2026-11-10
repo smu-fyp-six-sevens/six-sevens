@@ -156,10 +156,11 @@
    which a pointer marks. Same colours and faint-then-solid treatment as the Risk Summary's bar (.risk-gauge). */
 .severity-gauge { flex: none; width: 170px; height: auto; overflow: visible; }
 .severity-gauge path { fill: none; }
+/* The arc past the score is plain grey; only the part up to the score takes the bands' colours. */
 .severity-gauge-track,
-.severity-gauge-fill { stroke: var(--band); stroke-width: 16; }
-.severity-gauge-track { opacity: .3; }
-.severity-gauge--empty .severity-gauge-track { stroke: var(--line); opacity: 1; }
+.severity-gauge-fill { stroke-width: 16; }
+.severity-gauge-fill { stroke: var(--band); }
+.severity-gauge-track { stroke: var(--line); }
 .severity-gauge-sweep { stroke: var(--white); stroke-width: 20; animation: severity-gauge-sweep .9s cubic-bezier(.2, .8, .2, 1); }
 .severity-gauge-pointer { transform-box: view-box; transform-origin: 110px 112px; animation: severity-gauge-turn .9s cubic-bezier(.2, .8, .2, 1); }
 .severity-gauge-pointer line { stroke: var(--ink); stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 0 1.5px var(--white)) drop-shadow(0 0 1px var(--white)); }

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from pypdf import PdfReader
+from reportlab.lib.units import mm
 
 from app import case_report
 from app.case_pipeline.models import AnalysisSummary, CaseAnalysis, CrossDocFinding, FindingCategory, SummaryReason
@@ -271,12 +272,12 @@ def test_gather_routes_a_low_confidence_document_to_manual_review() -> None:
         ExtractedField(id="f1", field_name="net_pay", field_type="number", field_value="1000", confidence=0.6),
     ]}
     with (
-        patch.object(case_report.case_service, "get_case_summary", return_value=_summary()),
-        patch.object(case_report.document_repository, "list_documents", return_value=[payslip]),
-        patch.object(case_report.extracted_fields_repository, "get_extracted_fields_for_documents", return_value=fields),
-        patch.object(case_report.analysis_service, "get_current", return_value=None),
-        patch.object(case_report.notes_repository, "list_notes", return_value=[]),
-        patch.object(case_report, "check_case_match", side_effect=RuntimeError),
+        patch.object(case_report.data.case_service, "get_case_summary", return_value=_summary()),
+        patch.object(case_report.data.document_repository, "list_documents", return_value=[payslip]),
+        patch.object(case_report.data.extracted_fields_repository, "get_extracted_fields_for_documents", return_value=fields),
+        patch.object(case_report.data.analysis_service, "get_current", return_value=None),
+        patch.object(case_report.data.notes_repository, "list_notes", return_value=[]),
+        patch.object(case_report.data, "check_case_match", side_effect=RuntimeError),
     ):
         data = case_report.gather("case-1")
 
@@ -287,9 +288,9 @@ def test_gather_routes_a_low_confidence_document_to_manual_review() -> None:
 
 
 def test_long_file_names_wrap_at_underscores() -> None:
-    wrapped = case_report._wrap_filename("BrightwaveAnalytics_Incorporation_Cert_F.pdf", 40 * case_report.mm)
+    wrapped = case_report.formatting._wrap_filename("BrightwaveAnalytics_Incorporation_Cert_F.pdf", 40 * mm)
     assert wrapped.split("<br/>") == ["BrightwaveAnalytics_", "Incorporation_Cert_F.pdf"]
-    assert case_report._wrap_filename("short.pdf", 40 * case_report.mm) == "short.pdf"
+    assert case_report.formatting._wrap_filename("short.pdf", 40 * mm) == "short.pdf"
 
 
 def test_an_out_of_date_analysis_names_the_documents_changed_since() -> None:
@@ -312,8 +313,8 @@ def test_changed_since_reads_document_events_after_the_run_started() -> None:
         Event(type=types.DOCUMENT_UPLOADED, case_id="case-1", document_id="d1", occurred_at=later),
         Event(type=types.DOCUMENT_APPROVED, case_id="case-1", document_id="d2", occurred_at=datetime(2026, 1, 1, tzinfo=timezone.utc)),
     ]
-    with patch.object(case_report.audit, "list_events", return_value=events):
-        changed = case_report._changed_since("case-1", analysis, DOCUMENTS)
+    with patch.object(case_report.data.audit, "list_events", return_value=events):
+        changed = case_report.data._changed_since("case-1", analysis, DOCUMENTS)
 
     assert changed == [("uob_statement_aug.pdf", "approved", later)]
 

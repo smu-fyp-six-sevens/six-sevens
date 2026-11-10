@@ -26,6 +26,13 @@ export type CaseRiskLevel = NonNullable<Schemas['CaseRisk']['level']>;
 // The backend types severity as a plain string; it is always a detection severity.
 export type CaseRiskFinding = Omit<Schemas['ContributingFinding'], 'severity'> & { severity: DetectionSeverity };
 
+// One document's side of a cross-document finding: the field it was compared on and the value it holds.
+export type CitedValue = Schemas['CitedValue'];
+
+// A value to find on a document, and where it was found (POST /documents/:id/locate-values).
+export type ValueToLocate = Schemas['ValueToLocate'];
+export type LocatedValue = Schemas['LocatedValue'];
+
 export type CaseRisk = Omit<Schemas['CaseRisk'], 'contributing_findings'> & {
   contributing_findings: CaseRiskFinding[];
 };

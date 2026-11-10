@@ -53,7 +53,9 @@ def _png_bytes() -> bytes:
 
 def _ocr_result(*pairs: tuple[str, float]):
     texts, scores = zip(*pairs) if pairs else ((), ())
-    return SimpleNamespace(boxes=[True] * len(texts) if texts else None, txts=list(texts), scores=list(scores))
+    # RapidOCR gives each line's four corners, clockwise from the top-left.
+    boxes = [[[2, 1 + 10 * i], [18, 1 + 10 * i], [18, 9 + 10 * i], [2, 9 + 10 * i]] for i in range(len(texts))]
+    return SimpleNamespace(boxes=boxes if texts else None, txts=list(texts), scores=list(scores))
 
 
 @pytest.fixture
@@ -244,6 +246,8 @@ def test_extract_image_with_ocr_from_pil_and_numpy(monkeypatch: pytest.MonkeyPat
     assert pil["page_number"] == 2
     assert pil["text"] == "Hello"
     assert pil["elements"][0]["confidence"] == pytest.approx(0.91)
+    # Where the line sits, kept for boxing a value on the document (text_lines).
+    assert pil["elements"][0]["bbox"] == [2.0, 1.0, 18.0, 9.0]
 
     array = np.zeros((8, 8, 3), dtype=np.uint8)
     from_array = extract_image_with_ocr(array)

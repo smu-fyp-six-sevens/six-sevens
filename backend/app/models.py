@@ -353,6 +353,46 @@ RiskState = Literal["scored", "pending", "failed", "no_documents"]
 RiskLevel = Literal["Low", "Medium", "High", "Critical"]
 
 
+class ValueToLocate(BaseModel):
+    # The caller's own key for the value, echoed back.
+    id: str = Field(max_length=64)
+    # The field it was read from ("uen", "net_pay"): its label on the page is where the value is looked for first.
+    field: str = Field(default="value", max_length=120)
+    value: str = Field(max_length=400)
+
+
+class LocateValuesRequest(BaseModel):
+    values: list[ValueToLocate] = Field(max_length=20)
+
+
+class ValueLocation(BaseModel):
+    page: int
+    # [x0, y0, x1, y1] from the page's top-left, in `units`.
+    bbox: list[float]
+
+
+class LocatedValue(BaseModel):
+    id: str
+    units: Literal["pt", "px"] = "pt"
+    # The page the boxes were measured on, for a photo or a scan (its pixels); none for a text PDF (points).
+    page_size: list[float] | None = None
+    # Empty when the value isn't found on the document, or is found in too many places to point at one.
+    locations: list[ValueLocation] = Field(default_factory=list)
+
+
+class LocatedValues(BaseModel):
+    values: list[LocatedValue]
+
+
+class CitedValue(BaseModel):
+    """One document's side of a cross-document finding: the field it was compared on and the value it holds, so the
+    officer can be shown that value on the document (the compare view finds it in the page's text)."""
+
+    document_id: str
+    field: str
+    value: str
+
+
 class ContributingFinding(BaseModel):
     document_id: str
     filename: str
@@ -378,6 +418,9 @@ class ContributingFinding(BaseModel):
     # carry it. On the copies that score 0: the finding_id of the one that scored.
     also_on: int = 0
     repeat_of: str | None = None
+    # A cross-document finding: every document it rests on, and the value each one cited.
+    document_ids: list[str] = Field(default_factory=list)
+    cited_values: list[CitedValue] = Field(default_factory=list)
 
 
 class DismissedFinding(BaseModel):

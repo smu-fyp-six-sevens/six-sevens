@@ -37,6 +37,7 @@ from ... import document_repository, extracted_fields_repository, storage_servic
 from ...cpu_pool import run_cpu
 from ...guardrails import content_guard
 from ...ingestion.ingestion_service import content_type_from_filename, ingest_document
+from ...ingestion.pdf_extractor import pdf_contains_text
 from ...fraud_detection.authenticity.ai_generation import AIImageAssessment, AIIndicator, check_ai_generation
 from ...fraud_detection.dates.date_anomalies import check_date_anomalies
 from ...fraud_detection.font_consistency import check_font_consistency
@@ -331,6 +332,9 @@ async def hidden_text_tool(document_id: Annotated[str, InjectedState("document_i
     findings = [
         {
             "page": span.get("page"),
+            # Where the hidden run sits (guard results from before positions were kept have none: the report's
+            # reader finds those by their text, see value_locations).
+            **({"bbox": span["bbox"], "bbox_units": "pt"} if span.get("bbox") else {}),
             "why_hidden": span.get("why_hidden") or [],
             "text": _short(span.get("quote") or ""),
             "summary": f'Hidden text ({_why_hidden(span)}, page {span.get("page")}): "{_short(span.get("quote") or "")}"',
@@ -421,15 +425,59 @@ def needs_locations(report: dict) -> bool:
     return any(value_locations.needs_locations(finding) for finding in report.get("findings", []))
 
 
-def add_missing_locations(report: dict, file_bytes: bytes, fields: dict) -> dict:
-    """The report with its numerical, date and registry findings placed on the page by their value
-    (value_locations). Not saved; worked out again on each read."""
-    if not file_bytes.startswith(b"%PDF"):
+def needs_text_lines(file_bytes: bytes) -> bool:
+    """A photo or a scan: its findings are placed by its OCR'd lines, not a text layer."""
+    return not (file_bytes.startswith(b"%PDF") and pdf_contains_text(file_bytes))
+
+
+def locate_values(file_bytes: bytes, values: list[dict], text_pages: list[dict] | None = None) -> list[dict]:
+    """Each value ({id, field, value}) placed on the document the way a numerical or date finding is (value_locations):
+    in the forms it is likely printed in, preferring the line of its field's label. Returns {id, units, page_size,
+    locations} for each; no locations when it isn't found, or is found too often to point at."""
+    def place(doc: pymupdf.Document, value: dict) -> dict:
+        field = str(value.get("field") or "value")
+        finding = {"field": field, "stated": value.get("value")}
+        return value_locations.locate(doc, finding, {field: value.get("value")})
+
+    def answer(value: dict, placed: dict) -> dict:
+        return {
+            "id": value["id"], "units": placed.get("bbox_units", "pt"), "page_size": placed.get("page_size"),
+            "locations": placed.get("locations") or [],
+        }
+
+    if not needs_text_lines(file_bytes):
+        with value_locations.open_with_form_values(file_bytes) as doc:
+            return [answer(v, place(doc, v)) for v in values]
+    if not text_pages:
+        return [answer(v, {}) for v in values]
+    doc, scales = value_locations.doc_from_text_lines(text_pages)
+    with doc:
+        return [answer(v, value_locations.in_image_units(place(doc, v), text_pages, scales)) for v in values]
+
+
+def add_missing_locations(
+    report: dict, file_bytes: bytes, fields: dict, text_pages: list[dict] | None = None
+) -> dict:
+    """The report with its numerical, date and registry findings placed on the page by their value, and quoted
+    hidden or instruction text by its words (value_locations). A photo or a scan is searched through its OCR'd
+    lines (`text_pages`, from app/text_lines.py). Not saved; worked out again on each read."""
+    def place(doc: pymupdf.Document, finding: dict) -> dict:
+        if finding.get("tool") in value_locations.QUOTE_TOOLS:
+            return value_locations.locate_quote(doc, finding)
+        return value_locations.locate(doc, finding, fields)
+
+    findings = report.get("findings", [])
+    if not needs_text_lines(file_bytes):
+        with value_locations.open_with_form_values(file_bytes) as doc:
+            located = [place(doc, f) if value_locations.needs_locations(f) else f for f in findings]
+        return {**report, "findings": located}
+    if not text_pages:
         return report
-    with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
+    doc, scales = value_locations.doc_from_text_lines(text_pages)
+    with doc:
         located = [
-            value_locations.locate(doc, finding, fields) if value_locations.needs_locations(finding) else finding
-            for finding in report.get("findings", [])
+            value_locations.in_image_units(place(doc, f), text_pages, scales) if value_locations.needs_locations(f) else f
+            for f in findings
         ]
     return {**report, "findings": located}
 
@@ -583,7 +631,10 @@ def _injection_finding(span: dict) -> dict:
     else:
         summary = f'Visible text worded as an instruction to the AI: "{quote}"'
     severity = _INJECTION_SEVERITY.get((where, caught_by), "low")
-    return {**span, "severity_hint": severity, "severity_floor": severity, "summary": summary}
+    # A span on the page (hidden, or in an image) carries where it sits; a visible one is found by its text when the
+    # report is read (value_locations), and metadata or a file name has no place on the page at all.
+    placed = {"bbox_units": "pt"} if span.get("bbox") else {}
+    return {**span, **placed, "severity_hint": severity, "severity_floor": severity, "summary": summary}
 
 
 async def _guard_result(document_id: str) -> dict | None:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import threading
 import time
 import uuid
@@ -31,6 +32,13 @@ def upload_file(
         storage_path, file_bytes, {"content-type": content_type}
     )
     return storage_path
+
+
+def save_json(storage_path: str, data: object) -> None:
+    """Writes (or overwrites) a JSON file at an exact path, for caches kept beside the documents."""
+    supabase_client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).upload(
+        storage_path, json.dumps(data).encode(), {"content-type": "application/json", "upsert": "true"}
+    )
 
 
 def download_file(storage_path: str) -> bytes:
