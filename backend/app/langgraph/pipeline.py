@@ -130,7 +130,13 @@ async def _rerun_extraction(document_id: str) -> None:
         )
         return
 
-    extraction = await extract.run_extraction(document_type, raw_text)
+    extraction = await extract.run_extraction(
+        document_type,
+        raw_text,
+        document_id=document_id,
+        filename=document.filename,
+        storage_path=document.storage_path,
+    )
     # Persisted regardless of escalation, same as the main graph's extract
     # node — whatever fields Extraction found are real data worth keeping.
     await nodes.persist_extracted_fields(document_id, document_type, extraction)

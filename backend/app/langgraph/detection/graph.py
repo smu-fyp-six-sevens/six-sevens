@@ -82,6 +82,7 @@ class DetectionState(TypedDict, total=False):
     result: dict
     # Kept out of `context`, which goes into the lead's prompt.
     case_id: str | None
+    extraction_disagreements: list[dict]
 
 
 class SpecialistInput(TypedDict, total=False):
@@ -224,7 +225,15 @@ async def load_context_node(state: DetectionState) -> dict:
     facts = await detection_tools.file_facts(document_id)
     if facts:
         context["file_facts"] = facts
-    return {"context": context, "case_id": document.case_id}
+    try:
+        saved_trace = await asyncio.to_thread(trace.get_persisted, document_id)
+    except Exception:
+        saved_trace = None
+    if not saved_trace:
+        saved_trace = trace.get(document_id) or {}
+    extraction_steps = [step for step in (saved_trace.get("steps") or []) if step.get("step") == "extraction"]
+    disagreements = extraction_steps[-1].get("extraction_disagreements", []) if extraction_steps else []
+    return {"context": context, "case_id": document.case_id, "extraction_disagreements": disagreements}
 
 
 def _normalise_plan(raw: LeadPlan | None) -> dict:
@@ -490,6 +499,55 @@ def merge_reports(state: DetectionState) -> dict:
                 if name not in merged["specialists"]:
                     merged["specialists"].append(name)
 
+    # A targeted visual read that conflicts with a native PDF text layer is kept as a
+    # deterministic finding. The extracted text remains unchanged for the normal checks.
+    for index, conflict in enumerate(state.get("extraction_disagreements") or [], start=1):
+        field_name = str(conflict.get("field") or "field")
+        visual = conflict.get("visual_value")
+        textual = conflict.get("text_value")
+        finding_id = f"extraction_conflict-{field_name}"
+        summary_text = f"Text extraction and visual review disagree on {field_name.replace('_', ' ')}"
+        findings[("extraction_conflict_tool", finding_id)] = {
+            "tool": "extraction_conflict_tool",
+            "id": finding_id,
+            "severity": "medium",
+            "summary": summary_text,
+            "rationale": (f"The PDF text layer reads {textual!r}, while the rendered page was read as {visual!r}. "
+                          "The text-layer value was retained; review the original page before relying on it."),
+            "field": field_name,
+            "text_value": textual,
+            "visual_value": visual,
+            "pages": conflict.get("pages", []),
+            "source": "extraction second look",
+            "specialists": ["extraction"],
+            "agent_confidences": [{"specialist": "extraction", "confidence": conflict.get("visual_confidence", 0.0)}],
+            "via_second_look": False,
+        }
+        last_listed[("extraction_conflict_tool", summary_text)] = len(reports) + index
+
+    extraction_conflicts = state.get("extraction_disagreements") or []
+    if extraction_conflicts:
+        extraction_confidence = min(
+            (item.get("visual_confidence", 0.0) for item in extraction_conflicts), default=0.0,
+        )
+        agent_decisions.append({
+            "agent": "extraction_reviewer",
+            "decision_id": "text_image_conflict",
+            "decision": f"reported {len(extraction_conflicts)} text/image disagreement(s)",
+            "confidence": extraction_confidence,
+        })
+        consulted.append({
+            "specialist": "extraction_reviewer",
+            "title": "Extraction Reviewer",
+            "brief": "Rechecked uncertain extracted fields against page layout and rendered page evidence.",
+            "tools_called": ["layout_lookup", "vision_read"],
+            "summary": f"Found {len(extraction_conflicts)} disagreement(s) between PDF text and visual reading.",
+            "decision_confidences": [{"confidence": extraction_confidence, "second_look": False}],
+            "uncertain": True,
+            "dismissed": [],
+            "second_look": False,
+        })
+
     # A finding a specialist dismissed after it was listed (a second look) is gone, not just annotated.
     kept = [
         f for f in findings.values()
@@ -510,6 +568,11 @@ def merge_reports(state: DetectionState) -> dict:
         "inconclusive": "No findings, but not every check could be run.",
         "clean": "Nothing worth flagging was found.",
     }[verdict]
+    if state.get("extraction_disagreements"):
+        verdict = "flagged"
+        lead = summary if summary and summary != "Nothing worth flagging was found." else ""
+        conflict_summary = "The text layer and visual read disagree on one or more extracted fields; review the original page."
+        summary = f"{conflict_summary} {lead}".strip()
 
     return {
         "document_id": state["document_id"],

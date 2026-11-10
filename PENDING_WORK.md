@@ -1,11 +1,12 @@
 # Pending work
 
-Open product and platform work only: remove an item once it's done. Elsewhere: stability findings, code smells, optimisations and database load in `STABILITY_AND_REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10; backwards-compatibility fallbacks in `STABILITY_AND_REFACTORING_AUDIT.md` §7. Updated 2026-11-07.
+Open product and platform work only: remove an item once it's done. Elsewhere: stability findings, code smells, optimisations and database load in `STABILITY_AND_REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10; backwards-compatibility fallbacks in `STABILITY_AND_REFACTORING_AUDIT.md` §7. Updated 2026-11-10.
 
 ## Product
 
 - **Skip repeated runs** (decided 2026-11-01): "Run again" on a case whose fingerprint matches the last complete run shows that run instead of starting another (each spends about 12k tokens).
 - **Agent-raised findings.** A specialist can only assess findings a tool returns; something it notices itself (a "modified copy" subject) appears in its summary but never scores. Needs a way to raise a finding that cites the field it read.
+- **Evaluate extraction second-look accuracy.** Compare text-only and selective second-look results against labelled bank statements and payslips. The evaluator should track field accuracy and text/image disagreements; run it on demand because it uses model calls.
 
 ## Claude models
 
@@ -14,23 +15,6 @@ Open product and platform work only: remove an item once it's done. Elsewhere: s
 ## Deployment note (report and commercialisation document)
 
 - **Data residency asterisk.** Put this wherever the report describes the model calls, and carry it into the commercialisation document the supervisor asked for (server, model, RAM, storage requirements): *"This prototype calls the public Claude API. In production, GLDB would reach Claude through an enterprise agreement or its cloud provider (for example Vertex AI), with regional processing and zero data retention, subject to its outsourcing and MAS requirements."* Google's data-residency page lists Singapore (`asia-southeast1`) for some Claude models, but which ones varies, so the sentence names no model or region; the Claude API's own residency option is global or US only. Don't name banks that have signed such contracts without a source.
-
-## Extraction agent
-
-Extraction is one Sonnet call over the page text (`langgraph/extract.py`). The text loses table columns, and the model says so in `low_confidence_reason`: a statement's debit and credit "inferred from balance movement", a credit report's "table layout is garbled; balance column alignment unclear". Plan: escalate field by field, the way classification escalates (rules, then the text classifier, then vision).
-1. **Text pass:** today's call, unchanged.
-2. **Code picks the fields for a second look:** below a confidence threshold, a required field that's missing, or one a guard dropped (`_drop_unprinted_numbers` and the like). None picked means no extra cost, as on most clean native PDFs.
-3. **An extraction agent on those fields only,** a subgraph shaped like `classify_graph` (`extract_graph.py`, tools in `extraction_tools.py`), with the order enforced in code like `classify_graph._refusal`:
-   - `layout_lookup(fields)`: the words near each field's label with their positions (PyMuPDF), and table cells by column (pdfplumber) for statement and credit-report rows. Free, so it runs first; on a scan it uses the OCR boxes.
-   - `vision_read(fields, pages)`: renders only those pages and asks only for those fields. Once at most, only for fields layout didn't settle; straight away on an image-only document.
-   - The agent may leave an unimportant optional field alone.
-
-**Rules code enforces:**
-- A second look may fill a field or raise its confidence, never "correct" a value to make the arithmetic work. A statement whose balances don't add up may be forged; a disagreement between the text and the image is kept for detection, not resolved.
-- On a native PDF, vision can't add a number the text layer doesn't hold (as `_drop_unprinted_numbers`): a forged overlay is exactly where the image and the text disagree.
-- Each field records its source (text, layout or vision) in the trace.
-
-**Also:** `extract_node` and `rerun_extraction` both hand over to the subgraph. The CLAUDE.md design rule ("classifier and extraction are plain pipelines") and `HOW_IT_WORKS.md`'s extraction section change with it. Mocked tests cover the tool order, the field picking and the merge rules. An eval on bank statements and payslips (spends tokens; on demand) decides whether it beats the single call.
 
 ## Detection and the document pipeline
 

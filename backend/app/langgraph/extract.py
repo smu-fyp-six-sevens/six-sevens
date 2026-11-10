@@ -6,6 +6,7 @@ model's JSON into extracted fields/confidences lives here.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 
@@ -18,6 +19,7 @@ from ..llm_contracts import ExtractionReply
 from ..llm_io import message_text, parse_json_object, salvage_entries, validate, was_cut_off
 from ..run_context import spend_model_call
 from .extraction_prompts import build_extraction_prompt, drop_empty_optional_fields
+from .extraction_prompts import EXTRACTION_SCHEMAS
 from .. import telemetry
 
 logger = logging.getLogger("classifier_pipeline.langgraph.extract")
@@ -53,7 +55,15 @@ def _classifier_guess_hint(classified_as: str) -> str:
     )
 
 
-async def run_extraction(document_type: str, raw_text: str, *, classified_as: str | None = None) -> dict:
+async def run_extraction(
+    document_type: str,
+    raw_text: str,
+    *,
+    classified_as: str | None = None,
+    document_id: str | None = None,
+    filename: str | None = None,
+    storage_path: str | None = None,
+) -> dict:
     from ._anthropic import build_chat_anthropic
     from .cache_gate import cache_gate
 
@@ -97,8 +107,178 @@ async def run_extraction(document_type: str, raw_text: str, *, classified_as: st
         result = _drop_empty_fields(result, document_type)
         result = _drop_period_totals(result, raw_text)
         result = _drop_example_values(result, raw_text)
+        selected: list[dict] = []
+        if document_id and filename and storage_path and not result.get("output_error"):
+            selected = select_second_look_fields(document_type, result)
+            result["field_provenance"] = {
+                name: {
+                    "source": "text",
+                    "confidence": (result.get("field_confidences") or {}).get(name),
+                }
+                for name in (result.get("extracted_fields") or {})
+            }
+            if selected:
+                from ..storage_service import download_file
+                from .extract_graph import run_second_look
+
+                try:
+                    file_bytes = await asyncio.to_thread(download_file, storage_path)
+                    from ..ingestion.pdf_extractor import pdf_contains_text
+                    native_text_pdf = filename.lower().endswith(".pdf") and await asyncio.to_thread(
+                        pdf_contains_text, file_bytes,
+                    )
+                    review = await run_second_look(
+                        document_id=document_id,
+                        filename=filename,
+                        file_bytes=file_bytes,
+                        raw_text=raw_text,
+                        selected_fields=selected,
+                        native_text_pdf=native_text_pdf,
+                    )
+                    _merge_second_look(result, review, selected, raw_text, native_text_pdf=native_text_pdf)
+                except Exception as exc:
+                    logger.warning("Document %s: extraction second look failed: %s", document_id, exc)
+                    result["second_look_error"] = f"{type(exc).__name__}: {exc}"
         span.set_attribute("dropped_unprinted_fields", len(result.get("dropped_unprinted_fields", [])))
+        span.set_attribute("second_look_fields", len(selected) if document_id and filename and storage_path else 0)
         return result
+
+
+def select_second_look_fields(document_type: str, result: dict) -> list[dict]:
+    """Select only low-confidence, missing-required, or extraction-guard-dropped fields."""
+    values = result.get("extracted_fields") or {}
+    confidences = result.get("field_confidences") or {}
+    reasons = result.get("field_reasons") or {}
+    schema = EXTRACTION_SCHEMAS.get(document_type, {})
+    required = set(schema.get("required", []))
+    if values.get("entity_type") == "individual":
+        required.update(schema.get("required_when_individual", []))
+    dropped = {
+        name
+        for key in ("dropped_unprinted_fields", "dropped_empty_fields", "dropped_period_totals", "dropped_example_values")
+        for name in result.get(key, [])
+    }
+    names = set(values) | required | dropped
+    selected = []
+    for name in sorted(names):
+        value = values.get(name)
+        confidence = confidences.get(name)
+        triggers = []
+        if isinstance(confidence, (int, float)) and confidence < settings.EXTRACTION_CONFIDENCE_THRESHOLD:
+            triggers.append("low_confidence")
+        elif confidence is None and name in values and name not in dropped:
+            triggers.append("confidence_missing")
+        if name in required and (name not in values or value is None or value == ""):
+            triggers.append("missing_required")
+        if name in dropped:
+            triggers.append("guard_dropped")
+        if triggers:
+            selected.append({
+                "name": name,
+                "current_value": value,
+                "confidence": confidence,
+                "reason": reasons.get(name),
+                "triggers": triggers,
+            })
+    return selected
+
+
+def _printed_number_tokens(text: str) -> set[float]:
+    return {float(item.replace(",", "")) for item in _TEXT_NUMBER_RE.findall(text or "")}
+
+
+def _candidate_numbers(value) -> list[float]:
+    if isinstance(value, bool) or value is None:
+        return []
+    if isinstance(value, (int, float)):
+        return [abs(float(value))]
+    if isinstance(value, str):
+        return [float(item.replace(",", "")) for item in _TEXT_NUMBER_RE.findall(value)]
+    if isinstance(value, dict):
+        return [number for child in value.values() for number in _candidate_numbers(child)]
+    if isinstance(value, (list, tuple)):
+        return [number for child in value for number in _candidate_numbers(child)]
+    return []
+
+
+def _same_value(left, right) -> bool:
+    if left == right:
+        return True
+    if isinstance(left, str) and isinstance(right, str):
+        return re.sub(r"\s+", " ", left).strip().casefold() == re.sub(r"\s+", " ", right).strip().casefold()
+    return False
+
+
+def _merge_second_look(
+    result: dict,
+    review: dict,
+    selected: list[dict],
+    raw_text: str,
+    *,
+    native_text_pdf: bool,
+) -> None:
+    """Merge only corroborated or missing values; never hide a text/image disagreement."""
+    fields = result.setdefault("extracted_fields", {})
+    confidences = result.setdefault("field_confidences", {})
+    reasons = result.setdefault("field_reasons", {})
+    provenance = result.setdefault("field_provenance", {})
+    conflicts = result.setdefault("extraction_disagreements", [])
+    selected_by_name = {item["name"]: item for item in selected}
+    allowed_sources = {source for source, used in (review.get("_tools_used") or {}).items() if used}
+    native_pdf = native_text_pdf
+    printed = _printed_number_tokens(raw_text)
+    vision_pages = review.get("_vision_pages") or []
+
+    for name, candidate in (review.get("fields") or {}).items():
+        if name not in selected_by_name or not isinstance(candidate, dict):
+            continue
+        source = candidate.get("source")
+        value = candidate.get("value")
+        confidence = candidate.get("confidence")
+        if source not in allowed_sources or source not in {"layout_lookup", "vision_read"} or value in (None, ""):
+            continue
+        if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+            continue
+        confidence = max(0.0, min(1.0, float(confidence)))
+        current = fields.get(name)
+        if current not in (None, "") and not _same_value(current, value):
+            if source == "vision_read" and native_pdf:
+                conflict = {
+                    "field": name,
+                    "text_value": current,
+                    "visual_value": value,
+                    "visual_confidence": confidence,
+                    "pages": vision_pages,
+                    "reason": candidate.get("reason") or "The native text and rendered page appear to differ.",
+                }
+                conflicts.append(conflict)
+            else:
+                reasons[name] = (candidate.get("reason") or "Second look disagreed with the text extraction; "
+                                 "the original text value was kept.")
+            continue
+        # A native PDF's image cannot add a number absent from its text layer. If a text value
+        # already exists, the disagreement above is retained as a detection finding instead.
+        if native_pdf and source == "vision_read":
+            if any(not any(abs(number - printed_number) < 0.005 for printed_number in printed)
+                   for number in _candidate_numbers(value)):
+                result.setdefault("second_look_rejected_fields", []).append({
+                    "field": name,
+                    "reason": "Vision proposed a number absent from the native PDF text layer.",
+                })
+                continue
+        confidences[name] = max(float(confidences.get(name) or 0.0), confidence)
+        provenance[name] = {
+            "source": "text" if current not in (None, "") else source.removesuffix("_read").removesuffix("_lookup"),
+            "confidence": confidences[name],
+            "corroborated_by": [source] if current not in (None, "") else [],
+        }
+        if current in (None, ""):
+            fields[name] = value
+        if candidate.get("reason"):
+            reasons[name] = candidate["reason"]
+    if conflicts:
+        result["extraction_disagreements"] = conflicts
+    result["confidence"] = _average_field_confidence(confidences)
 
 
 def _failed_extraction(reason: str, *, salvaged: dict | None = None) -> dict:

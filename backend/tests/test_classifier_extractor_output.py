@@ -233,12 +233,16 @@ async def _extract_node(classification: dict, attempts: int):
 
 async def test_a_low_confidence_guess_is_given_to_the_generic_extraction() -> None:
     run = await _extract_node({"document_type": "list_of_loans", "confidence": 0.72}, attempts=0)
-    run.assert_awaited_once_with("unrecognised", "text", classified_as="list_of_loans")
+    run.assert_awaited_once_with(
+        "unrecognised", "text", classified_as="list_of_loans", document_id="d", filename=None, storage_path=None,
+    )
 
 
 async def test_the_guess_is_not_repeated_after_a_reclassification() -> None:
     run = await _extract_node({"document_type": "list_of_loans", "confidence": 0.72}, attempts=1)
-    run.assert_awaited_once_with("unrecognised", "text", classified_as=None)
+    run.assert_awaited_once_with(
+        "unrecognised", "text", classified_as=None, document_id="d", filename=None, storage_path=None,
+    )
 
 
 @pytest.mark.parametrize(
