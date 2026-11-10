@@ -18,7 +18,7 @@ function finding(overrides: Partial<CaseRiskFinding>): CaseRiskFinding {
     document_id: 'doc-a', filename: 'C001_CertIncorp.pdf', document_type: 'certificate_of_incorporation', finding_id: 'xd-det-1',
     tool: 'cross_document_analysis', check_code: null, severity: 'high', summary: UEN, rationale: '', points: 50,
     unreviewed: false, fingerprint: 'fp-xd-det-1', category: 'identity_entity_conflict', source: 'cross_document',
-    repeat_of: null, also_on: 0, document_ids: [], cited_values: [], ...overrides,
+    repeat_of: null, also_on: 0, document_ids: [], cited_values: [], feedback_ids: [], ...overrides,
   };
 }
 
