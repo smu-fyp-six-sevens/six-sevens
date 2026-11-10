@@ -18,6 +18,7 @@ from ..llm_contracts import ExtractionReply
 from ..llm_io import message_text, parse_json_object, salvage_entries, validate, was_cut_off
 from ..run_context import spend_model_call
 from .extraction_prompts import build_extraction_prompt, drop_empty_optional_fields
+from . import correction_hints
 from .. import telemetry
 
 logger = logging.getLogger("classifier_pipeline.langgraph.extract")
@@ -59,8 +60,11 @@ async def run_extraction(document_type: str, raw_text: str, *, classified_as: st
 
     prefix, text = _split_prompt_for_caching(document_type, raw_text)
     model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, _EXTRACTION_MAX_TOKENS, effort="low")
-    # The hint is its own block after the cached prefix, so the prefix stays the same for every document.
+    # The hints are their own blocks after the cached prefix, so the prefix stays the same for every document.
     hint = [{"type": "text", "text": _classifier_guess_hint(classified_as)}] if classified_as else []
+    fields = correction_hints.field_hint(document_type, await correction_hints.load_field_edits(document_type))
+    if fields:
+        hint.append({"type": "text", "text": fields})
     message = {
         "role": "user",
         "content": [
