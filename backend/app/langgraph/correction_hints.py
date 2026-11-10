@@ -37,7 +37,22 @@ SIGNALS: dict[tuple[str, str], str] = {
         "is a short registry certificate stating the incorporation date and registration number"
     ),
     ("bank_statement", "list_of_loans"): (
-        "states a facility amount, interest rate and repayment terms rather than dated transactions with a running balance"
+        "lists the applicant's borrowings, one row per facility with the lender, limit or outstanding balance and "
+        "monthly instalment, rather than one account's dated transactions"
+    ),
+    ("list_of_loans", "credit_report"): (
+        "comes from a credit bureau, with enquiries, account status and payment history, rather than a schedule the "
+        "applicant prepared"
+    ),
+    ("credit_report", "list_of_loans"): (
+        "is a schedule the applicant or company prepared, without a bureau's enquiries or payment history"
+    ),
+    ("bank_statement", "source_of_wealth"): (
+        "is a letter or declaration explaining where the wealth came from (a business, a property sale, an "
+        "inheritance), even when statements are attached as support"
+    ),
+    ("source_of_wealth", "bank_statement"): (
+        "is the bank's own record of one account's dated transactions and running balance, not a letter explaining them"
     ),
     ("list_of_loans", "bank_statement"): "lists dated transactions with a running balance over a statement period",
     ("bank_statement", "credit_report"): (
@@ -47,7 +62,10 @@ SIGNALS: dict[tuple[str, str], str] = {
         "is issued by IRAS for a year of assessment and states chargeable income and tax payable"
     ),
     ("notice_of_assessment", "payslip"): "comes from an employer for one pay period, with gross pay, deductions and net pay",
-    ("passport", "nric"): "carries an NRIC number (a letter, 7 digits and a letter) rather than a machine-readable zone",
+    # A Singapore passport prints the NRIC number too, so that number doesn't tell them apart.
+    ("passport", "nric"): (
+        "is an identity card, front and back, with the holder's address on the back and no machine-readable zone"
+    ),
     ("nric", "passport"): "has a machine-readable zone (two lines of '<' characters) and a passport number",
     ("proof_of_address", "bank_statement"): (
         "lists the account's dated transactions with a running balance; classify it by that, not by the address on it"

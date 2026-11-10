@@ -55,7 +55,7 @@ def test_a_pair_with_no_signal_just_names_the_confusion() -> None:
 
 def test_the_hint_reads_as_english() -> None:
     hint = correction_hints.type_hint("passport", [_pair("passport", "nric")])
-    assert "corrected a passport to an NRIC in 2 cases. An NRIC carries" in hint
+    assert "corrected a passport to an NRIC in 2 cases. An NRIC is an identity card" in hint
     assert correction_hints.a("employment_letter") == "an employment letter"
 
 

@@ -1,6 +1,8 @@
 -- The live Supabase schema (public, plus the storage bucket), as read on 2026-11-01 plus the case list columns, view
 -- and indexes of the same day. The access rules (secret key only, no anon grants or policies) are the target from
 -- 2026-11-07: run sql/2026-11-07_step1_run_claim.sql and sql/2026-11-07_step2_secret_key_only.sql on the live database to match.
+-- Agent learning (finding_feedback's keys and indexes, feedback_counts, type_corrections, field_edit_counts) was
+-- migrated live on 2026-11-10.
 -- A snapshot, not a migration: it rebuilds an empty database (staging, a fresh project). Keep it in step by hand
 -- when the schema changes.
 
@@ -383,9 +385,9 @@ grant execute on function public.replace_extracted_fields(uuid, jsonb) to servic
 
 -- Read functions (backend only) -------------------------------------------------------------------------------------
 
--- Officer feedback from other cases, counted (feedback_repository.counts): one row per check (check_name, and
--- check_code when the finding had one) and lesson, with how many cases taught it (each case once), how many cases
--- gave each reason, the latest notes and summaries, and the ids behind it. Newest lesson first.
+-- Officer feedback from other cases in the last 6 months, counted (feedback_repository.counts): one row per check
+-- (check_name, and check_code when the finding had one) and lesson, with how many cases taught it (each case once),
+-- how many cases gave each reason, the latest notes and summaries, and the ids behind it. Newest lesson first.
 --   lesson: 'false_alarm', 'confirmed', 'set_aside_wrongly' (a set-aside finding found real) or 'missed'.
 create function public.feedback_counts(p_scope text, p_check_names text[], p_exclude_case_id text)
 returns table (
@@ -406,6 +408,8 @@ as $$
             end as lesson
         from public.finding_feedback f
         where f.scope = p_scope and f.check_name = any(p_check_names) and f.case_id <> p_exclude_case_id
+            -- Only the last 6 months teach: an old lesson may describe documents and checks that have since changed.
+            and f.updated_at >= now() - interval '6 months'
     ),
     by_reason as (
         select l.check_name, l.check_code, l.lesson, l.reason, count(distinct l.case_id)::integer as cases
