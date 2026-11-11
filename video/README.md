@@ -7,8 +7,9 @@ So far this is the **hook** (about 11 s). No app on screen yet: the app is the s
 **v3 "buried" (current, default), 12 s.** Full screen: the loan officer's screen fills the frame. PDF windows pile up,
 browser tabs multiply until they squash to icons, pings from other teams stack in the corner. Headlines sit on a soft
 wash on the left: "Corporate loan applications need extensive documentation.", then "Waaaaaaaaay too many documents
-to review. For one case." **Every extra "a" opens one more document.** At 8.9 s everything stops and dims, one big
-ping lands in the middle ("Customer's on the line again. Any update on Anchorpoint?") and the shot holds about
+to review. For one case." **"Waaaay" stretches smoothly to 28 a's, running across into the right of the frame, and
+documents keep opening as it grows.** At 8.9 s everything stops and dims, one big
+ping lands in the middle ("Customer's on the line again. Any update on Anchorpoint's loan status?") and the shot holds about
 3 s for your sigh.
 
 **v2 "overwhelm"** (the same pile on a screen at the side) and **v1 "portal"** (the upload box) are kept. Switch with
@@ -25,6 +26,7 @@ npm run dev        # Remotion Studio: scrub, preview, edit props live
 ```
 
 - **Timing (v3):** `src/timing.ts`, the `OVERWHELM3` object, all in seconds. Line the knobs up with your voiceover: `title1In`/`title1Out` (first line), `wayIn`, `stretchStart`/`stretchEnd` (how long you drag the "waaaay": the a's, and their documents, land evenly in between), `title2In`, `footnoteIn`, `pings` (one per message), `finalPingIn` (the sigh moment), and `length` (sets how long the hold lasts after it).
+- **How long the word gets:** `WAY3_MAX_A` (28) in `src/data/overwhelm.ts`; `WAY3_DOCS` is how many documents open during the stretch.
 - **Final ping text:** `FINAL_PING` in `src/data/overwhelm.ts`. Messages before it: `PINGS3` (add or remove one, and its time in `OVERWHELM3.pings`).
 - **Timing (v2):** `src/timing.ts`, the `OVERWHELM` object. Everything is in seconds: when each headline rises and leaves, the first and last PDF window, the first and last tab, `pings` (one time per message), when the "a"s stretch, the camera push. `ramp` sets how frantic the pile-up gets. Save and Studio updates.
 - **Words (v2):** `src/data/overwhelm.ts`: the PDFs (`DOCS`), extra tabs (`EXTRA_TABS`), the messages (`PINGS`: name, team, text, avatar colour) and the headlines (`COPY2`). `\n` is a line break; lines never wrap by themselves. Add or remove a message and add or remove its time in `OVERWHELM.pings`.

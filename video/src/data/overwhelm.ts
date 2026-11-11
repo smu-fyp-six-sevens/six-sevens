@@ -65,6 +65,11 @@ export const PINGS3 = PINGS.filter((p) => p.text !== "Any update??");
 export const FINAL_PING = {
   name: "Priya",
   team: "Relationship Manager",
-  text: "Customer's on the line again. Any update on Anchorpoint?",
+  text: "Customer's on the line again. Any update on Anchorpoint's loan status?",
   tint: "#355f96",
 };
+
+/** v3: how many "a"s "Waaaay" grows to. 28 runs the word across into the right side of the frame. */
+export const WAY3_MAX_A = 28;
+/** v3: how many of the PDF windows open while the word stretches (the rest open before it). */
+export const WAY3_DOCS = 8;

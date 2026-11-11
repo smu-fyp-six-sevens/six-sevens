@@ -9,7 +9,7 @@ import { DocWindow } from "../components/DocWindow";
 import { Stage } from "../components/Stage";
 import { TabStrip } from "../components/TabStrip";
 import { Title } from "../components/Title";
-import { COPY2, DOCS, EXTRA_TABS, FINAL_PING, PINGS3 } from "../data/overwhelm";
+import { COPY2, DOCS, EXTRA_TABS, FINAL_PING, PINGS3, WAY3_DOCS, WAY3_MAX_A } from "../data/overwhelm";
 import { canvas, colors, fonts } from "../theme";
 import { FPS, OVERWHELM3 as T, atSeconds, s } from "../timing";
 
@@ -24,14 +24,33 @@ const TOAST_W = 420;
 const TOAST_STEP = 112;
 
 // ---- When things happen (seconds) ----------------------------------------------------
-const EXTRA_A = COPY2.wayMaxA - 1;
-/** The moment each extra "a" appears: evenly between stretchStart and stretchEnd. */
-const LETTER_TIMES = Array.from({ length: EXTRA_A }, (_, j) =>
-  T.stretchStart + ((T.stretchEnd - T.stretchStart) * j) / Math.max(1, EXTRA_A - 1));
+const EXTRA_A = WAY3_MAX_A - 1;
+/** How far through the stretch (0..1) the word is at progress u of its time: an ease-in-out
+ * mixed with a steady pace by stretchEase. */
+const stretchCurve = (u: number) => {
+  const c = Math.max(0, Math.min(1, u));
+  const eased = 0.5 - 0.5 * Math.cos(Math.PI * c);
+  return (1 - T.stretchEase) * c + T.stretchEase * eased;
+};
+/** Seconds when letter j (0-based) has fully slid in: the inverse of stretchCurve, by bisection. */
+const LETTER_TIMES = Array.from({ length: EXTRA_A }, (_, j) => {
+  const target = (j + 1) / EXTRA_A;
+  let lo = 0;
+  let hi = 1;
+  for (let k = 0; k < 30; k++) {
+    const mid = (lo + hi) / 2;
+    if (stretchCurve(mid) < target) lo = mid;
+    else hi = mid;
+  }
+  return T.stretchStart + (T.stretchEnd - T.stretchStart) * hi;
+});
 
-const PRE = DOCS.length - EXTRA_A; // windows that open before "Waaaay"; the rest open one per letter
+const PRE = DOCS.length - WAY3_DOCS; // windows that open before "Waaaay"; the rest open during the stretch
+/** The stretch's documents open as evenly spaced letters arrive. */
+const STRETCH_DOC_TIMES = Array.from({ length: WAY3_DOCS }, (_, k) =>
+  LETTER_TIMES[Math.min(EXTRA_A - 1, Math.round(((k + 0.5) * EXTRA_A) / WAY3_DOCS))]);
 const DOC_TIMES = DOCS.map((_, i) =>
-  i < PRE ? T.firstDocIn + (T.lastDocIn - T.firstDocIn) * Math.pow(i / Math.max(1, PRE - 1), T.ramp) : LETTER_TIMES[i - PRE]);
+  i < PRE ? T.firstDocIn + (T.lastDocIn - T.firstDocIn) * Math.pow(i / Math.max(1, PRE - 1), T.ramp) : STRETCH_DOC_TIMES[i - PRE]);
 
 // Each PDF opens a tab at the same moment; the extra tabs fill in between.
 const TABS = (() => {
@@ -52,18 +71,27 @@ const PLACES = DOCS.map((_, i) => {
 const HEAD1 = { fontFamily: fonts.display, fontSize: 66, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.1, color: colors.ink } as const;
 const BIG = { fontFamily: fonts.display, fontSize: 92, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1.05, color: colors.ink } as const;
 
-/** "W" + a's + "y": each extra "a" pops in at its LETTER_TIME, the same moment its document opens. */
+/** "W" + a's + "y". The word grows smoothly: the stretch's progress is continuous, and the a that is
+ * arriving opens its width (and fades in) instead of popping, so "y" glides right. */
+const A_EM = 0.6; // an "a" is narrower than this in Inter Bold, so the cap never clips a finished letter
 const StretchWay: React.FC<{ frame: number }> = ({ frame }) => {
   const p = interpolate(frame, [s(T.wayIn), s(T.wayIn) + 14], [0, 1], { ...clamp, easing: rise });
-  const extra = LETTER_TIMES.filter((t) => frame >= s(t));
+  const u = (frame / FPS - T.stretchStart) / (T.stretchEnd - T.stretchStart);
+  const grown = stretchCurve(u) * EXTRA_A; // e.g. 7.4 = seven a's in, the eighth 40% open
+  const shown = Math.ceil(grown);
   return (
-    <div style={{ clipPath: "inset(-0.3em -100vw -0.2em -100vw)", ...BIG, whiteSpace: "nowrap" }}>
+    <div
+      style={{
+        clipPath: "inset(-0.3em -100vw -0.3em -100vw)", ...BIG, whiteSpace: "nowrap",
+        textShadow: "0 0 22px rgba(249,249,248,0.95), 0 0 8px rgba(249,249,248,0.95)",
+      }}
+    >
       <div style={{ transform: `translateY(${(1 - p) * 110}%)` }}>
         {COPY2.wayBefore}a
-        {extra.map((t, j) => {
-          const pop = interpolate(frame, [s(t), s(t) + 7], [0, 1], { ...clamp, easing: land });
+        {Array.from({ length: shown }, (_, j) => {
+          const open = Math.max(0, Math.min(1, grown - j));
           return (
-            <span key={j} style={{ display: "inline-block", transformOrigin: "50% 85%", transform: `scale(${1.45 - 0.45 * pop})`, color: colors.ink }}>
+            <span key={j} style={{ display: "inline-block", overflow: "hidden", verticalAlign: "bottom", maxWidth: `${A_EM * open}em`, opacity: Math.min(1, open * 1.5) }}>
               a
             </span>
           );

@@ -22,3 +22,9 @@
 - Decision: the camera pushes into the pile only; tabs, pings and headlines stay fixed (a full-frame push slid the tabs off the top edge).
 - Measured: stills at frames 100, 240, 260, 330 and a contact sheet every 24 frames: headlines clear of the edge, tabs and pings inside the frame, the final ping fully legible.
 - Not checked: nobody has watched it in motion yet.
+
+## Wave 4 - longer, smoother "waaaay"; clearer final ping
+- Owner: "waaaay" longer so it eats into the right side; smoother a's; final ping should say "Anchorpoint's loan status".
+- Done: 28 a's (word ends near x 1700), continuous growth with each arriving "a" opening its width (ease-in-out, `stretchEase`), stretch now 5.0-7.0 s; 8 documents open spread along it; a paper-coloured halo keeps the word legible over the windows.
+- Final ping: "Customer's on the line again. Any update on Anchorpoint's loan status?"
+- Measured: stills at frames 165, 180, 195, 215, 300: no clipping, word inside the frame, ping legible. Not watched in motion.

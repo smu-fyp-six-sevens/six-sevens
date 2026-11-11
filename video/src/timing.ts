@@ -89,8 +89,9 @@ export const OVERWHELM3 = {
   firstTabIn: 0.3,        // tabs pile up across the top between these two times
   lastTabIn: 8.2,
   wayIn: 4.7,             // "Way" appears
-  stretchStart: 5.0,      // first extra "a" (and its document)...
-  stretchEnd: 6.6,        // ...last one. The a's land evenly in between, one document each
+  stretchStart: 5.0,      // the "a"s start sliding in (documents open along the way)...
+  stretchEnd: 7.0,        // ...and the word reaches full length. Starts slow, speeds up, eases out at the end
+  stretchEase: 0.6,       // 0 = steady pace, 1 = very slow start and end
   title2In: 5.1,          // "too many documents to review."
   footnoteIn: 7.0,        // "For one case."
   pings: [2.0, 3.4, 5.8, 7.3, 8.0], // one time per message in PINGS3
