@@ -4,13 +4,13 @@ Visuals only: no music, no voiceover. You set the timing.
 
 So far this is the **hook** (about 11 s). No app on screen yet: the app is the solution and comes later.
 
-**v3 "buried" (current, default), 12 s.** Full screen: the loan officer's screen fills the frame. PDF windows pile up,
+**v3 "buried" (current, default), 9.6 s.** Full screen: the loan officer's screen fills the frame. PDF windows pile up,
 browser tabs multiply until they squash to icons, pings from other teams stack in the corner. Headlines sit on a soft
 wash on the left: "Corporate loan applications need extensive documentation.", then "Waaaaaaaaay too many documents
 to review. For one case." **"Waaaay" stretches smoothly to 28 a's, running across into the right of the frame, and
-documents keep opening as it grows.** At 8.9 s everything stops and dims, one big
+documents keep opening as it grows.** At 7.1 s everything stops and dims, one big
 ping lands in the middle ("Customer's on the line again. Any update on Anchorpoint's loan status?") and the shot holds about
-3 s for your sigh.
+2.5 s for your sigh.
 
 **v2 "overwhelm"** (the same pile on a screen at the side) and **v1 "portal"** (the upload box) are kept. Switch with
 `HOOK_VERSION` in `src/timing.ts`; their renders are in `renders/v2/` and `renders/v1/`.

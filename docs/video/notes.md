@@ -28,3 +28,8 @@
 - Done: 28 a's (word ends near x 1700), continuous growth with each arriving "a" opening its width (ease-in-out, `stretchEase`), stretch now 5.0-7.0 s; 8 documents open spread along it; a paper-coloured halo keeps the word legible over the windows.
 - Final ping: "Customer's on the line again. Any update on Anchorpoint's loan status?"
 - Measured: stills at frames 165, 180, 195, 215, 300: no clipping, word inside the frame, ping legible. Not watched in motion.
+
+## Wave 5 - Sales Team, faster
+- Priya's team is now "Sales Team" (both pings).
+- Every v3 time tightened by about 20%: 12 s -> 9.6 s; final ping at 7.1 s, hold 2.5 s; stretch 4.0-5.6 s.
+- Measured: stills at frames 50, 175, 245. Not watched in motion.

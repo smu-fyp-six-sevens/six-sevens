@@ -79,24 +79,24 @@ export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
 /** v3 hook. All times in seconds from the start of the hook. */
 export const OVERWHELM3 = {
-  length: 12,             // whole hook, including the hold on the final ping
-  title1In: 0.25,         // "Corporate loan applications need extensive documentation."
-  title1Out: 4.4,         // ...lifts away
-  firstDocIn: 0.4,        // first PDF window opens
-  lastDocIn: 4.6,         // last window before "Waaaay" (the rest open with its letters)
+  length: 9.6,            // whole hook, including the hold on the final ping
+  title1In: 0.2,          // "Corporate loan applications need extensive documentation."
+  title1Out: 3.5,         // ...lifts away
+  firstDocIn: 0.3,        // first PDF window opens
+  lastDocIn: 3.7,         // last window before "Waaaay" (the rest open with its letters)
   ramp: 0.75,             // how sharply those windows speed up: 1 = steady, 0.5 = slow start
-  docPop: 0.25,           // how long one window takes to pop open
-  firstTabIn: 0.3,        // tabs pile up across the top between these two times
-  lastTabIn: 8.2,
-  wayIn: 4.7,             // "Way" appears
-  stretchStart: 5.0,      // the "a"s start sliding in (documents open along the way)...
-  stretchEnd: 7.0,        // ...and the word reaches full length. Starts slow, speeds up, eases out at the end
+  docPop: 0.2,            // how long one window takes to pop open
+  firstTabIn: 0.25,       // tabs pile up across the top between these two times
+  lastTabIn: 6.6,
+  wayIn: 3.75,            // "Way" appears
+  stretchStart: 4.0,      // the "a"s start sliding in (documents open along the way)...
+  stretchEnd: 5.6,        // ...and the word reaches full length. Starts slow, speeds up, eases out at the end
   stretchEase: 0.6,       // 0 = steady pace, 1 = very slow start and end
-  title2In: 5.1,          // "too many documents to review."
-  footnoteIn: 7.0,        // "For one case."
-  pings: [2.0, 3.4, 5.8, 7.3, 8.0], // one time per message in PINGS3
-  finalPingIn: 8.9,       // everything stops and dims; the big ping lands. The rest is the hold for your sigh
-  dim: 0.3,               // how long the dim takes
+  title2In: 4.1,          // "too many documents to review."
+  footnoteIn: 5.6,        // "For one case."
+  pings: [1.6, 2.7, 4.6, 5.8, 6.4], // one time per message in PINGS3
+  finalPingIn: 7.1,       // everything stops and dims; the big ping lands. The rest is the hold for your sigh
+  dim: 0.25,              // how long the dim takes
   pushIn: 1.04,           // the camera's slow push until the final ping (1 = none)
 };
 

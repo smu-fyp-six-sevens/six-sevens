@@ -39,11 +39,11 @@ export const EXTRA_TABS = [
 
 /** Pings from other teams, in order. `at` times are in timing.ts (OVERWHELM.pings). */
 export const PINGS: { name: string; team: string; text: string; tint: string }[] = [
-  { name: "Priya", team: "Relationship Manager", text: "Hey, have you reviewed the Anchorpoint docs yet?", tint: "#355f96" },
+  { name: "Priya", team: "Sales Team", text: "Hey, have you reviewed the Anchorpoint docs yet?", tint: "#355f96" },
   { name: "Daniel", team: "Credit Risk", text: "How's the case going? Committee is at 3pm", tint: "#166d5f" },
   { name: "Mei Ling", team: "Client Services", text: "Customer emailed us again 😅", tint: "#c6820a" },
   { name: "Ops Team", team: "Operations", text: "2 more statements just came in, added to the folder", tint: "#6b778c" },
-  { name: "Priya", team: "Relationship Manager", text: "Any update??", tint: "#355f96" },
+  { name: "Priya", team: "Sales Team", text: "Any update??", tint: "#355f96" },
   { name: "Aaron", team: "Compliance", text: "Need the KYC checks before sign-off", tint: "#b3402a" },
 ];
 
@@ -64,7 +64,7 @@ export const PINGS3 = PINGS.filter((p) => p.text !== "Any update??");
 /** The last ping: everything stops, it lands in the middle of the frame, and the shot holds. */
 export const FINAL_PING = {
   name: "Priya",
-  team: "Relationship Manager",
+  team: "Sales Team",
   text: "Customer's on the line again. Any update on Anchorpoint's loan status?",
   tint: "#355f96",
 };
