@@ -3922,6 +3922,8 @@ export interface components {
         };
         /** MetadataAnomaly */
         MetadataAnomaly: {
+            /** Code */
+            code: string;
             /** Field */
             field: string;
             /** Reason */

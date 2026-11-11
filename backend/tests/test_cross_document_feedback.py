@@ -23,8 +23,8 @@ from tests.test_case_analysis_agent import SALARY_CHECKS, calls, claude, context
 
 def group(n: int, **overrides) -> FeedbackGroup:
     return FeedbackGroup(**{
-        "check_name": "behavioural_anomaly", "lesson": "false_alarm", "cases": 2,
-        "reasons": {"explained_elsewhere": 2}, "summaries": ["Round-number deposits look like structuring"],
+        "check_name": "behavioural_anomaly", "lesson": "confirmed", "cases": 2,
+        "summaries": ["Round-number deposits look like structuring"],
         "ids": [f"00000000-0000-0000-0000-{n:012d}"], "latest": "2026-10-23T02:00:00+00:00", **overrides,
     })
 
@@ -43,6 +43,19 @@ async def test_feedback_is_looked_up_once_for_the_categories_the_model_decides_f
 
     counts.assert_called_once_with(["behavioural_anomaly", "unsupported_claim"], "case", "case-9")
     assert set(shown) == {"behavioural_anomaly", "unsupported_claim"}
+
+
+async def test_false_alarms_are_never_shown_since_a_kind_lumps_unrelated_hypotheses_together() -> None:
+    groups = [
+        group(1, lesson="false_alarm", reasons={"explained_elsewhere": 2}),
+        group(2, lesson="set_aside_wrongly", cases=1, reasons={"part_of_a_pattern": 1}),
+        group(3, check_name="unsupported_claim", lesson="false_alarm", cases=4),
+    ]
+    with patch.object(feedback.feedback_repository, "counts", return_value=groups):
+        shown = await feedback.load_feedback("case-9")
+
+    assert [g.ids for g in shown["behavioural_anomaly"]] == [group(2).ids]
+    assert "unsupported_claim" not in shown and "false alarm" not in feedback.render(shown).lower()
 
 
 async def test_feedback_that_touches_a_protected_attribute_is_never_shown() -> None:
@@ -65,12 +78,14 @@ async def test_a_failed_lookup_gives_no_feedback_instead_of_failing_the_analysis
 
 def test_feedback_is_rendered_as_fenced_counts_that_cannot_override_the_rules() -> None:
     text = feedback.render({"behavioural_anomaly": [
-        group(1), group(2, lesson="confirmed", cases=1, reasons={}, summaries=["Circular transfers confirmed"]),
-        group(3, lesson="missed", cases=1, reasons={}, summaries=[], notes=["Loan drawdown was never repaid"]),
+        group(1, cases=1, summaries=["Circular transfers confirmed"]),
+        group(2, lesson="set_aside_wrongly", cases=2, reasons={"part_of_a_pattern": 2}),
+        group(3, lesson="missed", cases=1, summaries=[], notes=["Loan drawdown was never repaid"]),
     ]})
     assert 'source="officer_feedback"' in text
-    assert "FALSE ALARM in 2 cases (Explained by another document in 2)" in text
-    assert "CONFIRMED real in 1 case" in text and "MISSED by the analysis in 1 case" in text and "never repaid" in text
+    assert "Officers found it real after the agents set it aside in 2 cases (Part of a wider pattern in 2)" in text
+    assert "Officers confirmed it real in 1 case" in text and "Officers found an issue the analysis missed in 1 case" in text
+    assert "never repaid" in text
     assert "never overrides" in text and "bias rule" in text
     assert feedback.render({}) == ""
 

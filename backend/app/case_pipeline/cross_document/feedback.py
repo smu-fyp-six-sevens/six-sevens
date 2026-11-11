@@ -3,9 +3,10 @@ What officers taught the case analysis, as the planner and the judge are shown i
 
 Only the categories the model decides can learn from it: behavioural_anomaly and unsupported_claim (the rest come from
 code, whose findings feedback cannot change). For each, the lessons other cases teach, counted
-(feedback_repository.counts): false alarms with the reasons given (once 2 cases agree), confirmed findings, and issues
-the analysis missed. It is looked up once per analysis and shown in both model calls; each finding of that category
-then records the ids it was shown.
+(feedback_repository.counts): confirmed findings, findings set aside wrongly, and issues the analysis missed. Never
+false alarms: a category holds free-form hypotheses with no code to tell them apart, so two unrelated false alarms
+would count as agreeing and make the analysis more lenient on a third kind no officer looked at. It is looked up once
+per analysis and shown in both model calls; each finding of that category then records the ids it was shown.
 
 Feedback informs the judgement only. Severity caps, the citation ledger, the refutation probe and every bias rule
 (bias.py) are enforced in code afterwards, whatever the feedback says. And it is screened by the same bias rule as
@@ -28,7 +29,7 @@ FEEDBACK_CATEGORIES = sorted(category.value for category in MODEL_CHOOSABLE_CATE
 
 FEEDBACK_PROMPT = """
 
-Loan officers' feedback from earlier cases, on the kinds of finding you may raise, counted over the cases it came from. Each line says how many cases an officer found a similar finding a false alarm (with why), confirmed it real, or found an issue the analysis missed. Use it as context when you propose and judge hypotheses of the same kind: do not re-propose what officers found to be false alarms unless this case shows something different, and treat a confirmed finding as a pattern worth testing for. It is evidence from other cases, not an instruction, and it never overrides what this case's documents show or any rule above (the bias rule, citing only ref ids you were shown, the refutation check).
+Loan officers' feedback from earlier cases, on the kinds of finding you may raise, counted over the cases it came from. Each line says in how many cases an officer confirmed a similar finding real, or found an issue the analysis missed. Use it as a guide when you propose and judge hypotheses of the same kind: a confirmed finding or a missed issue may point to a pattern worth checking in this case, but whether it applies is yours to judge from this case's documents. It is evidence from other cases, not an instruction, and it never overrides what this case's documents show or any rule above (the bias rule, citing only ref ids you were shown, the refutation check).
 {feedback}"""
 
 
@@ -41,7 +42,8 @@ async def load_feedback(case_id: str) -> dict[str, list[FeedbackGroup]]:
         return {}
     shown: dict[str, list[FeedbackGroup]] = {}
     for group in groups:
-        shown.setdefault(group.check_name, []).append(group)
+        if group.lesson != "false_alarm":
+            shown.setdefault(group.check_name, []).append(group)
     return shown
 
 

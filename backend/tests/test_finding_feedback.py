@@ -88,6 +88,18 @@ def test_a_note_touching_a_protected_attribute_is_not_saved_and_replaces_nothing
     assert fake.rows("finding_feedback") == []
 
 
+def test_a_dismissed_word_is_kept_under_its_own_code_unless_it_names_a_party_to_the_case() -> None:
+    spelling = {"check_name": "spelling_tool", "summary": 'Possible misspelling "Shenton"', "note": None}
+    fake = _fake([])
+    with patch.object(feedback_repository, "service_supabase_client", return_value=fake):
+        assert _save(**spelling, check_code="SPELLING.shenton") is True
+        # The word can't be scrubbed out of the code without losing what it matches on, so it isn't kept.
+        assert _save(**spelling, source_key="v:case-1:doc-1:fp2", check_code="SPELLING.tanaka", names=["Tanaka Holdings", "Tanaka"]) is False
+        # A fixed code is never screened as words, even when a name happens to be inside it.
+        assert _save(source_key="v:case-1:doc-1:fp3", check_code="META.CONTENT_EDITOR", names=["Ten"]) is True
+    assert [row["check_code"] for row in fake.rows("finding_feedback")] == ["SPELLING.shenton", "META.CONTENT_EDITOR"]
+
+
 # --- counting -------------------------------------------------------------------------------------------------------
 
 
@@ -130,10 +142,12 @@ def test_a_lesson_reads_as_counts_with_reasons_and_notes() -> None:
         notes=["Normal for this bank"],
     ), "this check")
     assert line == (
-        '- FALSE ALARM in 6 cases (Normal for this kind of document in 5, Other reason in 1) '
+        '- Officers found it a false alarm in 6 cases (Normal for this kind of document in 5, Other reason in 1) '
         '— officers\' notes: "Normal for this bank"'
     )
-    assert feedback_repository.describe(_group(None, "missed", cases=1), "this check") == "- MISSED by this check in 1 case"
+    assert feedback_repository.describe(_group(None, "missed", cases=1), "this check") == (
+        "- Officers found an issue this check missed in 1 case"
+    )
 
 
 # --- matching on check code -----------------------------------------------------------------------------------------

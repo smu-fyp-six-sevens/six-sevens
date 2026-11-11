@@ -25,6 +25,8 @@ TABLE = "finding_feedback"
 MIN_FALSE_ALARM_CASES = 2
 # The example notes shown per lesson.
 MAX_NOTES = 2
+# Codes built from the document's own words (spelling_tool's SPELLING.<word>), screened like the text.
+_CONTENT_CODE_PREFIXES = ("SPELLING.",)
 
 _COLUMNS = (
     "id, case_id, document_id, scope, kind, check_name, check_code, document_type, verdict, reason, summary, note, "
@@ -113,9 +115,11 @@ def save(
 ) -> bool:
     """
     Saves (or replaces) the feedback this key names, scrubbed of confidential details. Text touching a protected
-    attribute is not kept for the agents (any earlier item under the key goes too): returns False then.
+    attribute is not kept for the agents (any earlier item under the key goes too): returns False then. Nor is a
+    code made of the document's words that names a party to the case or a confidential detail, since the code
+    can't be scrubbed without losing what it matches on.
     """
-    if has_protected_text(f"{summary} {note or ''}"):
+    if has_protected_text(f"{summary} {note or ''}") or _confidential_code(check_code, names):
         withdraw(source_key)
         return False
     service_supabase_client().table(TABLE).upsert({
@@ -125,6 +129,13 @@ def save(
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }, on_conflict="source_key").execute()
     return True
+
+
+def _confidential_code(check_code: str | None, names: list[str]) -> bool:
+    if not check_code or not check_code.startswith(_CONTENT_CODE_PREFIXES):
+        return False
+    word = check_code.split(".", 1)[1]
+    return has_protected_text(word) or scrub(word, names) != word
 
 
 def withdraw(source_key: str) -> None:
@@ -155,12 +166,15 @@ def _cases(n: int) -> str:
 
 
 def describe(group: FeedbackGroup, missed_by: str) -> str:
-    """One prompt line: "FALSE ALARM in 6 cases (Normal for this kind of document in 5) — officers' notes: ..."."""
+    """
+    One prompt line, worded as context rather than a verdict: "Officers found it a false alarm in 6 cases (Normal for
+    this kind of document in 5) — officers' notes: ...".
+    """
     said = {
-        "false_alarm": "FALSE ALARM",
-        "confirmed": "CONFIRMED real",
-        "set_aside_wrongly": "SET ASIDE WRONGLY, it was real",
-        "missed": f"MISSED by {missed_by}",
+        "false_alarm": "Officers found it a false alarm",
+        "confirmed": "Officers confirmed it real",
+        "set_aside_wrongly": "Officers found it real after the agents set it aside",
+        "missed": f"Officers found an issue {missed_by} missed",
     }[group.lesson]
     reasons = ", ".join(
         f"{REASON_LABELS.get(reason, reason)} in {n}"

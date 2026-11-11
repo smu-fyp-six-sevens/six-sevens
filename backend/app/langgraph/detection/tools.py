@@ -211,6 +211,11 @@ def _with_ids(tool_name: str, findings: list[dict]) -> list[dict]:
     return [{"id": f"{tool_name}-{i + 1}", **finding} for i, finding in enumerate(checked)]
 
 
+def _rule_code(prefix: str, label: Any) -> str:
+    """The code naming which rule of a tool fired ("Text Overlay" -> LAYOUT.TEXT_OVERLAY): feedback is counted per code."""
+    return f"{prefix}.{re.sub(r'[^A-Z0-9]+', '_', str(label).upper()).strip('_')}"
+
+
 def _short(text: Any) -> str:
     text = " ".join(str(text).split())
     return text if len(text) <= _MAX_TEXT else text[: _MAX_TEXT - 1] + "…"
@@ -252,6 +257,7 @@ async def font_consistency_tool(document_id: Annotated[str, InjectedState("docum
 
     findings = [
         {
+            "check_code": _rule_code("FONT", anomaly.deviation_type),
             "deviation_type": anomaly.deviation_type,
             "detected": anomaly.detected,
             "expected": anomaly.expected,
@@ -299,6 +305,7 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
     page_sizes = await run_cpu(_layout_page_sizes, file_bytes) if result.anomalies else []
     findings = [
         {
+            "check_code": _rule_code("LAYOUT", anomaly.anomaly_type),
             **anomaly.model_dump(),
             "bbox": list(anomaly.bbox),
             "bbox_units": "pt",
@@ -380,6 +387,9 @@ async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")
 
     findings = [
         {
+            # One code per word, so officers' false alarms are counted per word, like a dictionary of words they
+            # dismissed (feedback_repository withholds one that names a party to the case).
+            "check_code": f"SPELLING.{anomaly.word.lower()}",
             "word": anomaly.word,
             "context": _short(anomaly.surrounding_text),
             "suggested_correction": anomaly.suggested_correction,
@@ -588,6 +598,7 @@ async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")
 
     findings = [
         {
+            "check_code": anomaly.code,
             "field": anomaly.field,
             "value": anomaly.value,
             "reason": anomaly.reason,
@@ -706,6 +717,7 @@ async def image_manipulation_tool(document_id: Annotated[str, InjectedState("doc
     # endpoint, and detected/expected/deviation already state the finding.
     findings = [
         {
+            "check_code": _rule_code("IMAGE", indicator.indicator),
             "indicator": indicator.indicator,
             "page": indicator.page + 1,
             "bbox": indicator.bbox,
@@ -737,6 +749,7 @@ async def image_tampering_tool(document_id: Annotated[str, InjectedState("docume
     # `evidence` left out for the same reason as image_manipulation_tool.
     findings = [
         {
+            "check_code": _rule_code("TAMPER", indicator.indicator),
             "indicator": indicator.indicator,
             "page": indicator.page + 1,
             "bbox": indicator.bbox,
@@ -790,6 +803,7 @@ async def ai_generation_tool(document_id: Annotated[str, InjectedState("document
     # endpoint.
     findings = [
         {
+            "check_code": "AI.IMAGE_SCORE",
             "indicator": "AI Generation",
             "page": image.page + 1 if image.page is not None else None,
             "bbox": image.bbox,
@@ -805,6 +819,7 @@ async def ai_generation_tool(document_id: Annotated[str, InjectedState("document
     provenance = result.file_provenance
     if provenance is not None and provenance.assessed and provenance.strength >= result.config.medium_threshold:
         findings.append({
+            "check_code": "AI.DECLARED_SOURCE",
             "indicator": "AI Generation",
             "score": provenance.strength,
             "severity_hint": "high" if provenance.strength >= result.config.high_threshold else "medium",

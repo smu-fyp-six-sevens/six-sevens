@@ -6451,6 +6451,10 @@
       },
       "MetadataAnomaly": {
         "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
           "field": {
             "title": "Field",
             "type": "string"
@@ -6481,6 +6485,7 @@
           }
         },
         "required": [
+          "code",
           "field",
           "value",
           "reason",
