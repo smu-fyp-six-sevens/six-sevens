@@ -1,0 +1,66 @@
+{
+  "box": {
+    "x": 116,
+    "y": 266.9375,
+    "w": 1285,
+    "h": 1492.25,
+    "color": "rgb(18, 32, 61)",
+    "bg": "rgb(254, 254, 253)",
+    "border": "1px dashed rgb(179, 178, 173)",
+    "radius": "10px",
+    "font": "16px / 24px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif",
+    "padding": "0px",
+    "gap": "normal",
+    "shadow": "none",
+    "html": "<div class=\"upload-box upload-box--filled\"><div class=\"dropzone\" tabindex=\"0\" role=\"button\" aria-label=\"Upload documents\"><input class=\"sr-only\" type=\"file\" multiple=\"\" accept=\".pdf,.png,.jpg,.jpeg\" style=\"\"><div class=\"dz-icon\" aria-hidden=\"true\"><svg class=\"icon\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M12 16V5m-4.5 4.5L12 5l4.5 4.5M5 19h14\"></path></svg></div><div class=\"dz-title\">Drag files here or <span class=\"browse-link\">browse</span></div><div class=\"dz-formats\">PDF · PNG · JPG  — up to 25MB each</div></div><div class=\"file-list\"><div class=\"file-row\"><div class=\"f-icon\">JPG</div><div class=\"f-main\"><div class=\"f-name\" title=\"POR_UtilityBill_20251028.jpg\">POR_UtilityBill_20251028.jpg</div><div class=\"f-meta\">Ready to upload</div></div><span class=\"badge pending\">Ready</span><button type=\"button\" class=\"remove-btn\" title=\"Remove POR_UtilityBill_20251028.jpg\">×</button></div><div class=\"file-row\"><div class=\"f-icon\">PNG</div><div class=\"f-main\"><div class=\"f-name\" title=\"Passport_6086.png\">Passport_6086.png</div><div class=\"f-meta\">Ready to upload</div></div><span class=\"badge pending\">Ready</span><button type=\"button\" class=\"remove-btn\" title=\"Remove Passport_6086.png\">×</button></div><div class=\"file-row\"><div class=\"f-icon\">PDF</div><div class=\"f-main\"><div class=\"f-name\" title=\"MuhammadD_Wealth_Statement_scan.pdf\">Muha"
+  },
+  "row": {
+    "x": 117,
+    "y": 406.6875,
+    "w": 1283,
+    "h": 63.5,
+    "color": "rgb(18, 32, 61)",
+    "bg": "rgba(0, 0, 0, 0)",
+    "border": "0px none rgb(18, 32, 61)",
+    "radius": "0px",
+    "font": "16px / 24px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif",
+    "padding": "12px 14px",
+    "gap": "12px",
+    "shadow": "none",
+    "html": "<div class=\"file-row\"><div class=\"f-icon\">JPG</div><div class=\"f-main\"><div class=\"f-name\" title=\"POR_UtilityBill_20251028.jpg\">POR_UtilityBill_20251028.jpg</div><div class=\"f-meta\">Ready to upload</div></div><span class=\"badge pending\">Ready</span><button type=\"button\" class=\"remove-btn\" title=\"Remove POR_UtilityBill_20251028.jpg\">×</button></div>"
+  },
+  "name": {
+    "x": 175,
+    "y": 418.6875,
+    "w": 1110.4375,
+    "h": 20.25,
+    "color": "rgb(18, 32, 61)",
+    "bg": "rgba(0, 0, 0, 0)",
+    "border": "0px none rgb(18, 32, 61)",
+    "radius": "0px",
+    "font": "600 13.5px / 20.25px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif",
+    "padding": "0px",
+    "gap": "normal",
+    "shadow": "none",
+    "html": "<div class=\"f-name\" title=\"POR_UtilityBill_20251028.jpg\">POR_UtilityBill_20251028.jpg</div>"
+  },
+  "button": {
+    "x": 1259.296875,
+    "y": 1708.6875,
+    "w": 126.703125,
+    "h": 37.5,
+    "color": "rgb(255, 255, 255)",
+    "bg": "rgb(53, 95, 150)",
+    "border": "0px none rgb(255, 255, 255)",
+    "radius": "7px",
+    "font": "600 13px / 19.5px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif",
+    "padding": "9px 16px",
+    "gap": "normal",
+    "shadow": "none",
+    "html": "<button type=\"button\" class=\"upload-btn\">Upload 20 files</button>"
+  },
+  "body": {
+    "bg": "rgb(249, 249, 248)",
+    "font": "16px / 24px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif"
+  }
+}

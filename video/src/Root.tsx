@@ -1,0 +1,28 @@
+// Root - the hook's compositions. Open them with `npm run dev` (Remotion Studio).
+//   Master          the hook with its on-screen headlines
+//   Master-NoText   the same shots with no headlines, for laying your own text or voiceover over
+//   Scene-*         one scene alone, for quick iteration
+
+import { loadFont } from "@remotion/fonts";
+import { Composition, staticFile } from "remotion";
+import { Master } from "./Master";
+import { PackageScene } from "./scenes/PackageScene";
+import { TooManyScene } from "./scenes/TooManyScene";
+import { canvas } from "./theme";
+import { FPS, SCENES, TOTAL_FRAMES } from "./timing";
+
+// Inter, bundled in public/fonts (OFL, see Inter-LICENSE.txt), so renders work offline.
+for (const weight of ["400", "500", "600", "700"]) {
+  loadFont({ family: "Inter", url: staticFile(`fonts/inter-latin-${weight}-normal.woff2`), weight });
+}
+
+const size = { fps: FPS, width: canvas.width, height: canvas.height };
+
+export const RemotionRoot: React.FC = () => (
+  <>
+    <Composition id="Master" component={Master} defaultProps={{ showText: true }} durationInFrames={TOTAL_FRAMES} {...size} />
+    <Composition id="Master-NoText" component={Master} defaultProps={{ showText: false }} durationInFrames={TOTAL_FRAMES} {...size} />
+    <Composition id="Scene-Package" component={PackageScene} defaultProps={{ showText: true }} durationInFrames={SCENES.package.duration} {...size} />
+    <Composition id="Scene-TooMany" component={TooManyScene} defaultProps={{ showText: true }} durationInFrames={SCENES.tooMany.duration} {...size} />
+  </>
+);

@@ -1,0 +1,86 @@
+{
+  "case": "GLDB-02",
+  "company": "Anchorpoint Insurance Brokers",
+  "documents": [
+    {
+      "filename": "POR_UtilityBill_20251028.jpg",
+      "type": "proof_of_address"
+    },
+    {
+      "filename": "Passport_6086.png",
+      "type": "passport"
+    },
+    {
+      "filename": "MuhammadD_Wealth_Statement_scan.pdf",
+      "type": "source_of_wealth"
+    },
+    {
+      "filename": "AnchorpointInsuranceBrokers_BizFile_Officers_20251128.pdf",
+      "type": "certificate_of_incumbency"
+    },
+    {
+      "filename": "MuhammadD_NRIC_front.jpg",
+      "type": "nric"
+    },
+    {
+      "filename": "FATCA_Form_20250522.pdf",
+      "type": "fatca_crs_declaration"
+    },
+    {
+      "filename": "SimS_SourceOfWealth.pdf",
+      "type": "source_of_wealth"
+    },
+    {
+      "filename": "LoanOffer_8415_3.pdf",
+      "type": "list_of_loans"
+    },
+    {
+      "filename": "Statement_128262.pdf",
+      "type": "bank_statement"
+    },
+    {
+      "filename": "BizFile_333996.pdf",
+      "type": "certificate_of_incorporation"
+    },
+    {
+      "filename": "Anchorpoint_IRAS_NOA.pdf",
+      "type": "notice_of_assessment"
+    },
+    {
+      "filename": "Credit_Bureau_Report_8027.pdf",
+      "type": "credit_report"
+    },
+    {
+      "filename": "FacilityLetter_AIB_2026-03-09_1.pdf",
+      "type": "list_of_loans"
+    },
+    {
+      "filename": "MuhammadD_NRIC_back.jpg",
+      "type": "nric"
+    },
+    {
+      "filename": "LoanFacility_56439_2.pdf",
+      "type": "list_of_loans"
+    },
+    {
+      "filename": "AnchorpointInsuranceBrokers_Constitution_20260805.pdf",
+      "type": "company_constitution"
+    },
+    {
+      "filename": "Financials_BalanceSheet_617.pdf",
+      "type": "source_of_wealth"
+    },
+    {
+      "filename": "MuhammadD_ProofAddr_BankStmt_2956.pdf",
+      "type": "bank_statement"
+    },
+    {
+      "filename": "Company_UtilityBill_45040.pdf",
+      "type": "proof_of_address"
+    },
+    {
+      "filename": "MuhammadD_Payslip_Jan2026.pdf",
+      "type": "payslip"
+    }
+  ]
+}

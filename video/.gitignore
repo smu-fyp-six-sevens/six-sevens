@@ -1,0 +1,6 @@
+node_modules/
+out/
+.env
+.env.local
+.DS_Store
+capture/node_modules
