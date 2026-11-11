@@ -49,24 +49,6 @@ def test_a_finding_still_flags() -> None:
     assert result["verdict"] == "flagged"
 
 
-def test_native_pdf_extraction_disagreement_is_preserved_as_a_detection_finding() -> None:
-    result = merge_reports({
-        "document_id": "doc-1",
-        "context": {"document_type": "bank_statement"},
-        "reports": [_report("content_validation")],
-        "extraction_disagreements": [{
-            "field": "ledger_balance", "text_value": "900.00", "visual_value": "990.00",
-            "visual_confidence": 0.96, "pages": [2], "reason": "The rendered digits differ.",
-        }],
-    })  # type: ignore[arg-type]
-    [finding] = result["findings"]
-    assert result["verdict"] == "flagged"
-    assert finding["tool"] == "extraction_conflict_tool"
-    assert finding["text_value"] == "900.00"
-    assert finding["visual_value"] == "990.00"
-    assert finding["pages"] == [2]
-
-
 def test_reports_from_before_nothing_to_check_existed_still_merge() -> None:
     old = _report("content_validation")
     del old["nothing_to_check"]

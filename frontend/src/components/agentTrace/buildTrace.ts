@@ -100,6 +100,8 @@ const SPAN_LABELS: Record<string, string> = {
   'case_pipeline.run': 'Case analysis',
   'classify.agent_call': 'Deciding the type',
   'extract.run_extraction': 'Reading the fields',
+  'extraction.second_look_agent': 'Second look: choosing what to recheck',
+  'extraction.vision_read': 'Second look: reading the page images',
   'detection.lead_plan': 'Plan',
   'detection.lead_review': 'Review',
   'detection.numerical_binder': 'Matching figures to checks',
@@ -128,6 +130,9 @@ const STEP_LABELS: Record<string, string> = {
   record_escalation: 'Sent for officer review',
   classification_finalised: 'Document type decided',
   extraction: 'Fields extracted',
+  extraction_layout_lookup: 'Page layout read',
+  extraction_vision_read: 'Page images read',
+  extraction_second_look: 'Second look finished',
   detection_start: 'Detection started',
   detection_plan: 'Investigation plan',
   detection_second_look: 'Second look requested',
@@ -153,6 +158,8 @@ const STEP_LABELS: Record<string, string> = {
 const TOOL_LABELS: Record<string, string> = {
   llm_classify_tool: 'Text classification',
   vision_llm: 'Page image reading',
+  layout_lookup: 'Layout lookup',
+  vision_read: 'Visual read',
   numerical_checks_tool: 'Numerical checks',
   external_validation_tool: 'Public record checks',
   metadata_tool: 'File metadata check',
@@ -179,6 +186,66 @@ function spanKind(step: TraceStep, name: string): TraceNodeKind {
   return list(step.llm_calls).length > 0 ? 'llm' : 'chain';
 }
 
+export interface SecondLookField {
+  name: string;
+  why: string[];
+}
+
+export interface SecondLookDisagreement {
+  field: string;
+  textValue: unknown;
+  secondValue: unknown;
+  readBy: string;
+  pages: number[];
+}
+
+export interface SecondLook {
+  fields: SecondLookField[];
+  tools: string[];
+  disagreements: SecondLookDisagreement[];
+  rejected: Array<{ field: string; reason: string }>;
+  error?: string;
+}
+
+const TRIGGER_LABELS: Record<string, string> = {
+  low_confidence: 'low confidence',
+  confidence_missing: 'no confidence given',
+  missing_required: 'required but missing',
+  guard_dropped: 'number not printed in the text',
+};
+
+// What an extraction step's second look reviewed and found; undefined when it had none.
+export function secondLookOf(step: TraceStep): SecondLook | undefined {
+  if (step.step !== 'extraction' || typeof step.second_look !== 'object' || step.second_look === null) return undefined;
+  const review = step.second_look as { fields?: unknown; tools_used?: unknown };
+  return {
+    fields: (list(review.fields) as Array<{ name?: unknown; triggers?: unknown }>).map((item) => ({
+      name: String(item.name),
+      why: list(item.triggers).map((trigger) => TRIGGER_LABELS[String(trigger)] ?? humanize(String(trigger))),
+    })),
+    tools: list(review.tools_used).map(String),
+    disagreements: (list(step.extraction_disagreements) as Array<Record<string, unknown>>).map((item) => ({
+      field: String(item.field),
+      textValue: item.text_value,
+      secondValue: item.second_look_value,
+      readBy: item.source === 'layout_lookup' ? 'page layout' : 'page image',
+      pages: list(item.pages).filter((page): page is number => typeof page === 'number'),
+    })),
+    rejected: (list(step.second_look_rejected_fields) as Array<{ field?: unknown; reason?: unknown }>).map((item) => ({
+      field: String(item.field),
+      reason: String(item.reason ?? ''),
+    })),
+    error: str(step.second_look_error),
+  };
+}
+
+function describeExtraction(step: TraceStep): string | undefined {
+  const review = secondLookOf(step);
+  if (!review) return str(step.document_type);
+  const found = review.error ? 'failed, text pass kept' : `${review.disagreements.length} disagreement(s)`;
+  return `${String(step.document_type)} · second look on ${review.fields.length} field(s) · ${found}`;
+}
+
 // One line saying what a step found, for the steps worth a summary.
 export function describeStep(step: TraceStep): string | undefined {
   switch (step.step) {
@@ -195,7 +262,12 @@ export function describeStep(step: TraceStep): string | undefined {
     case 'classification_finalised':
       return `${String(step.document_type ?? 'no type')} · confidence ${String(step.confidence ?? '—')}`;
     case 'extraction':
-      return str(step.document_type);
+      return describeExtraction(step);
+    case 'extraction_layout_lookup':
+    case 'extraction_vision_read':
+      return `${list(step.fields).length} field(s) · page(s) ${step.step === 'extraction_vision_read' ? list(step.pages).join(', ') || '—' : String(step.pages ?? '—')}`;
+    case 'extraction_second_look':
+      return `${list(step.fields).length} field(s) reviewed in ${num(step.turn_count)} turn(s)`;
     case 'detection_plan':
       return `briefs for ${Object.keys((step.detection_briefs as object | undefined) ?? {}).length} specialists`;
     case 'detection_specialist': {

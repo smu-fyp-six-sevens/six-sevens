@@ -15,7 +15,11 @@ function CheckedWhen({ check }: { check: AdverseMediaCheck }) {
   // A former name is searched too: companies often rename after a scandal, so older coverage uses the old name.
   const former = check.former_names.length > 0 ? ` (also as ${check.former_names.join(', ')})` : '';
   const company = check.query ? ` “${check.query}”${former}` : '';
-  return <span className="analysis-brief-media-when">Searched{company} on {when}{check.reused && ' (cached)'}</span>;
+  return (
+    <span className="analysis-brief-media-when">
+      Searched{company} on {when}{check.reused && ' (cached)'} · Last 3 weeks, selected news and regulator sites
+    </span>
+  );
 }
 
 function AdverseMedia({ check }: { check: AdverseMediaCheck | null | undefined }) {

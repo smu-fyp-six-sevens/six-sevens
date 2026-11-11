@@ -43,6 +43,7 @@ import { useDocumentRecord } from './document-details/useDocumentRecord';
 import { useDocumentTypeEditing } from './document-details/useDocumentTypeEditing';
 import { useFieldEditing } from './document-details/useFieldEditing';
 import { useLangGraphTrace } from './document-details/useLangGraphTrace';
+import { lowConfidenceReasons } from './document-details/fieldReasons';
 import { useContentGuard } from './document-details/useContentGuard';
 import { ContentGuardWarning } from './document-details/ContentGuardWarning';
 import { humanizeFieldKey } from '../utils/fieldLabels';
@@ -275,7 +276,8 @@ export default function DocumentDetailsPage({
     setDocument((current) => (current ? { ...current, status: 'detecting' } : current)),
   );
 
-  const { langGraphTrace, isRefreshingTrace, refreshLangGraphTrace } = useLangGraphTrace(documentId);
+  const { langGraphTrace, isRefreshingTrace, refreshLangGraphTrace } = useLangGraphTrace(documentId, document?.status);
+  const fieldReasons = useMemo(() => lowConfidenceReasons(langGraphTrace), [langGraphTrace]);
 
   const contentGuard = useContentGuard(documentId, document?.status);
 
@@ -621,6 +623,7 @@ export default function DocumentDetailsPage({
             canAddOrDeleteFields={!isLocked && !isBlocked}
             document={document}
             extractedFields={showManualReview ? reviewFields : extractedFields}
+            fieldReasons={fieldReasons}
             isInFlight={isInFlight}
             lowestConfidence={lowestConfidence}
             setDocument={setDocument}

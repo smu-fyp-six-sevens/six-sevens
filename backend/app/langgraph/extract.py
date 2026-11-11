@@ -19,7 +19,7 @@ from ..llm_contracts import ExtractionReply
 from ..llm_io import message_text, parse_json_object, salvage_entries, validate, was_cut_off
 from ..run_context import spend_model_call
 from .extraction_prompts import build_extraction_prompt, drop_empty_optional_fields
-from .extraction_prompts import EXTRACTION_SCHEMAS
+from .extraction_prompts import EXTRACTION_SCHEMAS, TRANSACTION_COUNTERPARTIES_FIELD
 from . import correction_hints
 from .. import telemetry
 
@@ -27,9 +27,14 @@ logger = logging.getLogger("classifier_pipeline.langgraph.extract")
 
 # Bank statements list every transaction with a per-field confidence wrapper; 4096 truncated the JSON. Room for thinking too.
 _EXTRACTION_MAX_TOKENS = 18000
+# Below settings.EXTRACTION_CONFIDENCE_THRESHOLD, so a text/image disagreement waits for the officer.
+_DISAGREEMENT_CONFIDENCE = 0.5
+# A table that passed every parse check: above the review threshold, as a clean model read of the list is.
+_TABLE_CONFIDENCE = 0.95
+_READ_BY = {"layout_lookup": "the page layout", "vision_read": "the page image"}
 
 
-def _split_prompt_for_caching(document_type: str, raw_text: str) -> tuple[str, str]:
+def _split_prompt_for_caching(document_type: str, raw_text: str, *, transactions_read: bool = False) -> tuple[str, str]:
     """
     build_extraction_prompt always ends with the schema/instructions
     followed by "Document text:\n{raw_text}". Building the same prompt with
@@ -37,7 +42,7 @@ def _split_prompt_for_caching(document_type: str, raw_text: str) -> tuple[str, s
     prefix across every document and run) to put cache_control on
     (schema first, raw_text last).
     """
-    prefix = build_extraction_prompt(document_type, "")
+    prefix = build_extraction_prompt(document_type, "", transactions_read=transactions_read)
     return prefix, raw_text
 
 
@@ -68,7 +73,10 @@ async def run_extraction(
     from ._anthropic import build_chat_anthropic
     from .cache_gate import cache_gate
 
-    prefix, text = _split_prompt_for_caching(document_type, raw_text)
+    table = await _read_statement_table(document_type, filename, storage_path) if document_id else {}
+    rows = table.get("rows")
+    descriptions = list(dict.fromkeys(row["description"] for row in rows if row["amount"] is not None)) if rows else []
+    prefix, text = _split_prompt_for_caching(document_type, raw_text, transactions_read=bool(rows))
     model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, _EXTRACTION_MAX_TOKENS, effort="low")
     # The hints are their own blocks after the cached prefix, so the prefix stays the same for every document.
     hint = [{"type": "text", "text": _classifier_guess_hint(classified_as)}] if classified_as else []
@@ -81,6 +89,7 @@ async def run_extraction(
             {"type": "text", "text": f"{prefix}\n{DOCUMENT_DATA_RULE}\n", "cache_control": {"type": "ephemeral"}},
             *hint,
             {"type": "text", "text": fence(text, "document_text")},
+            *([{"type": "text", "text": fence(_numbered(descriptions), "transaction_descriptions")}] if rows else []),
         ],
     }
     with telemetry.get_tracer().start_as_current_span("extract.run_extraction") as span:
@@ -90,7 +99,8 @@ async def run_extraction(
         # batch pays for the cache write, the rest of that type wait for it
         # rather than racing it. Different types never block each other.
         spend_model_call("extraction")
-        response = await cache_gate.run(f"extract:{document_type}", lambda: model.ainvoke([message]))
+        cache_key = f"extract:{document_type}:table" if rows else f"extract:{document_type}"
+        response = await cache_gate.run(cache_key, lambda: model.ainvoke([message]))
         telemetry.record_usage(span, response)
         reply, cut_off = message_text(response.content), was_cut_off(response)
         result = parse_extraction_output(reply, cut_off=cut_off)
@@ -106,6 +116,9 @@ async def run_extraction(
             telemetry.record_usage(span, retry)
             retried = parse_extraction_output(message_text(retry.content), cut_off=was_cut_off(retry))
             result = {**retried, "retried": True}
+        result["transaction_table"] = table.get("trace")
+        if rows and not result.get("output_error") and not result.get("escalation"):
+            _apply_statement_table(result, rows, descriptions)
         result = _apply_entity_fields(result, document_type)
         result = _drop_unprinted_numbers(result, raw_text)
         result = _drop_empty_fields(result, document_type)
@@ -116,40 +129,116 @@ async def run_extraction(
             selected = select_second_look_fields(document_type, result)
             result["field_provenance"] = {
                 name: {
-                    "source": "text",
+                    "source": "table" if name == "transactions" and rows else "text",
                     "confidence": (result.get("field_confidences") or {}).get(name),
                 }
                 for name in (result.get("extracted_fields") or {})
             }
             if selected:
-                from ..storage_service import download_file
-                from .extract_graph import run_second_look
-
-                try:
-                    file_bytes = await asyncio.to_thread(download_file, storage_path)
-                    from ..ingestion.pdf_extractor import pdf_contains_text
-                    native_text_pdf = filename.lower().endswith(".pdf") and await asyncio.to_thread(
-                        pdf_contains_text, file_bytes,
-                    )
-                    review = await run_second_look(
-                        document_id=document_id,
-                        filename=filename,
-                        file_bytes=file_bytes,
-                        raw_text=raw_text,
-                        selected_fields=selected,
-                        native_text_pdf=native_text_pdf,
-                    )
-                    _merge_second_look(result, review, selected, raw_text, native_text_pdf=native_text_pdf)
-                except Exception as exc:
-                    logger.warning("Document %s: extraction second look failed: %s", document_id, exc)
-                    result["second_look_error"] = f"{type(exc).__name__}: {exc}"
+                result["second_look"] = {
+                    "fields": [{"name": item["name"], "triggers": item["triggers"]} for item in selected],
+                    "tools_used": [],
+                }
+                await _run_second_look(result, selected, raw_text, document_id, filename, storage_path)
         span.set_attribute("dropped_unprinted_fields", len(result.get("dropped_unprinted_fields", [])))
         span.set_attribute("second_look_fields", len(selected) if document_id and filename and storage_path else 0)
         return result
 
 
+async def _read_statement_table(document_type: str, filename: str | None, storage_path: str | None) -> dict:
+    """
+    A native-text PDF statement's transactions, read in code: {"rows": [...], "trace": ...}. Without rows, for a scan,
+    an image or a table that can't be read cleanly, extraction reads the transactions from the text as usual. Never raises.
+    """
+    if document_type != "bank_statement" or not filename or not storage_path:
+        return {}
+
+    from ..cpu_pool import run_cpu
+    from ..ingestion.ingestion_service import content_type_from_filename
+    from ..ingestion.pdf_extractor import pdf_contains_text
+    from ..storage_service import download_file
+    from .statement_table import read_transactions
+
+    if content_type_from_filename(filename) != "application/pdf":
+        return {"trace": {"read_by": "model", "reason": "not a PDF"}}
+    try:
+        file_bytes = await asyncio.to_thread(download_file, storage_path)
+        if not await run_cpu(pdf_contains_text, file_bytes):
+            return {"trace": {"read_by": "model", "reason": "no text layer"}}
+        parsed = await run_cpu(read_transactions, file_bytes)
+    except Exception as exc:
+        logger.warning("Statement table could not be read: %s", exc)
+        return {"trace": {"read_by": "model", "reason": f"{type(exc).__name__}: {exc}"}}
+    if "rows" not in parsed:
+        return {"trace": {"read_by": "model", "reason": parsed.get("rejected")}}
+    return {"rows": parsed["rows"], "trace": {"read_by": "code", "rows": len(parsed["rows"])}}
+
+
+def _numbered(descriptions: list[str]) -> str:
+    return "\n".join(f"{number}. {text}" for number, text in enumerate(descriptions, start=1))
+
+
+def _apply_statement_table(result: dict, rows: list[dict], descriptions: list[str]) -> None:
+    """The rows code read, each with the counterparty the model named for its description."""
+    fields = result.setdefault("extracted_fields", {})
+    confidences = result.setdefault("field_confidences", {})
+    named = fields.pop(TRANSACTION_COUNTERPARTIES_FIELD, None)
+    confidences.pop(TRANSACTION_COUNTERPARTIES_FIELD, None)
+    result.setdefault("field_reasons", {}).pop(TRANSACTION_COUNTERPARTIES_FIELD, None)
+    names = named if isinstance(named, dict) else {}
+    number_of = {text: str(number) for number, text in enumerate(descriptions, start=1)}
+    fields["transactions"] = [
+        {**row, "counterparty": name if isinstance(name := names.get(number_of.get(row["description"])), str) and name.strip() else None}
+        for row in rows
+    ]
+    confidences["transactions"] = _TABLE_CONFIDENCE
+    result.get("field_reasons", {}).pop("transactions", None)
+    result["confidence"] = _average_field_confidence(confidences)
+
+
+async def _run_second_look(
+    result: dict, selected: list[dict], raw_text: str, document_id: str, filename: str, storage_path: str,
+) -> None:
+    """Reviews the selected fields. Never raises: on any failure, the time limit included, the text pass stands."""
+    from ..cpu_pool import run_cpu
+    from ..ingestion.ingestion_service import content_type_from_filename
+    from ..ingestion.pdf_extractor import pdf_contains_text
+    from ..storage_service import download_file
+    from .extract_graph import run_second_look
+
+    timeout = settings.EXTRACTION_SECOND_LOOK_TIMEOUT_SECONDS
+    try:
+        file_bytes = await asyncio.to_thread(download_file, storage_path)
+        is_pdf = content_type_from_filename(filename) == "application/pdf"
+        native_text_pdf = is_pdf and await run_cpu(pdf_contains_text, file_bytes)
+        review = await asyncio.wait_for(
+            run_second_look(
+                document_id=document_id,
+                filename=filename,
+                storage_path=storage_path,
+                file_bytes=file_bytes,
+                raw_text=raw_text,
+                selected_fields=selected,
+                is_pdf=is_pdf,
+                native_text_pdf=native_text_pdf,
+            ),
+            timeout,
+        )
+        _merge_second_look(result, review, selected, raw_text, native_text_pdf=native_text_pdf)
+        result["second_look"]["tools_used"] = [name for name, used in (review.get("_tools_used") or {}).items() if used]
+    except asyncio.TimeoutError:
+        logger.warning("Document %s: extraction second look passed its %ss limit", document_id, timeout)
+        result["second_look_error"] = f"TimeoutError: the second look passed its {timeout:g}s limit"
+    except Exception as exc:
+        logger.warning("Document %s: extraction second look failed: %s", document_id, exc)
+        result["second_look_error"] = f"{type(exc).__name__}: {exc}"
+
+
 def select_second_look_fields(document_type: str, result: dict) -> list[dict]:
-    """Select only low-confidence, missing-required, or extraction-guard-dropped fields."""
+    """
+    Only low-confidence, unwrapped, missing-required or unprinted-number fields. An optional field that simply isn't
+    on the document is not a reason to look, and a one-period total or a sample value can never be put back.
+    """
     values = result.get("extracted_fields") or {}
     confidences = result.get("field_confidences") or {}
     reasons = result.get("field_reasons") or {}
@@ -157,12 +246,8 @@ def select_second_look_fields(document_type: str, result: dict) -> list[dict]:
     required = set(schema.get("required", []))
     if values.get("entity_type") == "individual":
         required.update(schema.get("required_when_individual", []))
-    dropped = {
-        name
-        for key in ("dropped_unprinted_fields", "dropped_empty_fields", "dropped_period_totals", "dropped_example_values")
-        for name in result.get(key, [])
-    }
-    names = set(values) | required | dropped
+    dropped = set(result.get("dropped_unprinted_fields", []))
+    names = (set(values) | required | dropped) - _deliberately_dropped(result)
     selected = []
     for name in sorted(names):
         value = values.get(name)
@@ -170,7 +255,7 @@ def select_second_look_fields(document_type: str, result: dict) -> list[dict]:
         triggers = []
         if isinstance(confidence, (int, float)) and confidence < settings.EXTRACTION_CONFIDENCE_THRESHOLD:
             triggers.append("low_confidence")
-        elif confidence is None and name in values and name not in dropped:
+        elif confidence is None and name in values:
             triggers.append("confidence_missing")
         if name in required and (name not in values or value is None or value == ""):
             triggers.append("missing_required")
@@ -187,8 +272,17 @@ def select_second_look_fields(document_type: str, result: dict) -> list[dict]:
     return selected
 
 
-def _printed_number_tokens(text: str) -> set[float]:
-    return {float(item.replace(",", "")) for item in _TEXT_NUMBER_RE.findall(text or "")}
+def _deliberately_dropped(result: dict) -> set[str]:
+    """Fields whose value is printed but isn't this field's: a one-period total, or a sample value."""
+    return {name for key in ("dropped_period_totals", "dropped_example_values") for name in result.get(key, [])}
+
+
+def _printed_numbers(text: str) -> set[float]:
+    return {float(token.replace(",", "")) for token in _TEXT_NUMBER_RE.findall(text or "")}
+
+
+def _is_printed(figure: float, printed: set[float]) -> bool:
+    return any(abs(figure - number) < 0.005 for number in printed)
 
 
 def _candidate_numbers(value) -> list[float]:
@@ -205,12 +299,58 @@ def _candidate_numbers(value) -> list[float]:
     return []
 
 
+def _words(text: str) -> str:
+    """Letters and digits only, in any script, so punctuation and spacing can't read as a different value."""
+    return re.sub(r"[\W_]+", " ", text.casefold()).strip()
+
+
 def _same_value(left, right) -> bool:
     if left == right:
         return True
-    if isinstance(left, str) and isinstance(right, str):
-        return re.sub(r"\s+", " ", left).strip().casefold() == re.sub(r"\s+", " ", right).strip().casefold()
-    return False
+    left_figure, right_figure = _as_figure(left), _as_figure(right)
+    if left_figure is not None or right_figure is not None:
+        return left_figure is not None and right_figure is not None and abs(left_figure - right_figure) < 0.005
+    return isinstance(left, str) and isinstance(right, str) and _words(left).replace(" ", "") == _words(right).replace(" ", "")
+
+
+def _seen_in_lines(value, lines: list[dict]) -> bool:
+    """Whether code can see the value in the layout lines returned for its field."""
+    text = " ".join(str(line.get("text") or "") for line in lines if isinstance(line, dict))
+    figure = _as_figure(value)
+    if figure is not None:
+        return _is_printed(figure, _printed_numbers(text))
+    wanted = _words(value) if isinstance(value, str) else ""
+    return bool(wanted) and f" {wanted} " in f" {_words(text)} "
+
+
+def _shown(value) -> str:
+    text = " ".join(str(value).split())
+    return text if len(text) <= 120 else f"{text[:117]}..."
+
+
+def _record_disagreement(result: dict, name: str, current, candidate: dict, review: dict) -> None:
+    """The text value stays; the low confidence sends the field to the officer, who decides."""
+    source, value = candidate["source"], candidate["value"]
+    confidences = result["field_confidences"]
+    existing = confidences.get(name)
+    confidences[name] = _DISAGREEMENT_CONFIDENCE if existing is None else min(existing, _DISAGREEMENT_CONFIDENCE)
+    result["field_reasons"][name] = (
+        f"The text reads {_shown(current)} but {_READ_BY[source]} reads {_shown(value)}. Check the original page."
+    )
+    result["field_provenance"][name] = {"source": "text", "confidence": confidences[name], "disagreed_with": [source]}
+    lines = (review.get("_layout_fields") or {}).get(name) or []
+    pages = (review.get("_vision_pages") or []) if source == "vision_read" else sorted(
+        {line["page"] for line in lines if isinstance(line, dict) and isinstance(line.get("page"), int)}
+    )
+    result.setdefault("extraction_disagreements", []).append({
+        "field": name,
+        "text_value": current,
+        "second_look_value": value,
+        "source": source,
+        "second_look_confidence": candidate["confidence"],
+        "pages": pages,
+        "reason": candidate.get("reason") or "",
+    })
 
 
 def _merge_second_look(
@@ -221,67 +361,57 @@ def _merge_second_look(
     *,
     native_text_pdf: bool,
 ) -> None:
-    """Merge only corroborated or missing values; never hide a text/image disagreement."""
+    """Fills only missing values and never replaces a text value: a disagreement goes to the officer."""
     fields = result.setdefault("extracted_fields", {})
     confidences = result.setdefault("field_confidences", {})
     reasons = result.setdefault("field_reasons", {})
     provenance = result.setdefault("field_provenance", {})
-    conflicts = result.setdefault("extraction_disagreements", [])
-    selected_by_name = {item["name"]: item for item in selected}
+    selected_names = {item["name"] for item in selected}
+    never_refill = _deliberately_dropped(result)
+    unprinted = set(result.get("dropped_unprinted_fields", []))
     allowed_sources = {source for source, used in (review.get("_tools_used") or {}).items() if used}
-    native_pdf = native_text_pdf
-    printed = _printed_number_tokens(raw_text)
-    vision_pages = review.get("_vision_pages") or []
+    printed = _printed_numbers(raw_text)
+    layout_lines = review.get("_layout_fields") or {}
 
     for name, candidate in (review.get("fields") or {}).items():
-        if name not in selected_by_name or not isinstance(candidate, dict):
+        if name not in selected_names or name in never_refill or not isinstance(candidate, dict):
             continue
         source = candidate.get("source")
         value = candidate.get("value")
         confidence = candidate.get("confidence")
-        if source not in allowed_sources or source not in {"layout_lookup", "vision_read"} or value in (None, ""):
+        if source not in allowed_sources or source not in _READ_BY or value in (None, ""):
             continue
         if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
             continue
         confidence = max(0.0, min(1.0, float(confidence)))
+        candidate = {**candidate, "confidence": confidence}
         current = fields.get(name)
-        if current not in (None, "") and not _same_value(current, value):
-            if source == "vision_read" and native_pdf:
-                conflict = {
-                    "field": name,
-                    "text_value": current,
-                    "visual_value": value,
-                    "visual_confidence": confidence,
-                    "pages": vision_pages,
-                    "reason": candidate.get("reason") or "The native text and rendered page appear to differ.",
-                }
-                conflicts.append(conflict)
-            else:
-                reasons[name] = (candidate.get("reason") or "Second look disagreed with the text extraction; "
-                                 "the original text value was kept.")
-            continue
-        # A native PDF's image cannot add a number absent from its text layer. If a text value
-        # already exists, the disagreement above is retained as a detection finding instead.
-        if native_pdf and source == "vision_read":
-            if any(not any(abs(number - printed_number) < 0.005 for printed_number in printed)
-                   for number in _candidate_numbers(value)):
-                result.setdefault("second_look_rejected_fields", []).append({
-                    "field": name,
-                    "reason": "Vision proposed a number absent from the native PDF text layer.",
-                })
+        if current not in (None, ""):
+            if not _same_value(current, value):
+                _record_disagreement(result, name, current, candidate, review)
                 continue
+            # Only what code can see moves the confidence: the model's word alone is recorded and nothing more.
+            if _seen_in_lines(current, layout_lines.get(name) or []):
+                confidences[name] = max(float(confidences.get(name) or 0.0), confidence)
+            provenance[name] = {"source": "text", "confidence": confidences.get(name), "corroborated_by": [source]}
+            continue
+        # A native PDF's image can't add a number absent from its text, nor the layout one the guard removed.
+        must_be_printed = (source == "layout_lookup" and name in unprinted) or (source == "vision_read" and native_text_pdf)
+        if must_be_printed and not all(_is_printed(number, printed) for number in _candidate_numbers(value)):
+            result.setdefault("second_look_rejected_fields", []).append({
+                "field": name,
+                "reason": "The second look proposed a number that isn't printed in the document text.",
+            })
+            continue
+        fields[name] = value
         confidences[name] = max(float(confidences.get(name) or 0.0), confidence)
         provenance[name] = {
-            "source": "text" if current not in (None, "") else source.removesuffix("_read").removesuffix("_lookup"),
+            "source": source.removesuffix("_read").removesuffix("_lookup"),
             "confidence": confidences[name],
-            "corroborated_by": [source] if current not in (None, "") else [],
+            "corroborated_by": [],
         }
-        if current in (None, ""):
-            fields[name] = value
         if candidate.get("reason"):
             reasons[name] = candidate["reason"]
-    if conflicts:
-        result["extraction_disagreements"] = conflicts
     result["confidence"] = _average_field_confidence(confidences)
 
 
@@ -333,7 +463,7 @@ def parse_extraction_output(llm_output: str, *, cut_off: bool = False) -> dict:
         "extracted_fields": extracted_fields,
         "field_confidences": field_confidences,
         # Only for fields the agent itself scored low — see _FIELD_WRAPPER_INSTRUCTIONS.
-        # Not persisted anywhere; surfaced only in this run's langgraph trace (nodes.py's extract_node).
+        # Not an extracted_fields column: kept in the langgraph trace (nodes.py's extract_node), shown under the field.
         "field_reasons": field_reasons,
         # The document-level confidence is derived from the individual fields' own confidences (averaged),
         # not the model's separate top-level self-report, which is easy to phone in.
@@ -380,7 +510,7 @@ def _drop_unprinted_numbers(result: dict, raw_text: str) -> dict:
     checks scalar figures. Skipped entirely when the text has no figures at
     all, so an empty/failed OCR doesn't wipe out every numeric field.
     """
-    printed = {float(token.replace(",", "")) for token in _TEXT_NUMBER_RE.findall(raw_text or "")}
+    printed = _printed_numbers(raw_text)
     if not printed:
         return result
 
@@ -390,7 +520,7 @@ def _drop_unprinted_numbers(result: dict, raw_text: str) -> dict:
         figure = _as_figure(value)
         if figure is None:
             continue
-        if not any(abs(figure - p) < 0.005 for p in printed):
+        if not _is_printed(figure, printed):
             dropped.append(name)
             del fields[name]
             result.get("field_confidences", {}).pop(name, None)
@@ -473,15 +603,14 @@ def _drop_example_values(result: dict, raw_text: str) -> dict:
     A top-level scalar whose value appears only inside those blocks is the sample, not this document's data.
     """
     inside, outside = _split_example_blocks(raw_text)
-    figures = {float(t.replace(",", "")) for t in _TEXT_NUMBER_RE.findall(inside)}
-    figures -= {float(t.replace(",", "")) for t in _TEXT_NUMBER_RE.findall(outside)}
+    figures = _printed_numbers(inside) - _printed_numbers(outside)
     grades = set(_GRADE_RE.findall(inside)) - set(_GRADE_RE.findall(outside))
     fields = result.get("extracted_fields") or {}
     dropped = []
     for name, value in list(fields.items()):
         figure = _as_figure(value)
         is_example = (
-            any(abs(figure - f) < 0.005 for f in figures) if figure is not None
+            _is_printed(figure, figures) if figure is not None
             else isinstance(value, str) and value.strip().upper() in grades
         )
         if is_example:

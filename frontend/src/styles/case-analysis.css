@@ -224,8 +224,8 @@
 }
 
 .analysis-brief-media--concerns {
-  border-left-color: var(--amber, #b7791f);
-  background: var(--amber-tint, #fdf6ec);
+  border-left-color: var(--amber);
+  background: var(--amber-bg);
 }
 
 .analysis-brief-media--muted {

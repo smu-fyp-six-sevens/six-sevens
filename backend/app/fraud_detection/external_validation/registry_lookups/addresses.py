@@ -2,8 +2,8 @@
 
 REG.POSTAL_CODE_EXISTS; REG.ADDRESS_MATCH (block and street are at that postal code); REG.RESIDENTIAL_ADDRESS (a home
 can be lived in); REG.COMPANY_ADDRESS_RESIDENTIAL (company at a home, only a signal: the Home Office Schemes allow it);
-REG.UNIT_STOREY (an HDB unit is no higher than its block). An address without a unit number cannot be checked at
-unit level and is returned as a skipped check, not a fraud finding.
+REG.UNIT_STOREY (an HDB unit is no higher than its block). An address without a unit number, or with one that can't be
+read, cannot be checked at unit level and is returned as a skipped check, not a fraud finding.
 
 Best source first: an HDB block by HDB's register; a private building by URA's approved-use answer for the unit ("Y" is
 an approved home, "NA" a non-home or a unit URA has no record of), then by zoning (Business 1/2 allows no homes;
@@ -16,7 +16,7 @@ Home address, private building:
 * unit not approved, shophouse zone                  fine
 * unit not approved, Residential zone or no zone     signal
 * unit not approved, any other zone                  implausible
-* no unit given                                       skipped (REG.UNIT_MISSING)
+* no unit given, or one that can't be read            skipped (REG.UNIT_MISSING)
 Company address: HDB flats only, a unit URA approves, or (only if URA gave no answer) a purely Residential zone: signal.
 """
 
@@ -26,7 +26,7 @@ import re
 from dataclasses import dataclass, field as dc_field
 from typing import Any
 
-from ...shared.field_values import also_printed_in, describe_path, text_values
+from ...shared.field_values import also_printed_in, decode_field_value, describe_path, text_values
 from ...numerical_validation.models import SkippedCheck
 from ....holder import holder_kind
 from . import hdb, land_use, onemap, ura
@@ -134,9 +134,33 @@ def _same_address(a: str, b: str) -> bool:
     )
 
 
+def _with_joined_address_lines(fields: dict[str, Any]) -> dict[str, Any]:
+    """
+    One address extracted as a list of lines, or under *_address_lines, as one text: the unit is often on a line of its
+    own, away from the postal code. A list with several postal codes is several people's addresses, and stays a list.
+    """
+    joined = dict(fields)
+    for key, raw in fields.items():
+        name = key.removesuffix("_lines")
+        lines = decode_field_value(raw)
+        if not name.lower().endswith("address") or not isinstance(lines, list) or len(lines) < 2 or not all(isinstance(x, str) for x in lines):
+            continue
+        if sum(1 for line in lines if onemap.POSTAL_CODE_RE.search(line)) == 1 and (name == key or name not in fields):
+            joined.pop(key)
+            joined[name] = ", ".join(line.strip() for line in lines if line.strip())
+    return joined
+
+
+def _unit_skip(address: _Address, where: str) -> SkippedCheck:
+    """REG.UNIT_MISSING: a unit the parser couldn't read is never reported as one the document left out."""
+    problem = "the unit number couldn't be read" if ura.names_a_unit(address.text) else "no unit number was provided"
+    return SkippedCheck(check_code="REG.UNIT_MISSING", reason=f"{address.field}: {where}{problem}, so the specific dwelling could not be checked")
+
+
 def _addresses(fields: dict[str, Any], document_type: str | None) -> list[_Address]:
     """Every distinct Singapore address in the document, nested ones included, top-level fields first."""
     found: list[_Address] = []
+    fields = _with_joined_address_lines(fields)
     # A statement without entity_type can hold a company's address under individual_address.
     corporate_holder = holder_kind(document_type, fields) == "corporate"
     for value in text_values(fields):
@@ -207,11 +231,7 @@ async def _building_use(address: _Address, results: list[dict]) -> Outcome:
                 hdb.SOURCE, address, expected=f"a storey from 1 to {block.max_floor}",
             ))
         if address.residential and block.residential and unit is None:
-            skips.append(SkippedCheck(
-                check_code="REG.UNIT_MISSING",
-                reason=(f"{address.field}: HDB block {block.block} {block.street} is residential, but no unit "
-                        "number was provided, so the specific dwelling could not be checked"),
-            ))
+            skips.append(_unit_skip(address, f"HDB block {block.block} {block.street} is residential, but "))
         if address.residential and not block.residential:
             findings.append(_finding(
                 "REG.RESIDENTIAL_ADDRESS", "inconsistent",
@@ -250,11 +270,7 @@ async def _building_use(address: _Address, results: list[dict]) -> Outcome:
         elif approved is False and unit is None and zone not in SHOPHOUSE_ZONES:
             # Without a unit number, URA's unit-level response cannot establish
             # whether this particular dwelling is approved for residential use.
-            skips.append(SkippedCheck(
-                check_code="REG.UNIT_MISSING",
-                reason=(f"{address.field}: no unit number was provided for {building_name}{zoned}, so URA's "
-                        "unit-level residential-use check could not identify the dwelling"),
-            ))
+            skips.append(_unit_skip(address, f"URA's unit-level residential-use check needs the unit at {building_name}{zoned}, but "))
         elif approved is False and unit and zone not in SHOPHOUSE_ZONES:
             # "implausible" needs a KNOWN zone that is neither meant for homes nor shophouse land: with no zone
             # (no index, or the point is in no polygon) nothing says it isn't a home, so it's only a signal.

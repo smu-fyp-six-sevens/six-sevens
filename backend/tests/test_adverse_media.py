@@ -211,6 +211,20 @@ def test_former_names_drop_blanks_repeats_and_the_current_name() -> None:
     assert names == ["Zenith Bay Engineering Pte. Ltd.", "Old Co", "Older Co"]
 
 
+def test_former_names_compare_as_company_names() -> None:
+    names = adverse_media.former_names_of("Acme Pte Ltd", ["ACME Private Limited", "Zenith Pte Ltd", "ZENITH PRIVATE LIMITED"])
+
+    assert names == ["Zenith Pte Ltd"]
+
+
+def test_the_cache_treats_the_same_company_name_as_the_same_company() -> None:
+    previous, now = _checked(1, query="Acme Trading Pte Ltd")
+
+    assert adverse_media.reuse_recent(previous, "ACME TRADING PRIVATE LIMITED", now) is not None
+    searched = previous.model_copy(update={"former_names": ["Zenith Pte Ltd"]})
+    assert adverse_media.reuse_recent(searched, "Acme Trading Pte Ltd", now, former_names=["Zenith Private Limited"]) is not None
+
+
 def test_the_cache_searches_again_once_a_former_name_turns_up() -> None:
     previous, now = _checked(1)
 
@@ -345,6 +359,16 @@ def test_without_a_business_profile_the_certificate_names_the_company() -> None:
     name, _ = _company_on_file([_doc("coi", "certificate_of_incorporation")], {"coi": {"company_name": "Acme Pte Ltd"}})
 
     assert name == "Acme Pte Ltd"
+
+
+def test_json_encoded_names_are_decoded_not_searched_as_text() -> None:
+    name, former = _company_on_file(
+        [_doc("profile", "certificate_of_incumbency")],
+        {"profile": {"company_name": '["Acme Trading Pte. Ltd."]', "company_former_name": '["Zenith Pte Ltd", "Older Co; Oldest Co"]'}},
+    )
+
+    assert name == "Acme Trading Pte. Ltd."
+    assert former == ["Zenith Pte Ltd", "Older Co", "Oldest Co"]
 
 
 def test_a_rejected_document_does_not_name_the_company() -> None:

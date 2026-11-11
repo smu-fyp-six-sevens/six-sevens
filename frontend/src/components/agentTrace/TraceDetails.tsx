@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { KIND_LABELS, toolLabel, type LlmCall, type TraceNode, type TraceStep, type ValidationFailure } from './buildTrace';
+import { KIND_LABELS, humanize, secondLookOf, toolLabel, type LlmCall, type TraceNode, type TraceStep, type ValidationFailure } from './buildTrace';
 import { Chevron } from './Chevron';
 import { KindIcon } from './KindIcon';
 import { formatCost, formatSeconds, formatTokens, prettyJson } from './format';
@@ -50,6 +50,55 @@ function ScoredFindings({ step }: { step: TraceStep }) {
   );
 }
 
+const cellText = (value: unknown) => (typeof value === 'string' ? value : JSON.stringify(value));
+
+// What the extraction second look reviewed and why, the tools it ran, and where it disagreed with the text.
+function SecondLookDetails({ step }: { step: TraceStep }) {
+  const review = secondLookOf(step);
+  if (!review) return null;
+  return (
+    <>
+      <Block title="Second look: fields reviewed">
+        <table className="trace-table">
+          <thead><tr><th>Field</th><th>Why</th></tr></thead>
+          <tbody>
+            {review.fields.map((field) => (
+              <tr key={field.name}><td>{humanize(field.name)}</td><td>{field.why.join(', ')}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </Block>
+      <Block title="Second look: tools run">
+        {review.tools.length ? <p>{review.tools.map(toolLabel).join(', ')}</p> : <p className="trace-muted">No tools were run.</p>}
+      </Block>
+      {review.error && <Block title="Second look: failed"><p>{review.error}. The text pass was kept.</p></Block>}
+      {review.disagreements.length > 0 && (
+        <Block title="Second look: disagreements (the officer decides)">
+          <table className="trace-table">
+            <thead><tr><th>Field</th><th>Text reads</th><th>Second look reads</th><th>Read from</th><th>Pages</th></tr></thead>
+            <tbody>
+              {review.disagreements.map((item) => (
+                <tr key={item.field}>
+                  <td>{humanize(item.field)}</td>
+                  <td>{cellText(item.textValue)}</td>
+                  <td>{cellText(item.secondValue)}</td>
+                  <td>{item.readBy}</td>
+                  <td>{item.pages.join(', ') || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Block>
+      )}
+      {review.rejected.length > 0 && (
+        <Block title="Second look: values not used">
+          <ul>{review.rejected.map((item) => <li key={item.field}>{humanize(item.field)}: {item.reason}</li>)}</ul>
+        </Block>
+      )}
+    </>
+  );
+}
+
 function hasOverview(node: TraceNode): boolean {
   const { step } = node;
   return Boolean(node.error || (node.kind === 'event' && node.subtitle))
@@ -87,6 +136,7 @@ function Overview({ node }: { node: TraceNode }) {
         </Block>
       )}
       <ScoredFindings step={step} />
+      <SecondLookDetails step={step} />
     </>
   );
 }

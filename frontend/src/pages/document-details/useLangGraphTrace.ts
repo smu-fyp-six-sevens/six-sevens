@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { getLangGraphTrace } from '../../services/uploadService';
 import type { LangGraphTrace } from '../../services/uploadService';
 
-// Debug aid, see backend/app/langgraph/trace.py.
-export function useLangGraphTrace(documentId: string) {
+// The agent trace, and the low-confidence reasons shown under each field (fieldReasons.ts). See backend/app/langgraph/trace.py.
+export function useLangGraphTrace(documentId: string, documentStatus?: string) {
   const [langGraphTrace, setLangGraphTrace] = useState<LangGraphTrace | null>(null);
   const [isRefreshingTrace, setIsRefreshingTrace] = useState(false);
 
@@ -13,13 +13,13 @@ export function useLangGraphTrace(documentId: string) {
       const result = await getLangGraphTrace(documentId);
       setLangGraphTrace(result);
     } catch {
-      // Dev-only aid — a fetch failure here shouldn't disturb the page.
+      // Best-effort: a fetch failure here shouldn't disturb the page.
     } finally {
       setIsRefreshingTrace(false);
     }
   };
 
-  // Fetched once on load.
+  // On load and when the status changes, so a run that finishes while the page is open brings its reasons.
   useEffect(() => {
     let cancelled = false;
     getLangGraphTrace(documentId)
@@ -27,12 +27,12 @@ export function useLangGraphTrace(documentId: string) {
         if (!cancelled) setLangGraphTrace(result);
       })
       .catch(() => {
-        // Dev-only aid — a fetch failure here shouldn't disturb the page.
+        // Best-effort: a fetch failure here shouldn't disturb the page.
       });
     return () => {
       cancelled = true;
     };
-  }, [documentId]);
+  }, [documentId, documentStatus]);
 
   return { langGraphTrace, isRefreshingTrace, refreshLangGraphTrace };
 }

@@ -6,7 +6,7 @@ Open product and platform work only: remove an item once it's done. Elsewhere: s
 
 - **Skip repeated runs** (decided 2026-11-01): "Run again" on a case whose fingerprint matches the last complete run shows that run instead of starting another (each spends about 12k tokens).
 - **Agent-raised findings.** A specialist can only assess findings a tool returns; something it notices itself (a "modified copy" subject) appears in its summary but never scores. Needs a way to raise a finding that cites the field it read.
-- **Evaluate extraction second-look accuracy.** Compare text-only and selective second-look results against labelled bank statements and payslips. The evaluator should track field accuracy and text/image disagreements; run it on demand because it uses model calls.
+- **Evaluate extraction second-look accuracy.** Compare text-only and selective second-look results against labelled bank statements and payslips. It should also compare code-read bank-statement transactions (`statement_table.py`) with the model's. The evaluator should track field accuracy and text/image disagreements; run it on demand because it uses model calls.
 
 ## Claude models
 

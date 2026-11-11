@@ -16,11 +16,13 @@ import { humanizeFieldKey, normaliseFieldName } from '../../utils/fieldLabels';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { ArrayFieldEditButton, LabelValueArrayEditButton, ObjectFieldEditButton } from './ArrayFieldEditors';
 import { Icon } from '../../components/Icon';
+import { fieldReason } from './fieldReasons';
 
 export function ExtractedInformationCard({
   canAddOrDeleteFields,
   document,
   extractedFields,
+  fieldReasons,
   isInFlight,
   lowestConfidence,
   setDocument,
@@ -33,6 +35,8 @@ export function ExtractedInformationCard({
   canAddOrDeleteFields: boolean;
   document: DocumentRecord;
   extractedFields: [string, ExtractedField][];
+  // Why extraction was unsure of a field, by field name: model output from the document, so only ever plain text.
+  fieldReasons: Record<string, string>;
   isInFlight: boolean;
   lowestConfidence: number | null;
   setDocument: Dispatch<SetStateAction<DocumentRecord | null>>;
@@ -328,6 +332,8 @@ export function ExtractedInformationCard({
                       </button>
                     )}
                   </span>
+
+                  <FieldReason reason={fieldReason(fieldReasons, key, field.confidence)} />
                 </div>
               ))}
             </div>
@@ -369,6 +375,10 @@ export function ExtractedInformationCard({
           )}
         </section>
   );
+}
+
+function FieldReason({ reason }: { reason: string | null }) {
+  return reason ? <p className="extracted-field-reason">{reason}</p> : null;
 }
 
 // A field's value as an input (or the editor button for a list or object), while the document needs review.

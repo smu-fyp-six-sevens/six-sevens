@@ -31,8 +31,24 @@ SOURCE = "URA Approved Residential Use"
 _TOKEN_URL = "https://eservice.ura.gov.sg/uraDataService/insertNewToken/v1"
 _SERVICE_URL = "https://eservice.ura.gov.sg/uraDataService/invokeUraDS/v1"
 _SGT = timezone(timedelta(hours=8))
-# "#40-01", "# 4 - 1", "#B1-12A": storey and unit as printed.
-_UNIT_RE = re.compile(r"#\s*([A-Z]?\d{1,3})\s*-\s*(\d{1,5}[A-Z]?)", re.IGNORECASE)
+_STOREY = r"([A-Z]?\d{1,3})"
+_UNIT = r"(\d{1,5}[A-Z]?)(?!\d)"
+_NO = r"(?:no\.?\s*)?"
+# "#40-01", "# 4 - 1", "#B1-12A", "#05 01", "Unit 05-01", "Unit #05-01": storey and unit as printed.
+_UNIT_RE = re.compile(rf"(?:#|\bunit\b\s*{_NO}#?)\s*{_STOREY}(?:\s*[-\u2013\u2014/]\s*|\s+){_UNIT}", re.IGNORECASE)
+# "Level 5 Unit 1", "Floor 05, #01", "L5-01".
+_LEVEL_RE = re.compile(
+    rf"\b(?:level|lvl|floor|flr|fl|storey|l)\s*{_NO}{_STOREY}\s*"
+    rf"(?:[,;]?\s*(?:unit\b|#)\s*#?\s*{_NO}|[-\u2013\u2014]\s*){_UNIT}",
+    re.IGNORECASE,
+)
+# A bare "05-01" after the street. Two-digit storeys only, so "12-1" and the like aren't read as units.
+_BARE_RE = re.compile(rf"(?<=[\s,])(B\d{{1,2}}|\d{{2,3}})\s*[-\u2013\u2014]\s*{_UNIT}(?![-\w])", re.IGNORECASE)
+_BLOCK_BEFORE_RE = re.compile(r"\b(?:blk|block)\s*$", re.IGNORECASE)
+# The address says it has a unit, whether or not the storey and unit could be read from it.
+_NAMES_UNIT_RE = re.compile(
+    rf"#\s*[A-Z]?\d|\b(?:unit|apt|apartment|flat|level|lvl|floor|flr|storey)\b\s*{_NO}#?\s*[A-Z]?\d", re.IGNORECASE,
+)
 
 _token: dict[str, str] = {}
 # Answers by address, kept until the next process start (URA updates quarterly). Only real
@@ -48,11 +64,24 @@ def configured() -> bool:
 
 def unit_of(address: str) -> tuple[str, str] | None:
     """The (storey, unit) an address names, zero-padded to two digits as Singapore prints them."""
-    match = _UNIT_RE.search(address)
+    match = _UNIT_RE.search(address) or _LEVEL_RE.search(address) or _bare_unit(address)
     if not match:
         return None
     storey, unit = match.group(1).upper(), match.group(2).upper()
     return (storey.zfill(2) if storey.isdigit() else storey), (unit.zfill(2) if unit[:1].isdigit() and len(unit) == 1 else unit)
+
+
+def _bare_unit(address: str) -> re.Match[str] | None:
+    """A bare unit needs the street before it: "10-12 Bedok Road" and "Blk 10-12" are house and block numbers."""
+    match = _BARE_RE.search(address)
+    if match is None or not re.search("[A-Za-z]", address[:match.start()]) or _BLOCK_BEFORE_RE.search(address[:match.start()]):
+        return None
+    return match
+
+
+def names_a_unit(address: str) -> bool:
+    """Whether the address gives a unit at all, so a None from unit_of means it couldn't be read rather than absent."""
+    return _NAMES_UNIT_RE.search(address) is not None
 
 
 async def _day_token(refresh: bool = False) -> str:

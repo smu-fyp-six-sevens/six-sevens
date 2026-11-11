@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 from langchain_core.messages import HumanMessage
 
-from .. import telemetry
+from .. import identifiers, telemetry
 from ..config import settings
 from ..guardrails.envelope import fence
 from ..langgraph._anthropic import build_chat_anthropic
@@ -90,17 +90,15 @@ _HARMLESS_ERRORS = {"max_uses_exceeded"}
 
 
 def former_names_of(company_name: str | None, candidates: list[str]) -> list[str]:
-    """The case's former company names: distinct, none the same as the current name (ignoring case and punctuation)."""
-    def key(name: str) -> str:
-        return " ".join("".join(c if c.isalnum() else " " for c in name.casefold()).split())
-
-    seen = {key(company_name or "")}
+    """The case's former company names: distinct, none the same company name as the current one."""
+    seen = {identifiers.company_key(company_name)}
     names: list[str] = []
     for raw in candidates:
-        for name in str(raw or "").split(";"):
+        for name in identifiers.text_values(raw):
             name = " ".join(name.split())
-            if name and key(name) not in seen:
-                seen.add(key(name))
+            key = identifiers.company_key(name)
+            if key is not None and key not in seen:
+                seen.add(key)
                 names.append(name)
     return names[:_MAX_FORMER_NAMES]
 
@@ -241,12 +239,12 @@ def reuse_recent(
     skipped check is always retried), it ran under CACHE_HOURS ago, and it searched the same company name (an
     officer's rename searches again, and so does a former name the last check didn't search). None means search afresh.
     """
-    company = (company_name or "").strip()
+    company = identifiers.company_key(company_name)
     if previous is None or previous.status not in ("clean", "concerns") or previous.checked_at is None or not company:
         return None
-    if previous.query.strip().casefold() != company.casefold():
+    if identifiers.company_key(previous.query) != company:
         return None
-    if {n.casefold() for n in former_names or []} - {n.casefold() for n in previous.former_names}:
+    if {identifiers.company_key(n) for n in former_names or []} - {identifiers.company_key(n) for n in previous.former_names}:
         return None
     if (now or datetime.now(timezone.utc)) - previous.checked_at >= timedelta(hours=CACHE_HOURS):
         return None

@@ -43,7 +43,7 @@ The three `PAY.CPF_*` checks share one assessment (`reference_checks/cpf.py`), s
 | `REG.RESIDENTIAL_ADDRESS` | a home that can't be lived in: no flats, industrial zone, or a unit URA doesn't approve | inconsistent / implausible / signal |
 | `REG.COMPANY_ADDRESS_RESIDENTIAL` | company registered at a home (Home Office Schemes allow it) | signal |
 | `REG.UNIT_STOREY` | HDB unit above the block's top storey | impossible |
-| `REG.UNIT_MISSING` | home in flats or a condo with no unit number | signal |
+| `REG.UNIT_MISSING` | home in flats or a condo with no unit number, or one that couldn't be read | skipped check, not a finding |
 
 Zoning comes from a local index (`land_use.py`, about 12 MB) built from a 175 MB data.gov.sg file when the Docker image is built. Without it, zoning is skipped and the startup log says so.
 

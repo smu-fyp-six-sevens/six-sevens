@@ -435,6 +435,70 @@ def test_ura_unit_numbers_are_read_as_singapore_prints_them() -> None:
     assert unit_of("4 Siglap Avenue South") is None
 
 
+@pytest.mark.parametrize("address, unit", [
+    ("Unit 05-01, 2 Marina Boulevard", ("05", "01")),
+    ("2 Marina Boulevard Unit #05-01", ("05", "01")),
+    ("Blk 123 Bedok North Road 05-01 Singapore 460123", ("05", "01")),
+    ("123 Bedok North Road, 05-01, Singapore 460123", ("05", "01")),
+    ("10 Jalan Besar B1-12 Singapore 208787", ("B1", "12")),
+    ("2 Marina Boulevard #05 01 Singapore 018987", ("05", "01")),
+    ("2 Marina Boulevard Level 5 Unit 1 Singapore 018987", ("05", "01")),
+    ("2 Marina Boulevard Floor 05, #01 Singapore 018987", ("05", "01")),
+    ("2 Marina Boulevard L5-01 Singapore 018987", ("05", "01")),
+    ("2 Marina Boulevard #05\u201301 Singapore 018987", ("05", "01")),
+])
+def test_the_common_singapore_unit_forms_are_read(address, unit) -> None:
+    from app.fraud_detection.external_validation.registry_lookups.ura import unit_of
+
+    assert unit_of(address) == unit
+
+
+@pytest.mark.parametrize("address", [
+    "10-12 Bedok Road Singapore 460010",  # a house number range
+    "Blk 10-12 Bedok Road Singapore 460010",
+    "2 Marina Boulevard #05 Singapore 018987",  # the postal code is not the unit
+    "2 Marina Boulevard Tel 6123-4567",
+    "2 Marina Boulevard 12-01-2024",
+    "4 Siglap Avenue South Singapore 456264",
+])
+def test_numbers_that_are_not_a_unit_are_not_read_as_one(address) -> None:
+    from app.fraud_detection.external_validation.registry_lookups.ura import unit_of
+
+    assert unit_of(address) is None
+
+
+async def test_a_unit_that_cannot_be_read_is_not_reported_as_absent(ura_key) -> None:
+    result = await _home("2 Marina Boulevard Unit 7 Singapore 018987", "WHITE", approved=False)
+    [skip] = _skipped_codes(result, "REG.UNIT_MISSING")
+    assert "couldn't be read" in skip.reason and "no unit number" not in skip.reason
+
+
+async def test_a_missing_unit_still_says_none_was_provided(ura_key) -> None:
+    result = await _home("2 Marina Boulevard Singapore 018987", "WHITE", approved=False)
+    [skip] = _skipped_codes(result, "REG.UNIT_MISSING")
+    assert "no unit number was provided" in skip.reason
+
+
+@pytest.mark.parametrize("fields", [
+    {"individual_address": ["2 Marina Boulevard", "#40-01", "Singapore 018987"]},
+    {"individual_address": '["2 Marina Boulevard", "#40-01", "Singapore 018987"]'},
+    {"individual_address_lines": ["2 Marina Boulevard", "#40-01", "Singapore 018987"]},
+])
+def test_an_address_split_over_lines_keeps_its_unit(fields) -> None:
+    from app.fraud_detection.external_validation.registry_lookups.addresses import _addresses
+    from app.fraud_detection.external_validation.registry_lookups.ura import unit_of
+
+    [address] = _addresses(fields, "nric")
+    assert unit_of(address.text) == ("40", "01") and address.field == "individual_address"
+
+
+def test_a_list_of_several_addresses_stays_separate() -> None:
+    from app.fraud_detection.external_validation.registry_lookups.addresses import _addresses
+
+    found = _addresses({"individual_address": ["2 Marina Boulevard #40-01 Singapore 018987", "22 Bedok South Avenue 1 #14-11 Singapore 460022"]}, "nric")
+    assert len(found) == 2
+
+
 
 async def test_a_home_address_without_a_unit_cannot_be_checked_at_unit_level(ura_key) -> None:
     # Without a unit, URA cannot identify which dwelling to check; do not infer fraud from the omission.
