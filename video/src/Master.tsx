@@ -1,19 +1,28 @@
 // Master - the hook, visuals only (no soundtrack, no voiceover: you lay those in your editor).
-// Scene starts and lengths come from HOOK in timing.ts.
+// HOOK_VERSION in timing.ts picks the version; every time is a knob there, in seconds.
 
 import { AbsoluteFill, Sequence } from "remotion";
+import { OverwhelmScene } from "./scenes/OverwhelmScene";
 import { PackageScene } from "./scenes/PackageScene";
 import { TooManyScene } from "./scenes/TooManyScene";
 import { colors } from "./theme";
-import { SCENES } from "./timing";
+import { HOOK, HOOK_VERSION, OVERWHELM, atSeconds } from "./timing";
 
 export const Master: React.FC<{ showText?: boolean }> = ({ showText = true }) => (
   <AbsoluteFill style={{ background: colors.paper }}>
-    <Sequence from={SCENES.package.start} durationInFrames={SCENES.package.duration}>
-      <PackageScene showText={showText} />
-    </Sequence>
-    <Sequence from={SCENES.tooMany.start} durationInFrames={SCENES.tooMany.duration}>
-      <TooManyScene showText={showText} />
-    </Sequence>
+    {HOOK_VERSION === "v2" ? (
+      <Sequence durationInFrames={atSeconds(OVERWHELM.length)}>
+        <OverwhelmScene showText={showText} />
+      </Sequence>
+    ) : (
+      <>
+        <Sequence durationInFrames={atSeconds(HOOK.package.length)}>
+          <PackageScene showText={showText} />
+        </Sequence>
+        <Sequence from={atSeconds(HOOK.package.length)} durationInFrames={atSeconds(HOOK.tooMany.length)}>
+          <TooManyScene showText={showText} />
+        </Sequence>
+      </>
+    )}
   </AbsoluteFill>
 );

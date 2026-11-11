@@ -8,14 +8,14 @@ import { Title } from "../components/Title";
 import { UploadBox } from "../components/UploadBox";
 import { COPY, FILES } from "../data/hook";
 import { colors, fonts } from "../theme";
-import { HOOK, SCENES, s } from "../timing";
+import { HOOK, atSeconds, s } from "../timing";
 import { BOX_W, BOX_X, BOX_Y, U, rowState, scrollFor } from "./hookLayout";
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 
 export const PackageScene: React.FC<{ showText?: boolean }> = ({ showText = true }) => {
   const frame = useCurrentFrame();
-  const duration = SCENES.package.duration;
+  const duration = atSeconds(HOOK.package.length);
   const { progress, fresh, rows } = rowState(frame);
   const scroll = scrollFor(rows);
 

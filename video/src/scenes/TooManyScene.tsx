@@ -8,7 +8,7 @@ import { Title } from "../components/Title";
 import { UploadBox } from "../components/UploadBox";
 import { COPY, FILES } from "../data/hook";
 import { colors, fonts } from "../theme";
-import { HOOK, SCENES, s } from "../timing";
+import { HOOK, atSeconds, s } from "../timing";
 import { BOX_W, BOX_X, BOX_Y, FIT, U, scrollFor } from "./hookLayout";
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
@@ -47,7 +47,7 @@ const StretchWay: React.FC<{ frame: number }> = ({ frame }) => {
 export const TooManyScene: React.FC<{ showText?: boolean }> = ({ showText = true }) => {
   const frame = useCurrentFrame();
   const t = HOOK.tooMany;
-  const duration = SCENES.tooMany.duration;
+  const duration = atSeconds(HOOK.tooMany.length);
 
   // From scene 1's last frame (all rows in, scrolled) to the whole list fitted on the right.
   const q = interpolate(frame, [0, s(t.pullBackEnd)], [0, 1], { ...clamp, easing: pull });

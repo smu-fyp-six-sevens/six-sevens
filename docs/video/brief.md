@@ -13,17 +13,15 @@ Not beat-synced (`BEAT_SYNCED = false`). Every time is in seconds in `video/src/
 One case is too much paper for one person to read; the portal reads all of it, and shows every step it took.
 
 ## Script - built so far
-**Scene 1 · 0:00-0:05.5 · package**
-- Visual: the portal's upload box; the case's 20 real files drop in, accelerating, list scrolls off frame.
-- On-screen copy (placeholder): **Corporate loan / applications need / extensive documentation.**
-- Motion: headline rises behind a line mask; rows drop and settle; headline lifts out in the last 0.35 s.
+**Hook v2 (default) · 0:00-0:11 · overwhelm.** No app yet; the app is introduced as the solution later.
+- Visual: the officer's screen (generic browser + PDF viewer, no real product's look). PDF windows pile up faster and faster, tabs multiply until they are icons, pings from other teams stack bottom-right. Slow push toward the screen.
+- On-screen copy (placeholder): **Corporate loan / applications need / extensive / documentation.** then **Waaaaaaaaay / too many / documents / to review.** / **For one case.**
+- Pings (placeholder, invented people): "Hey, have you reviewed the Anchorpoint docs yet?", "How's the case going? Committee is at 3pm", "Customer emailed us again", "2 more statements just came in, added to the folder", "Any update??", "Need the KYC checks before sign-off".
 
-**Scene 2 · 0:05.5-0:11 · tooMany**
-- Visual: continuous from scene 1; pull back until all 20 files fit on the right.
-- On-screen copy (placeholder): **Case GLDB-02 · Anchorpoint Insurance Brokers** / **Waaaaaaaaay too many / documents to review.** / **20 files for a single case.**
-- Motion: pull-back leaves the cut at speed and settles; "Way" stretches a letter at a time; slow drift after.
+**Hook v1 (kept behind HOOK_VERSION) · 0:00-0:11 · package + tooMany.** The portal's upload box filling with the case's 20 real files, then a pull-back. Renders in `video/renders/v1/`.
 
 ## Assumptions (veto any)
+0. v2: people, teams and filenames are invented; documents are schematic (grey bars, made-up figures). The company name Anchorpoint Insurance Brokers comes from the test fixture.
 1. On-screen headlines included by default; `Master-NoText` has none.
 2. Real filenames from the regression fixture are shown, including personal names in filenames (e.g. "MuhammadD_..."). Check this data is synthetic before publishing.
 3. The upload hint keeps the portal's own em-dash ("PDF · PNG · JPG — up to 25MB each"), as it is the product's real string.

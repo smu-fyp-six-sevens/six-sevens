@@ -2,12 +2,15 @@
 
 Visuals only: no music, no voiceover. You set the timing.
 
-So far this is the **hook** (scenes 1-2, about 11 s):
+So far this is the **hook** (about 11 s). No app on screen yet: the app is the solution and comes later.
 
-| Scene | On screen | Script line it covers |
-|---|---|---|
-| 1 `package` | The real package of case GLDB-02 (20 files) drops into the portal's upload box, faster and faster | "Corporate loan applications require extensive documentation..." |
-| 2 `tooMany` | Pull back to all 20 files; "Way" stretches to "Waaaaaaaaay too many documents to review." | "...waaaay too many documents to review for a case." |
+**v2 "overwhelm" (current, default).** The loan officer's screen gets buried: PDF windows (bank statements, NOA,
+balance sheet, IDs, forms...) pile up, browser tabs multiply until they squash to icons, and pings from other teams
+stack in the corner ("Hey, have you reviewed the Anchorpoint docs yet?", "Customer emailed us again"). Headlines:
+"Corporate loan applications need extensive documentation." then "Waaaaaaaaay too many documents to review. For one case."
+
+**v1 "portal" (kept).** The portal's upload box filling with the case's 20 real files. Switch with `HOOK_VERSION` in
+`src/timing.ts`. Its renders are in `renders/v1/`.
 
 Renders: `renders/hook.mp4` (with headlines), `renders/hook-no-text.mp4` (same shots, no headlines), `renders/hook-poster.png`.
 
@@ -19,9 +22,9 @@ npm install
 npm run dev        # Remotion Studio: scrub, preview, edit props live
 ```
 
-- **Timing:** `src/timing.ts`, the `HOOK` object. Everything is in seconds: scene lengths, when the headline rises, when the first and last file land, when the "a"s stretch. Save and Studio updates.
-- **Words:** `src/data/hook.ts` (`COPY`). `\n` is a line break; lines never wrap by themselves. `wayMaxA` is how many "a"s.
-- **Files shown:** `FILES` in the same file (the case's real filenames, in upload order).
+- **Timing (v2):** `src/timing.ts`, the `OVERWHELM` object. Everything is in seconds: when each headline rises and leaves, the first and last PDF window, the first and last tab, `pings` (one time per message), when the "a"s stretch, the camera push. `ramp` sets how frantic the pile-up gets. Save and Studio updates.
+- **Words (v2):** `src/data/overwhelm.ts`: the PDFs (`DOCS`), extra tabs (`EXTRA_TABS`), the messages (`PINGS`: name, team, text, avatar colour) and the headlines (`COPY2`). `\n` is a line break; lines never wrap by themselves. Add or remove a message and add or remove its time in `OVERWHELM.pings`.
+- **v1:** timing in `HOOK`, words and the case's real filenames in `src/data/hook.ts`.
 - **Colours / font:** `src/theme.ts` (taken from `frontend/DESIGN.md`). Inter is bundled in `public/fonts`.
 - **Layout:** `src/scenes/hookLayout.ts` (box position, size, scale `U`).
 - **No headlines:** render `Master-NoText`, or set `showText: false` in Studio's props panel.
@@ -34,9 +37,9 @@ npx remotion render Master-NoText renders/hook-no-text.mp4 --color-space=bt709 -
 npx remotion still Master renders/hook-poster.png --frame=320
 ```
 
-Single scenes for quick checks: `Scene-Package`, `Scene-TooMany`.
+Single scenes for quick checks: `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
 
-## Where the UI comes from
+## Where the UI comes from (v1)
 
 The upload box is the portal's own UI rebuilt in React from its measured DOM (sizes x1.45), not a drawing.
 `capture/` reruns that capture: it serves the real frontend against the frontend's own mock backend

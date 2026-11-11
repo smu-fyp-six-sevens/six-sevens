@@ -1,15 +1,17 @@
 // Root - the hook's compositions. Open them with `npm run dev` (Remotion Studio).
 //   Master          the hook with its on-screen headlines
 //   Master-NoText   the same shots with no headlines, for laying your own text or voiceover over
-//   Scene-*         one scene alone, for quick iteration
+//   Scene-*         one scene alone, for quick iteration (Scene-Overwhelm is hook v2; Scene-Package and
+//                   Scene-TooMany are hook v1, the portal version)
 
 import { loadFont } from "@remotion/fonts";
 import { Composition, staticFile } from "remotion";
 import { Master } from "./Master";
+import { OverwhelmScene } from "./scenes/OverwhelmScene";
 import { PackageScene } from "./scenes/PackageScene";
 import { TooManyScene } from "./scenes/TooManyScene";
 import { canvas } from "./theme";
-import { FPS, SCENES, TOTAL_FRAMES } from "./timing";
+import { FPS, HOOK, OVERWHELM, TOTAL_FRAMES, atSeconds } from "./timing";
 
 // Inter, bundled in public/fonts (OFL, see Inter-LICENSE.txt), so renders work offline.
 for (const weight of ["400", "500", "600", "700"]) {
@@ -22,7 +24,8 @@ export const RemotionRoot: React.FC = () => (
   <>
     <Composition id="Master" component={Master} defaultProps={{ showText: true }} durationInFrames={TOTAL_FRAMES} {...size} />
     <Composition id="Master-NoText" component={Master} defaultProps={{ showText: false }} durationInFrames={TOTAL_FRAMES} {...size} />
-    <Composition id="Scene-Package" component={PackageScene} defaultProps={{ showText: true }} durationInFrames={SCENES.package.duration} {...size} />
-    <Composition id="Scene-TooMany" component={TooManyScene} defaultProps={{ showText: true }} durationInFrames={SCENES.tooMany.duration} {...size} />
+    <Composition id="Scene-Overwhelm" component={OverwhelmScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(OVERWHELM.length)} {...size} />
+    <Composition id="Scene-Package" component={PackageScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(HOOK.package.length)} {...size} />
+    <Composition id="Scene-TooMany" component={TooManyScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(HOOK.tooMany.length)} {...size} />
   </>
 );

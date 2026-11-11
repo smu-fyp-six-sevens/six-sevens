@@ -68,6 +68,34 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
 // (npm run dev) re-flows the film. Scene times are each scene's length; event
 // times are seconds from the start of that scene.
 // ---------------------------------------------------------------------------
+/**
+ * Which hook the Master plays.
+ *   "v2"  overwhelm: the officer's screen buried in PDFs, tabs and pings (no app yet). Default.
+ *   "v1"  the portal's upload box filling with the case's files (first version).
+ */
+export const HOOK_VERSION: "v1" | "v2" = "v2";
+
+/** v2 hook. All times in seconds from the start of the hook. */
+export const OVERWHELM = {
+  length: 11,             // whole hook
+  title1In: 0.25,         // "Corporate loan applications need extensive documentation."
+  title1Out: 5.0,         // ...lifts away
+  firstDocIn: 0.5,        // first PDF window opens
+  lastDocIn: 9.2,         // last one; windows open faster and faster in between
+  docPop: 0.25,           // how long one window takes to pop open
+  ramp: 0.75,             // how sharply windows and tabs speed up: 1 = steady pace, 0.5 = slow start, frantic end
+  firstTabIn: 0.4,        // browser tabs pile up across the top between these two times
+  lastTabIn: 9.6,
+  pings: [2.4, 3.8, 6.2, 7.2, 8.1, 8.9], // when each message lands (one per entry in PINGS)
+  wayIn: 5.35,            // "Way" appears
+  stretchStart: 5.7,      // the "a"s start stretching...
+  stretchEnd: 6.9,        // ...and reach full length
+  title2In: 5.9,          // "too many documents to review."
+  footnoteIn: 7.4,        // "For one case."
+  pushIn: 1.04,           // the camera's slow push toward the screen over the whole hook (1 = none)
+};
+
+/** v1 hook. Times in seconds from the start of each scene. */
 export const HOOK = {
   package: {
     length: 5.5,          // scene 1 length
@@ -91,15 +119,15 @@ export const HOOK = {
 /** Seconds to frames, for event times inside a scene. */
 export const s = (seconds: number): number => Math.round(seconds * FPS);
 
-const SCENE_LENGTHS = {
-  package: atSeconds(HOOK.package.length),
-  tooMany: atSeconds(HOOK.tooMany.length),
-};
+const SCENE_LENGTHS: Record<string, number> =
+  HOOK_VERSION === "v2"
+    ? { overwhelm: atSeconds(OVERWHELM.length) }
+    : { package: atSeconds(HOOK.package.length), tooMany: atSeconds(HOOK.tooMany.length) };
 
 const SCENE_ENDS = (() => {
   let t = 0;
-  const ends = {} as Record<keyof typeof SCENE_LENGTHS, number>;
-  for (const k of Object.keys(SCENE_LENGTHS) as (keyof typeof SCENE_LENGTHS)[]) {
+  const ends: Record<string, number> = {};
+  for (const k of Object.keys(SCENE_LENGTHS)) {
     t += SCENE_LENGTHS[k];
     ends[k] = t;
   }
