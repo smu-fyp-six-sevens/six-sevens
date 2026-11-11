@@ -12,6 +12,7 @@ document (document_repository) and rebuilt if the document's file changes.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from io import BytesIO
@@ -20,6 +21,7 @@ from typing import Any, Iterable, cast
 from PIL import Image, ImageOps
 
 from . import storage_service
+from .cpu_pool import run_cpu
 from .document_repository import text_lines_cache_path
 from .ingestion.ingestion_service import content_type_from_filename
 from .ingestion.ocr_extractor import extract_image_with_ocr
@@ -80,28 +82,42 @@ def extract_text_lines(file_bytes: bytes, content_type: str) -> list[dict[str, A
     raise ValueError(f"Unsupported document type: {content_type}")
 
 
-def _cached(document: DocumentRecord) -> dict[str, Any] | None:
+def _cached(document_id: str, storage_path: str | None) -> dict[str, Any] | None:
     try:
-        cached = json.loads(storage_service.download_file(cache_path(document.id)))
+        cached = json.loads(storage_service.download_file(cache_path(document_id)))
     except Exception:
         return None
-    if cached.get("version") == VERSION and cached.get("storage_path") == document.storage_path:
+    if cached.get("version") == VERSION and cached.get("storage_path") == storage_path:
         return cached
     return None
 
 
+def _save(document_id: str, storage_path: str | None, pages: list[dict[str, Any]]) -> None:
+    try:
+        storage_service.save_json(
+            cache_path(document_id), {"version": VERSION, "storage_path": storage_path, "pages": pages}
+        )
+    except Exception:
+        logger.exception("Failed to cache the text lines of document %s", document_id)
+
+
 def get_or_build(document: DocumentRecord) -> dict[str, Any]:
     """The document's text lines, from the cache or worked out now (and cached). Blocking: run it in a thread."""
-    cached = _cached(document)
+    cached = _cached(document.id, document.storage_path)
     if cached is not None:
         return {"pages": cached["pages"]}
     assert document.storage_path is not None
     file_bytes = storage_service.download_file(document.storage_path)
     pages = extract_text_lines(file_bytes, content_type_from_filename(document.filename))
-    try:
-        storage_service.save_json(
-            cache_path(document.id), {"version": VERSION, "storage_path": document.storage_path, "pages": pages}
-        )
-    except Exception:
-        logger.exception("Failed to cache the text lines of document %s", document.id)
+    _save(document.id, document.storage_path, pages)
     return {"pages": pages}
+
+
+async def pages_for(document_id: str, storage_path: str, filename: str, file_bytes: bytes) -> list[dict[str, Any]]:
+    """The same lines for a caller already holding the file: storage on threads, the parsing on the CPU pool."""
+    cached = await asyncio.to_thread(_cached, document_id, storage_path)
+    if cached is not None:
+        return cached["pages"]
+    pages = await run_cpu(extract_text_lines, file_bytes, content_type_from_filename(filename))
+    await asyncio.to_thread(_save, document_id, storage_path, pages)
+    return pages

@@ -193,7 +193,7 @@ class _LLMUsage(AsyncCallbackHandler):
                     continue
                 cost = metrics.record_llm(
                     agent, used.model, used.uncached_input, used.output, used.cache_read, used.cache_write, seconds,
-                    cache_write_1h=used.cache_write_1h,
+                    cache_write_1h=used.cache_write_1h, web_searches=used.web_searches,
                 )
                 _active().add_llm(
                     used.total_input, used.output, used.cache_read, used.cache_write + used.cache_write_1h, cost.usd,
@@ -202,6 +202,7 @@ class _LLMUsage(AsyncCallbackHandler):
                 telemetry.add_llm_call({
                     "model": used.model, "input_tokens": used.uncached_input, "output_tokens": used.output,
                     "cache_read_tokens": used.cache_read, "cache_write_tokens": used.cache_write + used.cache_write_1h,
+                    "web_searches": used.web_searches,
                     "cost_usd": round(cost.usd, 6), "seconds": round(seconds, 3) if seconds is not None else None,
                     "stop_reason": (getattr(message, "response_metadata", None) or {}).get("stop_reason"),
                     "thinking": thinking_summaries(message),

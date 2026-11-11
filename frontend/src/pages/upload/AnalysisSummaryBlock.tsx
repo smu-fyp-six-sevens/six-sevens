@@ -1,6 +1,61 @@
 import { Link } from 'react-router-dom';
-import type { CaseAnalysis } from '../../services/uploadService';
+import type { AdverseMediaCheck, CaseAnalysis } from '../../services/uploadService';
 import { analysisFindingAnchor, checkedAndFine } from './analysisSummary';
+
+// A due-diligence aid, not a score: a web search for recent sanctions, regulatory action or negative news about
+// the company. Every run that has the check says what happened; a skipped or failed one says why, quietly. Only a
+// run from before the check existed shows nothing.
+// Which company was searched (the name its documents give, not necessarily the case's title), when, and whether this
+// run used the case's cached result rather than searching again.
+function CheckedWhen({ check }: { check: AdverseMediaCheck }) {
+  if (!check.checked_at) return null;
+  const when = new Date(check.checked_at).toLocaleString('en-SG', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+  // A former name is searched too: companies often rename after a scandal, so older coverage uses the old name.
+  const former = check.former_names.length > 0 ? ` (also as ${check.former_names.join(', ')})` : '';
+  const company = check.query ? ` “${check.query}”${former}` : '';
+  return (
+    <span className="analysis-brief-media-when">
+      Searched{company} on {when}{check.reused && ' (cached)'} · Last 3 weeks, selected news and regulator sites
+    </span>
+  );
+}
+
+function AdverseMedia({ check }: { check: AdverseMediaCheck | null | undefined }) {
+  if (!check) return null;
+  if (check.status === 'skipped' || check.status === 'failed') {
+    return (
+      <p className="analysis-brief-media analysis-brief-media--muted">
+        <span className="analysis-brief-label">Media check</span>
+        <span className="analysis-brief-media-text">
+          {check.summary ||
+            (check.status === 'skipped' ? 'Not run: the case has no company name.' : 'Couldn’t complete the web search this time.')}
+        </span>
+      </p>
+    );
+  }
+  const concerns = check.status === 'concerns';
+  return (
+    <div className={`analysis-brief-media analysis-brief-media--${concerns ? 'concerns' : 'clean'}`}>
+      <span className="analysis-brief-label">Media check</span>
+      <span className="analysis-brief-media-text">
+        {check.summary}
+        {!concerns && <span aria-label="clear"> ✓</span>}
+      </span>
+      <CheckedWhen check={check} />
+      {concerns && check.sources.length > 0 && (
+        <ul className="analysis-brief-media-sources">
+          {check.sources.map((source) => (
+            <li key={source.url}>
+              <a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function scrollToFinding(findingId: string) {
   window.document.getElementById(analysisFindingAnchor(findingId))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -32,6 +87,7 @@ export function AnalysisSummaryBlock({ analysis, linkToRiskTab }: { analysis: Ca
     return (
       <div className="analysis-brief">
         <CheckedAndFine analysis={analysis} />
+        <AdverseMedia check={analysis.adverse_media} />
       </div>
     );
   }
@@ -81,6 +137,8 @@ export function AnalysisSummaryBlock({ analysis, linkToRiskTab }: { analysis: Ca
       )}
 
       <CheckedAndFine analysis={analysis} />
+
+      <AdverseMedia check={analysis.adverse_media} />
 
       {summary.would_help && (
         <p className="analysis-brief-help">

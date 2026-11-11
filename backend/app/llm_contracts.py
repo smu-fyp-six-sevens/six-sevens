@@ -80,6 +80,18 @@ class SummaryReply(BaseModel):
     would_help: Text = ""
 
 
+class AdverseMediaSourceReply(BaseModel):
+    title: Text = ""
+    url: Text = ""
+
+
+class AdverseMediaReply(BaseModel):
+    # "clean" when the search found nothing concerning, "concerns" when it did.
+    status: Text = ""
+    summary: Text = ""
+    sources: Annotated[list[AdverseMediaSourceReply], BeforeValidator(keep_valid(AdverseMediaSourceReply))] = []
+
+
 def _placeholder_summary(value: Any) -> str:
     text = value.strip() if isinstance(value, str) else ""
     return text or "A finding was reported without a description."

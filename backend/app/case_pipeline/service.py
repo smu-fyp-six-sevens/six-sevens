@@ -16,19 +16,22 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 from .. import (
+    extracted_fields_repository,
     audit, case_repository, case_stage, detection_results, document_repository, events, finding_keys,
-    findings_repository, read_pool, telemetry,
+    findings_repository, identifiers, read_pool, telemetry,
 )
 from ..config import settings
+from ..fraud_detection.shared.field_values import decode_field_value
 from ..snapshots import push_case_snapshot
 from ..llm_io import ModelRefused
 from ..models import CaseStage, DocumentRecord
 from ..run_context import end_run, start_run
 from . import repository, state
+from .adverse_media import former_names_of, reuse_recent, run_adverse_media_check
 from .cross_document.evidence import build_context
 from .cross_document.agents import PROMPT_VERSION
 from .cross_document.graph import run_cross_document_analysis
-from .models import AgentDecision, AnalysisAudit, AnalysisStatus, CaseAnalysis, CaseAnalysisRunItem
+from .models import AdverseMediaCheck, AgentDecision, AnalysisAudit, AnalysisStatus, CaseAnalysis, CaseAnalysisRunItem
 from .risk import store as risk_store
 from .trace import RunTrace
 from .readiness import is_ready_for_analysis, unapproved_requirements
@@ -40,8 +43,8 @@ from .risk.supporting_documents import recommend_supporting_documents
 
 logger = logging.getLogger("classifier_pipeline.case_pipeline.service")
 
-# Plan and judge (Sonnet), evidence requests and summary (Haiku), with two to spare.
-_MAX_MODEL_CALLS = 6
+# Plan and judge (Sonnet), evidence requests, summary and the adverse-media check (Haiku), with two to spare.
+_MAX_MODEL_CALLS = 7
 
 
 class AnalysisDisabled(Exception):
@@ -233,59 +236,122 @@ async def _analyse(
     context.trace = trace
     trace.record("dossier", documents={k: {"id": v.id, "filename": v.filename, "findings": len(v.findings)}
                                       for k, v in context.docs.items()})
-    result = await run_cross_document_analysis(context)
-    findings = result.get("findings") or []
-    finding_keys.assign_case_fingerprints(findings)
-    trace.save()
+    # The media check doesn't depend on the documents, so it runs while the cross-document check does.
+    media_check = asyncio.create_task(_media_check(case_id, documents, trace))
+    try:
+        result = await run_cross_document_analysis(context)
+        findings = result.get("findings") or []
+        finding_keys.assign_case_fingerprints(findings)
+        trace.save()
 
-    risk = compute_case_risk(documents, reports, failed_ids, findings)
-    document_only = compute_case_risk(documents, reports, failed_ids)
-    without_dedupe = compute_case_risk(documents, reports, failed_ids, findings, dedupe=False)
-    trace.record(
-        "scoring", **scoring_breakdown(risk),
-        cross_document_findings=len(findings),
-        score_without_cross_document=document_only.score, level_without_cross_document=document_only.level,
-        score_without_dedupe=without_dedupe.score, level_without_dedupe=without_dedupe.level,
-    )
-    requests, request_status = await propose_requests_with_status(risk)
-    supporting_documents = recommend_supporting_documents(documents)
-    trace.record("evidence_requests", proposed=[r.model_dump() for r in requests],
-                 supporting_documents=[s.title for s in supporting_documents])
-    outlook = build_outlook(risk, requests)
-    trace.record("outlook", **outlook_trace(risk, requests, outlook))
-    additional = build_additional_documents(risk, requests, outlook, supporting_documents, request_status)
-    trace.record("additional_documents", reason=additional.reason, request_status=request_status,
-                 items=[{"title": i.title, "source": i.source, "affects_score": i.affects_score} for i in additional.items])
-    clean_checks, unrun_checks = _check_outcomes(reports)
-    summary = await write_summary(risk, outlook, clean_checks, unrun_checks)
-    trace.record("summary", **summary.model_dump())
+        risk = compute_case_risk(documents, reports, failed_ids, findings)
+        document_only = compute_case_risk(documents, reports, failed_ids)
+        without_dedupe = compute_case_risk(documents, reports, failed_ids, findings, dedupe=False)
+        trace.record(
+            "scoring", **scoring_breakdown(risk),
+            cross_document_findings=len(findings),
+            score_without_cross_document=document_only.score, level_without_cross_document=document_only.level,
+            score_without_dedupe=without_dedupe.score, level_without_dedupe=without_dedupe.level,
+        )
+        requests, request_status = await propose_requests_with_status(risk)
+        supporting_documents = recommend_supporting_documents(documents)
+        trace.record("evidence_requests", proposed=[r.model_dump() for r in requests],
+                     supporting_documents=[s.title for s in supporting_documents])
+        outlook = build_outlook(risk, requests)
+        trace.record("outlook", **outlook_trace(risk, requests, outlook))
+        additional = build_additional_documents(risk, requests, outlook, supporting_documents, request_status)
+        trace.record("additional_documents", reason=additional.reason, request_status=request_status,
+                     items=[{"title": i.title, "source": i.source, "affects_score": i.affects_score} for i in additional.items])
+        clean_checks, unrun_checks = _check_outcomes(reports)
+        summary = await write_summary(risk, outlook, clean_checks, unrun_checks)
+        trace.record("summary", **summary.model_dump())
 
-    analysis.findings = findings
-    analysis.outlook = outlook
-    analysis.structured_summary = summary
-    analysis.risk = risk
-    analysis.supporting_documents = supporting_documents
-    analysis.additional_documents = additional
-    analysis.consistent_checks = result.get("consistent_checks") or []
-    agent_decisions = [
-        AgentDecision.model_validate(decision)
-        for decision in result.get("agent_decisions") or []
-    ]
-    analysis.confidence = min(
-        (decision.confidence for decision in agent_decisions),
-        default=0.0,
-    )
-    analysis.clean_checks = clean_checks
-    analysis.audit = AnalysisAudit(
-        models={"analysis": settings.LANGGRAPH_SONNET_MODEL},
-        prompt_version=PROMPT_VERSION,
-        hypotheses_tried=len(result.get("hypotheses") or []),
-        findings_discarded=len(result.get("discarded") or []),
-        tool_calls=result.get("tool_calls") or [],
-        agent_decisions=agent_decisions,
-    )
-    analysis.status = "complete"
-    trace.record("done", status="complete", findings=len(findings))
+        # Started alongside the cross-document check above, so it adds no time to the run unless it outlasts all of it.
+        adverse_media = await media_check
+
+        analysis.findings = findings
+        analysis.outlook = outlook
+        analysis.structured_summary = summary
+        analysis.risk = risk
+        analysis.supporting_documents = supporting_documents
+        analysis.additional_documents = additional
+        analysis.consistent_checks = result.get("consistent_checks") or []
+        agent_decisions = [
+            AgentDecision.model_validate(decision)
+            for decision in result.get("agent_decisions") or []
+        ]
+        analysis.confidence = min(
+            (decision.confidence for decision in agent_decisions),
+            default=0.0,
+        )
+        analysis.clean_checks = clean_checks
+        analysis.adverse_media = adverse_media
+        analysis.audit = AnalysisAudit(
+            models={"analysis": settings.LANGGRAPH_SONNET_MODEL},
+            prompt_version=PROMPT_VERSION,
+            hypotheses_tried=len(result.get("hypotheses") or []),
+            findings_discarded=len(result.get("discarded") or []),
+            tool_calls=result.get("tool_calls") or [],
+            agent_decisions=agent_decisions,
+        )
+        analysis.status = "complete"
+        trace.record("done", status="complete", findings=len(findings))
+    finally:
+        # A step above failed before the check was awaited: don't leave it running past the run. No-op once done.
+        media_check.cancel()
+
+
+async def _media_check(case_id: str, documents: list[DocumentRecord], trace: RunTrace) -> AdverseMediaCheck | None:
+    """
+    The run's media check: the case's cached one when it ran within the last CACHE_HOURS for the same company (no
+    search, no cost), otherwise a new web search. A due-diligence aid only, never scored. Never raises: None if even the
+    lookup failed, so the run carries on without it.
+
+    The company searched is the one its documents name (business profile, else certificate of incorporation), as case
+    matching takes it: the case's own name is free text an officer types (often a placeholder), so it is only the
+    fallback for a case with neither document.
+    """
+    try:
+        on_file, former_on_file = await asyncio.to_thread(_company_on_file, documents)
+        if on_file:
+            company, source = on_file, "documents"
+        else:
+            case = await asyncio.to_thread(case_repository.get_case, case_id)
+            company, source = (case.company_name if case else None), "case name"
+        former = former_names_of(company, former_on_file)
+        previous = await asyncio.to_thread(repository.latest_adverse_media, case_id)
+        check = reuse_recent(previous, company, former_names=former) or await run_adverse_media_check(company, former)
+        trace.record(
+            "adverse_media", status=check.status, reused=check.reused, sources=len(check.sources),
+            company=check.query, company_from=source, former_names=check.former_names, summary=check.summary,
+        )
+        return check
+    except Exception:
+        logger.exception("Adverse-media check failed for case %s", case_id)
+        return None
+
+
+# Where the company's name and former names are recorded, most reliable first: its business profile (ACRA), then its
+# certificate of incorporation.
+_COMPANY_DOCUMENTS = ("certificate_of_incumbency", "certificate_of_incorporation")
+
+
+def _company_on_file(documents: list[DocumentRecord]) -> tuple[str | None, list[str]]:
+    """
+    The company name the case's company documents give (the first one found, business profile first) and every former
+    name they give (company_former_name). Rejected documents don't count. Sync.
+    """
+    name: str | None = None
+    former: list[str] = []
+    for kind in _COMPANY_DOCUMENTS:
+        for document in documents:
+            if document.document_type != kind or document.status.value == "rejected":
+                continue
+            fields = extracted_fields_repository.get_extracted_fields_dict(document.id) or {}
+            stated = identifiers.text_values(decode_field_value(fields.get("company_name")))
+            name = name or (" ".join(stated[0].split()) if stated else None)
+            former += identifiers.text_values(decode_field_value(fields.get("company_former_name")))
+    return name, former
 
 
 async def sync_stage(case_id: str) -> None:

@@ -151,6 +151,8 @@ class Settings:
     # correct them. Set above CLASSIFICATION_CONFIDENCE_THRESHOLD since a
     # wrong-looking field is costlier than a wrongly-routed document.
     EXTRACTION_CONFIDENCE_THRESHOLD: float = 0.9
+    # The whole extraction second look. Past it the text pass stands and second_look_error is set.
+    EXTRACTION_SECOND_LOOK_TIMEOUT_SECONDS: float = 90
 
     ALLOWED_CONTENT_TYPES: set[str] = {
         "application/pdf",

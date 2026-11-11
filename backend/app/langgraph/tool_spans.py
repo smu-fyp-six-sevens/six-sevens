@@ -16,7 +16,10 @@ from .. import telemetry
 T = TypeVar("T")
 
 # Arguments the code fills in, not the model: they say nothing about the call.
-_HIDDEN_ARGS = frozenset({"document_id", "state", "config", "tool_call_id"})
+_HIDDEN_ARGS = frozenset({
+    "document_id", "state", "config", "tool_call_id", "file_bytes", "raw_text", "storage_path", "filename",
+    "selected_fields", "agent_messages", "is_image",
+})
 
 
 def _outcome(result: Any) -> dict[str, Any]:

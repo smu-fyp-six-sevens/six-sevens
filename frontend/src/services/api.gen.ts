@@ -1838,6 +1838,49 @@ export interface components {
             reason: ("none_needed" | "no_reducible_findings" | "model_failed" | "budget") | null;
         };
         /**
+         * AdverseMediaCheck
+         * @description A web search for recent sanctions, regulatory action or negative news about the applicant company. It is a
+         *     due-diligence aid for the officer only: it never feeds the risk score or creates a finding.
+         */
+        AdverseMediaCheck: {
+            /** Checked At */
+            checked_at: string | null;
+            /** Former Names */
+            former_names: string[];
+            /**
+             * Query
+             * @default
+             */
+            query: string;
+            /**
+             * Reused
+             * @default false
+             */
+            reused: boolean;
+            /** Sources */
+            sources: components["schemas"]["AdverseMediaSource"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "clean" | "concerns" | "skipped" | "failed";
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+        };
+        /**
+         * AdverseMediaSource
+         * @description One page the adverse-media search cited, so an officer can read it themselves.
+         */
+        AdverseMediaSource: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+        };
+        /**
          * AgentDecision
          * @description One model agent's decision and its bounded self-reported confidence.
          */
@@ -2108,6 +2151,7 @@ export interface components {
         /** CaseAnalysis */
         CaseAnalysis: {
             additional_documents: components["schemas"]["AdditionalDocuments"] | null;
+            adverse_media: components["schemas"]["AdverseMediaCheck"] | null;
             audit: components["schemas"]["AnalysisAudit"];
             /** Case Id */
             case_id: string;

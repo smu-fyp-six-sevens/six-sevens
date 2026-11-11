@@ -322,7 +322,12 @@ async def extract_node(state: DocumentGraphState) -> dict:
     # can object. Only on the first pass: after a reclassification the classifier has already been asked again.
     guess = document_type if schema_type == "unrecognised" and document_type != "unrecognised" else None
     extraction = await extract.run_extraction(
-        schema_type, raw_text, classified_as=guess if state.get("attempts", 0) == 0 else None
+        schema_type,
+        raw_text,
+        classified_as=guess if state.get("attempts", 0) == 0 else None,
+        document_id=document_id,
+        filename=state.get("filename"),
+        storage_path=state.get("storage_path"),
     )
 
     # Persisted regardless of escalation — whatever fields Extraction
@@ -341,9 +346,15 @@ async def extract_node(state: DocumentGraphState) -> dict:
         "output_error": extraction.get("output_error"),
         "output_status": extraction.get("output_status"),
         "retried": extraction.get("retried", False),
-        # The agent's own reasoning for each field it wasn't confident in — not persisted to the
-        # extracted_fields table, visible here in the trace only (see extract.py's field_reasons).
+        # Why each field is low confidence, the second look's disagreements included: not an extracted_fields
+        # column. Shown under the field on the review screen (document-details/fieldReasons.ts).
         "low_confidence_reasons": extraction.get("field_reasons") or {},
+        "field_provenance": extraction.get("field_provenance") or {},
+        "transaction_table": extraction.get("transaction_table"),
+        "second_look": extraction.get("second_look"),
+        "extraction_disagreements": extraction.get("extraction_disagreements") or [],
+        "second_look_rejected_fields": extraction.get("second_look_rejected_fields") or [],
+        "second_look_error": extraction.get("second_look_error"),
     }
     trace.record(document_id, "extraction", document_type=document_type, schema=schema_type, **summary)
     if extraction.get("output_error"):

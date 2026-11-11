@@ -230,6 +230,7 @@ export function makeAnalysis(overrides: Partial<CaseAnalysis> & Pick<CaseAnalysi
     additional_documents: null,
     consistent_checks: [],
     clean_checks: [],
+    adverse_media: null,
     audit: { models: {}, prompt_version: '', hypotheses_tried: 0, findings_discarded: 0, tool_calls: [], agent_decisions: [] },
     trace: [],
     stale: false,

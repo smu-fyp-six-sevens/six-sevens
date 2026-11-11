@@ -354,6 +354,31 @@ async def test_scoring_does_not_start_while_the_cross_document_check_is_still_ru
     assert runs.rows[run_id]["status"] == "complete"
 
 
+async def test_the_media_check_runs_while_the_cross_document_check_does(
+    runs, case, existing_case, published_events, monkeypatch
+):
+    """The media check doesn't need the documents, so it must not wait for the cross-document check to finish."""
+    from app.case_pipeline.cross_document.graph import run_cross_document_analysis
+
+    media_started = asyncio.Event()
+
+    async def media_check(case_id, documents, trace):
+        media_started.set()
+        return None
+
+    async def cross_document_check_waiting_for_media(context):
+        # Run one after the other, the media check could never start first: this would time out.
+        await asyncio.wait_for(media_started.wait(), timeout=5)
+        return await run_cross_document_analysis(context)
+
+    monkeypatch.setattr("app.case_pipeline.service._media_check", media_check)
+    monkeypatch.setattr("app.case_pipeline.service.run_cross_document_analysis", cross_document_check_waiting_for_media)
+    run_id = (await asyncio.to_thread(run_analysis)).json()["run_id"]
+    await run_requested_analysis(published_events)
+
+    assert runs.rows[run_id]["status"] == "complete"
+
+
 @pytest.mark.sprint4
 @pytest.mark.story("SCRUM-53", "MA-020")
 async def test_scoring_starts_after_the_cross_document_check_finishes(runs, case, existing_case, published_events):

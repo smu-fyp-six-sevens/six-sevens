@@ -2,7 +2,7 @@
 Claude list prices in USD per million tokens (platform.claude.com/docs/en/about-claude/pricing, read 2026-10-30), for
 the cost metrics and trace attributes. A call's cost is its exact token counts times these prices, so it matches the
 bill unless the organisation has a discount. Matched by the longest model-name prefix; a model missing here costs 0
-and is logged once.
+and is logged once. Server-side web searches are billed per search on top of the tokens (WEB_SEARCH_USD).
 """
 
 from __future__ import annotations
@@ -20,6 +20,8 @@ class Usage(NamedTuple):
     cache_read: int
     cache_write: int  # 5-minute cache writes
     cache_write_1h: int = 0
+    # Server-side web searches the call ran, billed per search on top of the tokens.
+    web_searches: int = 0
 
     @property
     def total_input(self) -> int:
@@ -42,7 +44,9 @@ def usage(message: Any) -> Usage | None:
         write_5m = details.get("cache_creation", 0) or 0
     # langchain-anthropic's input_tokens already includes cache reads and writes.
     uncached = max(0, (meta.get("input_tokens", 0) or 0) - cache_read - write_5m - write_1h)
-    return Usage(model, uncached, meta.get("output_tokens", 0) or 0, cache_read, write_5m, write_1h)
+    server_tools = ((response.get("usage") or {}).get("server_tool_use") or {}) if isinstance(response, dict) else {}
+    searches = server_tools.get("web_search_requests", 0) or 0
+    return Usage(model, uncached, meta.get("output_tokens", 0) or 0, cache_read, write_5m, write_1h, searches)
 
 
 class Price(NamedTuple):
@@ -71,6 +75,8 @@ _PRICES: dict[str, Price] = {
 _LONG_PROMPT_PRICES: dict[str, Price] = {
     "claude-haiku-5-5": Price(0.50, 2.50, 0.05, 0.625, 1),
 }
+# The web search tool's fee: $10 per 1,000 searches, the same on every model (a failed search isn't billed or counted).
+WEB_SEARCH_USD = 0.01
 _unpriced: set[str] = set()
 
 
@@ -100,11 +106,13 @@ class Cost(NamedTuple):
 
 def cost(
     model: str, uncached_input: int, output: int, cache_read: int, cache_write: int, cache_write_1h: int = 0,
+    web_searches: int = 0,
 ) -> Cost:
+    searches_usd = web_searches * WEB_SEARCH_USD
     price = price_for(model, uncached_input + cache_read + cache_write + cache_write_1h)
     if price is None:
-        return Cost(0.0, 0.0)
-    usd = (
+        return Cost(searches_usd, 0.0)
+    usd = searches_usd + (
         uncached_input * price.input + output * price.output + cache_read * price.cache_read
         + cache_write * price.cache_write + cache_write_1h * price.cache_write_1h
     ) / 1_000_000

@@ -2,8 +2,9 @@
 Debug trace of what the langgraph pipeline actually did with a document —
 which route it took (fast vs agent), what rule/llm/vision each said, which
 model calls fired — so a human testing can see routing decisions without
-reading logs, via GET /documents/{id}/langgraph-trace. Not part of graph
-state, and nothing reads it to decide anything: detection's results live in
+reading logs, via GET /documents/{id}/langgraph-trace. The review screen also
+shows each low-confidence field's reason from it. Not part of graph state, and
+nothing reads it to decide anything: detection's results live in
 detection_results.py.
 
 record() adds steps to the process-local copy; flush(), called once at the

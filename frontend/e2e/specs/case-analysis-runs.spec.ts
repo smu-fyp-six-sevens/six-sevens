@@ -69,6 +69,11 @@ const latest = analysis(LATEST, {
   structured_summary: SUMMARY,
   consistent_checks: ['UEN is the same on 3 documents', 'The name is the same on C001_BizFile.pdf and C002_NRIC.pdf'],
   clean_checks: ['metadata_tool'],
+  adverse_media: {
+    status: 'clean', query: 'Acme Trading Pte Ltd',
+    summary: 'The web search found nothing concerning about the company in the last three weeks.',
+    sources: [], checked_at: '2026-10-27T02:03:00Z', reused: true, former_names: [],
+  },
 });
 const earlier = analysis(EARLIER, { started_at: '2026-10-26T02:00:00Z', structured_summary: EARLIER_SUMMARY, stale: true });
 const runs: CaseAnalysisRunItem[] = [
@@ -112,6 +117,44 @@ test.describe('Case analysis summary and earlier runs', () => {
     // No score restated and no finding text pasted back in.
     await expect(brief).not.toContainText('48');
     await expect(brief).not.toContainText(ADDRESS);
+  });
+
+  test('the adverse media check shows its result as a due-diligence note', async ({ page, backend }) => {
+    const brief = await openAnalysis(page, backend);
+
+    const media = brief.locator('.analysis-brief-media');
+    await expect(media).toHaveClass(/analysis-brief-media--clean/);
+    await expect(media).toContainText('Media check');
+    await expect(media).toContainText('nothing concerning about the company in the last three weeks');
+    // When the search ran, and that this run used the case's cached search rather than searching again.
+    await expect(media.locator('.analysis-brief-media-when')).toContainText('Searched “Acme Trading Pte Ltd” on 27 Oct 2026');
+    await expect(media.locator('.analysis-brief-media-when')).toContainText('(cached)');
+  });
+
+  test('an adverse media hit shows the concern and links its sources', async ({ page, backend }) => {
+    const flagged = analysis(LATEST, {
+      structured_summary: SUMMARY,
+      adverse_media: {
+        status: 'concerns', query: 'Acme Trading Pte Ltd',
+        summary: 'MAS issued an enforcement notice against the company last week.',
+        sources: [{ title: 'MAS enforcement notice', url: 'https://mas.gov.sg/notice' }],
+        checked_at: '2026-10-27T02:03:00Z', reused: false, former_names: ['Zenith Bay Engineering Pte. Ltd.'],
+      },
+    });
+    const brief = await openAnalysis(page, backend);
+    // Registered after openAnalysis's route so this one wins (Playwright tries the newest route first).
+    await page.route(/\/cases\/case-analysis\/analysis$/, (route) => route.fulfill({ json: flagged }));
+    await page.goto('/cases/GLDB-4004?section=analysis');
+
+    const media = brief.locator('.analysis-brief-media');
+    await expect(media).toHaveClass(/analysis-brief-media--concerns/);
+    await expect(media).toContainText('MAS issued an enforcement notice');
+    await expect(media.locator('.analysis-brief-media-when')).not.toContainText('(cached)');
+    // A former name searched too is named, so the officer knows the old name was covered.
+    await expect(media.locator('.analysis-brief-media-when')).toContainText('Searched “Acme Trading Pte Ltd” (also as Zenith Bay Engineering Pte. Ltd.) on');
+    await expect(media.getByRole('link', { name: 'MAS enforcement notice' })).toHaveAttribute(
+      'href', 'https://mas.gov.sg/notice',
+    );
   });
 
   test('a reason opens the finding it cites: on this card, or on the Risk Summary tab', async ({ page, backend }) => {

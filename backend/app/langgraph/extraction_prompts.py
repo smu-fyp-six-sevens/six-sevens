@@ -21,6 +21,9 @@ which tier a field belongs to:
 
 from ..models import DocumentType
 
+# The field the model returns instead of "transactions" when code has read the table (extract._apply_statement_table).
+TRANSACTION_COUNTERPARTIES_FIELD = "transaction_counterparties"
+
 EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
     # Tiers below are derived from doc_gen_scripts, not guessed: "required"
     # is whatever every generator/template for that type sets unconditionally
@@ -435,6 +438,18 @@ _ENTITY_GUIDANCE = (
     "LLP, BHD or INC is a company."
 )
 
+_COUNTERPARTY_RULE = (
+    "the name of the other party as printed in the description — who was paid or who paid, e.g. a supplier or "
+    "customer company — without reference numbers, payment channel words like FAST/GIRO/PayNow, or the amount"
+)
+_TRANSACTIONS_READ_GUIDANCE = (
+    'The transaction list has already been read from this statement by code: do not return "transactions" or any '
+    f'per-transaction field. Instead return "{TRANSACTION_COUNTERPARTIES_FIELD}", whose "value" is an object mapping '
+    "the number of each line in <transaction_descriptions> that names another party to "
+    f"{_COUNTERPARTY_RULE}. Leave out lines that name no other party, e.g. bank charges or interest.\n\n"
+    + _ENTITY_GUIDANCE
+)
+
 EXTRA_FIELD_GUIDANCE: dict[str, str] = {
     "proof_of_address": _ENTITY_GUIDANCE,
     "company_constitution": (
@@ -552,10 +567,7 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         '(as shown in the document), "description", "amount" (numeric; negative for '
         "debits/withdrawals, positive for credits/deposits), \"balance\" (the "
         "running balance after that transaction, if shown, else null), and "
-        '"counterparty" (the name of the other party as printed in the description '
-        "— who was paid or who paid, e.g. a supplier or customer company — without "
-        "reference numbers, payment channel words like FAST/GIRO/PayNow, or the "
-        "amount; null when the line names no other party, e.g. bank charges or "
+        f'"counterparty" ({_COUNTERPARTY_RULE}; null when the line names no other party, e.g. bank charges or '
         "interest). Include "
         "every transaction you can find in the text — do not summarise, truncate, "
         "or only include a sample. Its \"confidence\" should reflect your overall "
@@ -768,14 +780,15 @@ _FIELD_WRAPPER_INSTRUCTIONS = (
 )
 
 
-def build_extraction_prompt(document_type: str, raw_text: str) -> str:
+def build_extraction_prompt(document_type: str, raw_text: str, *, transactions_read: bool = False) -> str:
+    """`transactions_read`: code has read a statement's transaction table, so the model reads everything else."""
     schema = EXTRACTION_SCHEMAS.get(document_type)
     if schema is None:
         raise ValueError(f"No extraction schema defined for document_type: {document_type}")
 
-    required = schema["required"]
+    required = [name for name in schema["required"] if not (transactions_read and name == "transactions")]
     additional = schema["additional"]
-    extra_guidance = EXTRA_FIELD_GUIDANCE.get(document_type, "")
+    extra_guidance = _TRANSACTIONS_READ_GUIDANCE if transactions_read else EXTRA_FIELD_GUIDANCE.get(document_type, "")
     # Precomputed (not inlined in the f-string below) since a backslash can't
     # appear inside an f-string expression on Python <3.12.
     extra_guidance_block = f"\n{extra_guidance}\n" if extra_guidance else ""
