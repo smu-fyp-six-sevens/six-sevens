@@ -2,7 +2,7 @@
 
 The per-case analysis is built (`backend/app/case_pipeline/`); `HOW_IT_WORKS.md` §3 describes it step by step and `FRAUD_DETECTION_MAP.md` §1B lists the files. This document keeps the design rules and what is still open.
 
-**Open:** the rest of the automatic trigger (Step 0 below), the evals, a dismissal flow for cross-document findings, and unit tests for the hypothesiser and `summary.py`. `case_analysis_runs` must exist (see `README.md`); `CASE_ANALYSIS_ENABLED=false` is the kill switch; every run writes a step-by-step `trace` to its row for debugging.
+**Open:** the rest of the automatic trigger (Step 0 below), the evals, and a dismissal flow for cross-document findings. `case_analysis_runs` must exist (see `README.md`); `CASE_ANALYSIS_ENABLED=false` is the kill switch; every run writes a step-by-step `trace` to its row for debugging.
 
 ## Scope
 
@@ -12,6 +12,7 @@ The per-case analysis is built (`backend/app/case_pipeline/`); `HOW_IT_WORKS.md`
 | `external_validation/` | Not part of this module. Runs per document; its findings reach the agent through each document's detection report. |
 | `cross_document/deterministic.py` | Part of this module. Comparisons that need no judgement run first on every analysis, one finding per difference, and are given to the agent as facts. |
 | `case_risk.py` | The only source of the score (deterministic). |
+| `adverse_media.py` | Part of the run, outside the score. A web search for recent adverse media about the company, shown to the officer as a note (`HOW_IT_WORKS.md` §3, Step 6). |
 | `additional_documents.py`, `supporting_documents.py` | Rule-based recommendations merged with the agent's requests into one list. The merged list is stored on the case (`cases.recommended_additional_documents`) when a run completes and is still the newest (the run's own result no longer carries it). Planned: the rule-based recommendations also feed the agent. |
 
 ## Step 0: per-case trigger (open parts)
@@ -54,7 +55,7 @@ Hypotheses that aren't proven are discarded: not shown, not stored, not scored. 
 - **Structured disconfirmation.** The plan fixes the refutation test and tags its check before any result is seen, so it can't be chosen to be easy to pass; code checks it ran on the named document and could have failed.
 - **Grounded evidence only.** No tool-issued citation, no conclusive verdict.
 - **Seeded categories, not a checklist:** declared activity vs observed flows, scale vs capital and age, timeline contradictions, circular or related-party flows, address and identity continuity, source-of-wealth coherence.
-- **Bounded:** at most 3 hypotheses of 4 checks; two Sonnet calls, a Haiku summary and a Haiku evidence-request call (ceiling 6 calls); planner input 30,000 characters (the code-found facts at most 5,000 of them), judge evidence 12,000, each tool result 900; output 3,000 and 2,500 tokens. No tool loop; it is a background job.
+- **Bounded:** at most 3 hypotheses of 4 checks; two Sonnet calls, a Haiku summary, a Haiku evidence-request call and the Haiku adverse-media search (ceiling 7 calls); planner input 30,000 characters (the code-found facts at most 5,000 of them), judge evidence 12,000, each tool result 900; output 3,000 and 2,500 tokens. No tool loop; it is a background job.
 
 ### Severity cap
 

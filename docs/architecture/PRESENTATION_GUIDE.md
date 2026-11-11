@@ -38,7 +38,7 @@ It runs on **Cloud Run** (Stage 1), with everything defined in **Terraform**. **
 | # | Show | Where | Point to make |
 |---|---|---|---|
 | 1 | Diagram page 1 | draw.io | Six services, one topic, no direct calls; workers are private |
-| 2 | Upload a document, approve it, run the case analysis | the frontend URL | The app behaves as before, but each step is now an event |
+| 2 | Upload a document and approve it; the case analysis starts on its own | the frontend URL | The app behaves as before, but each step is now an event |
 | 3 | Cloud Run service list | Cloud Console → Cloud Run | Each service is deployed and scaled on its own (and scales to zero) |
 | 4 | Pub/Sub subscriptions and their filters | Cloud Console → Pub/Sub | Each worker gets only its event types; failures go to the dead-letter topic |
 | 5 | The case's **Claude Cost** tab | the case page → Claude Cost | What each document and the analysis cost, from the audit trail, and how much input the prompt cache served |
@@ -57,8 +57,8 @@ It runs on **Cloud Run** (Stage 1), with everything defined in **Terraform**. **
 | **api** | via Kong | Reads, login, officer commands, uploads, live updates over WebSocket, case match | HTTP |
 | **audit-metrics** | via Kong (`/audit`) | Stores every event; serves the audit trail and per-case cost; runs the sweeper | Every event (push) |
 | **doc-worker** | private | OCR, classify, extract (LangGraph + Claude) | `document.uploaded`, `retyped`, `retry_requested`, `cancelled` |
-| **detection-worker** | private | Lead agent plus 3 specialists over 10 fraud checks; writes flags | `document.approved`, detection retry and cancel |
-| **case-worker** | private | Cross-document analysis, deterministic risk score, summary | `case.analysis.requested` |
+| **detection-worker** | private | Lead agent plus 3 specialists over 13 fraud checks; writes findings | `document.approved`, detection retry and cancel |
+| **case-worker** | private | Cross-document analysis, deterministic risk score, adverse-media search, summary | `case.analysis.requested` |
 | **Kong** | public | The single entry point: CORS, rate limits, request ids; blocks `/push` and `/metrics` | HTTP |
 
 Also deployed: the **frontend** (React build in nginx) and **Grafana**.
@@ -128,15 +128,15 @@ The UI updates live: Supabase Realtime tells api a row changed, and api pushes a
 - **All test documents are synthetic.** GLDB can't share real ones, so detection is tested on fraud we injected ourselves.
 - **Cloud Run, not Kubernetes yet** (the open question above).
 - **Some numbers are estimates:** Claude cost uses list prices, and the live Cloud Run cost is estimated. The billed row is exact but a few hours behind.
-- **The `/dashboard` page in the app is still mock data** (being built separately). The Claude Cost tab on the case page is real data but a placeholder design.
+- **The `/dashboard` page still mixes in sample data:** real cases fill in sample values where a figure isn't recorded, and with no cases it shows sample cases. The Claude Cost tab on the case page is real data but a placeholder design.
 
 ## 9. Key facts at a glance
 
 - **Region:** `asia-southeast1`. **Project:** `fyp-six-sevens`.
-- **Services:** 6 backend roles (api, audit-metrics, doc-worker, detection-worker, case-worker; ingestion runs inside api), plus Kong, the frontend and Grafana. That's 8 Cloud Run services.
+- **Services:** 5 backend roles (api, audit-metrics, doc-worker, detection-worker, case-worker; ingestion runs inside api), plus Kong, the frontend and Grafana. That's 8 Cloud Run services.
 - **Messaging:** 1 topic and 4 filtered push subscriptions, plus a dead-letter topic and a sweep every 5 minutes.
 - **Observability:** 4 Grafana dashboards and 4 alert policies.
-- **Tests:** about 1,640 backend test functions and 116 Playwright tests, run in CI on every push.
+- **Tests:** about 2,400 backend test functions (3,161 cases) and 276 Playwright tests, run in CI on every push.
 
 ## 10. The diagrams, page by page
 
@@ -191,7 +191,7 @@ Dashed arrows are data reads and writes; solid arrows are requests and events.
 
 **Page 6: CI and deploy.** The delivery pipeline.
 - **How to read it:**
-  - **Top row:** CI runs four jobs in parallel on every push and pull request: backend (lint, type checks, tests), frontend (lint, build, 116 Playwright tests), security scans (Checkov, pip-audit, npm audit, and Snyk when dependencies change) and Terraform checks. A docs-only push skips all of it.
+  - **Top row:** CI runs four jobs in parallel on every push and pull request: backend (lint, type checks, tests), frontend (lint, build, the Playwright suite), security scans (Checkov, pip-audit, npm audit, and Snyk when dependencies change) and Terraform checks. A docs-only push skips all of it.
   - **The gate:** when all four pass on a push to `main`, the deploy starts by itself. A pull request or another branch stops at CI.
   - **Bottom row:** the deploy (it can also be started by hand). Only one runs at a time, and one is never cancelled halfway. It authenticates without a stored key, builds 8 images (5 role targets of the one backend Dockerfile, plus Kong, frontend and Grafana), rolls them out workers first, then checks the gateway: pass finishes the deploy, fail rolls every service back.
 - **Point to make:** it's continuous deployment, so every green change to `main` reaches production with no manual step, and a broken deploy undoes itself. The deploy only changes images; Terraform owns everything else.

@@ -3,7 +3,7 @@
 Open test work for Sprint 6: backend unit tests (`backend/tests`), Playwright (`frontend/e2e`), Vitest, and the checks CI runs. Only open items are listed: delete one once it's done.
 
 **How it was measured:**
-- CI run `42235844107` (2026-11-06, `SCRUM-323-Sprint-5-Regression-Testing` at `405a57b`) gave the results and the line coverage;
+- CI run `42980050902` (2026-11-11, `main` at `d83a8a6`, after the agent refinements merged) gave the results and the line coverage;
 - a static scan of the test files gave the counts;
 - the failing step of the recent failed CI runs showed whether any test is flaky (none failed and then passed unchanged);
 - each gap comes from reading the code behind it.
@@ -18,14 +18,14 @@ Open test work for Sprint 6: backend unit tests (`backend/tests`), Playwright (`
 
 ## 1. Health
 
-| | 6 Nov (before the 7 Nov changes) |
+| | 11 Nov |
 |---|---|
-| Backend test functions | 2,242 in 127 files |
-| Backend cases on CI | 2,956 pass, 4 xfail |
+| Backend test functions | 2,419 in 136 files |
+| Backend cases on CI | 3,161 pass, none xfail |
 | Backend line coverage | 93% |
-| Playwright | 253 pass (248 definitions in 14 specs) |
-| Vitest | 34 in 5 files (of about 144 source files) |
-| `data-testid`s in the app | 24 |
+| Playwright | 276 pass (in 15 specs) |
+| Vitest | 36 in 8 files (of about 160 source files) |
+| `data-testid`s in the app | 27 |
 
 ## 2. Open items, highest risk first
 
@@ -48,7 +48,7 @@ The fake answers only what the repositories use (`select` with a count, `eq`, `n
 | `telemetry.record_usage` | `telemetry.py` 76% | Tokens and cost set on the exported span (only the no-usage branch runs). The exporter setup (lines 51–94) is fine to leave |
 | `cross_document/tools/comparisons.py` | 80% | Lines 131–159 |
 | `events/bus.py` | 83% | Lines 65–76, 94–103 |
-| Frontend logic | Vitest covers 5 files of about 144; no coverage tooling | `caseSearch`, `caseValidation`, `fileValidation`, `errorText`, `caseStages`, `request.ts`, `caseSocket.ts`, and hooks such as `useFieldEditing`, `useDocumentSelection`, `useFindingReviews` |
+| Frontend logic | Vitest covers 8 files of about 160; no coverage tooling | `caseSearch`, `caseValidation`, `fileValidation`, `errorText`, `caseStages`, `request.ts`, `caseSocket.ts`, and hooks such as `useFieldEditing`, `useDocumentSelection`, `useFindingReviews` |
 | Coverage gates | `pytest --cov` has no `--cov-fail-under` | The 93% can erode unnoticed |
 | Evals and load tests | | `CLAUDE.md` describes them, but none is tracked in the repo |
 

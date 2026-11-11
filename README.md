@@ -9,7 +9,7 @@ The system automates the forgery-check stage of GLDB's loan origination workflow
 - `backend/` FastAPI app. Document pipeline and detection agent run on LangGraph (`app/langgraph/`), the per-case cross-document analysis and risk scoring live in `app/case_pipeline/` (a case's risk score exists only as the output of an analysis run), with Supabase for data and file storage, and the Claude API for LLM calls.
 - `frontend/` React + TypeScript (Vite) app for officers: case upload, document review, and detection results. Live case status comes over a WebSocket.
 - `docs/regression/` regression test report.
-- `docker-compose.yml` local container setup for both services.
+- `compose.yaml` (with `deploy/compose/`) the optional local container setup of the services split.
 
 Documents at the root:
 
@@ -18,6 +18,7 @@ Documents at the root:
 - `CROSS_DOCUMENT_AND_RISK_PLAN.md` design of the per-case analysis: deterministic checks, hypotheses, verification, risk outlook and guardrails.
 - `STABILITY_AND_REFACTORING_AUDIT.md` stability findings, code smells, optimisations and technical debt, with effort estimates.
 - `backend_tests.md` state of the test suites and what to add.
+- `CLOUD_ARCHITECTURE_PLAN.md` the cloud as built, its to-do list and Stage 2.
 - `PENDING_WORK.md` open product and platform work.
 - `CLAUDE.md` project context and planned architecture (kept locally; git-ignored).
 
@@ -47,7 +48,7 @@ uv pip compile pyproject.toml --extra dev -c requirements.lock --universal --pyt
 
 Add `--upgrade` to the first command to move every package to its newest allowed release, or `--upgrade-package <name>` for one.
 
-The database is Supabase, and its schema is changed directly there; the repo keeps no SQL migration files. The backend expects these to exist:
+The database is Supabase, and its schema is changed directly there. `backend/sql/schema.sql` mirrors it by hand (it isn't a migration), and a change the live database needs comes as a dated SQL file in `backend/sql/`. The backend expects these to exist:
 
 | Object | Used for |
 |---|---|
@@ -56,6 +57,8 @@ The database is Supabase, and its schema is changed directly there; the repo kee
 | `risk_scores` and the `latest_risk_scores` view (newest row per case) | saved scores and the case list |
 | `detection_results` | each document's latest detection report, or its last error |
 | `findings` | every finding, the agents' decision and the officer's verdict, and missed issues (written through the `sync_findings` function) |
+| `review_sign_offs` | a group of findings an officer saved as reviewed |
+| `finding_feedback` | scrubbed officer verdicts and missed issues that teach the agents (read counted through the `feedback_counts` function) |
 | `case_notes` | loan officers' notes on a case or one of its documents (a reply is a row with `parent_id`); only a note's author can edit (sets `edited_at`) or delete it, and a deleted note with replies stays as a placeholder (`deleted_at`, text erased) |
 | sequence `greenlink_case_id_seq` and trigger `set_greenlink_case_id` on `cases` | readable case ids (`GLDB-<n>`); the trigger skips any id already taken |
 | `audit_events` | the audit trail: every domain event, keyed by the event's id (the service role needs `select, insert`) |
@@ -63,7 +66,7 @@ The database is Supabase, and its schema is changed directly there; the repo kee
 
 The full schema, with every grant and policy, is in `backend/sql/schema.sql`. The backend reaches the database only with `SUPABASE_SECRET_KEY` (role `service_role`, which bypasses row level security), so every table has RLS on and no policies, and `anon` and `authenticated` hold no grants: the browser never talks to Supabase. The service role holds `select, insert, update, delete` on each table, `select, insert` only on `audit_events`, and nobody holds `TRUNCATE`; it also runs the `sync_findings` and `replace_extracted_fields` functions (`grant execute ... to service_role`). A delete needs the `DELETE` privilege on the tables the backend deletes from: `documents`, `extracted_fields`, `detection_results`, `findings`, `case_notes`, `langgraph_trace`, `case_analysis_runs`, `risk_scores` and `cases` (for example `grant delete on public.case_analysis_runs to service_role;`). Without it a delete fails with Postgres error 42501 ("permission denied for table ..."). Deleting a document removes its `extracted_fields`, `findings`, `detection_results`, `case_notes` and `langgraph_trace` rows (by cascade) and its stored file; deleting a case removes its documents, then (by cascade) its `risk_scores`, `case_analysis_runs`, `findings` and `case_notes` rows. On `case_notes` the service role needs `select, insert, delete` and `update (body, edited_at, deleted_at, case_id)`: an author's edit, a deleted note kept as a placeholder above its replies, and a moved document taking its notes to the new case. Every table keyed by a document or a case cascades from it in the database; the backend removes only the stored files and the cross-document findings resting on a deleted document. `audit_events` is never deleted. Deleting one document leaves the case's analysis runs and scores in place; the run is marked out of date.
 
-A case's status lives in the existing `cases.status` column (see `CaseStage` in `backend/app/models.py`); at startup the api moves every case to its current status, so cases still at an older status name catch up. The stage is derived from the case's documents and analysis, so no history is stored.
+A case's status lives in the existing `cases.status` column (see `CaseStage` in `backend/app/models.py`); at startup the api recomputes every case's stage (`case_stage.sync_all_cases`), so a case that changed while the backend was down catches up. The stage is derived from the case's documents and analysis, so no history is stored.
 
 `exiftool` should be on the `PATH`; without it the metadata checks report that they could not run. Every setting and its default is in `HOW_IT_WORKS.md` §7, including the public-registry keys (a registry check that can't run is skipped, never a finding) and `CASE_ANALYSIS_ENABLED`. `python -m scripts.build_land_use_index` builds the URA zoning index ahead of time. The backend logs one `perf` line per request, snapshot and background job (§8).
 
@@ -107,7 +110,7 @@ pytest
 
 Tests never call real Supabase or Claude. `tests/conftest.py` blocks both, so a test that tries to reach them fails.
 
-Regression tests are tagged by sprint: `pytest -m sprint1` (also `sprint2`, `sprint3`).
+Regression tests are tagged by sprint: `pytest -m sprint1` (up to `sprint5`).
 
 Frontend lint, build and end-to-end tests (from `frontend/`):
 
@@ -117,7 +120,7 @@ npm run build
 npm run test:e2e
 ```
 
-The Playwright suite runs against a mocked backend (`frontend/e2e/support/mockBackend.ts`). Sprint filters: `npm run test:e2e:sprint1` and `:sprint2`.
+The Playwright suite runs against a mocked backend (`frontend/e2e/support/mockBackend.ts`). Sprint filters: `npm run test:e2e:sprint1` (up to `:sprint5`).
 
 ## GitHub Actions
 

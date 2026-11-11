@@ -2,14 +2,14 @@
 
 What is fragile, what will fail under load or a retry, and what the many merges left behind: code smells, cleanup, optimisations and technical debt across `backend/app`, `frontend/src` and the deployment (`deploy/`, `.github/workflows`). Tests are in `backend_tests.md`; product work is in `PENDING_WORK.md`.
 
-Severity (stability findings): Medium or Low. Effort: S (minutes), M (an hour or two), L (a day or more). Read from the code and static checks (ruff, pyright, tsc, eslint) on `main`; reviewed 2026-10-22 and 2026-10-29, updated 2026-11-07. Nothing was profiled against production data. Only open items are listed: delete one once it's done.
+Severity (stability findings): Medium or Low. Effort: S (minutes), M (an hour or two), L (a day or more). Read from the code and static checks (ruff, pyright, tsc, eslint) on `main`; reviewed 2026-10-22 and 2026-10-29, updated 2026-11-11. Nothing was profiled against production data. Only open items are listed: delete one once it's done.
 
 ## Where we are
 
 | | |
 |---|---|
-| Backend | 50,500 lines in 217 files under `app/` (4,400 of them in `injection/`); 64 route handlers |
-| Frontend | 15,900 lines of TS/TSX in 118 files (not counting `api.gen.ts`); 8,500 lines of CSS in 19 files |
+| Backend | 54,500 lines in 242 files under `app/` (4,400 of them in `injection/`); 69 route handlers |
+| Frontend | 22,100 lines of TS/TSX in 160 files (not counting `api.gen.ts`); 11,900 lines of CSS in 22 files |
 | Deployment | Terraform 1,000 lines in 11 files, 2 workflows, 8 compose files, Kong and Grafana images |
 | Tests | see `backend_tests.md` section 1 |
 | Backend gates | ruff and pyright clean on `app/`, 0 `type: ignore`, 15 `noqa` |
@@ -47,7 +47,7 @@ Measured on 2026-11-07 from Supabase's API logs (`edge_logs`, read-only, ids and
 ## 3. Duplicated code
 
 **Frontend**
-1. **The risk scale is written per hue, not by meaning.** Every colour is a token (`styles/tokens.css`), but "medium risk" is still `--orange-92`, `--orange-27` and the like in each file. Semantic tokens (`--risk-medium-bg`, `--risk-medium-text`, ...) would let the whole scale change in one place. Do it when the risk cards are restyled. S
+1. **The risk scale is only partly written by meaning.** Semantic tokens exist (`--risk-medium-tint`, `--risk-medium-text`, ... in `styles/tokens.css`), but only 4 files use them; the rest still style risk with hue tokens such as `--orange-92` and `--orange-27`, which also serve non-risk uses. Move the risk styling over when the risk cards are restyled. S
 
 **Deployment**
 2. **Four Cloud Run definitions repeat the same blocks** (scaling, resources, `lifecycle`, the collector sidecar): `run.tf` (roles, Kong, frontend) and `observability.tf` (Grafana). Kong's collector duplicates the roles' dynamic block. A local module would shrink this, but it isn't worth it before Stage 2 replaces Cloud Run with Helm charts. M, low priority
@@ -57,7 +57,7 @@ Measured on 2026-11-07 from Supabase's API logs (`edge_logs`, read-only, ids and
 **Backend**
 1. **Private helpers shared across packages.** `case_pipeline/*` (6 modules), `dates/date_anomalies.py`, `giro.py`, the `reference_checks` and two `registry_lookups` modules import `_as_number`, `_rows`, `_parse_field_date` (and `_money`, `_CURRENCY_WORDS`, `_fields_by_name`, …) from `fraud_detection/numerical_validation/common.py`. Those are a public field-value API in practice: make them public in `fraud_detection/shared/field_values.py`, as `decode_field_value` already is. Similarly, `field_checks/*` and `tool_timeout.py` import `_result` and `_with_ids` from `detection/tools.py`. M
 2. **`case_service.py` (674 lines) mixes jobs:** the documents-status rollup, pass-throughs (`get_case`, `create_case`, `update_case`), and the snapshot builder with its caches. The required-documents rules are split across `models.py`, `case_service.py` and `mapper.py`. M
-3. **`models.py` (1,006 lines)** mixes enums and business rules, API schemas, and risk models that have a twin in `case_pipeline/models.py`. M
+3. **`models.py` (1,084 lines)** mixes enums and business rules, API schemas, and risk models that have a twin in `case_pipeline/models.py`. M
 4. **Blocking calls in routers without the 502 wrapper.** A Supabase error at these becomes a bare 500 with no log line, instead of `to_thread_or_502` / `bad_gateway_on_error`'s logged 502: `cases.py` (the summary re-read in `update_case`); `detection.py` (`langgraph_trace.resume`, and `list_documents` in the company-name check); `upload.py` (the case lookup in single and bulk upload). S
 5. **`metadata_tool` blocks the event loop:** it calls the synchronous `check_metadata_anomalies` inside an `async` function (the other tools use `asyncio.to_thread`) (`langgraph/detection/tools.py`). S
 
@@ -96,9 +96,7 @@ The database was wiped on 2026-10-31 and the fallbacks for older rows were remov
 - `detection_report.read_report`: defaults for keys a report lacks (a run that stopped partway, or a later schema change).
 - `services/uploadService/documentStatus.ts`: `approved` is read as about to scan, skipped (no type) or failed, all live states.
 
-**To decide** (likely dead since the wipe):
-- `frontend/src/pages/document-details/fieldDisplay.ts` ("Fallback for older/simple extracted-field data") accepts a bare value where the API now always sends `{id, value, confidence}`. Confirm against `GET /documents/{id}`, then delete the branch.
-- `README.md` says at startup "cases still at an older status name catch up" (`case_stage.sync_all_cases`). The sync is still needed to correct stages after any code change, but the wording, and any mapping of old status names, can go if none remains.
+**To decide** (likely dead since the wipe): `frontend/src/pages/document-details/fieldDisplay.ts` ("Fallback for older/simple extracted-field data") accepts a bare value where the API now always sends `{id, value, confidence}`. Confirm against `GET /documents/{id}`, then delete the branch.
 
 **Rule from here on:** a new stored field gets a default in the model that the old rows read correctly, and an entry here naming the fallback, so it can be removed once the old rows are gone.
 
@@ -106,17 +104,15 @@ The database was wiped on 2026-10-31 and the fallbacks for older rows were remov
 
 Found by the size and coupling in a code graph (2026-11-05), not by reading the code. Each needs a real review before it counts as a problem.
 
-- **`case_report.py`:** 1,298 lines and 88 symbols, and it depends on 17 other files. It's about twice the size of `case_service.py`, so it's the best candidate for a real review.
-- **`DocumentDetailsPage.tsx` and `UploadPage.tsx`:** 712 and 510 lines, and each depends on 36–37 files.
+- **`DocumentDetailsPage.tsx` and `UploadPage.tsx`:** 716 and 530 lines, and each depends on 36–37 files.
 - **`routers/detection.py`:** it depends on 33 files, a lot for a router. `documents.py` was split into a service for the same reason.
 - **`_finding`:** defined in 7 files. The copies haven't been compared.
-- **`FRAUD_DETECTION_MAP.md` section 6:** row 1 describes parsing the lead's JSON, but the lead now returns a structured `LeadPlan`; the other rows haven't been re-checked since 2026-10-24.
 
 ## Suggested order
 
 1. **Quick wins:** the 502 wrappers (4.4) and `metadata_tool` off the event loop (4.5), both S.
 2. **Merge the two Supabase clients** (1.4).
 3. **Public field-value helpers** (4.1).
-4. **Decide the two compatibility leftovers** (7).
+4. **Decide the compatibility leftover** (7).
 5. **Content-guard override** (1.1), when the officer-facing work is next.
 6. **Semantic risk tokens** (3.1), when the risk cards are restyled.

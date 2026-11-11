@@ -57,7 +57,7 @@ terraform apply
 - An image the commit already has isn't rebuilt; unchanged layers come from the registry cache (`buildcache:<image>`). A change under `backend/app` rebuilds the zoning index (about a minute).
 - When only the deploy job failed and no code changed, use **"Re-run failed jobs"**: it reuses the built images.
 - If the gateway check fails, every service goes back to the revision that was serving before; the failing `expect` line says which check failed.
-- After a deploy: open the frontend, log in with an `AUTH_USERS` account, create a case, upload, approve, run the analysis, and read `GET <Kong URL>/audit/events?case_id=<id>`.
+- After a deploy: open the frontend, log in with an `AUTH_USERS` account, create a case, upload, approve, wait for the analysis to start on its own, and read `GET <Kong URL>/audit/events?case_id=<id>`.
 
 A changed secret reaches a service on its next revision (the next deploy, or `gcloud run services update <service> --region asia-southeast1`). Sizes, scaling, environment and secrets change here, never in the workflow.
 

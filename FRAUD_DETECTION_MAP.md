@@ -1,6 +1,6 @@
 # Fraud Detection: Implementation Map
 
-Where detection logic lives and how it is wired. Updated 2026-10-19. Behaviour in plain language is in `HOW_IT_WORKS.md`; the per-case analysis design is in `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
+Where detection logic lives and how it is wired. Updated 2026-11-11. Behaviour in plain language is in `HOW_IT_WORKS.md`; the per-case analysis design is in `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 
 ## 0. Summary
 
@@ -9,7 +9,7 @@ Detection runs in the background once a loan officer approves a document. Nothin
 1. **Lead briefs.** An LLM reads the document's type and writes each specialist a one-sentence brief.
 2. **Specialists, in parallel.** All three always review the document. Each is a small LLM loop: it chooses which of its own tools to run, reads the results, and gives each finding a severity and rationale, or dismisses it as a false positive (a correct proper noun the dictionary doesn't know). Dismissed findings are left out of the report the lead sees; the raw tool output stays on the trace. The tools do the checks; the LLM never computes the numbers.
 3. **Lead review.** The lead reads the reports and may ask ONE other specialist to double-check ONE uncertain finding, at most once per run.
-4. **Merge.** Plain code combines the findings into one report with a verdict (`flagged`, `inconclusive`, `clean`), stored on the document's LangGraph trace (not the `documents` table, so the large trace loads only when needed).
+4. **Merge.** Plain code combines the findings into one report with a verdict (`flagged`, `inconclusive`, `clean`), stored in `detection_results` and on the document's LangGraph trace (not the `documents` table, so the large report loads only when needed).
 5. **Individual checks.** An officer can re-run one check from the panel, only after a full run has produced a report.
 
 **Findings.** After the report is saved, code fingerprints every finding a tool returned (`app/finding_keys.py`) and writes them all, kept and dismissed, to the `findings` table (`app/findings_repository.py`, one transaction), replacing the previous run's findings and their verdicts, before the document becomes `detected`. A failed write is recorded on the trace as `findings_error` and does not fail the run. **Rerun and cancel:** an officer can cancel a run in flight or still waiting for a worker, and run detection again after a cancelled or failed run or over a finished report; a rerun that doesn't finish leaves the earlier report standing (the document returns to `detected`, and the report says the last run didn't finish).
@@ -30,7 +30,8 @@ An approved "Other" (unrecognised) document is scanned like any other. Checks th
 | `pages/` | Cross-page consistency of one multi-page document, no model calls: `PAGE.NUMBERING` (gaps, repeats, reordering in "Page x of y"), `PAGE.CARRY_FORWARD` (carry lines vs each other and their page; quiet where the rows break, which `BS.RUNNING_BALANCE` reports), `PAGE.HEADER_IDENTITY` (account number, holder, UEN the same on every page; periods not compared), `PAGE.SOURCE` (other page size, or a scan among digital pages; a signal), `PAGE.DUPLICATE`. Evidence about one page or boundary is merged into one finding. `page_view.py` reads each page and places transaction rows on pages. Test defects (delete, duplicate, swap a page, edit a carry line) are in `app/injection/page_defects.py` |
 | `images/` | `image_manipulation.py` (resolution and compression mismatches; `check_image_tampering`: overlay, scaling, visible boundary, quality mismatch) and `image_integrity.py` |
 | `external_validation/` | The document's facts against outside references. `runner.py` is the entry point; `registry_lookups/` holds the live ACRA, OneMap, HDB, URA (approved residential use, Master Plan zoning index) and MOM lookups; `sg_reference/` the published tables (CPF, GST, IRAS, bank identifiers, public holidays); `reference_checks/` the checks over them (`PAY.CPF_RATE`, `PAY.CPF_CEILING`, `PAY.CPF_BASE`, `POA.GST`, `NOA.PAYABLE`, `BS.BANK_IDENTIFIERS`, `BS.ACCOUNT_NUMBER_FORMAT`); `giro.py` the GIRO closed-day check |
-| `shared/` | Not checks: `field_values.py`, `field_catalogue.py` (what specialists see of the fields), `pdf_pages.py` |
+| `shared/` | Not checks: `check_result.py` (the base every check result inherits), `field_values.py`, `field_catalogue.py` (what specialists see of the fields), `file_facts.py` (the file's kind, pages, text layer and images, for the lead and the specialists), `pdf_pages.py` |
+| `app/guardrails/` | Not under `fraud_detection/`: `content_guard.py` (hidden text and prompt injection, scanned at ingest and reported by the two tools of the same name), `envelope.py` (fencing document text as data), `leak_check.py` |
 
 The three `PAY.CPF_*` checks share one assessment (`reference_checks/cpf.py`), so a wrong contribution is reported once: `CPF_CEILING` (ceiling not applied, impossible), `CPF_BASE` (rate applied to basic pay only, inconsistent), `CPF_RATE` (anything else). Earnings are split into ordinary, additional (bonus) and non-wages; a line that can't be classified, or a negative adjustment, is uncertain and any reading of it is accepted.
 
@@ -43,13 +44,13 @@ The three `PAY.CPF_*` checks share one assessment (`reference_checks/cpf.py`), s
 | `REG.RESIDENTIAL_ADDRESS` | a home that can't be lived in: no flats, industrial zone, or a unit URA doesn't approve | inconsistent / implausible / signal |
 | `REG.COMPANY_ADDRESS_RESIDENTIAL` | company registered at a home (Home Office Schemes allow it) | signal |
 | `REG.UNIT_STOREY` | HDB unit above the block's top storey | impossible |
-| `REG.UNIT_MISSING` | home in flats or a condo with no unit number, or one that couldn't be read | skipped check, not a finding |
+| `REG.UNIT_MISSING` | home in flats or a condo with no unit number, or one the parser couldn't read; the reason says which (`ura.names_a_unit`), so an unread unit is never reported as missing | skipped check, not a finding |
 
 Zoning comes from a local index (`land_use.py`, about 12 MB) built from a 175 MB data.gov.sg file when the Docker image is built. Without it, zoning is skipped and the startup log says so.
 
 **Addresses** compare after `cross_document/address_matching.normalize_address`: "Block 50, Tuas Avenue 11, Floor 01, Unit 30, Singapore 639107", "50 TUAS AVENUE 11, #01-30, SINGAPORE 639107" and "Blk 50 … Unit 01-30 S639107" are one address (floor and unit forms, block, abbreviations, leading zeros); a different unit, floor, block or postal code still differs.
 
-**`case_match.py`** is the upload check, not a fraud signal: it verifies each case document's company and individuals against the certificate of incumbency (UEN, name and ID matching), so a document from another case is caught and sent to manual review. It is separate from the cross-document analysis; both build their comparable keys from `identifiers.py`. Reports stored before person comparison moved to the case analysis may still carry `case_identity_match` findings; they still display and score.
+**`case_match.py`** is the upload check, not a fraud signal: it verifies each case document's company and individuals against the certificate of incumbency (UEN, name and ID matching), so a document from another case is caught and sent to manual review. It is separate from the cross-document analysis; both build their comparable keys from `identifiers.py`.
 
 ## 1B. Case pipeline: `backend/app/case_pipeline/`
 
@@ -65,6 +66,9 @@ Runs per case, on its own once every document is decided and every approved one 
 | `cross_document/evidence.py` | The case as the analysis sees it: dossier (protected fields removed), masked identifiers, the ledger of every ref id issued in a run, the model-call counter |
 | `cross_document/bias.py` | What the analysis may never reason from: protected field names and the text patterns for them. Used by the dossier, tools, hypothesis screen and verifier. The one exception is code: `deterministic.py` compares date of birth, race, sex and nationality, and those findings are withheld from every model (`withhold_if_protected`) |
 | `cross_document/agents.py`, `graph.py`, `verify.py` | Plan (at most 3 hypotheses, each with the checks to run), run the checks (code), judge all in one call, verify each verdict in code. Two Sonnet calls at effort `medium`, each retried once if the reply calls no tool (`MAX_MODEL_CALLS_PER_RUN` 4); tool choice is left to the model (Sonnet 5.5 rejects a forced one) and the judge's tool is strict. One cached system prompt. `verify.plain_text` strips tool names, flags and ref ids from the judge's wording |
+| `cross_document/leads.py` | `lead:` lines in the dossier: where a detection finding's figure should also appear on another document |
+| `cross_document/feedback.py` | Officer feedback from other cases for the planner and the judge (no false alarms) |
+| `adverse_media.py` | The web search for recent adverse media about the company, alongside the run. Never a finding, never scored |
 | `cross_document/tools/` | Read-only evidence tools: `reading.py`, `transactions.py` (repeated payments, card usage, recurring payments), `comparisons.py` (including `compare_linked_people`), `consistency.py` |
 | `cross_document/company_identity.py`, `address_matching.py` | The strict company-name and address matching behind the consistency tools |
 | `risk/case_risk.py` | Deterministic score, level and findings; called only by an analysis run. The same check with the same stated value on several documents scores once (`repeat_of` / `also_on`); Critical counts only documents whose high finding scores |
@@ -80,29 +84,30 @@ Shared: `app/identifiers.py` is a leaf module (it imports neither `case_match` n
 
 ## 2. Detection Agent: files
 
-- **`langgraph/detection/tools.py`**: 8 tools (font, layout, spelling, date, metadata, image manipulation, image tampering, AI generation) plus the 2 field-driven ones below, so 10 in all; each a thin adapter onto a check in `fraud_detection/`. Every tool returns `{tool, unable_to_assess, reason, findings, truncated}`; findings are capped at 15 per tool, each with a `<tool>-<n>` id, a `summary`, and the tool's own `severity_hint` kept apart from the specialist's `info/low/medium/high`. The metadata tool reads the document with `include_metadata=True`; nothing else loads the exiftool blob.
+- **`langgraph/detection/tools.py`**: 11 tools (hidden text, font, layout, spelling, page consistency, date, metadata, prompt injection, image manipulation, image tampering, AI generation) plus the 2 field-driven ones below, so 13 in all; each a thin adapter onto a check in `fraud_detection/`. Every tool returns `{tool, unable_to_assess, reason, findings, truncated}`; findings are capped at 15 per tool, each with a `<tool>-<n>` id, a `summary`, and the tool's own `severity_hint` kept apart from the specialist's `info/low/medium/high`. The metadata tool reads the document with `include_metadata=True`; nothing else loads the exiftool blob.
   - The field-driven checks (`langgraph/detection/field_checks/`): `numerical_checks_tool` (calculations on the document's own figures) and `external_validation_tool` (facts against outside references). Both take a `bindings` argument the specialist fills from the field list and check menus, and a document type injected from run state that the agent never sees; the type alone decides which checks run, and one with unbound roles is skipped with the reason. A lookup in a static table or live source is external; a calculation is numerical (`group=` on `@check`). `binder.py` is the one-call binder used only by the officer endpoints.
   - Company-name and address consistency are cross-document checks (`cross_document/tools/consistency.py`), attached to no specialist.
 - **`specialists.py`**: the three specialists, each a tool-calling loop (agent, tools, collect).
-  - Layout & Rendering: font consistency, layout anomalies, image manipulation, image tampering.
+  - Layout & Rendering: hidden text (run before its first turn), font consistency, layout anomalies, image manipulation, image tampering.
   - Content Validation: spelling, date consistency, page consistency, `numerical_checks_tool`, `external_validation_tool`; its prompt also lists the document's fields and the two check menus.
-  - Digital Authenticity: metadata, AI generation.
+  - Digital Authenticity: prompt injection (run before its first turn), metadata, AI generation.
   A finding the LLM doesn't assess is kept at `medium` with `ai_accepted: false`; one it assessed and kept has `ai_accepted: true`. A tool with a severity floor (`_MIN_SEVERITY_BY_TOOL`) keeps that floor even when dismissed. Every finding is stored, kept and dismissed (`findings.agent_decision`); the case list counts the accepted ones.
 - **Per-run fetch cache (`tools.py`)**: the document row, its fields and its file are each fetched once per run. The cache holds the in-flight fetch, so parallel specialists share one; a failed fetch is dropped and retried. `load_context` primes it.
 - **`graph.py`**: the lead graph, the merge into a verdict, the lead's prompts, and `run_detection()`.
+- **`feedback.py`**: officer feedback from other cases, read once per specialist and appended to each tool result for the check codes it fired (`HOW_IT_WORKS.md`, "Learning from officers' verdicts").
 - **`findings_repository.py`**: builds `findings` rows from a report or a case analysis and syncs them; officers' verdicts and missed issues. **`finding_keys.py`**: the fingerprints.
 
 ## 2A. Wiring reference
 
 ### Entry point (`run_detection(document_id)`)
 
-1. `trace.resume`, record `detection_start`, mark the document `detecting`.
+1. `trace.resume`, record `detection_start`. The detection worker has already claimed the document as `detecting` (compare-and-swap, `workers/detection.py`).
 2. Invoke the cached graph with `recursion_limit=40`.
 3. `finally`: drop the per-run fetch cache.
 4. On any exception: save the error (`detection_results`), end the run (`end_unfinished_run`: back to `approved`, or to `detected` when an earlier report stands), re-raise. A cancel is recorded by the detection worker instead.
 5. On success, in order: save the report (`detection_results`), store the findings, mark `detected`. The report is saved before the status changes, so a snapshot never shows "detected" without a report.
 
-`_run_detection_task` holds a semaphore (`DETECTION_CONCURRENCY`, default 2), so a bulk approval queues the rest.
+The detection worker holds a semaphore (`_slots`, `DETECTION_CONCURRENCY`, default 2), so a bulk approval queues the rest.
 
 `DetectionState`: `document_id`; `context` (set by `load_context`: type, filename, field names, extension, metadata flag; the lead gets no field values); `plan` (one brief per specialist); `reports` (the `operator.add` reducer appends parallel writes); `second_look_used` (enforces "once"); `second_look`; `lead_summary`; `result` (the merged report, flag-eligible findings carrying `flag_id`); `case_id` (kept out of `context` so it isn't in the lead's prompt).
 
@@ -125,11 +130,12 @@ load_context ──► lead_plan ──(Send x 3)──► specialist ──► 
 
 ### Specialist subgraph
 
-Each is compiled once and cached. `agent → (tool calls ? tools : collect)`, `tools → agent`, `collect → END`.
+Each is compiled once and cached. `agent → (tool calls ? tools : collect)`, `tools → feedback → agent`, `collect → END`.
 
-- **`agent`**: Haiku, max 4096 tokens, `bind_tools` with that specialist's tools only, at most `_MAX_TOOL_ROUNDS = 3` rounds. The first turn's system message has two blocks: the static prompt (`cache_control: ephemeral`) and the dynamic one (type and brief); it runs through `cache_gate` under `detection_specialist:<name>`. Later turns are not gated.
+- **`agent`**: Haiku, max 6144 tokens, `bind_tools` with that specialist's tools only, at most `_MAX_TOOL_ROUNDS = 3` rounds, then one wrap-up turn that can't call a tool. A specialist with a `first_tool` (hidden text, prompt injection) has it run before its first turn, and the first turn must call a tool. The first turn's system message has two blocks: the static prompt (`cache_control: ephemeral`) and the dynamic one (type, file facts, brief); it runs through `cache_gate` under `detection_specialist:<name>`. Later turns are not gated.
+- **`feedback`**: appends officer feedback to the new tool results (`detection/feedback.py`).
 - **`tools`**: `ToolNode(handle_tool_errors=True)`; a raising tool returns an error string.
-- **`collect`**: tools called (duplicates included); `unable_to_assess` from results so marked or not JSON; findings keyed by id (a repeated id overwrites the earlier one); the final message is parsed as JSON. An assessment with `dismiss: true` moves the finding to `dismissed` with its reason; others take the severity and rationale; an unassessed finding gets `medium` and "Not assessed by the specialist." `uncertain` is true if the model said so, the JSON didn't parse, or no tool ran. If the specialist runs out of steps it is reported uncertain rather than failing the run (recursion limit 12, behind the 3-round limit).
+- **`collect`**: tools called (duplicates included); `unable_to_assess` from results so marked or not JSON; findings keyed by id (a repeated id overwrites the earlier one); the final message is parsed as JSON. An assessment with `dismiss: true` moves the finding to `dismissed` with its reason; others take the severity and rationale; an unassessed finding gets `medium` and "Not assessed by the specialist." `uncertain` is true if the model said so, the JSON didn't parse, or no tool ran. If the specialist runs out of steps it is reported uncertain rather than failing the run (recursion limit 16, behind the 3-round limit).
 
 ### Lead model call (`_ask_lead`)
 
@@ -174,12 +180,12 @@ Trace writes are coalesced: at most one write per document is queued and it save
 - `GET /documents/{id}/detection/{font-consistency, layout-anomalies, image-manipulation, image-tampering, image-integrity, spelling-anomaly, numerical-validation, external-validation, date-anomalies, metadata-anomaly}`: individual checks, gated by `_require_detection_has_run` (409 until a `detection_report` exists). Numerical and external validation each use one Haiku call to bind the inputs (`field_checks/binder.py`).
 - `GET /documents/{id}/detection/report`: 200 with the report; 502 if the last run recorded an error and produced none; 404 if no run has happened.
 - `POST /documents/{id}/detection/cancel`: cancels a run in progress (409 if none).
-- `POST /documents/{id}/detection/retry`: only after a failed or cancelled run (409 otherwise).
+- `POST /documents/{id}/detection/retry`: "Run detection again" on an approved or detected document with a type; 409 while a run is in progress or queued.
 - `GET /documents/{id}/detection/case-match`: ungated, wraps `case_service`.
 - `GET /cases/{case_id}/detection/reports`: all stored reports for a case.
 - `POST /cases/{case_id}/analysis/run`, `GET /cases/{case_id}/analysis`: the per-case analysis (§1B).
 
-There is no `POST /detection/run`: the first run starts only on approval (`approve_document` → `_launch_detection`).
+There is no `POST /detection/run`: the first run starts only on approval (`document_service.approve` publishes `document.approved`; the detection worker runs it).
 
 ## 4. Frontend
 
@@ -188,22 +194,21 @@ There is no `POST /detection/run`: the first run starts only on approval (`appro
 
 ## 5. Tests
 
-Each check module has its own test file under `backend/tests/`; `test_detection.py` covers the endpoints and `test_detection_tools.py` the tool contract. Not tested: the lead plan, the merge into a verdict, the second-look rules and specialist report collection. See `backend_tests.md` for the suite as a whole.
+Each check module has its own test file under `backend/tests/`; `test_detection.py` covers the endpoints, `test_detection_tools.py` the tool contract, `test_detection_verdict.py` the merge into a verdict, and several files the specialist's report collection (`_collect_node`). Not tested directly: the lead plan (`_normalise_plan`) and the second-look rules (`_validated_second_look`). See `backend_tests.md` for the suite as a whole.
 
 ## 6. Known bugs: Detection Agent
 
-Found by reading the code (2026-10-05); re-checked 2026-10-24. None has been reproduced in the app. Remove a row once it's fixed.
+Found by reading the code (2026-10-05); re-checked 2026-11-11. None has been reproduced in the app. Remove a row once it's fixed.
 
 | # | Severity | Where | What happens |
 |---|---|---|---|
-| 1 | Low | `graph.py` `_normalise_plan` | If the lead's JSON can't be parsed, every specialist runs with the generic brief and nothing records the lead's failure |
+| 1 | Low | `graph.py` `_ask_lead`, `_normalise_plan` | If the lead's call fails, every specialist runs with the generic brief and the failure is only logged, not recorded on the trace (an unreadable reply is recorded by `validate`) |
 | 2 | Medium (local only) | `routers/detection.py` cancel/retry, `DetectionPanel.tsx` | If a run is lost mid-scan (`detecting`) before recording an error, cancel only asks a worker that no longer has it, and retry returns 409 (a run lost while still queued can be cancelled). In the cloud the sweeper recovers a document `detecting` for over 15 minutes; locally (uvicorn, sweeper off) the panel shows "Scanning…" until `python -m app.sweeper --once --case <id>` is run |
-| 3 | Medium–High | `specialists.py` `_collect_node`, merge | An unassessed finding becomes `medium` and can flag a document and count towards case risk ("unreviewed"); it is no longer stored as a flag |
+| 3 | Medium–High | `specialists.py` `_collect_node`, merge | An unassessed finding becomes `medium` and can flag a document and count towards case risk ("unreviewed"); it is stored with `agent_decision` `not_assessed` |
 | 4 | Medium | `tools.py` `metadata_tool` | Calls the synchronous `check_metadata_anomalies` inside an `async` function, blocking the event loop while it runs (the other tools use `asyncio.to_thread`) |
 | 5 | Medium | `tools.py` `_with_ids`, `specialists.py` `_collect_node` | Finding ids are numbered per tool call; if a specialist calls the same tool twice, `_collect_node` keys by id and silently overwrites the first, and the second-look lookup assumes unique ids |
-| 7 | Low | `specialists.py` `_collect_node` | `uncertain` is set whenever no tool ran, even when the specialist correctly judged none applicable; the lead may read that as doubt about the document |
 
-Design questions: a second look can only raise severity (the merge keeps the highest), so it can never clear a finding; "call each tool at most once" is in the prompt but not enforced; a wrongly dismissed finding disappears from the lead's view and the report (the raw output stays on the trace and the panel lists each dismissal with its reason). Check how often real documents get dismissals before trusting this.
+Design questions: "call each tool at most once" is in the prompt but not enforced; a wrongly dismissed finding disappears from the lead's view and the report (the raw output stays on the trace and the panel lists each dismissal with its reason). Check how often real documents get dismissals before trusting this.
 
 ## 7. Synthetic fraud data: `backend/app/injection/`
 

@@ -1,6 +1,6 @@
 # Cloud architecture
 
-How the backend is split into services on Google Cloud, the decisions behind it, and what's left to do. Updated 2026-10-24. Deadline: mid-November 2026.
+How the backend is split into services on Google Cloud, the decisions behind it, and what's left to do. Updated 2026-11-11. Deadline: mid-November 2026.
 
 **Where it stands:** Stage 1 runs on Cloud Run in project `fyp-six-sevens` (`asia-southeast1`). It was first deployed on 2026-10-22, and since 2026-10-24 every push to `main` deploys automatically once CI passes. There is one GCP project and one Supabase project, shared by local runs and the cloud; a staging environment is planned (section 9). Stage 2 (section 10) adds staging, load and failure tests, and a Helm chart that lets the same services run on a bank's own Kubernetes platform.
 
@@ -31,8 +31,8 @@ The award requirement is a *genuinely* decoupled architecture, not a monolith on
 |---|---|---|---|---|
 | **api** | via Kong | HTTP | Reads, login, officer commands (publish events), uploads (ingestion lives here), WebSocket live updates, case match, notes | 1 CPU, 1 GiB, max 3 |
 | **doc-worker** | no | `document.uploaded`, `retyped`, `retry_requested`, `cancelled`; its recoveries | OCR, classify, extract, reclassify loop | 2 CPU, 4 GiB, 2 at once, max 3 |
-| **detection-worker** | no | `document.approved`, detection retry and cancel; its recoveries | Lead agent, 3 specialists, 10 checks, findings | 2 CPU, 4 GiB, 2 at once, max 3; carries the zoning index |
-| **case-worker** | no | `case.analysis.requested`; its recoveries | Cross-document analysis, deterministic risk score, summary | 1 CPU, 2 GiB, max 2 |
+| **detection-worker** | no | `document.approved`, detection retry and cancel; its recoveries | Lead agent, 3 specialists, 13 checks, findings | 2 CPU, 4 GiB, 2 at once, max 3; carries the zoning index |
+| **case-worker** | no | `case.analysis.requested`; its recoveries | Cross-document analysis, deterministic risk score, summary, adverse-media web search (Claude's server-side tool) | 1 CPU, 2 GiB, max 2 |
 | **audit-metrics** | via Kong (`/audit`) | every event | Stores each event in `audit_events`; serves the audit trail and per-case cost; runs the sweeper | 1 CPU, 1 GiB, max 2 |
 | **kong** | public | HTTP | The single entry point (section 4) | |
 | **frontend** | public | HTTP | Static React build in nginx; Kong's URL is baked in at build | |
@@ -118,11 +118,11 @@ Terraform owns everything else about a service (`deploy/terraform`); `apply` is 
 **Stage 1**
 - **Failure tests** (a deliverable): kill a worker mid-run (redelivered, the document recovers); flood uploads (scale out, the queue drains); stop audit-metrics (events wait, then catch up); a poison message goes to the dead-letter topic without blocking; a lost publish (set a document to `queued` without publishing; the sweeper recovers it and the audit trail shows `recovery.requested` then `document.recovered`).
 - **Shared Anthropic rate budget** across instances: today each instance caps itself (max instances times concurrency).
-- **A Kong config test in CI:** the rendered `kong.yml` in front of stub upstreams (routes, CORS, rate limits, WebSocket upgrade). See `backend_tests.md` section 2.9 for the other missing infrastructure checks.
+- **A Kong config test in CI:** the rendered `kong.yml` in front of stub upstreams (routes, CORS, rate limits, WebSocket upgrade). See `backend_tests.md` section 2.5 for the other missing infrastructure checks.
 - **Optional:** ingestion out of api; the frontend reading Kong's URL at runtime (needed for staging anyway).
 
 **Staging** (planned, not started). A second GCP project (`fyp-six-sevens-staging`) and a second free Supabase project, run by the same Terraform with a second variables file and state. Rejected: suffixing every resource in one project (shared IAM, easy to cross-wire) and tagged Cloud Run revisions (same database and topic).
-1. **Schema as code:** dump production's schema into `supabase/migrations/` (read-only, with the user's go-ahead); from then on schema changes are migrations, staging first. The repo has no SQL today.
+1. **Schema as code:** dump production's schema into `supabase/migrations/` (read-only, with the user's go-ahead); from then on schema changes are migrations, staging first. Today the repo keeps only a hand-made mirror (`backend/sql/schema.sql`) and dated change files.
 2. **Frontend runtime config:** nginx writes `/config.js` from an environment variable, so one image serves both environments.
 3. **Terraform:** an `environment` variable and `staging.tfvars` / `production.tfvars` (staging: min 0, smaller max, lower budget, alerts and billing export optional). Workload Identity's condition also requires the GitHub environment, so only an approved job gets a production token (this also clears Checkov's CKV_GCP_125 skip).
 4. **Create the project** (a billing admin links it), apply Terraform and the migrations, fill staging's secrets (`AUTH_USERS`, token key; **no Anthropic key**), give staging's Cloud Run agent read access to production's Artifact Registry so both run the same images.
@@ -180,7 +180,7 @@ Cost: about $0 idle and cents per merge or night (Cloud Run and Supabase only; n
 - **Kong** is a single entry point: a wrong `Host` or CORS rule breaks the whole frontend; test with compose first.
 - **One environment** until staging exists: the post-deploy check and automatic rollback are the safety net.
 - **Shared Supabase:** local runs and the cloud see each other's cases and stuck documents. Anything that scans the whole database runs only in the cloud (the sweeper; a local run must name a case).
-- **Scope:** staging, load testing and failure tests (section 10) all need time before November; the Helm chart (section 10) competes with them; running on GKE stays out of scope unless a trigger fires.
+- **Scope:** staging, load testing and failure tests (section 10) all need time before the mid-November deadline; the Helm chart (section 10) competes with them; running on GKE stays out of scope unless a trigger fires.
 
 ## 12. Running it
 
@@ -188,7 +188,7 @@ Cost: about $0 idle and cents per merge or night (Cloud Run and Supabase only; n
 
 **The split locally** (opt-in): `docker compose up --build` (stop uvicorn first; Kong takes :8000), then `npm run dev`. Containers: the Pub/Sub emulator plus `pubsub-init` (creates the topic and subscriptions, then exits), Kong, api, one `workers` container running the three workers (to save memory) and audit-metrics: about 3.5 GB. `--profile frontend` adds the nginx build on :5173. To debug the workers in the IDE: `PUSH_HOST=host.docker.internal PUSH_PORT=8001 docker compose up --build --scale workers=0`, then run uvicorn on :8001 from `backend/` with `ROLE=doc-worker,detection-worker,case-worker EVENT_TRANSPORT=pubsub PUBSUB_EMULATOR_HOST=localhost:8085 GOOGLE_CLOUD_PROJECT=local`. The emulator has no OIDC or IAM, so `/push` takes unsigned requests locally.
 
-**Walkthrough before a risky change** (real Supabase and Claude): upload a document (reaches `analyzed`), approve it (`detected`, findings appear), run case analysis (score and summary), read `GET /audit/events?case_id=<id>`; `docker compose restart workers` mid-detection (the run returns to `approved`, is redelivered, still reaches `detected`); stop and start audit-metrics (missed events appear); `docker compose run --rm pubsub-init python -m app.events.emulator_setup --poison` (retried, then dead-lettered).
+**Walkthrough before a risky change** (real Supabase and Claude): upload a document (reaches `analyzed`), approve it (`detected`, findings appear), wait for the case analysis to start on its own (score and summary), read `GET /audit/events?case_id=<id>`; `docker compose restart workers` mid-detection (the run returns to `approved`, is redelivered, still reaches `detected`); stop and start audit-metrics (missed events appear); `docker compose run --rm pubsub-init python -m app.events.emulator_setup --poison` (retried, then dead-lettered).
 
 **Deploying:** push to `main`. Manual rollback: `gcloud run services update-traffic <service> --to-revisions=<revision>=100 --region asia-southeast1`. Configuration changes go in Terraform (`main.tf`, then `apply`); a changed subscription needs `python -m app.events.types`, then `apply`.
 

@@ -1,12 +1,12 @@
 # How the App Works
 
-A plain-language walkthrough of the system as it is now (updated 2026-10-21): from a loan officer logging in to a case getting a risk score, what is built, and where it is rough. Design rationale is in the other documents; this one describes behaviour.
+A plain-language walkthrough of the system as it is now (updated 2026-11-11): from a loan officer logging in to a case getting a risk score, what is built, and where it is rough. Design rationale is in the other documents; this one describes behaviour.
 
 ---
 
 ## 1. The one-paragraph version
 
-A loan officer creates a **case** for a company applying for a loan and uploads its documents (bank statements, NRICs, certificates and so on). Each document goes through a background pipeline: it is **read** (text from the PDF, or OCR for scans), **classified** ("this is a payslip") and **extracted** ("net pay = 8,027.85"). The officer reviews and **approves** it. Approval starts the **Detection Agent**: a lead AI investigator plus three specialist AIs that run forensic checks (fonts, layout, images, metadata, spelling, arithmetic, government registries) and write a fraud report for that document. The findings a specialist judged genuine are also stored one by one as **flags**. Once every approved document has a report, the officer can run **Case Analysis**. Code first compares the documents with each other (company name, address, UEN, a person's ID and details); an AI then looks for deeper contradictions; the case is scored deterministically; the system suggests what further evidence to request and writes a plain summary. **The risk score and the recommended supporting documents exist only as the output of that run.** Everything updates live in the browser over a WebSocket.
+A loan officer creates a **case** for a company applying for a loan and uploads its documents (bank statements, NRICs, certificates and so on). Each document goes through a background pipeline: it is **read** (text from the PDF, or OCR for scans), **classified** ("this is a payslip") and **extracted** ("net pay = 8,027.85"). The officer reviews and **approves** it. Approval starts the **Detection Agent**: a lead AI investigator plus three specialist AIs that run forensic checks (fonts, layout, images, metadata, spelling, arithmetic, government registries) and write a fraud report for that document. The findings a specialist judged genuine are also stored one by one as **flags**. Once every document is decided and every approved one has a report, **Case Analysis** starts on its own. Code first compares the documents with each other (company name, address, UEN, a person's ID and details); an AI then looks for deeper contradictions; the case is scored deterministically; the system suggests what further evidence to request, searches the web for recent adverse media about the company (a note for the officer, never scored) and writes a plain summary. **The risk score and the recommended supporting documents exist only as the output of that run.** Everything updates live in the browser over a WebSocket.
 
 ---
 
@@ -20,7 +20,7 @@ A loan officer creates a **case** for a company applying for a loan and uploads 
 | **Gateway** | Kong in front of api and audit-metrics (compose and the cloud only) | `deploy/kong/` |
 | **Metrics** | `GET /metrics` on every role (Prometheus) | `metrics.py` |
 | **Database / storage** | Supabase: hosted Postgres and a private `documents` bucket | Supabase project |
-| **AI** | Claude via the Anthropic API. Sonnet for classifying, extracting, leading detection and the case analysis; Haiku for the second-opinion classifier, detection specialists, evidence requests and the summary | `app/langgraph`, `app/case_pipeline` |
+| **AI** | Claude via the Anthropic API. Sonnet for classifying, extracting (and its second look), leading detection and the case analysis; Haiku for the second-opinion classifier, detection specialists, evidence requests, the adverse-media search and the summary | `app/langgraph`, `app/case_pipeline` |
 | **Agent framework** | LangGraph: each AI workflow is a graph of steps | same |
 | **Live updates** | Supabase Realtime tells the backend a row changed; the backend pushes a case snapshot over a WebSocket | `realtime_listener.py`, `case_broadcaster.py`, `routers/ws.py` |
 | **Cost logging** | One `perf` log line per unit of work | `query_stats.py` |
@@ -43,14 +43,14 @@ PDF, PNG or JPEG, up to 25 MB each, up to 20 per batch. For each file: store it,
 ### Step 3: Per-document pipeline (read, classify, extract)
 The doc-worker takes each `document.uploaded` (or an officer's `document.retry_requested`), claims the document with a compare-and-swap from `queued` to `processing` (so a repeated event is skipped), and runs the LangGraph document graph, `QUEUE_WORKER_CONCURRENCY` at once per process. When it ends it publishes `document.analyzed` or `document.failed`:
 
-1. **Ingest (`processing`, shown as "Classifying").** Download the file; read native PDF text or OCR it, and read file metadata with `exiftool` at the same time (it is a subprocess, so it runs in its own thread while the text extraction uses the PDF/OCR pool, `cpu_pool.py`: one thread locally, which keeps PyMuPDF off two threads at once, and two processes on the deployed workers, each with its own PyMuPDF). A failed metadata read is stored as an error record, never as "no metadata".
+1. **Ingest (`processing`, shown as "Classifying").** Download the file; read native PDF text or OCR it, and read file metadata with `exiftool` at the same time (it is a subprocess, so it runs in its own thread while the text extraction uses the PDF/OCR pool, `cpu_pool.py`: one thread locally, which keeps PyMuPDF off two threads at once, and two processes on the deployed workers, each with its own PyMuPDF). A failed metadata read is stored as an error record, never as "no metadata". The **content guard** (`guardrails/content_guard.py`) then scans the file for hidden text and wording addressed to an AI: flagged hidden text is taken out of what the models read, the result is saved for detection to report, and a document worded as an instruction to the AI fails here (`GUARD_BLOCK_INJECTION`).
 2. **Classify.** A rule-based classifier first (free); then a Sonnet agent that may ask a Haiku classifier for a second opinion and, on a later turn, vision. Every turn offers both tools (a thinking block is only valid with the tools list it was made with); the order is enforced in code (`classify_graph.tools_node`): a call out of turn gets an error result instead of running. Confidence below **0.85** routes the document to manual review.
 3. **Extract (`extracting`).** A Sonnet text pass fills the type's schema, with a confidence and, when confidence is low, a reason for each field. On a native-text PDF bank statement, code first reads the transaction table from word positions (`statement_table.py`, columns taken from each page's own header row) and the model reads everything else, naming each line's counterparty in the same call. The table is accepted on parse quality only, never on whether its balances add up; a scan, an image or a table that can't be read cleanly takes the usual text pass. The trace's `transaction_table` says which it was. Code selects only low-confidence fields, fields returned without a confidence, missing required fields, and figures removed because they aren't printed in the text; an optional field that simply isn't on the document doesn't count, and one-period totals and sample values are never looked at again. If none qualify, the text pass is the whole extraction. Otherwise, a field-scoped extraction agent may use a free layout lookup first (the cached text lines with their positions, OCR for scans, and each relevant page's tables); it may then make at most one visual read, cropped to the field's lines where the layout placed them, if the layout does not settle the selected fields. The whole second look has its own time limit (`EXTRACTION_SECOND_LOOK_TIMEOUT_SECONDS`, 90s); past it, or on any failure, the text pass stands. Image uploads can go straight to the visual read. The second look can fill a missing value but never replaces an existing one, and it raises a field's confidence only when code can see the value in the layout lines returned for that field. If it reads a different value from the text, on any file and from either tool, the text value stays, the field's confidence drops below the review threshold, and its reason gives both readings: the document goes to Manual Review and approval waits until the officer saves the field, so the officer decides. The disagreement is shown under the field and in the agent trace, and detection doesn't see it. A native PDF's visual read cannot introduce a number absent from its text layer, and neither can the layout lookup for a figure the unprinted-number guard removed. Each field's source (text, layout, or vision) is recorded in the document trace. The same second-look path runs when an officer changes the document type and re-runs extraction. Fields are stored one row each in `extracted_fields` **before** the document row is updated, so a snapshot never sees a document without its fields. For a document that can belong to a company or a person (a bank statement, a source-of-wealth document) the model also says which it is (`entity_type`).
 4. **Disagreement loop.** If extraction says the type is wrong, the document returns to the classifier once; if still unresolved it is marked `failed`. An unreadable reply fails the document (retryable) without reclassifying it.
 5. Done: `analyzed`.
 
 ### Step 4: Officer review
-The officer can edit or delete fields, correct the document type (which re-runs extraction), move, delete, cancel or retry a document, and **approve** or **reject** it. A company name shows a character count from 80 characters, in red at the 100-character limit. The case menu (⋮) holds Download report, Edit case details and Delete case; a report that fails to download shows one plain sentence and logs the raw error. Approval locks the document. A **case-match** check (plain code, `case_match.py`) compares each document's company and people with the certificate of incumbency to catch a document in the wrong case; it is not a fraud signal.
+The officer can edit or delete fields, correct the document type (which re-runs extraction), move, delete, cancel or retry a document, and **approve** or **reject** it. A company name shows a character count from 80 characters, in red at the 100-character limit. The case menu (⋮) holds Download report, Edit case details and Delete case; a report that fails to download shows one plain sentence and logs the raw error. Approval locks the document, and waits while any field is below the confidence threshold until the officer saves the fields. Under such a field the page shows why extraction was unsure, read from the latest extraction step of the document's trace; if that trace write failed the reason is missing, but Manual Review still applies. A **case-match** check (plain code, `case_match.py`) compares each document's company and people with the certificate of incumbency to catch a document in the wrong case; it is not a fraud signal.
 
 The case page also shows the **requirements checklist** (required types, proof of address per person, both sides of each ID).
 
@@ -59,13 +59,13 @@ Approval publishes `document.approved`; the detection-worker runs it, **two runs
 
 1. **Load context.** The document and its fields are fetched once and shared by every tool in the run. The file's contents are read too (`fraud_detection/shared/file_facts.py`): its kind, page count, whether a PDF has selectable text, and the size of each distinct embedded image.
 2. **Lead plans (Sonnet).** One brief per specialist. The lead sees those file facts and says which checks do not apply.
-3. **Three specialists in parallel (Haiku).** Each picks which of its tools to run, at most 3 tool rounds. Each is shown the file's contents and told what its tools need (image manipulation compares images with each other, so it needs at least two; image tampering needs embedded images; AI generation scores photographs and scans of at least 128 px, not logos; the font check needs selectable text). It is guidance, not a fixed list: the specialist still decides, and is told to run a tool anyway when the contents are unclear:
+3. **Three specialists in parallel (Haiku).** Each picks which of its tools to run, at most 3 tool rounds. Each is shown the file's contents and told what its tools need (image manipulation compares images with each other, so it needs at least two; image tampering needs embedded images; AI generation scores photographs and scans of at least 128 px, not logos; the font check needs selectable text). It is guidance, not a fixed list: the specialist still decides, and is told to run a tool anyway when the contents are unclear. Two checks run on every document before the specialist's first turn, so they don't depend on its choice: hidden text and prompt injection:
 
 | Specialist | Tools (plain code) | Looks for |
 |---|---|---|
-| **Layout & Rendering** | font consistency, layout anomalies, image manipulation, image tampering | odd fonts and sizes, misalignment, text over text, spliced or edited images |
+| **Layout & Rendering** | hidden text, font consistency, layout anomalies, image manipulation, image tampering | text a reader can't see, odd fonts and sizes, misalignment, text over text, spliced or edited images |
 | **Content Validation** | spelling, date consistency, page consistency, numerical checks, external validation | typos, impossible dates, a page missing, swapped in or copied in a multi-page statement, sums and balances that don't add up, broken NRIC/UEN/MRZ checksums, a company missing from ACRA, a postal code missing from OneMap, a home address at an office or industrial unit, wrong CPF/GST rates |
-| **Digital Authenticity** | metadata, AI generation | editing software in the metadata, modified-after-created dates, AI-generated images |
+| **Digital Authenticity** | prompt injection, metadata, AI generation | wording written to steer the AI reviewing the file, editing software in the metadata, modified-after-created dates, AI-generated images |
 
    A tool returns *candidate* findings. The specialist gives each a severity or dismisses it as a false positive; it cannot invent findings or change a tool's facts.
 
@@ -81,7 +81,7 @@ Approval publishes `document.approved`; the detection-worker runs it, **two runs
 
 If detection crashes it is recorded, the document returns to `approved`, and the officer can retry. Single checks can be run on demand once a report exists.
 
-### Step 6: Case Analysis (on demand, the only source of the score)
+### Step 6: Case Analysis (automatic, the only source of the score)
 **It starts on its own** (`case_pipeline/service.start_if_due`) once every document is decided (none processing, failed or waiting for the officer, required checklist documents approved) and every approved one is `detected`. The check runs after each detection run (detection-worker) and after an officer rejects, cancels, moves or deletes a document (api). It records a `running` run and publishes `case.analysis.requested` as the system (`detail.trigger = "automatic"`); the case-worker runs it and publishes `case.analysis.completed`. While it is due or running, the case stays at **Fraud Detection**.
 - **No repeat:** nothing starts when the newest run already covers the same inputs (its fingerprint matches), whether complete, failed (the officer reruns a failed one) or still running.
 - **Replaced:** a run over outdated inputs is not stopped; a new one starts, and the old one's result is recorded as `superseded` when it ends (`repository.finish_run`).
@@ -101,7 +101,13 @@ One run, in order:
 9. **Additional documents (code).** The rule-based recommendations (large supplier or customer payments, balance-sheet breakdowns) and the model's requests are merged into one list, each marked as score-changing or not.
 10. **Summary (one Haiku call).** Grounded in the findings. It is told which checks ran clean and which **could not run**, so it cannot call an unrun check clear.
 
-The run stores its result, including the risk and additional documents, and writes one `risk_scores` row. Cost: 4 model calls (plan, judge, requests, summary) against a ceiling of 6, with output capped at 3,000 and 2,500 tokens for plan and judge; a real run logged about 13k tokens in and 2.4k out. Plan and judge share one cached system prompt. Bias is enforced at four points (input, prompt, proposals, verdicts); see `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
+**Adverse media (one Haiku call with Claude's web search, `adverse_media.py`).** It starts alongside the cross-document check, so it adds no time unless it outlasts the run, and is limited to 45 s. A due-diligence note for the officer: it never creates a finding or touches the score.
+- **What it searches:** at most 3 searches for sanctions, regulatory action, fraud, insolvency or other serious negative news from the last 21 days, only on the 22 sites in `TRUSTED_DOMAINS` (many large news sites block the search crawler, so they can't be listed).
+- **Which name:** the company named on the documents (business profile, then certificate of incorporation), or the case's name if neither is there. One search covers up to 3 former names.
+- **Results:** `clean` only when every search ran and the reply says so. `concerns` needs at least one cited page the search really returned. Anything else is `failed`, or `skipped` with no company name; neither reads as clean.
+- **Cache:** a `clean` or `concerns` result is reused for 24 hours while the company and former names are the same, with no search and no cost.
+
+The run stores its result, including the risk and additional documents, and writes one `risk_scores` row. Cost: 5 model calls (plan, judge, requests, summary, adverse media) against a ceiling of 7, with output capped at 3,000 and 2,500 tokens for plan and judge; a real run before the media check logged about 13k tokens in and 2.4k out. Each web search is billed on top of the tokens (`pricing.py`). Plan and judge share one cached system prompt. Bias is enforced at four points (input, prompt, proposals, verdicts); see `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 
 A case that was never analysed shows "Not scored yet". If documents change after a run, the run is marked out of date and the previous result stays visible with a notice. `CASE_ANALYSIS_ENABLED=false` switches the module off.
 
@@ -122,9 +128,10 @@ Every verdict an officer saves on a finding, and every missed issue they report,
 - **Case analysis (`cross_document/feedback.py`).** Read once per analysis for the two model-decided categories, and shown to the planner and the judge. Confirmations, findings set aside wrongly and missed issues only, never false alarms: a category holds free-form hypotheses with no code to tell them apart.
 - **Recorded:** each finding stores the ids of what it was shown for its code (`feedback_ids`), and the case page lists them as "Feedback the agent was shown". Being shown is not the same as acting on it.
 - **Limits:** feedback only informs the model. Severity floors, impossible values, the citation ledger, `bias.py` and the score are all enforced in code, whatever it says. A lookup that fails means no feedback, never a failed run.
-- **Reset for a test:** `truncate public.finding_feedback;`, then `backend/sql/dev/seed_feedback_test.sql`; `backend/scripts/preview_feedback.py` prints what an agent would be shown, with no model call.
+- **No on/off setting** (decided: too many edge cases).
+- **Reset for a test:** `truncate public.finding_feedback;` in Supabase's SQL editor. To seed a known set, run `backend/sql/dev/seed_feedback_test.sql`, and afterwards `delete from public.cases where id like 'test-case-%';` (its feedback goes with the cases). `backend/scripts/preview_feedback.py` prints what an agent would be shown, with no model call.
 
-The classifier and the extractor learn from what officers change, read from `audit_events` (`corrections_repository.py`, through `type_corrections` and `field_edit_counts` in `schema.sql`). Labels and field names only, never values, and no table of their own. A lesson counts once 2 cases agree, and only corrections after `LEARNING_SINCE` count (a constant in code, so a test can move it). A failed read gives no hint. Both hints sit after the cache breakpoint (`langgraph/correction_hints.py`).
+The classifier and the extractor learn from what officers change, read from `audit_events` (`corrections_repository.py`, through `type_corrections` and `field_edit_counts` in `schema.sql`). Labels and field names only, never values, and no table of their own. A lesson counts once 2 cases agree, and only corrections after `LEARNING_SINCE` count (a constant in code, so a test can move it). A failed read gives no hint. Both hints sit after the cache breakpoint (`langgraph/correction_hints.py`). `audit_events` is never deleted, so these can't be reset like the feedback table: a test moves `LEARNING_SINCE` instead.
 - **Classifier:** a retype from one type to another (`document.retyped`; confirming the same type isn't a correction) teaches "officers corrected X to Y in N cases". When the agent's guess is X it is told this, with what tells Y apart (`SIGNALS`, written by the team; without one, it just names the confusion). The rule classifier's guess gets it on the first turn, and a classify tool's guess gets it appended to that tool's result, each guess once.
 - **Extractor:** `document.field_edited` carries `document_type`. A field added (a change from nothing) or deleted (a change to nothing) on a type teaches the extractor of that type to look for it, or to extract it only when the document shows one. A field that is added and deleted equally often teaches nothing. Field names that aren't plain snake_case, or that name a protected attribute, are never taught. Edits from before `document_type` was recorded can't be grouped, so they don't count.
 
@@ -146,7 +153,7 @@ Every model reply and tool result is checked against an expected shape before an
 | Hypotheses, verdicts, evidence requests | Empty list |
 | Summary | The deterministic summary |
 
-**Bounds:** a run may make at most `DOCUMENT_MAX_MODEL_CALLS` (24) or `DETECTION_MAX_MODEL_CALLS` (30) calls, and a case analysis 6 (`run_context.py`). Past the detection limit the verdict can't be clean. Every tool has a time limit (`TOOL_TIMEOUT_SECONDS` 60, `SLOW_TOOL_TIMEOUT_SECONDS` 120 for model and registry tools); a timeout is `unable_to_assess`. Transient API errors are retried by the client (`LLM_MAX_RETRIES`, 1). Every repaired reply is written to the trace (`run_audit`), with the raw reply capped at 4,000 characters.
+**Bounds:** a run may make at most `DOCUMENT_MAX_MODEL_CALLS` (24) or `DETECTION_MAX_MODEL_CALLS` (30) calls, and a case analysis 7 (`run_context.py`). Past the detection limit the verdict can't be clean. Every tool has a time limit (`TOOL_TIMEOUT_SECONDS` 60, `SLOW_TOOL_TIMEOUT_SECONDS` 120 for model and registry tools); a timeout is `unable_to_assess`. Transient API errors are retried by the client (`LLM_MAX_RETRIES`, 1). Every repaired reply is written to the trace (`run_audit`), with the raw reply capped at 4,000 characters.
 
 ---
 
@@ -180,15 +187,18 @@ uploaded → queued → processing → extracting → analyzed ──approve─�
 | `cases` | company name, GreenLink ID, the stage (`status`), and `checklist_enforced` and `reviews_required`, set at creation. `recommended_additional_documents` (jsonb) holds `[]` until a case is analysed, then the whole `additional_documents` result of its latest complete run; the case summary returns it as `additional_documents`. The summary's `missing_requirements` (the checklist types no accepted document covers yet) is computed on every read, not stored |
 | `documents` | one row per file: status, type, confidences, routing, requirements fulfilled, file metadata (read only by the metadata checks) |
 | `extracted_fields` | one row per field per document |
-| `langgraph_trace` | one JSON trace per document: every run's steps and spans (classification, extraction, detection, single checks) and the **full detection report** |
+| `langgraph_trace` | one JSON trace per document: every run's steps and spans (classification, extraction, detection, single checks) and the **full detection report**. For debugging and for showing field reasons on the review screen; never read to decide anything |
 | `detection_results` | each document's latest detection report, or why its last run failed |
 | `findings` | every finding (per document, kept and dismissed, and per case), the agents' decision, and the officer's verdict; missed issues |
-| `case_analysis_runs` | each run: findings (including `xd-det-N`), `consistent_checks`, outlook, summary, **risk**, **additional documents**, audit, step trace |
+| `review_sign_offs` | a group of findings an officer saved as reviewed |
+| `finding_feedback` | scrubbed officer verdicts and missed issues, read counted through `feedback_counts` |
+| `case_notes` | officers' notes on a case or a document, and their replies |
+| `case_analysis_runs` | each run: findings (including `xd-det-N`), `consistent_checks`, outlook, summary, **risk**, **additional documents**, adverse media, audit, step trace |
 | `risk_scores` (+ `latest_risk_scores` view) | one row per completed run: score, level, reasoning |
 | `audit_events` | every domain event, stored by audit-metrics (id = the event's id, so a redelivery is ignored): who (officer, agent or system), what, which case or document, outcome, timing, and Kong's request id; read at `GET /audit/events` |
 | Storage bucket `documents` | the uploaded files |
 
-Deleting a document removes its fields, flags, trace and file; deleting a case removes its documents, then its runs, scores and flags. The schema is changed directly in Supabase (no SQL in the repo); `README.md` lists the objects the backend expects.
+Deleting a document removes its fields, findings, trace and file; deleting a case removes its documents, then its runs, scores and findings. `backend/sql/schema.sql` mirrors the live schema by hand; `README.md` lists the objects the backend expects.
 
 ---
 
@@ -214,10 +224,15 @@ Required: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, `AUTH_USER
 | `TOOL_TIMEOUT_SECONDS`, `SLOW_TOOL_TIMEOUT_SECONDS` | 60, 120 | time limit per detection tool, counted while it works (not while its job waits for the CPU worker); the slow ones call a model or a registry |
 | `CPU_QUEUE_TIMEOUT_SECONDS` | 300 | the most a tool waits for the CPU worker before it starts |
 | `CASE_ANALYSIS_ENABLED` | true | kill switch for the case analysis |
+| `CASE_ANALYSIS_AUTO_RUNS_PER_HOUR` | 4 | runs per case per hour that start on their own; past it, the officer starts one |
+| `REQUIRE_COMPLETE_CHECKLIST` | false | whether new cases need every required checklist document approved before analysis (stored on the case at creation; on only in production) |
+| `GUARD_BLOCK_INJECTION` | true | a document worded as an instruction to the AI fails at ingest; false lets it through, flagged |
+| `SWEEPER_ENABLED` | false | runs the stuck-work sweeper (Terraform sets it on audit-metrics) |
+| `STUCK_WAITING_SECONDS`, `STUCK_RUNNING_SECONDS`, `RECOVERY_MAX_ATTEMPTS` | 300, 900, 3 | when the sweeper counts work as stuck, and how often it retries |
 | `LOG_HTTP_REQUESTS` | false | httpx's one line per Supabase call |
 | `LANGGRAPH_SONNET_MODEL`, `LANGGRAPH_HAIKU_MODEL` | `claude-sonnet-5-5`, `claude-haiku-5-5` | model overrides. Every call sets its effort in code (`low`, or `medium` for the detection lead and the cross-document planner and judge) and sends no `temperature`; a refusal fails the step with its own reason |
 | `SUPABASE_STORAGE_BUCKET` | `documents` | bucket name |
-| `DATA_GOV_SG_API_KEY` | — | data.gov.sg lookups and the zoning download |
+| `DATA_GOV_SG_API_KEY`, `ONEMAP_API_TOKEN` | — | optional: without them the anonymous limits apply to data.gov.sg (lookups and the zoning download) and OneMap |
 | `URA_API_KEY` | — | URA approved residential use; skipped without it |
 | `LAND_USE_RUNTIME_REBUILD` | true | whether a server may build the URA zoning index itself; the Docker image sets false |
 
@@ -266,7 +281,7 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 ## 9. What is built and what isn't
 
-**Built:** upload and queue; classify and extract with the reclassify loop; officer review tools; requirements checklist; case-match; the Detection Agent with 10 checks and on-demand single checks, cancel and rerun; every finding stored with the agents' decision and the officer's verdict (dismissed ones included); the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, summary); live WebSocket updates; case notes; cost logging and per-case Claude cost (every run: retries, reruns, cancelled and failed runs, earlier analyses, deleted documents); the service split on Cloud Run (roles, domain events, Pub/Sub push, audit trail, stuck-work recovery, `/metrics`, Grafana, traces, alerts), Kong, the compose stack, Terraform, and CI/CD that deploys every green push to `main` (`CLOUD_ARCHITECTURE_PLAN.md`).
+**Built:** upload and queue; the content guard; classify and extract with the reclassify loop and the second look; officer review tools; requirements checklist; case-match; the Detection Agent with 13 checks and on-demand single checks, cancel and rerun; every finding stored with the agents' decision and the officer's verdict (dismissed ones included); learning from officers; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, adverse media, summary); live WebSocket updates; case notes; cost logging and per-case Claude cost (every run: retries, reruns, cancelled and failed runs, earlier analyses, deleted documents); the service split on Cloud Run (roles, domain events, Pub/Sub push, audit trail, stuck-work recovery, `/metrics`, Grafana, traces, alerts), Kong, the compose stack, Terraform, and CI/CD that deploys every green push to `main` (`CLOUD_ARCHITECTURE_PLAN.md`).
 
 **Not built:** open items are in `PENDING_WORK.md` and the cloud plan's section 9.
 
@@ -274,7 +289,7 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 - `exiftool` is not installed on the dev machine, so the metadata check and the AI-provenance part of the AI-generation check report "could not run". The summary says so.
 - Detection specialists run on Haiku, whose minimum cacheable prompt is longer than their prompts, so caching there does nothing. It works for classification, extraction and the case analysis.
-- Re-running the analysis on unchanged documents spends the tokens again; nothing short-circuits an identical fingerprint.
+- "Run again" on unchanged documents spends the tokens again; only an automatic start is skipped when the fingerprint matches.
 - The first requester of a burst of snapshot requests can wait for a follow-up build.
 - Known limits of the split:
   - On-demand single checks run in the api process.
@@ -292,14 +307,15 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 | Startup, roles, routers, auth | `backend/app/main.py`, `auth.py`, `config.py` |
 | Events and their transport | `events/` (`types.py`, `bus.py`, `push.py`, `registry.py`) |
 | Upload and the doc-worker | `routers/upload.py`, `workers/documents.py` |
-| Classify and extract | `langgraph/pipeline.py`, `graph.py`, `classify_graph.py`, `extract.py` |
+| Classify and extract | `langgraph/pipeline.py`, `graph.py`, `classify_graph.py`, `extract.py`, `extract_graph.py`, `extraction_tools.py`, `statement_table.py` |
 | Approve and detection | `document_service.py` (`approve`), `workers/detection.py`, `langgraph/detection/graph.py`, `specialists.py`, `tools.py` |
 | The forensic checks | `fraud_detection/` |
 | Findings and their reviews | `findings_repository.py`, `finding_keys.py`, `routers/finding_reviews.py` |
 | Case snapshot, checklist, case list | `case_service.py` |
 | Comparable keys for IDs, names, companies | `identifiers.py` |
 | Risk score | `case_pipeline/risk/case_risk.py`, `store.py` |
-| Case analysis | `case_pipeline/service.py`, `cross_document/deterministic.py`, `agents.py`, `verify.py`, `bias.py`, `risk/outlook.py` |
+| Case analysis | `case_pipeline/service.py`, `cross_document/deterministic.py`, `agents.py`, `verify.py`, `bias.py`, `risk/outlook.py`, `adverse_media.py` |
+| Learning from officers | `feedback_repository.py`, `corrections_repository.py`, `langgraph/detection/feedback.py`, `langgraph/correction_hints.py` |
 | Live updates | `realtime_listener.py`, `case_broadcaster.py`, `routers/ws.py`, `frontend/src/services/caseSocket.ts` |
 | Cost logging and metrics | `query_stats.py`, `metrics.py` |
 | Audit trail | `audit.py`, `routers/audit.py` |
