@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "skills": {
+    "saas-product-demo-video": {
+      "source": "noamdorr/saas-product-demo-video",
+      "sourceType": "github",
+      "skillPath": "skills/saas-product-demo-video/SKILL.md",
+      "computedHash": "5f2331ddfd213364a3a588839535d6cbac2128e249a39de8dafd0537b670de19"
+    }
+  }
+}
