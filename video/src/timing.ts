@@ -70,10 +70,34 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
 // ---------------------------------------------------------------------------
 /**
  * Which hook the Master plays.
- *   "v2"  overwhelm: the officer's screen buried in PDFs, tabs and pings (no app yet). Default.
+ *   "v3"  buried, full screen: PDFs, tabs and pings fill the frame; every "a" of "Waaaay" opens
+ *         another document; ends on one big ping and a hold (for the sigh). Default.
+ *   "v2"  overwhelm: the same pile on a screen at the side of the frame.
  *   "v1"  the portal's upload box filling with the case's files (first version).
  */
-export const HOOK_VERSION: "v1" | "v2" = "v2";
+export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
+
+/** v3 hook. All times in seconds from the start of the hook. */
+export const OVERWHELM3 = {
+  length: 12,             // whole hook, including the hold on the final ping
+  title1In: 0.25,         // "Corporate loan applications need extensive documentation."
+  title1Out: 4.4,         // ...lifts away
+  firstDocIn: 0.4,        // first PDF window opens
+  lastDocIn: 4.6,         // last window before "Waaaay" (the rest open with its letters)
+  ramp: 0.75,             // how sharply those windows speed up: 1 = steady, 0.5 = slow start
+  docPop: 0.25,           // how long one window takes to pop open
+  firstTabIn: 0.3,        // tabs pile up across the top between these two times
+  lastTabIn: 8.2,
+  wayIn: 4.7,             // "Way" appears
+  stretchStart: 5.0,      // first extra "a" (and its document)...
+  stretchEnd: 6.6,        // ...last one. The a's land evenly in between, one document each
+  title2In: 5.1,          // "too many documents to review."
+  footnoteIn: 7.0,        // "For one case."
+  pings: [2.0, 3.4, 5.8, 7.3, 8.0], // one time per message in PINGS3
+  finalPingIn: 8.9,       // everything stops and dims; the big ping lands. The rest is the hold for your sigh
+  dim: 0.3,               // how long the dim takes
+  pushIn: 1.04,           // the camera's slow push until the final ping (1 = none)
+};
 
 /** v2 hook. All times in seconds from the start of the hook. */
 export const OVERWHELM = {
@@ -120,7 +144,9 @@ export const HOOK = {
 export const s = (seconds: number): number => Math.round(seconds * FPS);
 
 const SCENE_LENGTHS: Record<string, number> =
-  HOOK_VERSION === "v2"
+  HOOK_VERSION === "v3"
+    ? { buried: atSeconds(OVERWHELM3.length) }
+    : HOOK_VERSION === "v2"
     ? { overwhelm: atSeconds(OVERWHELM.length) }
     : { package: atSeconds(HOOK.package.length), tooMany: atSeconds(HOOK.tooMany.length) };
 

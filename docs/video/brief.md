@@ -13,6 +13,12 @@ Not beat-synced (`BEAT_SYNCED = false`). Every time is in seconds in `video/src/
 One case is too much paper for one person to read; the portal reads all of it, and shows every step it took.
 
 ## Script - built so far
+**Hook v3 (default) · 0:00-0:12 · buried.** Full-screen version of v2, built for a voiceover with a sigh at the end.
+- Visual: the officer's screen fills the frame; PDFs pile up, tabs squash, pings stack bottom-right. A page-coloured wash on the left carries the headlines.
+- On-screen copy (placeholder): **Corporate loan / applications need / extensive / documentation.** then **Waaaaaaaaay / too many / documents / to review.** / **For one case.**
+- Signature move: each extra "a" pops in with one more PDF window and tab.
+- Ending: at 8.9 s the pile freezes, blurs and dims; one large ping lands centre: Priya, Relationship Manager, "Customer's on the line again. Any update on Anchorpoint?" Hold to 12 s for the sigh.
+
 **Hook v2 (default) · 0:00-0:11 · overwhelm.** No app yet; the app is introduced as the solution later.
 - Visual: the officer's screen (generic browser + PDF viewer, no real product's look). PDF windows pile up faster and faster, tabs multiply until they are icons, pings from other teams stack bottom-right. Slow push toward the screen.
 - On-screen copy (placeholder): **Corporate loan / applications need / extensive / documentation.** then **Waaaaaaaaay / too many / documents / to review.** / **For one case.**

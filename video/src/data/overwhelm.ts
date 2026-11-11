@@ -56,3 +56,15 @@ export const COPY2 = {
   footnote: "For one case.",
   company: "Anchorpoint Insurance Brokers Pte. Ltd.",
 };
+
+// ---- v3 "buried" (full screen) -------------------------------------------------------
+/** Pings in v3, before the final one. Times are OVERWHELM3.pings in timing.ts. */
+export const PINGS3 = PINGS.filter((p) => p.text !== "Any update??");
+
+/** The last ping: everything stops, it lands in the middle of the frame, and the shot holds. */
+export const FINAL_PING = {
+  name: "Priya",
+  team: "Relationship Manager",
+  text: "Customer's on the line again. Any update on Anchorpoint?",
+  tint: "#355f96",
+};

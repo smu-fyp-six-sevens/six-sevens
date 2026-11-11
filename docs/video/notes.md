@@ -14,3 +14,11 @@
 - Measured: stills at frames 60, 75, 140, 200, 250, 320 and a contact sheet every 22 frames: no clipped headline, toasts do not overlap, headline stays 90+ px from the left edge through the push.
 - Words on screen: 15 headline + about 45 in messages over 11 s. The messages are texture, read at a glance; cut some if it feels busy.
 - Not checked: nobody has watched it in motion yet.
+
+## Wave 3 - full screen, "waaaay" drives the pile, ending ping (v3)
+- Owner: graphics full screen with room for text; play with "waaaay"; end on a ping they sigh at in the voiceover.
+- Owner's picks: each extra "a" opens another document; the ending is a big centre ping with a dim and hold; text "Customer's on the line again. Any update on Anchorpoint?"
+- Decision: v3 default; v2 and v1 kept behind HOOK_VERSION, renders in renders/v2 and renders/v1.
+- Decision: the camera pushes into the pile only; tabs, pings and headlines stay fixed (a full-frame push slid the tabs off the top edge).
+- Measured: stills at frames 100, 240, 260, 330 and a contact sheet every 24 frames: headlines clear of the edge, tabs and pings inside the frame, the final ping fully legible.
+- Not checked: nobody has watched it in motion yet.

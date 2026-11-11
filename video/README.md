@@ -4,13 +4,15 @@ Visuals only: no music, no voiceover. You set the timing.
 
 So far this is the **hook** (about 11 s). No app on screen yet: the app is the solution and comes later.
 
-**v2 "overwhelm" (current, default).** The loan officer's screen gets buried: PDF windows (bank statements, NOA,
-balance sheet, IDs, forms...) pile up, browser tabs multiply until they squash to icons, and pings from other teams
-stack in the corner ("Hey, have you reviewed the Anchorpoint docs yet?", "Customer emailed us again"). Headlines:
-"Corporate loan applications need extensive documentation." then "Waaaaaaaaay too many documents to review. For one case."
+**v3 "buried" (current, default), 12 s.** Full screen: the loan officer's screen fills the frame. PDF windows pile up,
+browser tabs multiply until they squash to icons, pings from other teams stack in the corner. Headlines sit on a soft
+wash on the left: "Corporate loan applications need extensive documentation.", then "Waaaaaaaaay too many documents
+to review. For one case." **Every extra "a" opens one more document.** At 8.9 s everything stops and dims, one big
+ping lands in the middle ("Customer's on the line again. Any update on Anchorpoint?") and the shot holds about
+3 s for your sigh.
 
-**v1 "portal" (kept).** The portal's upload box filling with the case's 20 real files. Switch with `HOOK_VERSION` in
-`src/timing.ts`. Its renders are in `renders/v1/`.
+**v2 "overwhelm"** (the same pile on a screen at the side) and **v1 "portal"** (the upload box) are kept. Switch with
+`HOOK_VERSION` in `src/timing.ts`; their renders are in `renders/v2/` and `renders/v1/`.
 
 Renders: `renders/hook.mp4` (with headlines), `renders/hook-no-text.mp4` (same shots, no headlines), `renders/hook-poster.png`.
 
@@ -22,6 +24,8 @@ npm install
 npm run dev        # Remotion Studio: scrub, preview, edit props live
 ```
 
+- **Timing (v3):** `src/timing.ts`, the `OVERWHELM3` object, all in seconds. Line the knobs up with your voiceover: `title1In`/`title1Out` (first line), `wayIn`, `stretchStart`/`stretchEnd` (how long you drag the "waaaay": the a's, and their documents, land evenly in between), `title2In`, `footnoteIn`, `pings` (one per message), `finalPingIn` (the sigh moment), and `length` (sets how long the hold lasts after it).
+- **Final ping text:** `FINAL_PING` in `src/data/overwhelm.ts`. Messages before it: `PINGS3` (add or remove one, and its time in `OVERWHELM3.pings`).
 - **Timing (v2):** `src/timing.ts`, the `OVERWHELM` object. Everything is in seconds: when each headline rises and leaves, the first and last PDF window, the first and last tab, `pings` (one time per message), when the "a"s stretch, the camera push. `ramp` sets how frantic the pile-up gets. Save and Studio updates.
 - **Words (v2):** `src/data/overwhelm.ts`: the PDFs (`DOCS`), extra tabs (`EXTRA_TABS`), the messages (`PINGS`: name, team, text, avatar colour) and the headlines (`COPY2`). `\n` is a line break; lines never wrap by themselves. Add or remove a message and add or remove its time in `OVERWHELM.pings`.
 - **v1:** timing in `HOOK`, words and the case's real filenames in `src/data/hook.ts`.
@@ -37,7 +41,7 @@ npx remotion render Master-NoText renders/hook-no-text.mp4 --color-space=bt709 -
 npx remotion still Master renders/hook-poster.png --frame=320
 ```
 
-Single scenes for quick checks: `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
+Single scenes for quick checks: `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
 
 ## Where the UI comes from (v1)
 
