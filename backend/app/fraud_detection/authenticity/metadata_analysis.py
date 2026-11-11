@@ -146,14 +146,14 @@ _ARTEFACT_REASON = (
 )
 
 
-def _value_patterns(field_label: str, kind: str) -> list[tuple[re.Pattern[str], str]]:
+def _value_patterns(field_label: str, kind: str) -> list[tuple[re.Pattern[str], str, str]]:
     return [
-        (_GENERIC_IDENTITY_PATTERN, _PLACEHOLDER_REASON.format(field=field_label, kind=kind)),
-        (_TEST_ARTEFACT_PATTERN, _ARTEFACT_REASON.format(field=field_label, kind=kind)),
+        (_GENERIC_IDENTITY_PATTERN, _PLACEHOLDER_REASON.format(field=field_label, kind=kind), "META.PLACEHOLDER"),
+        (_TEST_ARTEFACT_PATTERN, _ARTEFACT_REASON.format(field=field_label, kind=kind), "META.TEST_ARTEFACT"),
     ]
 
 
-SUSPICIOUS_VALUE_PATTERNS: dict[str, list[tuple[re.Pattern[str], str]]] = {
+SUSPICIOUS_VALUE_PATTERNS: dict[str, list[tuple[re.Pattern[str], str, str]]] = {
     "author": _value_patterns("Author", "name"),
     "creator": _value_patterns("Creator", "person/application"),
     "producer": _value_patterns("Producer", "application"),
@@ -265,6 +265,8 @@ _EXIF_DATE_RE = re.compile(
 
 
 class MetadataAnomaly(BaseModel):
+    # The rule that fired (META.PDF_EDITOR, ...): officers' feedback is counted per rule, not per tool.
+    code: str
     field: str
     value: str | None
     reason: str
@@ -345,10 +347,10 @@ def _check_suspicious_values(extracted: dict[str, str | None]) -> list[MetadataA
         value = extracted.get(field)
         if not value:
             continue
-        for pattern, reason in patterns:
+        for pattern, reason, code in patterns:
             if pattern.search(value):
                 anomalies.append(
-                    MetadataAnomaly(field=field, value=value, reason=reason, severity="low")
+                    MetadataAnomaly(code=code, field=field, value=value, reason=reason, severity="low")
                 )
                 break
     return anomalies
@@ -385,6 +387,7 @@ def _check_software_markers(
         tool_name = _match_marker(lowered, AI_GENERATION_SOFTWARE_MARKERS)
         if tool_name is not None:
             anomaly = MetadataAnomaly(
+                code="META.AI_TOOL",
                 field=field,
                 value=value,
                 reason=f"Metadata references {tool_name}, an AI content/document generation tool",
@@ -397,7 +400,7 @@ def _check_software_markers(
         reason = _match_marker(lowered, CONTENT_EDITOR_MARKERS)
         if reason is not None:
             anomalies.append(
-                MetadataAnomaly(field=field, value=value, reason=reason, severity="high")
+                MetadataAnomaly(code="META.CONTENT_EDITOR", field=field, value=value, reason=reason, severity="high")
             )
             continue
 
@@ -409,6 +412,7 @@ def _check_software_markers(
             label = (document_type or "").replace("_", " ")
             anomalies.append(
                 MetadataAnomaly(
+                    code="META.PDF_EDITOR",
                     field=field,
                     value=value,
                     reason=(
@@ -443,6 +447,7 @@ def _check_date_relationship(
     if modification < creation:
         return [
             MetadataAnomaly(
+                code="META.MODIFIED_BEFORE_CREATED",
                 field="modification_date",
                 value=extracted.get("modification_date"),
                 reason=(
@@ -462,6 +467,7 @@ def _check_date_relationship(
 
     return [
         MetadataAnomaly(
+            code="META.RESAVED",
             field="modification_date",
             value=extracted.get("modification_date"),
             reason=(
@@ -502,6 +508,7 @@ def _check_impossible_dates(extracted: dict[str, str | None]) -> list[MetadataAn
         if parsed < _PDF_FORMAT_EPOCH:
             anomalies.append(
                 MetadataAnomaly(
+                    code="META.DATE_BEFORE_PDF",
                     field=field,
                     value=raw,
                     reason=(
@@ -514,6 +521,7 @@ def _check_impossible_dates(extracted: dict[str, str | None]) -> list[MetadataAn
         elif parsed > horizon:
             anomalies.append(
                 MetadataAnomaly(
+                    code="META.DATE_IN_FUTURE",
                     field=field,
                     value=raw,
                     reason=f"{raw} is in the future — the value cannot be genuine",
@@ -563,6 +571,7 @@ def _check_parse_warnings(raw_metadata: dict) -> list[MetadataAnomaly]:
     joined = "; ".join(warnings)
     return [
         MetadataAnomaly(
+            code="META.PARSE_WARNINGS",
             field="parse_warnings",
             value=joined,
             reason=(
@@ -599,6 +608,7 @@ def _check_edit_history(
 
     return [
         MetadataAnomaly(
+            code="META.EDIT_HISTORY",
             field="xmp_instance_id",
             value=instance_id,
             reason=(

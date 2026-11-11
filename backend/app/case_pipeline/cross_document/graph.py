@@ -14,6 +14,7 @@ from ..models import CrossDocFinding, Hypothesis
 from .agents import adjudicate, gather_evidence, hypothesise
 from .deterministic import brief, restates_a_code_finding, run_deterministic_checks
 from .evidence import CaseContext
+from .feedback import ids_by_category, load_feedback, render as render_feedback
 from .verify import verify_verdict
 
 
@@ -154,6 +155,14 @@ async def run_cross_document_analysis(context: CaseContext) -> AnalysisState:
         "deterministic", findings=[f.model_dump(mode="json") for f in established.findings],
         consistent=established.consistent,
     )
+    # What officers taught it on other cases: looked up once, shown to both model calls. Never stops the analysis.
+    try:
+        shown = await load_feedback(context.case_id)
+    except Exception:
+        shown = {}
+    context.feedback_text = render_feedback(shown)
+    context.feedback_ids = ids_by_category(shown)
+    context.note("feedback", shown={category: len(items) for category, items in shown.items()})
     graph = build_cross_document_graph()
     state = cast(AnalysisState, await graph.ainvoke({"context": context}))
     # The agent may still say again what the code found; one row for each fact is enough.

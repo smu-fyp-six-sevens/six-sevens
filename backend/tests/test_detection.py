@@ -306,7 +306,7 @@ def test_get_metadata_anomaly_success_persists_result() -> None:
         document_id="doc-1",
         extracted_metadata={"author": "admin"},
         anomalies=[
-            {"field": "author", "value": "admin", "reason": "placeholder", "severity": "low"}
+            {"code": "META.PLACEHOLDER", "field": "author", "value": "admin", "reason": "placeholder", "severity": "low"}
         ],
         ai_generation_indicators=[],
         unable_to_assess=False,

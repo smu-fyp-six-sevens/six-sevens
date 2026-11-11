@@ -39,7 +39,7 @@ from .tools import COMPUTED_TOOLS, CROSS_DOCUMENT_TOOLS, build_tools
 
 logger = logging.getLogger("classifier_pipeline.case_pipeline.agents")
 
-PROMPT_VERSION = "cross-doc-v9-confidence"
+PROMPT_VERSION = "cross-doc-v10-feedback"
 MAX_HYPOTHESES = 3
 MAX_CHECKS_PER_HYPOTHESIS = 4
 # One call to plan and one to judge, each retried once when the reply doesn't call its tool.
@@ -274,7 +274,7 @@ async def hypothesise(context: CaseContext) -> tuple[list[Hypothesis], float]:
         _system_message(context),
         HumanMessage(content=_PLAN_INSTRUCTIONS.format(
             limit=MAX_HYPOTHESES, max_checks=MAX_CHECKS_PER_HYPOTHESIS, dossier=dossier,
-        )),
+        ) + context.feedback_text),
     ]
     response, args = await _ask_for_tool(
         context, messages, _PLAN_TOOL, "hypotheses", _PLAN_MAX_TOKENS, "case_pipeline.hypothesise", gate="case_analysis",
@@ -405,7 +405,10 @@ async def adjudicate(
     messages = [
         _system_message(context),
         # The claims and their evidence quote the documents.
-        HumanMessage(content=_JUDGE_INSTRUCTIONS.format(hypotheses=fence(json.dumps(listing, default=str), "hypotheses"))),
+        HumanMessage(
+            content=_JUDGE_INSTRUCTIONS.format(hypotheses=fence(json.dumps(listing, default=str), "hypotheses"))
+            + context.feedback_text
+        ),
     ]
     response, args = await _ask_for_tool(
         context, messages, _VERDICT_TOOL, "verdicts", _JUDGE_MAX_TOKENS, "case_pipeline.adjudicate",

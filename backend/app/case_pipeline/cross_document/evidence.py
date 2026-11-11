@@ -104,6 +104,10 @@ class CaseContext:
     model_calls: int = 0
     # What the code-side comparisons already established (deterministic.brief), shown to the planner.
     established: str = ""
+    # Officer feedback from other cases, as the prompt block both model calls end with (feedback.render), and the ids of
+    # the items shown per finding category: what a finding of that category then says it was shown.
+    feedback_text: str = ""
+    feedback_ids: dict[str, list[str]] = field(default_factory=dict)
 
     def note(self, step: str, **fields: Any) -> None:
         """Records a step on the run's trace, if it has one."""

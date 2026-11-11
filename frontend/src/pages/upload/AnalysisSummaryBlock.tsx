@@ -118,7 +118,8 @@ export function AnalysisSummaryBlock({ analysis, linkToRiskTab }: { analysis: Ca
                 ) : linkToRiskTab && finding ? (
                   <Link
                     className="analysis-brief-link"
-                    to={{ search: '?section=risk', hash: `risk-finding-${finding.document_id}-${finding.finding_id}` }}
+                    // from=analysis so closing the document returns here, not to the risk tab (CaseRiskCard).
+                    to={{ search: '?section=risk&from=analysis', hash: `risk-finding-${finding.document_id}-${finding.finding_id}` }}
                   >
                     {reason.text}
                   </Link>

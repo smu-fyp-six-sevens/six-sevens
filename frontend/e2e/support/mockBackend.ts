@@ -348,12 +348,17 @@ export class MockBackend {
   traces: Record<string, unknown> = {};
   /** What the content guard found at ingest, per document id (GET .../content-guard); none = checked, nothing found. */
   contentGuards: Record<string, unknown> = {};
+  /** Officers' finding verdicts and sign-offs per case id (finding-reviews routes), enough for the review flow. */
+  findingReviews: Record<string, { verdicts: Record<string, unknown>; signOffs: Record<string, unknown> }> = {};
   /** Notes on cases and documents (GET/POST /cases/:id/notes), signed by the logged-in officer. */
   notes: NoteRow[] = [];
   /** Officers' reviews of groups with no findings to mark, one per case and group, like findings_repository.sign_off. */
   signOffs: SignOffRow[] = [];
   /** Audit trail entries (GET /audit/events?case_id=), in any order: served newest first, like the backend. */
   auditEvents: AuditEvent[] = [];
+  // The verdicts the page saved (PUT .../finding-reviews/verdicts), and the feedback items GET /finding-feedback opens.
+  verdictRequests: { verdicts: Record<string, unknown>[] }[] = [];
+  feedback: Record<string, unknown>[] = [];
   /** Each case's latest analysis run (GET /cases/:id/analysis); none = 404. POST .../analysis/run starts one. */
   analyses: Record<string, CaseAnalysis> = {};
   /** Per-filename upload results; files not listed here upload successfully. */
@@ -695,30 +700,59 @@ export class MockBackend {
     if (reviewedCase && this.cases.find((c) => c.id === reviewedCase[1])?.reviews_required === false) {
       return json({ detail: 'This case was created without finding reviews.' }, 409);
     }
-    // Officers' reviews of findings (precision/recall): no verdicts recorded, so every rate is "nothing to measure";
-    // the case's sign-offs as saved.
-    const reviews = (caseId: string) =>
-      json({
-        reviews: [],
-        sign_offs: this.signOffs
-          .filter((signOff) => signOff.case_id === caseId)
-          .map(({ scope, document_id, reviewer, updated_at }) => ({ scope, document_id, reviewer, updated_at })),
+    // Officers' reviews of findings: verdicts and sign-offs are kept per case (metrics stay empty — the review
+    // flow reads the verdicts and sign-offs, not the rates). A verdict is keyed by its document and fingerprint,
+    // a sign-off by its scope and document, so re-saving one replaces it, as the backend does.
+    const reviewStore = (caseId: string) =>
+      (this.findingReviews[caseId] ??= { verdicts: {}, signOffs: {} });
+    const reviewState = (caseId: string) => {
+      const store = reviewStore(caseId);
+      return json({
+        reviews: Object.values(store.verdicts),
+        sign_offs: Object.values(store.signOffs),
         case: emptyMetrics(),
         documents: {},
         cross_document: emptyMetrics(),
         checks: { document: [], case: [] },
       });
-    if (method === 'GET' && reviewedCase && path.endsWith('/finding-reviews')) {
-      return reviews(reviewedCase[1]);
+    };
+    const reviewsGet = path.match(/^\/cases\/([^/]+)\/finding-reviews$/);
+    if (method === 'GET' && reviewsGet) {
+      return reviewState(reviewsGet[1]);
     }
-    if (method === 'PUT' && reviewedCase && path.endsWith('/finding-reviews/sign-offs')) {
-      // Like findings_repository.sign_off: one per group, a later one replacing it, signed by the logged-in officer.
-      const { scope, document_id } = body as Pick<SignOffRow, 'scope' | 'document_id'>;
-      this.signOffs = this.signOffs.filter((s) => !(s.case_id === reviewedCase[1] && s.document_id === document_id));
-      this.signOffs.push({
-        case_id: reviewedCase[1], scope, document_id, reviewer: this.credentials.username, updated_at: '2026-10-31T00:00:00Z',
-      });
-      return reviews(reviewedCase[1]);
+    if (method === 'GET' && path === '/finding-feedback') {
+      const ids = url.searchParams.getAll('ids');
+      return json(this.feedback.filter((item) => ids.includes(item.id as string)));
+    }
+    const signOffPut = path.match(/^\/cases\/([^/]+)\/finding-reviews\/sign-offs$/);
+    if (method === 'PUT' && signOffPut) {
+      const { scope, document_id } = body as { scope: string; document_id: string | null };
+      reviewStore(signOffPut[1]).signOffs[`${scope}:${document_id ?? ''}`] = {
+        scope, document_id, reviewer: 'officer', updated_at: '2026-10-31T00:00:00Z',
+      };
+      return reviewState(signOffPut[1]);
+    }
+    const verdictsPut = path.match(/^\/cases\/([^/]+)\/finding-reviews\/verdicts$/);
+    if (method === 'PUT' && verdictsPut) {
+      this.verdictRequests.push(body as { verdicts: Record<string, unknown>[] });
+      const store = reviewStore(verdictsPut[1]);
+      const { verdicts } = body as {
+        verdicts: { scope: string; document_id: string | null; fingerprint: string; verdict: string | null; reason?: string | null; note?: string | null }[];
+      };
+      for (const item of verdicts) {
+        const key = `${item.document_id ?? ''}:${item.fingerprint}`;
+        if (item.verdict === null) {
+          delete store.verdicts[key];
+        } else {
+          store.verdicts[key] = {
+            id: key, kind: 'verdict', scope: item.scope, document_id: item.document_id, fingerprint: item.fingerprint,
+            verdict: item.verdict, reviewer: 'officer', check_name: '', check_code: null, agent_decision: null,
+            reason: item.reason ?? null, note: item.note ?? null, severity: null, summary: '', case_id: verdictsPut[1],
+            created_at: '2026-10-31T00:00:00Z', updated_at: '2026-10-31T00:00:00Z',
+          };
+        }
+      }
+      return reviewState(verdictsPut[1]);
     }
     if (method === 'GET' && path === '/detection-metrics') {
       return json(this.detectionMetrics ?? {

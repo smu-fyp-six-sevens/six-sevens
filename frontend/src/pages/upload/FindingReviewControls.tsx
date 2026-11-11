@@ -1,24 +1,24 @@
 import { useState } from 'react';
-import type { FindingReview, MetricsSummary, ReviewScope } from '../../services/uploadService';
+import type { ReviewReason, FindingReview, MetricsSummary, ReviewScope } from '../../services/uploadService';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { Rate } from '../../components/Rate';
 import { RATE_MEANING, belowTargetNote, formatCheck } from '../../utils/checkLabels';
 import { InfoLabel } from '../../components/InfoTip';
 import { officerName } from '../../lib/officers';
 import { Icon } from '../../components/Icon';
+import { FALSE_ALARM_REASONS, SET_ASIDE_REASONS, reviewReasonLabel } from '../../utils/reviewReasons';
 
 export type GroupReviewStatus = 'not_reviewed' | 'saved' | 'unsaved';
 
-const OTHER_CHECK = 'other';
-
-// Above a group's findings: tick the scored ones at once, and save the group's review. Saving is what makes an
-// unticked finding count as wrong; before that, nothing in the group counts.
+// Above a group's findings: tick the ones the agents got wrong, and save the group's review. Saving is what makes an
+// unticked finding count as right; before that, nothing in the group counts.
 export function GroupReviewBar({
   checkedCount,
   selectable,
   total,
   status,
   saving,
+  incomplete,
   onToggleAll,
   onSave,
 }: {
@@ -28,6 +28,8 @@ export function GroupReviewBar({
   total: number;
   status: GroupReviewStatus;
   saving: boolean;
+  // How many ticked false alarms still lack a reason (or the note "Other" needs): saving waits for them.
+  incomplete: number;
   onToggleAll: (checked: boolean) => void;
   onSave: () => void;
 }) {
@@ -52,16 +54,92 @@ export function GroupReviewBar({
       <span className="group-review-hint">
         <strong>Officer review:</strong>{' '}
         {total > 0
-          ? 'tick the real issues. Unticked ones are saved as false alarms.'
+          ? 'tick the findings the agents got wrong. Unticked ones are saved as right.'
           : 'no findings here. Save once you have checked it.'}
       </span>
-      <span className={`group-review-status group-review-status--${status}`}>
-        {status === 'saved' ? 'Review saved' : status === 'unsaved' ? 'Unsaved changes' : 'Not reviewed yet'}
-      </span>
-      <button type="button" className="group-review-save" disabled={saving || status === 'saved'} onClick={onSave}>
-        {saving ? 'Saving…' : 'Save review'}
-      </button>
+      <div className="group-review-actions">
+        {incomplete > 0 && (
+          <span className="group-review-incomplete" role="status">
+            {incomplete === 1 ? '1 finding needs a reason' : `${incomplete} findings need a reason`}
+          </span>
+        )}
+        <span className={`group-review-status group-review-status--${status}`}>
+          {status === 'saved' ? 'Review saved' : status === 'unsaved' ? 'Unsaved changes' : 'Not reviewed yet'}
+        </span>
+        <button
+          type="button"
+          className="group-review-save"
+          disabled={saving || status === 'saved' || incomplete > 0}
+          onClick={onSave}
+        >
+          {saving ? 'Saving…' : 'Save review'}
+        </button>
+      </div>
     </div>
+  );
+}
+
+// Under a ticked finding: why the agents got it wrong, in one click, which is required; "Other" also needs a note. On a
+// finding they kept it is a false alarm; on one they set aside it is a real issue. Read-only, it shows the saved reason.
+export function ReasonChips({
+  kind,
+  reason,
+  note,
+  disabled,
+  readOnly,
+  onChange,
+  onNoteChange,
+}: {
+  kind: 'false_alarm' | 'set_aside';
+  reason: ReviewReason | null;
+  note: string;
+  disabled: boolean;
+  readOnly: boolean;
+  onChange: (reason: ReviewReason) => void;
+  onNoteChange: (note: string) => void;
+}) {
+  const setAside = kind === 'set_aside';
+  if (readOnly) {
+    const label = reviewReasonLabel(reason);
+    return label ? (
+      <span className="false-alarm-reason">
+        {setAside ? 'Set aside wrongly' : 'False alarm'}: {label}
+        {note && ` — ${note}`}
+      </span>
+    ) : null;
+  }
+  return (
+    <span
+      className="false-alarm-reasons"
+      role="group"
+      aria-label={setAside ? 'Why were the agents wrong to set this aside?' : 'Why is this a false alarm?'}
+    >
+      <span className="false-alarm-reasons-label">{setAside ? 'Real issue because (required)' : 'False alarm because (required)'}</span>
+      {(setAside ? SET_ASIDE_REASONS : FALSE_ALARM_REASONS).map((entry) => (
+        <button
+          key={entry.value}
+          type="button"
+          className={`false-alarm-chip${reason === entry.value ? ' false-alarm-chip--on' : ''}`}
+          aria-pressed={reason === entry.value}
+          disabled={disabled}
+          onClick={() => onChange(entry.value)}
+        >
+          {entry.label}
+        </button>
+      ))}
+      {reason === 'other' && (
+        <input
+          className="false-alarm-note"
+          value={note}
+          maxLength={1000}
+          required
+          disabled={disabled}
+          aria-label="What was the reason?"
+          placeholder="What was the reason? (required)"
+          onChange={(event) => onNoteChange(event.target.value)}
+        />
+      )}
+    </span>
   );
 }
 
@@ -98,9 +176,8 @@ function MissedIssueForm({
   const [checkName, setCheckName] = useState(initialCheck);
   const [note, setNote] = useState(initialNote);
   const unchanged = checkName === initialCheck && note.trim() === initialNote.trim();
-  // "Other" (OTHER_CHECK in backend detection_metrics.py) is for an issue none of the checks covers, so it needs
-  // the description.
-  const needsNote = checkName === OTHER_CHECK;
+  // The note is what the agents learn from, so every missed issue needs one.
+  const needsNote = true;
 
   return (
     <form
@@ -124,7 +201,7 @@ function MissedIssueForm({
         </select>
       </label>
       <label>
-        <span>{needsNote ? 'What was missed' : 'What was missed (optional)'}</span>
+        <span>What was missed</span>
         <input
           value={note}
           required={needsNote}

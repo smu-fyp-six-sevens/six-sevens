@@ -61,6 +61,10 @@ class DocumentGraphState(TypedDict, total=False):
     # whether to call either, not a graph node.
     rule_result: dict | None
     agent_messages: Annotated[list[Any], add_messages]
+    # Officers' recurring type corrections (correction_hints), read on the agent's first turn, and the guesses
+    # already hinted about, so each is shown once.
+    type_corrections: list[dict]
+    type_hints_shown: list[str]
 
     classification: ClassificationResult | None
     extraction: ExtractionSummary | None

@@ -58,6 +58,7 @@ async def test_font_consistency_tool_findings_include_summary() -> None:
 
     assert output["findings"][0]["summary"]
     assert output["findings"][0]["locations"] == [{"page": 1, "bbox": [0, 0, 1, 1], "text": "x"}]
+    assert output["findings"][0]["check_code"] == "FONT.FONT"
 
 
 async def test_spelling_tool_findings_include_summary() -> None:
@@ -127,13 +128,15 @@ async def test_spelling_tool_reports_a_repeated_word_as_one_finding_with_its_cou
     assert finding["summary"] == 'Possible misspelling "Shenton" (suggested: "shelton"), appears 5 times.'
     assert finding["occurrences"] == 5
     assert finding["other_contexts"] == ["Shenton Way branch"]
+    # One code per word, so officers' false alarms are counted per word.
+    assert finding["check_code"] == "SPELLING.shenton"
 
 
 def test_metadata_tool_findings_include_summary() -> None:
     result = MetadataAnalysisResult(
         document_id="doc-1",
         extracted_metadata={},
-        anomalies=[MetadataAnomaly(field="author", value="admin", reason="placeholder", severity="low")],
+        anomalies=[MetadataAnomaly(code="META.PLACEHOLDER", field="author", value="admin", reason="placeholder", severity="low")],
         ai_generation_indicators=[],
         unable_to_assess=False,
     )
@@ -146,6 +149,8 @@ def test_metadata_tool_findings_include_summary() -> None:
         output = asyncio.run(tools.metadata_tool.ainvoke({"document_id": "doc-1"}))
 
     assert output["findings"][0]["summary"]
+    # Feedback is counted per rule: a dismissed placeholder author says nothing about an AI tool in the producer.
+    assert output["findings"][0]["check_code"] == "META.PLACEHOLDER"
 
 
 async def test_image_manipulation_tool_maps_indicators_to_findings() -> None:
@@ -180,6 +185,7 @@ async def test_image_manipulation_tool_maps_indicators_to_findings() -> None:
     assert finding["summary"] == "[Resolution Mismatch] Region drawn at 72 DPI among 300 DPI images."
     assert finding["page"] == 1
     assert finding["severity_hint"] == "high"
+    assert finding["check_code"] == "IMAGE.RESOLUTION_MISMATCH"
     assert "evidence" not in finding
 
 
@@ -215,6 +221,7 @@ async def test_layout_anomalies_tool_findings_carry_their_area_and_page_size() -
 
     finding = output["findings"][0]
     assert finding["type"] == "Alignment"
+    assert finding["check_code"] == "LAYOUT.ALIGNMENT"
     assert finding["bbox"] == [10.0, 40.0, 200.0, 52.0]
     assert finding["bbox_units"] == "pt"
     assert finding["page_size"] == [288.0, 192.0]
@@ -274,6 +281,7 @@ async def test_image_tampering_tool_maps_indicators_to_findings() -> None:
     assert finding["summary"].startswith("[Scaling Anomaly] ")
     assert finding["page"] == 1
     assert finding["severity_hint"] == "high"
+    assert finding["check_code"] == "TAMPER.SCALING_ANOMALY"
     assert "evidence" not in finding
 
 
@@ -458,6 +466,7 @@ async def test_ai_generation_tool_reports_only_medium_and_high_images() -> None:
     assert finding["severity_hint"] == "medium"
     assert finding["summary"].startswith("[AI Generation] Image on page 2 scores 0.60")
     assert [c["indicator"] for c in finding["contributors"]] == ["Spectral Peaks", "Noise Level"]
+    assert finding["check_code"] == "AI.IMAGE_SCORE"
 
 
 async def test_ai_generation_tool_reports_declared_file_provenance() -> None:
@@ -476,6 +485,8 @@ async def test_ai_generation_tool_reports_declared_file_provenance() -> None:
 
     assert output["findings"][0]["severity_hint"] == "high"
     assert "trainedalgorithmicmedia" in output["findings"][0]["summary"]
+    # A declared AI source is its own rule, apart from an image's score.
+    assert output["findings"][0]["check_code"] == "AI.DECLARED_SOURCE"
 
 
 async def test_ai_generation_tool_reports_unable_to_assess() -> None:

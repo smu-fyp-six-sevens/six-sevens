@@ -1429,7 +1429,6 @@
    while the page scrolls. Closed, it sits under the top bar (which is at 20); only the opened menu rises above the page. */
 .case-frame-nav {
   z-index: 15;
-  /* A pixel short of the window: page heights are fractional, and without the slack the end of the page nudged the rail. */
   height: calc(100vh - var(--topbar-height) - 1px);
 }
 

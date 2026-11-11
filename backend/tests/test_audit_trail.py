@@ -235,6 +235,8 @@ def test_adding_and_removing_a_field_record_its_value(published_events) -> None:
     added, removed = [e for e in published_events if e.type == types.DOCUMENT_FIELD_EDITED]
     assert added.detail["changes"] == [{"field": "net_pay", "from": None, "to": "5000"}]
     assert removed.detail["changes"] == [{"field": "net_pay", "from": "5000", "to": None}]
+    # What the extractor learns from is grouped by type (corrections_repository.field_edits).
+    assert added.detail["document_type"] == removed.detail["document_type"] == _document(DocumentStatus.ANALYZED).document_type
 
 
 # --- Case creation -------------------------------------------------------------

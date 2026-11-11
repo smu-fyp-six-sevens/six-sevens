@@ -73,6 +73,9 @@ def tool_results(messages: list) -> dict[str, dict]:
         if source is None or getattr(message, "status", "success") == "error":
             continue
         content = message.content
+        # A result with officers' corrections appended (classify_graph._with_type_hints): the tool's output is block one.
+        if isinstance(content, list) and content and isinstance(content[0], dict):
+            content = content[0].get("text", "")
         if isinstance(content, str):
             try:
                 content = json.loads(content)

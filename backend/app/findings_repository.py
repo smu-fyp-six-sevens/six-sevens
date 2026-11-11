@@ -38,7 +38,7 @@ _COLUMN_KEYS = frozenset({
 })
 _REVIEW_COLUMNS = (
     "id, case_id, document_id, scope, source, fingerprint, check_name, check_code, summary, agent_decision, severity, "
-    "verdict, reviewer, review_note, reviewed_at, created_at, updated_at"
+    "verdict, review_reason, reviewer, review_note, reviewed_at, created_at, updated_at"
 )
 
 
@@ -122,7 +122,7 @@ def _review(row: dict[str, Any]) -> FindingReview:
         kind="missed" if missed else "verdict", fingerprint=row.get("fingerprint"),
         check_name=row["check_name"], check_code=row.get("check_code"), summary=row.get("summary") or "",
         agent_decision=row.get("agent_decision"), severity=row.get("severity"), verdict=row.get("verdict"),
-        note=row.get("review_note"), reviewer=row["reviewer"],
+        reason=row.get("review_reason"), note=row.get("review_note"), reviewer=row["reviewer"],
         created_at=row["created_at"] if missed else row["reviewed_at"], updated_at=row["reviewed_at"],
     )
 
@@ -205,7 +205,7 @@ def sign_off(case_id: str, scope: ReviewScope, document_id: str | None, reviewer
 def find_current(case_id: str, scope: ReviewScope, document_id: str | None, fingerprint: str) -> dict[str, Any] | None:
     """The finding this fingerprint names in the case now, or None when a later run replaced it."""
     query = (
-        service_supabase_client().table(TABLE).select("id, document_id, check_name")
+        service_supabase_client().table(TABLE).select("id, document_id, check_name, check_code, summary, agent_decision, severity")
         .eq("case_id", case_id).eq("scope", scope).eq("fingerprint", fingerprint)
     )
     query = query.eq("document_id", document_id) if document_id is not None else query.is_("document_id", "null")
@@ -213,12 +213,14 @@ def find_current(case_id: str, scope: ReviewScope, document_id: str | None, fing
     return rows[0] if rows else None
 
 
-def set_verdict(row_id: str, verdict: ReviewVerdict | None, reviewer: str) -> None:
-    """The officer's verdict on one finding, replacing any earlier one; None clears it."""
+def set_verdict(
+    row_id: str, verdict: ReviewVerdict | None, reviewer: str, reason: str | None = None, note: str | None = None,
+) -> None:
+    """The officer's verdict on one finding, replacing any earlier one; None clears it. `reason` is why a false alarm is one."""
     values: dict[str, Any] = (
-        {"verdict": verdict, "reviewer": reviewer, "reviewed_at": _now()}
+        {"verdict": verdict, "review_reason": reason, "review_note": note, "reviewer": reviewer, "reviewed_at": _now()}
         if verdict is not None
-        else {"verdict": None, "reviewer": None, "review_note": None, "reviewed_at": None}
+        else {"verdict": None, "reviewer": None, "review_note": None, "review_reason": None, "reviewed_at": None}
     )
     result = service_supabase_client().table(TABLE).update({**values, "updated_at": _now()}).eq("id", row_id).execute()
     if not result.data:
@@ -227,13 +229,15 @@ def set_verdict(row_id: str, verdict: ReviewVerdict | None, reviewer: str) -> No
 
 def add_missed(
     *, case_id: str, scope: ReviewScope, document_id: str | None, check_name: str, note: str | None, reviewer: str,
-) -> None:
+) -> str:
+    """Saves the missed issue and returns its row id."""
     result = service_supabase_client().table(TABLE).insert({
         "case_id": case_id, "document_id": document_id, "scope": scope, "source": "officer",
         "check_name": check_name, "review_note": note, "reviewer": reviewer, "reviewed_at": _now(),
     }).execute()
     if not result.data:
         raise RuntimeError(f"The missed issue on case {case_id} was not saved")
+    return str(cast(list[dict[str, Any]], result.data)[0]["id"])
 
 
 def update_missed(row_id: str, *, check_name: str, note: str | None, reviewer: str) -> None:
