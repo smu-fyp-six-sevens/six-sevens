@@ -24,7 +24,7 @@ function contributing(overrides: Partial<CaseRiskFinding> & Pick<CaseRiskFinding
   return {
     filename: 'document.pdf', document_type: null, tool: null, check_code: null, severity: 'medium', summary: '',
     rationale: '', points: 0, unreviewed: false, fingerprint: `fp-${overrides.finding_id}`, category: null, source: 'document', repeat_of: null,
-    also_on: 0, document_ids: [], cited_values: [], ...overrides,
+    also_on: 0, feedback_ids: [], document_ids: [], cited_values: [], ...overrides,
   };
 }
 
@@ -48,7 +48,7 @@ function analysis(runId: string, overrides: Partial<CaseAnalysis> = {}): CaseAna
     findings: [{
       id: 'xdoc-1', hypothesis_id: 'h1', summary: ADDRESS, rationale: 'The two addresses differ.', severity: 'high',
       category: 'cross_document_variance', citations: [], document_ids: ['doc-bizfile'], cited_values: [], probe_summary: '', breach_flags: [], confidence: 0.8,
-      fingerprint: 'fp-xdoc-1',
+      fingerprint: 'fp-xdoc-1', feedback_ids: [],
     }],
     ...overrides,
   });
@@ -121,8 +121,21 @@ test.describe('Case analysis summary and earlier runs', () => {
     await expect(page.locator('#analysis-finding-xdoc-1')).toBeInViewport();
 
     await brief.getByRole('link', { name: "Declared pay isn't reflected in the account." }).click();
-    await expect(page).toHaveURL(/section=risk#risk-finding-doc-payslip-numerical_checks_tool-1$/);
+    await expect(page).toHaveURL(/section=risk&from=analysis#risk-finding-doc-payslip-numerical_checks_tool-1$/);
     await expect(page.locator('#risk-finding-doc-payslip-numerical_checks_tool-1')).toHaveClass(/risk-finding--linked/);
+  });
+
+  test('closing a document opened from a reason returns to the Case Analysis tab, not the risk tab', async ({ page, backend }) => {
+    const brief = await openAnalysis(page, backend);
+
+    await brief.getByRole('link', { name: "Declared pay isn't reflected in the account." }).click();
+    const modal = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
+    await expect(modal).toBeVisible();
+
+    await modal.getByRole('button', { name: 'Close review' }).click();
+
+    await expect(page).toHaveURL(/section=analysis$/);
+    await expect(brief.locator('.analysis-brief-headline strong')).toBeVisible();
   });
 
   test('"Would help" goes to the Additional Documents card', async ({ page, backend }) => {

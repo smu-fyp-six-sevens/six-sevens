@@ -500,6 +500,20 @@ def test_multiple_anomalies_all_reported_together() -> None:
     fields = {a.field for a in result.anomalies}
     assert fields == {"author", "producer", "modification_date"}
     assert result.document_id == "doc-1"
+    # Each names its own rule, so officers' feedback on one never counts towards another.
+    assert {a.code for a in result.anomalies} == {"META.PLACEHOLDER", "META.CONTENT_EDITOR", "META.MODIFIED_BEFORE_CREATED"}
+
+
+def test_each_rule_has_its_own_code() -> None:
+    def codes(metadata: dict, document_type: str | None = "bank_statement") -> set[str]:
+        return {a.code for a in check_metadata_anomalies("doc-1", metadata, document_type).anomalies}
+
+    assert codes({"Producer": "iLovePDF"}) == {"META.PDF_EDITOR"}
+    assert codes({"Producer": "ChatGPT"}) == {"META.AI_TOOL"}
+    assert codes({"Author": "fraud_tests"}) == {"META.TEST_ARTEFACT"}
+    assert codes({"CreateDate": "1990:01:01 00:00:00"}) == {"META.DATE_BEFORE_PDF"}
+    assert codes({"CreateDate": "2024:01:01 10:00:00", "ModifyDate": "2024:03:01 10:00:00"}) == {"META.RESAVED"}
+    assert codes({"Producer": "x", "Warning": "Invalid xref table"}) == {"META.PARSE_WARNINGS"}
 
 
 def test_subject_and_title_are_read_but_are_not_among_the_six_supported_fields() -> None:

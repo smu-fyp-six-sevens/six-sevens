@@ -86,7 +86,7 @@ The delete rules, RLS policies and grants are all in `backend/sql/schema.sql` (e
 - Delete audit events are fire-and-forget (`events.record`): if publishing fails, the delete stands with no audit row.
 - A delete's steps outside the database aren't in its transaction: the cross-document findings citing a document go first, then the stored files, then the row (whose cascades are atomic). A failure partway leaves the row (a retry finishes the job); a stored file that fails to delete is logged (`storage_service` warns when storage removes fewer files than asked), so it stays in storage.
 
-**Unused schema:** written, never read: `risk_scores.scored_at`, `extracted_fields.field_category` and `extracted_at` (read 2026-10-30). `public.finding_feedback` exists on the live database (0 rows, RLS on) but is in neither `schema.sql` nor any code: drop it.
+**Unused schema:** written, never read: `risk_scores.scored_at`, `extracted_fields.field_category` and `extracted_at` (read 2026-10-30).
 
 ## 7. Backwards compatibility (technical debt)
 

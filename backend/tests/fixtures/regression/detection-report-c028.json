@@ -119,6 +119,7 @@
       ],
       "ai_accepted": true,
       "bbox_units": "pt",
+      "check_code": "FONT.FONT",
       "confidence": 0.0,
       "detected": {
         "bold": false,
@@ -136,7 +137,7 @@
         "underline": false
       },
       "field_name": null,
-      "fingerprint": "3944f908eaa0a56c1e920531",
+      "fingerprint": "4e12c0be2d8683d3ec62ed5e",
       "id": "font_consistency_tool-1",
       "locations": [
         {
@@ -168,9 +169,10 @@
         }
       ],
       "ai_accepted": true,
+      "check_code": "META.PDF_EDITOR",
       "confidence": 0.0,
       "field": "creator",
-      "fingerprint": "1831e3a1abb9d0965ad0cee4",
+      "fingerprint": "df4e4630ebf426806bed41c7",
       "id": "metadata_tool-2",
       "rationale": "Rated medium.",
       "reason": "Adobe Acrobat can edit existing PDF content, and a credit report should reach us exactly as its issuer generated it",
@@ -192,9 +194,10 @@
         }
       ],
       "ai_accepted": true,
+      "check_code": "META.PDF_EDITOR",
       "confidence": 0.0,
       "field": "producer",
-      "fingerprint": "5767636fd490e751f10fd10e",
+      "fingerprint": "775b69b50bccc09cda6cd2e0",
       "id": "metadata_tool-3",
       "rationale": "Rated medium.",
       "reason": "Adobe Acrobat can edit existing PDF content, and a credit report should reach us exactly as its issuer generated it",
@@ -216,9 +219,10 @@
         }
       ],
       "ai_accepted": true,
+      "check_code": "META.TEST_ARTEFACT",
       "confidence": 0.0,
       "field": "author",
-      "fingerprint": "19b9387c45ec55bbf208c4bb",
+      "fingerprint": "8cad39e7f68499ddd237aecf",
       "id": "metadata_tool-1",
       "rationale": "Rated low.",
       "reason": "Author looks like a test/template artefact rather than a real name \u2014 a genuine document's metadata wouldn't carry it",

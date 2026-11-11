@@ -189,9 +189,15 @@ def _score_document(
             category=category_for_finding(finding).value,
             also_on=repeats.primary.get((document.id, finding["id"]), 0) if repeats else 0,
             repeat_of=repeats.repeat_of.get((document.id, finding["id"])) if repeats else None,
+            feedback_ids=_feedback_ids(finding),
         )
         for finding, points in zip(findings, base_points)
     ]
+
+
+def _feedback_ids(finding: dict[str, Any]) -> list[str]:
+    """The officer feedback the specialist was shown for this finding's check (detection's specialists.py)."""
+    return [i for i in finding.get("feedback_ids") or [] if isinstance(i, str)]
 
 
 def _dismissed(document: DocumentRecord, report: dict[str, Any]) -> list[DismissedFinding]:
@@ -208,6 +214,7 @@ def _dismissed(document: DocumentRecord, report: dict[str, Any]) -> list[Dismiss
             reason=finding.get("reason") or finding.get("rationale") or "",
             category=category_for_finding(finding).value,
             fingerprint=finding["fingerprint"],
+            feedback_ids=_feedback_ids(finding),
         )
         for finding, decision in report_findings(report)
         if decision == "dismissed" or finding.get("severity") == "info"
@@ -237,6 +244,7 @@ def contributing_from_cross_document(
         category=finding.category.value,
         source="cross_document",
         fingerprint=finding.fingerprint,
+        feedback_ids=finding.feedback_ids,
         document_ids=list(finding.document_ids),
         cited_values=list(finding.cited_values),
     )

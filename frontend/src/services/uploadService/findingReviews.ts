@@ -1,7 +1,15 @@
 import { assertOk } from './request';
 import { authFetch } from '../../lib/api';
 import { addDays, parseDay } from '../../utils/dateRange';
-import type { CaseFindingReviews, CaseStage, DetectionMetrics, ReviewScope, ReviewVerdict } from './types';
+import type {
+  CaseFindingReviews,
+  CaseStage,
+  DetectionMetrics,
+  ReviewReason,
+  FeedbackDetail,
+  ReviewScope,
+  ReviewVerdict,
+} from './types';
 
 // Every review in the case, with precision and recall per document, across documents and for the case.
 export async function getCaseFindingReviews(caseId: string): Promise<CaseFindingReviews> {
@@ -18,10 +26,14 @@ export interface FindingVerdictInput {
   documentId: string | null;
   fingerprint: string;
   verdict: ReviewVerdict | null;
+  // Why the agents got it wrong: required with a false alarm (wrong) or a set-aside finding found real (correct), and for
+  // 'other' a note too.
+  reason?: ReviewReason | null;
+  note?: string | null;
 }
 
-// One group's review in one request, signed by the logged-in officer: the findings the officer ticked are
-// correct, the rest wrong. Returns the case's reviews and metrics afresh.
+// One group's review in one request, signed by the logged-in officer: the findings the officer ticked are the ones the
+// agents got wrong, the rest right. Returns the case's reviews and metrics afresh.
 export async function setFindingVerdicts(caseId: string, verdicts: FindingVerdictInput[]): Promise<CaseFindingReviews> {
   const response = await authFetch(`/cases/${caseId}/finding-reviews/verdicts`, {
     method: 'PUT',
@@ -32,6 +44,9 @@ export async function setFindingVerdicts(caseId: string, verdicts: FindingVerdic
         document_id: review.documentId,
         fingerprint: review.fingerprint,
         verdict: review.verdict,
+        // The reason the officer gave for the agents getting it wrong: a false alarm (wrong), or a set-aside finding that is real.
+        reason: review.verdict ? (review.reason ?? null) : null,
+        note: review.verdict && review.reason === 'other' ? (review.note?.trim() ?? null) : null,
       })),
     }),
   });
@@ -129,4 +144,17 @@ export async function getDetectionMetrics(filters: DetectionMetricsFilters = {})
   await assertOk(response, 'Failed to load the detection metrics');
 
   return (await response.json()) as DetectionMetrics;
+}
+
+// The feedback items an agent was shown for a finding, opened: the officer's reason and note (confidential details already
+// removed) and the case each came from. One a later officer withdrew is no longer listed.
+export async function getFindingFeedback(ids: string[]): Promise<FeedbackDetail[]> {
+  if (ids.length === 0) return [];
+  const query = new URLSearchParams();
+  for (const id of ids) query.append('ids', id);
+  const response = await authFetch(`/finding-feedback?${query.toString()}`);
+
+  await assertOk(response, 'Failed to load the feedback');
+
+  return (await response.json()) as FeedbackDetail[];
 }

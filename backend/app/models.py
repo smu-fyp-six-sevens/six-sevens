@@ -418,6 +418,8 @@ class ContributingFinding(BaseModel):
     # carry it. On the copies that score 0: the finding_id of the one that scored.
     also_on: int = 0
     repeat_of: str | None = None
+    # The officer feedback (finding_feedback ids) the specialist was shown for this finding's check.
+    feedback_ids: list[str] = []
     # A cross-document finding: every document it rests on, and the value each one cited.
     document_ids: list[str] = Field(default_factory=list)
     cited_values: list[CitedValue] = Field(default_factory=list)
@@ -439,6 +441,8 @@ class DismissedFinding(BaseModel):
     reason: str
     category: str | None = None
     fingerprint: str
+    # The officer feedback (finding_feedback ids) the specialist was shown for this finding's check.
+    feedback_ids: list[str] = []
 
 
 class UnassessedCheck(BaseModel):
@@ -740,6 +744,16 @@ class UpdateNoteRequest(BaseModel):
 
 ReviewScope = Literal["document", "case"]
 ReviewVerdict = Literal["correct", "wrong"]
+# The one-click reasons a review offers when an officer says the agents got a finding wrong. For a finding the agents kept,
+# that it is a false alarm: why. For one they set aside, that it is real after all: why they were wrong to set it aside.
+FALSE_ALARM_REASONS = (
+    "normal_for_document", "within_tolerance", "tool_misread", "explained_elsewhere", "not_relevant", "other",
+)
+SET_ASIDE_REASONS = ("explanation_not_valid", "part_of_a_pattern", "other")
+ReviewReason = Literal[
+    "normal_for_document", "within_tolerance", "tool_misread", "explained_elsewhere", "not_relevant",
+    "explanation_not_valid", "part_of_a_pattern", "other",
+]
 MAX_REVIEW_NOTE_LENGTH = 1000
 
 
@@ -766,6 +780,8 @@ class FindingReview(BaseModel):
     agent_decision: Literal["accepted", "not_assessed", "overridden", "dismissed"] | None = None
     severity: str | None = None
     verdict: ReviewVerdict | None = None
+    # Why the officer says the agents got it wrong: a false alarm (verdict wrong), or one they set aside that is real.
+    reason: ReviewReason | None = None
     note: str | None = None
     reviewer: str
     created_at: datetime
@@ -790,6 +806,26 @@ class SetFindingVerdictRequest(_ReviewPlace):
 
     fingerprint: str = Field(min_length=1, max_length=100)
     verdict: ReviewVerdict | None = None
+    # Saying the agents got a finding wrong says why (the router checks which reasons fit, as only it knows what the
+    # agents did): a false alarm on a finding they kept, or a real issue among the ones they set aside. "Other" needs a
+    # note. Agreeing with the agents (a set-aside finding left alone) has neither.
+    reason: ReviewReason | None = None
+    note: str | None = Field(default=None, max_length=MAX_REVIEW_NOTE_LENGTH)
+
+    @field_validator("note")
+    @classmethod
+    def blank_note_is_none(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value is not None else None
+
+    @model_validator(mode="after")
+    def a_note_goes_with_other(self) -> "SetFindingVerdictRequest":
+        if self.verdict is None and (self.reason is not None or self.note is not None):
+            raise ValueError("A reason and a note go with a verdict")
+        if self.reason is None and self.note is not None:
+            raise ValueError("A note goes with a reason")
+        if self.reason == "other" and self.note is None:
+            raise ValueError("Say what the reason was when it is 'other'")
+        return self
 
 
 class SetFindingVerdictsRequest(BaseModel):

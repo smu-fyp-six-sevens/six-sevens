@@ -404,7 +404,8 @@ async def save_fields(document: DocumentRecord, extracted_fields: dict) -> Docum
     saved_fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document.id)
 
     await _audit(
-        types.DOCUMENT_FIELD_EDITED, document, action="saved", fields=sorted(extracted_fields),
+        types.DOCUMENT_FIELD_EDITED, document, action="saved", document_type=document.document_type,
+        fields=sorted(extracted_fields),
         changes=field_changes({field.field_name: field.field_value for field in existing_fields}, extracted_fields),
     )
     return present(updated or document, saved_fields)
@@ -442,7 +443,8 @@ async def add_field(document: DocumentRecord, name: str, value: object) -> Docum
     )
 
     await _audit(
-        types.DOCUMENT_FIELD_EDITED, document, action="added", fields=[field_name],
+        types.DOCUMENT_FIELD_EDITED, document, action="added", document_type=document.document_type,
+        fields=[field_name],
         changes=[{"field": field_name, "from": None, "to": _audit_value(value)}],
     )
     return present(updated or document, all_fields)
@@ -471,7 +473,8 @@ async def delete_field(document: DocumentRecord, field_id: str) -> DocumentRecor
     )
 
     await _audit(
-        types.DOCUMENT_FIELD_EDITED, document, action="deleted", fields=[field_to_delete.field_name],
+        types.DOCUMENT_FIELD_EDITED, document, action="deleted", document_type=document.document_type,
+        fields=[field_to_delete.field_name],
         changes=[{"field": field_to_delete.field_name, "from": _audit_value(field_to_delete.field_value), "to": None}],
     )
     return present(updated or document, remaining_fields)

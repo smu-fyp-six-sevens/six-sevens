@@ -223,6 +223,10 @@ export type CaseNote = Schemas['CaseNote'];
 export type FindingReview = Schemas['FindingReview'];
 export type ReviewScope = FindingReview['scope'];
 export type ReviewVerdict = NonNullable<FindingReview['verdict']>;
+// Why the agents got a finding wrong (one click on the review): a false alarm, or a set-aside finding that is real.
+export type ReviewReason = NonNullable<FindingReview['reason']>;
+// An item of officer feedback the agents were shown for a finding, opened: the officer's reason and the original case.
+export type FeedbackDetail = Schemas['FeedbackDetail'];
 export type CheckMetrics = Schemas['CheckMetrics'];
 export type MetricsSummary = Schemas['MetricsSummary'];
 // The backend keys checks by scope as a plain dict; it always has both scopes.

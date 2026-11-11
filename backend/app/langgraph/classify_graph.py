@@ -21,6 +21,10 @@ re-running rule_classify. Since that conversation already has at least one
 prior agent turn, only vision_llm (if it hasn't run) can be used there —
 llm_classify_tool already had its one shot on the original pass.
 
+Officers' recurring type corrections (correction_hints) reach the agent as a
+short hint for its guess: the rule classifier's on the first turn, and each
+classify tool's appended to that tool's result, each guess once.
+
 No checkpointer here (`compile(checkpointer=False)` in graph.py); only the
 parent graph persists.
 """
@@ -35,7 +39,8 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from . import text_cache, trace
+from . import correction_hints, text_cache, trace
+from ..corrections_repository import TypeCorrection
 from .cache_gate import cache_gate
 from .classification_confidence import compute_classification_confidence, tool_results
 from .. import telemetry
@@ -113,7 +118,26 @@ async def tools_node(state: DocumentGraphState, config: RunnableConfig) -> dict:
             {**state, "agent_messages": [*earlier, call_message.model_copy(update={"tool_calls": allowed})]}, config,
         )
         results = list(ran["agent_messages"])
-    return {"agent_messages": [*results, *refused]}
+    results, shown = _with_type_hints(results, state)
+    return {"agent_messages": [*results, *refused], "type_hints_shown": shown}
+
+
+def _with_type_hints(results: list, state: DocumentGraphState) -> tuple[list, list[str]]:
+    """Each classify tool's result, with the officers' corrections for its top guess appended as a second block."""
+    corrections = [TypeCorrection(**c) for c in state.get("type_corrections") or []]
+    shown = list(state.get("type_hints_shown") or [])
+    out = []
+    for message in results:
+        result = tool_results([message]) if isinstance(message, ToolMessage) and corrections else {}
+        guess = correction_hints.top_type(next(iter(result.values()), None))
+        hint = correction_hints.type_hint(guess, corrections, shown)
+        if hint and guess:
+            shown.append(guess)
+            message = message.model_copy(update={"content": [
+                {"type": "text", "text": message_text(message.content)}, {"type": "text", "text": hint},
+            ]})
+        out.append(message)
+    return out, shown
 
 
 def rule_node(state: DocumentGraphState) -> dict:
@@ -171,6 +195,12 @@ async def agent_node(state: DocumentGraphState) -> dict:
         # concatenating them into one block would make the whole thing vary
         # per document and never hit the cache. See classify_support.agent_prompt_parts.
         static_prompt, dynamic_inputs = agent_prompt_parts(state.get("rule_result"), _raw_text(state))
+        # Officers' recurring corrections, read once per document; the rule classifier's guess gets its hint now.
+        corrections = await correction_hints.load_type_corrections()
+        rule_guess = correction_hints.top_type(state.get("rule_result"))
+        hint = correction_hints.type_hint(rule_guess, corrections)
+        if hint:
+            dynamic_inputs += "\n\n" + hint
         model_input = [
             SystemMessage(content=[
                 {"type": "text", "text": static_prompt, "cache_control": {"type": "ephemeral"}},
@@ -189,7 +219,11 @@ async def agent_node(state: DocumentGraphState) -> dict:
         # agent_messages uses the add_messages reducer (see state.py), which
         # appends — only the messages new to this call are returned, not the
         # accumulated history, or they'd be duplicated.
-        return {"agent_messages": [*model_input, response]}
+        return {
+            "agent_messages": [*model_input, response],
+            "type_corrections": [c.model_dump() for c in corrections],
+            "type_hints_shown": [rule_guess] if hint and rule_guess else [],
+        }
 
 
 def should_continue_agent(state: DocumentGraphState) -> str:
