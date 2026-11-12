@@ -98,7 +98,7 @@ export const DashboardScene: React.FC<{ showText?: boolean }> = ({ showText = tr
           <Pointer x={px} y={py} size={20} press={Math.max(press(T.navClick), press(T.clickAt), press(T.auditClick))} />
         </Viewport>
       </Window>
-      <ProductHeader step={3} fromStep={2} length={T.length} headline={DASHBOARD_COPY.headline} headlineIn={T.headlineIn} showText={showText}
+      <ProductHeader step={5} fromStep={5} length={T.length} headline={DASHBOARD_COPY.headline} headlineIn={T.headlineIn} showText={showText}
         beats={DASHBOARD_COPY.beats.map((b) => ({ ...b, at: T[b.at as keyof typeof T] }))} />
     </AbsoluteFill>
   );

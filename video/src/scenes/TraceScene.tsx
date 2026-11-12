@@ -68,7 +68,7 @@ export const TraceScene: React.FC<{ showText?: boolean }> = ({ showText = true }
           </Screen>
         </Window>
       )}
-      <ProductHeader step={1} fromStep={1} length={T.length} headline={TRACE_COPY.headline} headlineIn={T.headlineIn} showText={showText}
+      <ProductHeader step={3} fromStep={3} length={T.length} headline={TRACE_COPY.headline} headlineIn={T.headlineIn} showText={showText}
         beats={TRACE_COPY.beats.map((b) => ({ ...b, at: T[b.at as keyof typeof T] }))} />
     </AbsoluteFill>
   );

@@ -42,7 +42,7 @@ One case is too much paper for one person to read; the portal reads all of it, a
 - The app's header reads "GLDB Fraud Review"; the film names the product "GLDB Anomaly Detection Portal" (owner's call).
 
 **Section 5 · after section 4 · 0:11.5 · upload (how it works, step 1).**
-- Format for every product section from here: step tracker on top (Upload / Detect / Score, owner's names), one headline, a short line that changes with each beat; the real portal in the same window below.
+- Format for every product section from here: step tracker on top (Upload / Classify / Extract / Detect / Score / Finalise), one headline, a short line that changes with each beat; the real portal in the same window below.
 - Visual: drag the package in, 20 rows cascade, click Upload; table fills row by row (Processing, type stamps on, Extracted); scanned December statement read by a beam into the Extracted Information card.
 - On-screen copy: **Upload the whole package.** / **Every file is classified and its key fields read, even from scans.**
 

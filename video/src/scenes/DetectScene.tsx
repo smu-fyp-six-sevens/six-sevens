@@ -165,7 +165,7 @@ export const DetectScene: React.FC<{ showText?: boolean }> = ({ showText = true 
           )}
         </AbsoluteFill>
       </Window>
-      <ProductHeader step={1} fromStep={0} length={T.length} headline={DETECT_COPY.headline} headlineIn={T.headlineIn} showText={showText}
+      <ProductHeader step={3} fromStep={2} length={T.length} headline={DETECT_COPY.headline} headlineIn={T.headlineIn} showText={showText}
         beats={DETECT_COPY.beats.map((b) => ({ ...b, at: T[b.at as keyof typeof T] }))} />
     </AbsoluteFill>
   );

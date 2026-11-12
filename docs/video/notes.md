@@ -122,3 +122,8 @@
 - Review re-captured with those lines hidden (capture/story2.spec.ts); every overlay position re-measured from it.
 - Bad actor: label removed, avatar at the bottom of its panel; three bubbles timed to the edit ("Let's change the numbers here...", "Just swap two digits.", "No one checks the closing balance anyway 😏"), newest on top, older ones fading out (BAD_ACTOR.lines in data/tamper.ts).
 - Spliced fresh renders of Scene-Tamper (frames 558-842) and Scene-Score (2253-2702) into renders/film-novo.mp4; soundtrack unchanged.
+
+## Wave 21 - six steps
+- Owner: the steps are Upload > Classify > Extract > Detect > Score > Finalise.
+- Mapping: Upload section lights Upload, then Classify as the table stamps types (classifyStart), then Extract with the scan (scanAt); Detect and Trace light Detect; Score lights Score, then Finalise from the review tick (tickAt); Dashboard stays on Finalise. ProductHeader takes stepAt for changes within a section; tracker chips slimmed to fit six.
+- Spliced a fresh render of frames 1218-3002 (sections 5-9) into renders/film-novo.mp4; soundtrack unchanged.

@@ -96,7 +96,7 @@ Everything you're likely to change is in two folders.
 | `overwhelm.ts` | Hook: the PDFs, the extra tabs, the chat pings (`PINGS3`), the final ping (`FINAL_PING`), the headlines (`COPY2`), and how long "Waaaay" gets (`WAY3_MAX_A`) |
 | `waiting.ts` | Section 2: the caption (`CAPTION`), the role labels (`ROLES`), the page and inbox counts, the clock's start and end times |
 | `howitworks.ts` | Sections 6-8: headlines and beats, the lead agent's plan, the six checks, the two catches, the What / Where / Why tags |
-| `upload.ts` | Section 5: the step names (`STEPS`: Upload, Detect, Score, shared by every product section), captions, the package's files and types, the scanned statement and its fields |
+| `upload.ts` | Section 5: the step names (`STEPS`: Upload, Classify, Extract, Detect, Score, Finalise, shared by every product section; `stepAt` on each section's ProductHeader moves the tracker on within it), captions, the package's files and types, the scanned statement and its fields |
 | `portal.ts` | Section 4: the lead-in (`intro`), the title and the two short lines. (The app's own wording is in the captured screenshots, from `capture/story.spec.ts`.) |
 | `tamper.ts` | Section 3: the caption (`CAPTION3`), the statement's rows, and the edited figure (`before` / `after`) |
 

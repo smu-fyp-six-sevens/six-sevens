@@ -40,7 +40,7 @@ kept behind `PORTAL_VERSION`; its renders are in `renders/v1/`. Screens are capt
 backend by `capture/story.spec.ts`, with a detection report written for the story.
 
 **Section 5 "upload", 11.5 s. How it works, step 1.** From here on every product section carries the same step
-tracker at the top: **1 Upload, 2 Detect, 3 Score**, the current step lit.
+tracker at the top: **Upload, Classify, Extract, Detect, Score, Finalise** (the tracker moves on within a section too), the current step lit.
 Headline "Upload the whole package." A cursor drags a fanned stack of "20 files" into the portal's upload box (it
 lights up as the stack hovers), the case's 20 files cascade in, and it clicks "Upload 20 files". The box clears and
 the documents table fills row by row: a spinner and "Processing", then the document type stamps on, the mark turns

@@ -275,7 +275,7 @@ export const UploadScene: React.FC<{ showText?: boolean }> = ({ showText = true 
         </Window>
       )}
 
-      <ProductHeader step={0} fromStep={null} length={T.length} headline={UPLOAD_COPY.headline} headlineIn={T.headlineIn} showText={showText}
+      <ProductHeader step={0} fromStep={null} stepAt={[[T.classifyStart, 1], [T.scanAt, 2]]} length={T.length} headline={UPLOAD_COPY.headline} headlineIn={T.headlineIn} showText={showText}
         beats={[{ text: UPLOAD_COPY.line1, at: T.line1In }, { text: UPLOAD_COPY.line2, at: T.line2In, accent: true }]} />
     </AbsoluteFill>
   );

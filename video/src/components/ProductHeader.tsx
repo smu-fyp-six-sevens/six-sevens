@@ -19,12 +19,19 @@ export const ProductHeader: React.FC<{
   step: number; headline: string; headlineIn: number; beats: Beat[]; showText: boolean;
   /** The step the previous section showed (null: no tracker before this section); the tracker animates from it. */
   fromStep?: number | null;
+  /** Later steps within the section: [seconds, step]. The tracker moves on to each over half a second. */
+  stepAt?: [number, number][];
   /** The section's length in seconds: the headline and line lift away over its last moments. */
   length: number;
-}> = ({ step, headline, headlineIn, beats, showText, fromStep = step, length }) => {
+}> = ({ step, headline, headlineIn, beats, showText, fromStep = step, length, stepAt = [] }) => {
   const frame = useCurrentFrame();
   const hand = interpolate(frame, [s(0.1), s(0.65)], [0, 1], { ...clamp, easing: ease });
-  const current = fromStep === null ? step : fromStep + (step - fromStep) * hand;
+  let current = fromStep === null ? step : fromStep + (step - fromStep) * hand;
+  let prev = step;
+  for (const [at, next] of stepAt) {
+    current += (next - prev) * interpolate(frame, [s(at), s(at + 0.5)], [0, 1], { ...clamp, easing: ease });
+    prev = next;
+  }
   const trackerIn = fromStep === null ? hand : 1;
   const out = interpolate(frame, [s(length) - 10, s(length)], [0, 1], { ...clamp, easing: Easing.bezier(0.5, 0, 0.9, 0.55) });
   return (
