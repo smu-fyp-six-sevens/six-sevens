@@ -82,7 +82,7 @@ test('risk summary and review', async ({ page, backend }) => {
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${OUT}/risk.png` });
   await page.screenshot({ path: `${OUT}/risk-full.png`, fullPage: true });
-  const risk = { documents: await boxes(page, '.risk-document'), card: await boxes(page, '.summary-card') };
+  const risk = { documents: await boxes(page, '.risk-document'), card: await boxes(page, '.summary-card'), gauge: await boxes(page, '.severity-gauge-value') };
 
   await page.locator('.risk-document', { hasText: jan.filename }).getByRole('button').first().click();
   const dialog = page.getByRole('dialog', { name: `Review findings on ${jan.filename}` });

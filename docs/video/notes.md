@@ -110,3 +110,9 @@
 - Dashboard: rebuilt as navigation driven by the cursor (top-bar Dashboard, scroll, GLDB-02, sidebar Audit); the camera works on the viewport and pages scroll inside it, so a new page opens at its top. Score hands over without a swipe.
 - Length 114.6 s: difference 10 -> 7, cta 9 -> 7.5, detect 13.5 -> 12.5, trace 11 -> 10.5, score 16 -> 15, dashboard 10. Music re-cut with a 9-bar loop so it ends with the film; no ducking when the voice is off.
 - Delivered: renders/film-novo.mp4 (music and effects, no voice). Master (with the guide voice) still renders, but the guide clips no longer fit every shortened section.
+
+## Wave 19 - the 72 and the tags
+- Owner: the ring round the gauge was ugly (make the 72 flash slowly); What / Where / Why more obvious and bigger. Only these two segments re-rendered.
+- The 72: the ring is gone; the number is redrawn over the page's own (measured .severity-gauge-value box) and flashes slowly ink to red with a soft red glow and a gentle swell, about one breath every 1.2 s.
+- Tags: tinted fills, 3.5 px outlines, 19 px uppercase labels; WHAT sits above its box (it clipped at the edge on the right); the camera pushes in gently while they appear.
+- Delivered by splicing a fresh render of Scene-Score into renders/film-novo.mp4 (frames 2253-2702, video only; the film's soundtrack kept as is).
