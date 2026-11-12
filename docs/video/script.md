@@ -14,9 +14,9 @@ About 2.5 words a second, so every line can be read calmly over its section. Tim
 | 8 | 1:15.1 | ③ Score | Every case gets a risk rating, with the evidence behind it: what was flagged, where, and why. The officer confirms or dismisses each finding, and adds notes. And the portal recommends the documents that would settle any doubt. | |
 | 9 | 1:31.1 | Dashboard *(new)* | From the dashboard, officers see every case at a glance, drill into anything flagged, and keep a full audit trail for compliance. | Real dashboard screen, zooms only. |
 | 10 | ~1:40 | The difference *(new)* | What took hours of screening now takes minutes. The AI does the reading. Your loan officers make the call. And customers hear back sooner. | Bookends section 2: the same Loan Officer and Customer, the clock barely moving, the officer's status "Review complete", and the customer gets the good-news ping (answering the hook's ping). |
-| 11 | ~1:50 | Close *(new)* | GLDB Anomaly Detection Portal. Faster reviews, with your team in control. | Name, tagline, "Try it today". About 5 s, the music resolves. |
+| 11 | ~1:50 | Call to action *(new)* | Ready to cut review time from hours to minutes? Book a demo of the GLDB Anomaly Detection Portal today. | Name, then a "Book a demo" button with a contact line under it (email or URL, to confirm). About 6 s; the music resolves on the button. Alternatives: "Try it on your next case" or "Join the pilot". |
 
-Running length: about 1:55.
+Running length: about 1:56.
 
 ## Sound
 - **Music:** your track under everything, ducked under the voice. It's quieter and tense through sections 1–3, lifts when the portal arrives (section 4), and resolves on the close.
