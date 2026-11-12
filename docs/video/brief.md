@@ -31,6 +31,10 @@ One case is too much paper for one person to read; the portal reads all of it, a
 - On-screen copy (locked, the script line): **A loan officer may spend over an hour / staring at details on the screen,** then **while the loan customer anxiously waits / on the other end for any news of approval.**
 - v1 (initials, invented names) kept behind WAITING_VERSION.
 
+**Section 3 · after section 2 · 0:09.5 · tamper.**
+- Visual: split screen. Left: Bad Actor silhouette (horns, tail, scheming eyes, grin). Right: corporate bank statement, zoomed; cursor selects the closing balance 182,400.00 and types 812,400.00 (digits swapped) with tiny tells (lighter weight, a hair low, wider spacing). Then the statement shrinks into an 18-document grid and blends in.
+- On-screen copy (owner chose the tidied line): **Even worse, when bad actors are involved, / smaller anomalies are even harder to catch.**
+
 ## Assumptions (veto any)
 0. v2: people, teams and filenames are invented; documents are schematic (grey bars, made-up figures). The company name Anchorpoint Insurance Brokers comes from the test fixture.
 1. On-screen headlines included by default; `Master-NoText` has none.

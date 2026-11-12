@@ -48,3 +48,9 @@
 ## Wave 8 - gentler numbers
 - Owner: "of 212" -> "of 95"; inbox checks end at 8x, not 14x.
 - Owner noticed soft quality: previews were 1080p at about 1.8 Mbit/s. Deliverables now rendered 4K, CRF 10, x264 slow (renders/4k).
+
+## Wave 9 - section 3, "tamper"
+- Owner: split screen, bad actor icon with devil horns, the other side amending a value.
+- Owner's picks: bank statement closing balance (182,400.00 -> 812,400.00); end "lost in the pile"; caption tidied.
+- Decision: the forgery's tells match the product's later checks (fonts, alignment, totals) so the film can pay them off when the product appears.
+- Measured: stills at frames 0, 70, 105, 125, 175, 210, 280: statement readable at 2.1x, no clipping, the doctored statement lands in slot 8 of the grid. Not watched in motion.

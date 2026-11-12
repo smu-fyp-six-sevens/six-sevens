@@ -23,7 +23,14 @@ racing from 9:02 to 10:14. Her status creeps from page 14 to 19 of 95; their "Ch
 The customer starts pulsing and typing when their half of the caption appears. The first version (initials and
 names) is kept behind `WAITING_VERSION`; its renders are in `renders/v1/`.
 
-Renders: `renders/film-so-far.mp4` (hook + section 2, 18.6 s), `renders/02-waiting.mp4` (section 2 alone), each with a
+**Section 3 "tamper", 9.5 s.** Caption: "Even worse, when bad actors are involved, / smaller anomalies are even harder
+to catch." Split screen: on the left, a Bad Actor (the same silhouette style, with devil horns, a tail, scheming eyes
+and a grin, snickering); on the right, a corporate bank statement zoomed in. A text cursor selects the closing balance
+182,400.00 and types 812,400.00 over it (two digits swapped). The forgery's tells are deliberately tiny: a slightly
+lighter weight, a hair lower, a little wider spaced. Then the statement shrinks into a grid of the case's other
+documents and is impossible to pick out.
+
+Renders: `renders/film-so-far.mp4` (hook + sections 2 and 3, 28.1 s), `renders/03-tamper.mp4` (section 3 alone), `renders/02-waiting.mp4` (section 2 alone), each with a
 `-no-text` twin. `renders/hook.mp4` (with headlines), `renders/hook-no-text.mp4` (same shots, no headlines), `renders/hook-poster.png`.
 
 ## Fine-tuning
@@ -34,6 +41,8 @@ npm install
 npm run dev        # Remotion Studio: scrub, preview, edit props live
 ```
 
+- **Timing (section 3):** `TAMPER` in `src/timing.ts`: `line1In`, `cursorIn`/`cursorAt`, `select`, `erase`, `typeStart`/`typeEnd`, `line2In`, `shrinkStart`/`shrinkEnd`, `length`.
+- **Words and figures (section 3):** `src/data/tamper.ts`: the caption, the statement's rows, and `before`/`after` for the edited balance. The bad actor is drawn in `src/components/Silhouette.tsx`.
 - **Timing (section 2):** `WAITING2` in `src/timing.ts`: `officerLineIn`, `customerLineIn`, `clockStart`/`clockEnd` (how long the hour takes), `pulseEvery`, `fidget`, `length`.
 - **Words (section 2):** `CAPTION` and `ROLES` in `src/data/waiting.ts`; page and inbox counts and the clock's times are in the same file. The avatars are drawn in `src/components/Silhouette.tsx`.
 - **Timing (v3):** `src/timing.ts`, the `OVERWHELM3` object, all in seconds. Line the knobs up with your voiceover: `title1In`/`title1Out` (first line), `wayIn`, `stretchStart`/`stretchEnd` (how long you drag the "waaaay": the a's, and their documents, land evenly in between), `title2In`, `footnoteIn`, `pings` (one per message), `finalPingIn` (the sigh moment), and `length` (sets how long the hold lasts after it).
@@ -66,9 +75,10 @@ Quick previews (1080p, small files; text is softer):
 ```bash
 npx remotion render Master renders/film-so-far.mp4 --color-space=bt709 --crf=16
 npx remotion render Scene-Waiting renders/02-waiting.mp4 --color-space=bt709 --crf=16
+npx remotion render Scene-Tamper renders/03-tamper.mp4 --color-space=bt709 --crf=16
 ```
 
-Single scenes for quick checks: `Scene-Waiting` (section 2), `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
+Single scenes for quick checks: `Scene-Tamper` (section 3), `Scene-Waiting` (section 2), `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
 
 ## Where the UI comes from (v1)
 

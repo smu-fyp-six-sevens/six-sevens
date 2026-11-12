@@ -10,11 +10,16 @@ const HEAD = { cx: 100, cy: 78, r: 40 };
 const BODY = "M18 214 C18 158 48 132 78 128 Q100 148 122 128 C152 132 182 158 182 214 Z";
 
 export const Silhouette: React.FC<{
-  role: "officer" | "customer"; size: number; tint: string; bg: string; t: number; fidget: number;
+  role: "officer" | "customer" | "badActor"; size: number; tint: string; bg: string; t: number; fidget: number;
 }> = ({ role, size, tint, bg, t, fidget }) => {
   const officer = role === "officer";
-  // Officer: a slow nod toward the screen. Customer: a restless sway.
-  const tilt = officer ? 3 + 1.5 * Math.sin((t * 2 * Math.PI) / 4) : 4 * Math.sin((t * 2 * Math.PI) / fidget);
+  const bad = role === "badActor";
+  // Officer: a slow nod toward the screen. Customer: a restless sway. Bad actor: leans in, snickering.
+  const tilt = officer
+    ? 3 + 1.5 * Math.sin((t * 2 * Math.PI) / 4)
+    : bad
+      ? 7 + 1.2 * Math.sin((t * 2 * Math.PI) / 0.45)
+      : 4 * Math.sin((t * 2 * Math.PI) / fidget);
   // Officer: a glint crosses the glasses every 2.4 s. Customer: a sweat drop slides every 2 s.
   const glint = ((t % 2.4) / 0.5);
   const drop = (t % 2) / 2;
@@ -37,8 +42,29 @@ export const Silhouette: React.FC<{
               <path d="M96 150 L104 150 L106 158 L101 196 L99 196 L94 158 Z" fill={tint} />
             </>
           )}
+          {bad && (
+            /* tail, curling up from behind the shoulder, with an arrowhead */
+            <g fill="none" stroke={tint} strokeWidth="6" strokeLinecap="round">
+              <path d="M160 186 C 190 170, 176 140, 194 128" />
+            </g>
+          )}
+          {bad && <path d="M194 116 L203 132 L186 133 Z" fill={tint} />}
+          {bad && (
+            /* horns */
+            <g fill={tint}>
+              <path d="M70 52 C 62 36, 62 24, 70 12 C 72 28, 80 38, 88 44 Z" />
+              <path d="M130 52 C 138 36, 138 24, 130 12 C 128 28, 120 38, 112 44 Z" />
+            </g>
+          )}
           <circle {...HEAD} fill={colors.ink} />
-          {officer ? (
+          {bad ? (
+            /* narrowed, scheming eyes and a sly grin */
+            <g fill="none" stroke={bg} strokeWidth="4.5" strokeLinecap="round">
+              <path d="M76 70 L92 76" />
+              <path d="M124 70 L108 76" />
+              <path d="M82 94 Q100 108 120 92" />
+            </g>
+          ) : officer ? (
             <>
               {/* glasses */}
               <g fill="none" stroke={bg} strokeWidth="4">

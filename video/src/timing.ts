@@ -77,6 +77,23 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
  */
 export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
+/** Section 3, "tamper". All times in seconds from the start of the section. */
+export const TAMPER = {
+  length: 9.5,            // whole section
+  panelsIn: -0.25,        // the two halves land. Negative = already arriving on the first frame
+  line1In: 0.3,           // "Even worse, when bad actors are involved,"
+  cursorIn: 1.1,          // the text cursor appears on the statement...
+  cursorAt: 1.9,          // ...and reaches the closing balance
+  select: 2.1,            // the figure gets selected
+  erase: 2.6,             // and deleted
+  typeStart: 2.8,         // the new figure is typed...
+  typeEnd: 3.9,           // ...character by character
+  line2In: 4.5,           // "smaller anomalies are even harder to catch."
+  shrinkStart: 5.3,       // the statement shrinks into the pile...
+  shrinkEnd: 6.4,         // ...and lands among the case's other documents
+  pileStagger: 0.04,      // seconds between the other documents appearing
+};
+
 /**
  * Section 2 version.
  *   "v2"  silhouette avatars (Loan Officer, Customer), the script line as the caption. Default.
@@ -176,7 +193,7 @@ export const s = (seconds: number): number => Math.round(seconds * FPS);
 
 const SCENE_LENGTHS: Record<string, number> =
   HOOK_VERSION === "v3"
-    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length) }
+    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length) }
     : HOOK_VERSION === "v2"
     ? { overwhelm: atSeconds(OVERWHELM.length) }
     : { package: atSeconds(HOOK.package.length), tooMany: atSeconds(HOOK.tooMany.length) };
