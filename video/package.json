@@ -5,10 +5,12 @@
   "scripts": {
     "dev": "remotion studio",
     "typecheck": "tsc --noEmit",
-    "render": "remotion render Master out/hook.mp4 --color-space=bt709",
-    "still": "remotion still Master out/hook-poster.png --frame=150",
+    "render": "remotion render Master renders/4k/film-so-far-4k.mp4 --scale=2 --crf=10 --x264-preset=slow --color-space=bt709",
+    "still": "remotion still Master renders/poster.png --frame=150",
     "timing": "node tools/dump-timing.mjs",
-    "stills": "node tools/stills.mjs"
+    "stills": "node tools/stills.mjs",
+    "render:notext": "remotion render Master-NoText renders/4k/film-so-far-no-text-4k.mp4 --scale=2 --crf=10 --x264-preset=slow --color-space=bt709",
+    "render:preview": "remotion render Master renders/film-so-far.mp4 --crf=16 --color-space=bt709"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.532",
