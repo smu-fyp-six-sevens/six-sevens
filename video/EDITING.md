@@ -15,7 +15,7 @@ time and every word lives in two kinds of files you can edit without touching th
 | Section 5 ("upload") | 0:40.6 - 0:52.1 | Step 1 Upload: drag the package in, the table classifies and extracts row by row, a scan beam reads a scanned statement |
 | Section 6 ("detect") | 0:52.1 - 1:04.6 | Step 2 Detect: the lead agent's plan, six checks branch out and run, the doctored figure and mismatched address are caught |
 | Section 7 ("trace") | 1:04.6 - 1:15.1 | Step 2 Detect: the real Agent trace and a tool call's output, then the real audit trail |
-| Section 8 ("score") | 1:15.1 - 1:28.6 | Step 3 Score: the real Risk Summary, the review dialog (what, where, why), a finding dismissed with a note and saved |
+| Section 8 ("score") | 1:15.1 - 1:31.1 | Step 3 Score: the real Risk Summary, the review dialog (what, where, why), a finding dismissed with a note and saved, then the recommended additional documents |
 | Section 4 ("portal") | 0:28.1 - 0:40.6 | "So that's why we introduce..." then the name, centred; the real app in 3D angles: Case Summary, Agent trace, Detection catching the forged statement |
 
 No sound: you add the voiceover and music in your video editor.
@@ -108,6 +108,7 @@ In a caption, `\n` is a line break. Lines never wrap on their own, so if a line 
 - **Change a caption:** edit the text in `src/data/...`, save, and check it in Studio.
 - **Make a section longer or shorter:** change its `length`. The sections after it move along automatically.
 - **Remove a chat ping from the hook:** delete it from `PINGS3` in `overwhelm.ts` *and* remove one time from `OVERWHELM3.pings`.
+- **Make the swipes between screens faster or slower:** `SWIPE` in `src/components/swipe.ts` (seconds).
 - **Change the edited figure:** `before` and `after` in `tamper.ts`.
 - **Go back to an earlier version:**
   - Hook: `HOOK_VERSION` in `timing.ts` (`"v1"` is the upload box, `"v2"` is the side screen).

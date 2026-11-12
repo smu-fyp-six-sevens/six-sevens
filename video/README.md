@@ -61,15 +61,22 @@ both boxed, a red "≠" between). Rebuilt in the portal's style.
 light up, the cursor opens the font consistency check and the tool's returned output is boxed as the camera moves in.
 Then the case's real audit trail, angled, its entries lighting up one by one: "Every finding can be audited."
 
-**Section 8 "score", 13.5 s. Step 3.** "Every case gets a risk rating." The real Risk Summary (High, 72) rises in; the
+**Section 8 "score", 16 s. Step 3.** "Every case gets a risk rating." The real Risk Summary (High, 72) rises in; the
 gauge is ringed, then the documents to review. The cursor opens the bank statement's real review dialog, with the
 statement on its page: "What", "Where" (the forged figure, boxed) and "Why" are tagged in turn. The officer ticks the
-metadata finding as a false alarm, picks "Other", types a note, and saves: "Review saved".
+metadata finding as a false alarm, picks "Other", types a note, and saves: "Review saved". Then the real Additional
+Documents section: "And it recommends the documents that would settle it." The score line (Now 72 High, best case
+20 Low) is boxed, then each recommended document lights up (a bank-certified January statement, proof of the
+registered address, a purchase order for the December supplier payment).
+
+**Between screens and between stages (sections 5-8)** there is one move: the outgoing window swipes off to the left,
+turning a little in 3D, as the next swipes in from the right (`src/components/swipe.ts`, `SWIPE` seconds). The step
+tracker animates from one step to the next, and each section's headline lifts away at its end.
 
 Sections 6-8 use the portal on its mock backend with the story's risk, review and audit events
 (`capture/story2.spec.ts`).
 
-Renders: `renders/film-so-far.mp4` (hook + sections 2-8, 88.6 s), `renders/05-upload.mp4` ... `renders/08-score.mp4` (each section alone), `renders/04-portal.mp4` (section 4 alone), `renders/03-tamper.mp4` (section 3 alone), `renders/02-waiting.mp4` (section 2 alone), each with a
+Renders: `renders/film-so-far.mp4` (hook + sections 2-8, 91.1 s), `renders/05-upload.mp4` ... `renders/08-score.mp4` (each section alone), `renders/04-portal.mp4` (section 4 alone), `renders/03-tamper.mp4` (section 3 alone), `renders/02-waiting.mp4` (section 2 alone), each with a
 `-no-text` twin. `renders/hook.mp4` (with headlines), `renders/hook-no-text.mp4` (same shots, no headlines), `renders/hook-poster.png`.
 
 ## Fine-tuning

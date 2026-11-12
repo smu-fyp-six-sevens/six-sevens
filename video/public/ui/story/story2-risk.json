@@ -104,6 +104,58 @@
         "w": 106.90625,
         "h": 32.75
       }
+    ],
+    "parts": [
+      {
+        "cls": "risk-severity risk-severity--high",
+        "text": "high",
+        "x": 877.109375,
+        "y": 212,
+        "w": 27.78125,
+        "h": 14,
+        "bx": 853,
+        "bw": 76
+      },
+      {
+        "cls": "risk-finding-check",
+        "text": "Bank statement totals",
+        "x": 939,
+        "y": 208,
+        "w": 156.84375,
+        "h": 14,
+        "bx": 939,
+        "bw": 424
+      },
+      {
+        "cls": "risk-finding-summary",
+        "text": "Closing balance 812,400.00 does not reconcile: the opening b",
+        "x": 939,
+        "y": 225.9375,
+        "w": 377.640625,
+        "h": 34.84375,
+        "bx": 939,
+        "bw": 424
+      },
+      {
+        "cls": "risk-finding-rationale",
+        "text": "The balance is four times what the transactions support.",
+        "x": 939,
+        "y": 265.625,
+        "w": 319.109375,
+        "h": 15,
+        "bx": 939,
+        "bw": 424
+      },
+      {
+        "cls": "risk-finding-unplaced",
+        "text": "On the document, but couldn't pinpoint where",
+        "x": 939,
+        "y": 284.625,
+        "w": 249.40625,
+        "h": 14,
+        "bx": 939,
+        "bw": 249.40625
+      }
     ]
   },
   "review2": {

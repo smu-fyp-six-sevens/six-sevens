@@ -8,8 +8,8 @@ export const STEPS = ["Upload", "Detect", "Score"] as const;
 
 export const UPLOAD_COPY = {
   headline: "Upload the whole package.",
-  line1: "Every file is classified and its key fields read,",
-  line2: "even from scans.",
+  line1: "Every file is classified and its key fields read.",
+  line2: "Even from scans.",
   /** On the stack the cursor drags in. */
   stackBadge: (n: number) => `${n} files`,
 };

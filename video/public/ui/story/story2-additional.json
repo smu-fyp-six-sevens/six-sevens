@@ -1,0 +1,92 @@
+{
+  "items": [
+    {
+      "cls": "",
+      "text": "SummaryCase Summary",
+      "x": 0,
+      "y": 146,
+      "w": 95,
+      "h": 54.390625
+    },
+    {
+      "cls": "",
+      "text": "DocumentsDocuments5 To Review · 14 To Approve",
+      "x": 0,
+      "y": 212.390625,
+      "w": 95,
+      "h": 54.390625
+    },
+    {
+      "cls": "",
+      "text": "AnalysisCase AnalysisStarting",
+      "x": 0,
+      "y": 278.78125,
+      "w": 95,
+      "h": 54.390625
+    },
+    {
+      "cls": "",
+      "text": "RiskRisk SummaryHigh · 72",
+      "x": 0,
+      "y": 345.171875,
+      "w": 95,
+      "h": 54.390625
+    },
+    {
+      "cls": "",
+      "text": "AdditionalAdditional Documents3 To Request",
+      "x": 0,
+      "y": 411.5625,
+      "w": 95,
+      "h": 54.390625
+    },
+    {
+      "cls": "",
+      "text": "NotesNotes",
+      "x": 0,
+      "y": 477.953125,
+      "w": 95,
+      "h": 54.390625
+    },
+    {
+      "cls": "",
+      "text": "AuditAudit Trail",
+      "x": 0,
+      "y": 544.34375,
+      "w": 95,
+      "h": 54.390625
+    },
+    {
+      "cls": "",
+      "text": "CostClaude Cost",
+      "x": 0,
+      "y": 610.734375,
+      "w": 95,
+      "h": 54.390625
+    },
+    {
+      "cls": "",
+      "text": "Case Queue",
+      "x": 111,
+      "y": 84,
+      "w": 85.375,
+      "h": 25.5
+    },
+    {
+      "cls": "",
+      "text": "GLDB-02",
+      "x": 198.375,
+      "y": 84,
+      "w": 96.546875,
+      "h": 25.5
+    },
+    {
+      "cls": "",
+      "text": "Payment of 42,150.00 on 23-Dec-25 to HARBOURSIDE OFFICE SUPPLIES PTE. LTD.",
+      "x": 155,
+      "y": 628.28125,
+      "w": 571.390625,
+      "h": 17.390625
+    }
+  ]
+}

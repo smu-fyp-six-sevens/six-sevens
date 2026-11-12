@@ -7,6 +7,7 @@
 import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { Pointer } from "../components/Pointer";
 import { ProductHeader } from "../components/ProductHeader";
+import { shotSwipe, SWIPE } from "../components/swipe";
 import boxes from "../../public/ui/story/story2-trace.json";
 import { SCREENS_STORY2, TRACE_COPY } from "../data/howitworks";
 import { colors } from "../theme";
@@ -26,10 +27,10 @@ const OUTPUT = { x: 722, y: 352, w: 690, h: 182 };
 export const TraceScene: React.FC<{ showText?: boolean }> = ({ showText = true }) => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
-  const inAudit = t >= T.auditAt;
+  const swipeA = shotSwipe(t, 0, T.auditAt + SWIPE);
+  const swipeB = shotSwipe(t, T.auditAt, T.length);
 
   // A
-  const enterA = land(interpolate(t, [0, 0.6], [0, 1], clamp));
   const tool = ROWS[TOOL_ROW];
   const toClick = interpolate(t, [T.clickAt - 0.7, T.clickAt - 0.05], [0, 1], { ...clamp, easing: even });
   const press = interpolate(t, [T.clickAt - 0.05, T.clickAt + 0.05, T.clickAt + 0.2], [0, 1, 0], clamp);
@@ -38,15 +39,14 @@ export const TraceScene: React.FC<{ showText?: boolean }> = ({ showText = true }
   const push = interpolate(t, [T.outputAt - 0.2, T.outputAt + 1.2], [0, 1], { ...clamp, easing: even });
 
   // B
-  const enterB = land(interpolate(t, [T.auditAt, T.auditAt + 0.7], [0, 1], clamp));
   const entries = boxes.audit.entries;
   const u = interpolate(t, [T.entriesStart, T.entriesEnd], [0, entries.length], clamp);
   const pan = interpolate(t, [T.entriesStart, T.entriesEnd + 0.3], [0, 1], { ...clamp, easing: even });
 
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
-      {!inAudit ? (
-        <Window enter={enterA} tilt={{ rx: 5, ry: lerp(enterA, 30, 8) - 6 * push, dx: lerp(enterA, 400, 0) }}>
+      {swipeA !== null && (
+        <Window enter={1} swipe={swipeA} tilt={{ rx: 5, ry: 8 - 6 * push }}>
           <Screen {...SCREENS_STORY2.trace} zoom={lerp(push, 1, 1.32)} focus={{ x: lerp(push, 600, 1060), y: lerp(push, 353, 430) }}>
             {opened > 0 && <Img src={staticFile(SCREENS_STORY2.traceTool.src)} style={{ position: "absolute", left: 0, top: 0, width: 1440, height: 900, opacity: opened }} />}
             {opened < 1 && <Trace frame={frame} start={T.rowsStart} end={T.rowsEnd} />}
@@ -56,8 +56,9 @@ export const TraceScene: React.FC<{ showText?: boolean }> = ({ showText = true }
             )}
           </Screen>
         </Window>
-      ) : (
-        <Window enter={enterB} tilt={{ rx: lerp(enterB, 14, 5), ry: lerp(enterB, -30, -6), dx: lerp(enterB, -400, 0) }}>
+      )}
+      {swipeB !== null && (
+        <Window enter={1} swipe={swipeB} tilt={{ rx: 5, ry: -6 }}>
           <Screen {...SCREENS_STORY2.audit} zoom={1.08} focus={{ x: 760, y: lerp(pan, 420, 560) }}>
             {entries.map((e, i) => {
               if (i > u) return null;
@@ -67,7 +68,7 @@ export const TraceScene: React.FC<{ showText?: boolean }> = ({ showText = true }
           </Screen>
         </Window>
       )}
-      <ProductHeader step={1} headline={TRACE_COPY.headline} headlineIn={T.headlineIn} showText={showText}
+      <ProductHeader step={1} fromStep={1} length={T.length} headline={TRACE_COPY.headline} headlineIn={T.headlineIn} showText={showText}
         beats={TRACE_COPY.beats.map((b) => ({ ...b, at: T[b.at as keyof typeof T] }))} />
     </AbsoluteFill>
   );

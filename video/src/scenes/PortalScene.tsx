@@ -99,8 +99,12 @@ export const Screen: React.FC<{ src: string; w: number; h: number; zoom: number;
 /** A tilt in degrees (x: top away from the viewer, y: right side away), and an offset in px. */
 export type Tilt = { rx?: number; ry?: number; rz?: number; dx?: number; dy?: number; scale?: number };
 
-export const Window: React.FC<{ enter: number; children: React.ReactNode; tilt?: Tilt; opacity?: number }> = ({ enter, children, tilt, opacity = 1 }) => (
-  <AbsoluteFill style={{ perspective: 2400, perspectiveOrigin: `${WIN.x + WIN.w / 2}px ${WIN.y + WIN.h / 2}px`, opacity }}>
+/**
+ * `swipe`: the one move between screens and between stages. 0 at rest; 1 = fully off to the right (entering);
+ * -1 = fully off to the left (leaving). The window travels and turns a little in 3D as it goes.
+ */
+export const Window: React.FC<{ enter: number; children: React.ReactNode; tilt?: Tilt; opacity?: number; swipe?: number }> = ({ enter, children, tilt, opacity = 1, swipe = 0 }) => (
+  <AbsoluteFill style={{ perspective: 2400, perspectiveOrigin: `${WIN.x + WIN.w / 2}px ${WIN.y + WIN.h / 2}px`, opacity: opacity * (1 - 0.85 * Math.abs(swipe)), filter: swipe ? `blur(${Math.abs(swipe) * 6}px)` : undefined, transform: `translateX(${swipe * WIN.w * 0.62}px) rotateY(${-swipe * 26}deg) scale(${1 - 0.08 * Math.abs(swipe)})` }}>
     <div
       style={{
         position: "absolute", left: WIN.x, top: WIN.y, width: WIN.w, height: WIN.h, borderRadius: 18, overflow: "hidden",

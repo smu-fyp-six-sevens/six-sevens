@@ -79,3 +79,10 @@
 - Captured (capture/story2.spec.ts): risk summary (story risk: forged balance high, font medium, PDF editor medium, cross-document address high = High 72), the review dialog before and after a dismissal with a note, the trace with a tool call opened, the audit trail. The fixture case predates reviews, so reviews_required is set on it.
 - Detect is rebuilt in the portal's style (no screen in the portal shows the plan and checks this way); Trace and Score are the real screens with overlays.
 - Measured: stills across all three; the doctored-figure crop fixed after the first stills. Not watched in motion.
+
+## Wave 14 - smoother hand-overs, accurate tags, recommendations
+- Owner: the "why" box was off; transitions between stages and screens felt jerky; add the additional recommended documents to the risk part.
+- Tags now use the measured text extents (risk-finding-summary, risk-finding-rationale) with labels outside the box.
+- One transition for sections 5-8 (swipe.ts): overlapping swipe between shots and at stage boundaries; tracker animates the step change; headlines lift away at a section's end.
+- Captured Additional Documents with a story recommendation set (two that would lower the score, one checklist request). Score is 16 s.
+- Measured: stills of the tags, the recommendations, and frames either side of each stage boundary. Not watched in motion.

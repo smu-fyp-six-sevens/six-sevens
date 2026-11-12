@@ -54,6 +54,7 @@ export const SCORE_COPY = {
     { text: "With the exact evidence behind it.", at: "line1In" },
     { text: "What was flagged, where, and why.", at: "reviewAt" },
     { text: "Officers confirm or dismiss each finding, and add notes.", at: "tickAt", accent: true },
+    { text: "And it recommends the documents that would settle it.", at: "addAt" },
   ],
   what: "What",
   where: "Where",
@@ -68,4 +69,15 @@ export const SCREENS_STORY2 = {
   trace: { src: "ui/story/trace.png", w: 1440, h: 900 },
   traceTool: { src: "ui/story/trace-tool.png", w: 1440, h: 900 },
   audit: { src: "ui/story/audit.png", w: 1440, h: 900 },
+  additional: { src: "ui/story/additional.png", w: 1440, h: 900 },
+};
+
+/** Additional Documents, measured on its capture (CSS px): the score line and each recommended document. */
+export const ADDITIONAL_BOXES = {
+  now: { x: 125, y: 264, w: 290, h: 36 },
+  items: [
+    { x: 117, y: 309, w: 1283, h: 100 },
+    { x: 117, y: 410, w: 1283, h: 101 },
+    { x: 117, y: 512, w: 1283, h: 148 },
+  ],
 };

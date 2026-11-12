@@ -6,6 +6,7 @@
 
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { ProductHeader } from "../components/ProductHeader";
+import { shotSwipe } from "../components/swipe";
 import { CATCHES, CHECKS, DETECT_COPY, PLAN } from "../data/howitworks";
 import { colors, fonts } from "../theme";
 import { DETECT as T, FPS, s } from "../timing";
@@ -55,7 +56,7 @@ export const DetectScene: React.FC<{ showText?: boolean }> = ({ showText = true 
   let left = typed;
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
-      <Window enter={1} tilt={{ rx: 4 + Math.sin(t / 3) * 0.6, ry: -3 + Math.sin(t / 4) * 1.2 }}>
+      <Window enter={1} swipe={shotSwipe(t, 0, T.length) ?? 0} tilt={{ rx: 4 + Math.sin(t / 3) * 0.6, ry: -3 + Math.sin(t / 4) * 1.2 }}>
         <AbsoluteFill style={{ background: "#f3f2ef", fontFamily: fonts.ui }}>
           {/* A + B: the plan and the checks */}
           {away < 1 && (
@@ -151,7 +152,7 @@ export const DetectScene: React.FC<{ showText?: boolean }> = ({ showText = true 
           )}
         </AbsoluteFill>
       </Window>
-      <ProductHeader step={1} headline={DETECT_COPY.headline} headlineIn={T.headlineIn} showText={showText}
+      <ProductHeader step={1} fromStep={0} length={T.length} headline={DETECT_COPY.headline} headlineIn={T.headlineIn} showText={showText}
         beats={DETECT_COPY.beats.map((b) => ({ ...b, at: T[b.at as keyof typeof T] }))} />
     </AbsoluteFill>
   );

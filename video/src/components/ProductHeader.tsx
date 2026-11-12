@@ -3,7 +3,7 @@
 // away as the new one rises).
 
 import React from "react";
-import { interpolate, useCurrentFrame } from "remotion";
+import { Easing, interpolate, useCurrentFrame } from "remotion";
 import { STEPS } from "../data/upload";
 import { colors, fonts } from "../theme";
 import { s } from "../timing";
@@ -12,15 +12,28 @@ import { Title } from "./Title";
 
 export type Beat = { text: string; at: number; accent?: boolean };
 
-export const ProductHeader: React.FC<{ step: number; headline: string; headlineIn: number; beats: Beat[]; showText: boolean }> = ({ step, headline, headlineIn, beats, showText }) => {
+const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
+const ease = Easing.bezier(0.37, 0, 0.63, 1);
+
+export const ProductHeader: React.FC<{
+  step: number; headline: string; headlineIn: number; beats: Beat[]; showText: boolean;
+  /** The step the previous section showed (null: no tracker before this section); the tracker animates from it. */
+  fromStep?: number | null;
+  /** The section's length in seconds: the headline and line lift away over its last moments. */
+  length: number;
+}> = ({ step, headline, headlineIn, beats, showText, fromStep = step, length }) => {
   const frame = useCurrentFrame();
+  const hand = interpolate(frame, [s(0.1), s(0.65)], [0, 1], { ...clamp, easing: ease });
+  const current = fromStep === null ? step : fromStep + (step - fromStep) * hand;
+  const trackerIn = fromStep === null ? hand : 1;
+  const out = interpolate(frame, [s(length) - 10, s(length)], [0, 1], { ...clamp, easing: Easing.bezier(0.5, 0, 0.9, 0.55) });
   return (
     <>
       <div style={{ position: "absolute", left: 0, right: 0, top: 30, display: "flex", justifyContent: "center" }}>
-        <StepTracker steps={STEPS} current={step} />
+        <StepTracker steps={STEPS} current={current} p={trackerIn} />
       </div>
       {showText && (
-        <>
+        <div style={{ opacity: 1 - out, transform: `translateY(${-24 * out}px)` }}>
           <div style={{ position: "absolute", left: 0, right: 0, top: 104, display: "flex", justifyContent: "center" }}>
             <Title text={headline} enterAt={s(headlineIn)} exit="none" align="center" style={{ fontFamily: fonts.display, fontSize: 54, fontWeight: 700, letterSpacing: "-0.02em", color: colors.ink, lineHeight: 1.1 }} />
           </div>
@@ -35,7 +48,7 @@ export const ProductHeader: React.FC<{ step: number; headline: string; headlineI
               </div>
             );
           })}
-        </>
+        </div>
       )}
     </>
   );

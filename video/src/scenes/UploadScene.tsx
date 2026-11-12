@@ -9,12 +9,12 @@
 
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { Pointer } from "../components/Pointer";
-import { StepTracker } from "../components/StepTracker";
-import { Title } from "../components/Title";
+import { ProductHeader } from "../components/ProductHeader";
+import { shotSwipe, SWIPE } from "../components/swipe";
 import { BOX, UploadBox } from "../components/UploadBox";
-import { DEC_STATEMENT, PACKAGE, SCAN_FIELDS, SCREENS_HOW, STEPS, UPLOAD_COPY } from "../data/upload";
+import { DEC_STATEMENT, PACKAGE, SCAN_FIELDS, SCREENS_HOW, UPLOAD_COPY } from "../data/upload";
 import { colors, fonts } from "../theme";
-import { FPS, UPLOAD as T, s } from "../timing";
+import { FPS, UPLOAD as T } from "../timing";
 import { Screen, WIN, Window } from "./PortalScene";
 import { CLOSE_H, CLOSE_Y, H, Statement, W } from "./TamperScene";
 
@@ -221,7 +221,8 @@ const Scan: React.FC<{ f: number }> = ({ f }) => {
 export const UploadScene: React.FC<{ showText?: boolean }> = ({ showText = true }) => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
-  const inScan = t >= T.scanAt;
+  const swipeA = shotSwipe(t, 0, T.scanAt + SWIPE);
+  const swipeScan = shotSwipe(t, T.scanAt, T.length);
 
   // A: drag, drop, cascade, click
   const drag = interpolate(t, [T.dragStart, T.dropAt], [0, 1], { ...clamp, easing: even });
@@ -237,13 +238,12 @@ export const UploadScene: React.FC<{ showText?: boolean }> = ({ showText = true 
   const pointerOn = t >= T.dragStart && t < T.tableAt;
   const cam = camera(frame);
   const tableIn = t >= T.clickAt + 0.15;
-  const scanEnter = land(interpolate(t, [T.scanAt, T.scanAt + 0.6], [0, 1], clamp));
   const scanZoom = interpolate(t, [T.scanAt, T.length], [1.0, 1.1], clamp);
 
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
-      {!inScan ? (
-        <Window enter={1}>
+      {swipeA !== null && (
+        <Window enter={1} swipe={swipeA}>
           <Screen {...SCREENS_HOW.documents} h={1800} imgH={900} zoom={cam.zoom} focus={{ x: cam.x, y: cam.y }}>
             {/* Before the upload, the case has no documents yet: hide the captured (already processed) table. */}
             {!tableIn && <div style={{ position: "absolute", left: 100, top: 420, width: 1340, height: 1380, background: colors.paper }} />}
@@ -259,27 +259,17 @@ export const UploadScene: React.FC<{ showText?: boolean }> = ({ showText = true 
             )}
           </Screen>
         </Window>
-      ) : (
-        <Window enter={scanEnter} tilt={{ ry: (1 - scanEnter) * -14, dx: (1 - scanEnter) * -200 }}>
+      )}
+      {swipeScan !== null && (
+        <Window enter={1} swipe={swipeScan}>
           <Screen {...SCREENS_HOW.scan} zoom={scanZoom} focus={{ x: 740, y: 560 }}>
             <Scan f={frame} />
           </Screen>
         </Window>
       )}
 
-      {/* The step tracker shows in every product section, captions or not: it is how the viewer follows along. */}
-      <div style={{ position: "absolute", left: 0, right: 0, top: 30, display: "flex", justifyContent: "center" }}>
-        <StepTracker steps={STEPS} current={0} />
-      </div>
-      {showText && (
-        <div style={{ position: "absolute", left: 0, right: 0, top: 104, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-          <Title text={UPLOAD_COPY.headline} enterAt={s(T.headlineIn)} exit="none" align="center" style={{ fontFamily: fonts.display, fontSize: 54, fontWeight: 700, letterSpacing: "-0.02em", color: colors.ink, lineHeight: 1.1 }} />
-          <div style={{ display: "flex", gap: 12 }}>
-            <Title text={UPLOAD_COPY.line1} enterAt={s(T.line1In)} exit="none" style={{ fontFamily: fonts.display, fontSize: 34, fontWeight: 600, color: colors.inkSoft, lineHeight: 1.2 }} />
-            <Title text={UPLOAD_COPY.line2} enterAt={s(T.line2In)} exit="none" style={{ fontFamily: fonts.display, fontSize: 34, fontWeight: 600, color: colors.steel, lineHeight: 1.2 }} />
-          </div>
-        </div>
-      )}
+      <ProductHeader step={0} fromStep={null} length={T.length} headline={UPLOAD_COPY.headline} headlineIn={T.headlineIn} showText={showText}
+        beats={[{ text: UPLOAD_COPY.line1, at: T.line1In }, { text: UPLOAD_COPY.line2, at: T.line2In, accent: true }]} />
     </AbsoluteFill>
   );
 };

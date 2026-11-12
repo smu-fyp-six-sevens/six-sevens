@@ -47,8 +47,27 @@ function setup(backend: Parameters<typeof loadFixture>[0]) {
         rationale: 'A company has one registered address.' }),
     ],
   };
+  const additional_documents = {
+    current_level: 'High', current_score: 72, best_case_level: 'Low', best_case_score: 20, reason: 'recommendations',
+    items: [
+      { source: 'finding', title: 'Bank-certified January 2026 statement', affects_score: true, level_if_supports: 'Medium', score_if_supports: 40,
+        addresses: [`${jan.id}:totals-1`, `${jan.id}:font-1`, `${jan.id}:meta-1`], recommendation: null,
+        why: 'Confirms the closing balance printed on Anchorpoint_BankStatement_Jan2026.pdf, straight from the bank.' },
+      { source: 'finding', title: 'Proof of registered address', affects_score: true, level_if_supports: 'Medium', score_if_supports: 46,
+        addresses: ['xd-address-1'], recommendation: null,
+        why: 'Settles which address is the company\'s: the business profile and the bank statement disagree.' },
+      { source: 'checklist', title: 'Purchase Order', affects_score: false, level_if_supports: null, score_if_supports: null, addresses: [],
+        why: 'Anchorpoint_BankStatement_Dec2025_scan.pdf shows 1 large supplier payment (of at least 20,000.00).',
+        recommendation: { document_type: 'purchase_order', title: 'Purchase Order', request: 'Request a purchase order for this transaction:',
+          reason: 'Anchorpoint_BankStatement_Dec2025_scan.pdf shows 1 large supplier payment (of at least 20,000.00).',
+          source_document_id: jan.id, source_filename: 'Anchorpoint_BankStatement_Dec2025_scan.pdf',
+          items: [{ amount: -42150.0, breakdown: [], counterparty: 'HARBOURSIDE OFFICE SUPPLIES PTE. LTD.', date: '23-Dec-25',
+            description: 'SUPPLIER PAYMENT HARBOURSIDE OFFICE SUPPLIES SGD 42,150', prior_amount: null,
+            reason: 'Payment of 42,150.00 on 23-Dec-25 to HARBOURSIDE OFFICE SUPPLIES PTE. LTD.' }] } },
+    ],
+  };
   // reviews_required: the case was created with officer reviews (this fixture predates the setting).
-  Object.assign(fx.case, CASE_VIEWS['scored'], { risk, reviews_required: true });
+  Object.assign(fx.case, CASE_VIEWS['scored'], { risk, additional_documents, reviews_required: true });
   backend.servePreviews = true;
   backend.findingReviews[fx.case.id] = { verdicts: {}, signOffs: {} };
   return { fx, jan, biz };
@@ -74,6 +93,13 @@ test('risk summary and review', async ({ page, backend }) => {
     rows: await boxes(page, '[role="dialog"] .risk-findings li'),
     wrong: await boxes(page, '[role="dialog"] input[type="checkbox"]'),
     save: await boxes(page, '[role="dialog"] button:has-text("Save review")'),
+    parts: await page.locator('[role="dialog"] .risk-findings li').first().evaluate((li) =>
+      Array.from(li.querySelectorAll('*')).filter((el) => el.childElementCount === 0 && (el.textContent ?? '').trim()).map((el) => {
+        const r = el.getBoundingClientRect();
+        // the text's own extent, not its block's
+        const range = document.createRange(); range.selectNodeContents(el); const t = range.getBoundingClientRect();
+        return { cls: (el as HTMLElement).className, text: (el.textContent ?? '').trim().slice(0, 60), x: t.x, y: t.y, w: t.width, h: t.height, bx: r.x, bw: r.width };
+      })),
   };
   // The officer dismisses the PDF-editor finding as a false alarm, with a note.
   await dialog.getByRole('checkbox', { name: /^Agents got this wrong: The file was last saved/ }).check();
@@ -127,4 +153,19 @@ test('trace tool call and audit trail', async ({ page, backend }) => {
   await page.screenshot({ path: `${OUT}/audit.png` });
   const audit = { entries: await boxes(page, '[data-testid="audit-entry"]') };
   writeFileSync(`${OUT}/story2-trace.json`, JSON.stringify({ trace, audit }, null, 2));
+});
+
+test('additional documents', async ({ page, backend }) => {
+  test.setTimeout(120_000);
+  const { fx } = setup(backend);
+  await page.goto(`${fx.caseUrl}?section=additional`);
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${OUT}/additional.png` });
+  await page.screenshot({ path: `${OUT}/additional-full.png`, fullPage: true });
+  const items = await page.locator('main li, [class*="additional"] li, [class*="recommend"]').evaluateAll((els) => els.map((el) => {
+    const r = el.getBoundingClientRect();
+    return { cls: (el as HTMLElement).className, text: (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 90), x: r.x, y: r.y, w: r.width, h: r.height };
+  }));
+  writeFileSync(`${OUT}/story2-additional.json`, JSON.stringify({ items }, null, 2));
 });

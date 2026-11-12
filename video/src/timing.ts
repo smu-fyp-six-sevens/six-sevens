@@ -81,7 +81,7 @@ export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 export const DETECT = {
   length: 12.5,
   headlineIn: 0.2,        // "Agents investigate every document."
-  planIn: 0.4,            // the lead agent's card; its plan types out...
+  planIn: 0.15,           // the lead agent's card; its plan types out...
   planEnd: 2.4,           // ...line by line
   specialistsIn: 2.7,     // the six checks branch out under it and start running...
   checksEnd: 5.6,         // ...finishing one after another by here (four turn up a finding)
@@ -105,7 +105,7 @@ export const TRACE = {
 
 /** Section 8, "score" (how it works, step 3). */
 export const SCORE = {
-  length: 13.5,
+  length: 16,
   headlineIn: 0.2,        // "Every case gets a risk rating."
   line1In: 0.6,           // "With the exact evidence behind it."
   gaugeAt: 1.0,           // the risk gauge is ringed...
@@ -118,6 +118,9 @@ export const SCORE = {
   tickAt: 7.4,            // "Officers confirm or dismiss...": the cursor ticks the metadata finding as wrong...
   noteAt: 8.1,            // ...picks a reason and types a note...
   saveAt: 10.0,           // ...and saves the review
+  addAt: 11.2,            // swipe to Additional Documents: "And it recommends the documents that would settle it."
+  nowAt: 11.9,            // "Now 72 (High) -> Best case 20 (Low)" is ringed...
+  recsStart: 12.6,        // ...then each recommended document lights up in turn
 };
 
 /** Section 5, "upload" (how it works, step 1). All times in seconds from the start of the section. */

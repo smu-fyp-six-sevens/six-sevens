@@ -8,8 +8,9 @@
 import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { Pointer } from "../components/Pointer";
 import { ProductHeader } from "../components/ProductHeader";
+import { shotSwipe, SWIPE } from "../components/swipe";
 import boxes from "../../public/ui/story/story2-risk.json";
-import { SCORE_COPY, SCREENS_STORY2 } from "../data/howitworks";
+import { ADDITIONAL_BOXES, SCORE_COPY, SCREENS_STORY2 } from "../data/howitworks";
 import { colors, fonts } from "../theme";
 import { FPS, SCORE as T, s } from "../timing";
 import { Screen, Window } from "./PortalScene";
@@ -24,7 +25,9 @@ const pr = (t: number, at: number) => interpolate(t, [at - 0.05, at + 0.05, at +
 // Measured on the captures (CSS px).
 const GAUGE = { x: 222, y: 318, r: 92 };
 const DOCS = boxes.risk.documents;
-const ROW1 = boxes.review1.rows[0];
+const PART = (cls: string) => boxes.review1.parts.find((p) => p.cls === cls)!;
+const SUMMARY = PART("risk-finding-summary"); // the finding's title: the "what"
+const RATIONALE = PART("risk-finding-rationale"); // its explanation: the "why"
 const TICK = boxes.review1.wrong[3];
 const SAVE = boxes.review1.save[0];
 const REASONS = boxes.review2.reasons[0];
@@ -34,26 +37,28 @@ const PAGE_X = PANE.x + (PANE.w - W * PAGE_K) / 2;
 const NOTE = { x: 1094, y: 556, w: 268, h: 30 }; // the note box in the dismissed capture
 const STATUS = { x: 1124, y: 158, w: 122, h: 24 }; // "Unsaved changes"
 
-const Tag: React.FC<{ x: number; y: number; w: number; h: number; label: string; p: number; tone?: string }> = ({ x, y, w, h, label, p, tone = colors.steel }) =>
+/** A box around a part of the screen, its label just outside it on one side so it never covers the text. */
+const Tag: React.FC<{ x: number; y: number; w: number; h: number; label: string; p: number; tone?: string; side?: "left" | "right" }> = ({ x, y, w, h, label, p, tone = colors.steel, side = "right" }) =>
   p <= 0 ? null : (
-    <div style={{ position: "absolute", left: x, top: y, width: w, height: h, border: `3px solid ${tone}`, borderRadius: 6, opacity: p, transform: `scale(${1.08 - 0.08 * p})` }}>
-      <span style={{ position: "absolute", left: -3, top: -26, font: `700 15px ${fonts.ui}`, color: "#fff", background: tone, padding: "3px 10px", borderRadius: "6px 6px 6px 0" }}>{label}</span>
+    <div style={{ position: "absolute", left: x, top: y, width: w, height: h, border: `2.5px solid ${tone}`, borderRadius: 5, opacity: p, transform: `scale(${1.06 - 0.06 * p})` }}>
+      <span style={{ position: "absolute", top: "50%", [side === "right" ? "left" : "right"]: "calc(100% + 8px)", transform: "translateY(-50%)", font: `700 14px ${fonts.ui}`, color: "#fff", background: tone, padding: "3px 10px", borderRadius: 6, whiteSpace: "nowrap" }}>{label}</span>
     </div>
   );
 
 export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }) => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
-  const inReview = t >= T.openAt + 0.25;
+  const swipeRisk = shotSwipe(t, 0, T.openAt + 0.25 + SWIPE);
+  const swipeReview = shotSwipe(t, T.openAt + 0.25, T.addAt + SWIPE);
+  const swipeAdd = shotSwipe(t, T.addAt, T.length);
+  const nowP = land(interpolate(t, [T.nowAt, T.nowAt + 0.4], [0, 1], clamp));
 
   // A
-  const enterA = land(interpolate(t, [0, 0.8], [0, 1], clamp));
   const ring = land(interpolate(t, [T.gaugeAt, T.gaugeAt + 0.4], [0, 1], clamp));
   const toRow = interpolate(t, [T.openAt - 0.7, T.openAt - 0.05], [0, 1], { ...clamp, easing: even });
   const row = DOCS[0];
 
   // B and C
-  const enterB = land(interpolate(t, [T.openAt + 0.25, T.openAt + 0.75], [0, 1], clamp));
   const what = land(interpolate(t, [T.whatAt, T.whatAt + 0.35], [0, 1], clamp));
   const where = land(interpolate(t, [T.whereAt, T.whereAt + 0.35], [0, 1], clamp));
   const why = land(interpolate(t, [T.whyAt, T.whyAt + 0.35], [0, 1], clamp));
@@ -73,8 +78,8 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
 
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
-      {!inReview ? (
-        <Window enter={enterA} tilt={{ rx: lerp(enterA, 30, 7), ry: lerp(enterA, 12, 5), dy: lerp(enterA, 500, 0) }}>
+      {swipeRisk !== null && (
+        <Window enter={1} swipe={swipeRisk} tilt={{ rx: 6, ry: 5 }}>
           <Screen {...SCREENS_STORY2.risk} zoom={1.05} focus={{ x: 720, y: 400 }}>
             {ring > 0 && <div style={{ position: "absolute", left: GAUGE.x - GAUGE.r, top: GAUGE.y - GAUGE.r, width: GAUGE.r * 2, height: GAUGE.r * 2, borderRadius: "50%", border: `4px solid ${colors.red}`, opacity: ring, transform: `scale(${1.3 - 0.3 * ring})` }} />}
             {DOCS.map((d, i) => {
@@ -84,8 +89,9 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
             {t >= T.openAt - 0.8 && <Pointer x={lerp(toRow, 900, row.x + row.w - 40)} y={lerp(toRow, 760, row.y + 46)} size={20} press={pr(t, T.openAt)} />}
           </Screen>
         </Window>
-      ) : (
-        <Window enter={enterB} tilt={{ rx: lerp(enterB, 8, 2), ry: lerp(enterB, -10, -2) }}>
+      )}
+      {swipeReview !== null && (
+        <Window enter={1} swipe={swipeReview} tilt={{ rx: 2, ry: -2 }}>
           <Screen {...SCREENS_STORY2.review} zoom={zoom} focus={focus}>
             {dismissed > 0 && <Img src={staticFile(SCREENS_STORY2.dismissed.src)} style={{ position: "absolute", left: 0, top: 0, width: 1440, height: 900, opacity: dismissed }} />}
             {/* the statement on the review's page, the forged figure boxed: the "where" */}
@@ -94,9 +100,9 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
               <div style={{ position: "absolute", left: PAGE_R - FIGURE_W - 6, top: CLOSE_Y + 3, width: FIGURE_W + 12, height: CLOSE_H - 6, border: `2.5px solid ${colors.red}`, borderRadius: 3, background: "rgba(179,64,42,0.08)" }} />
             </div>
             {/* What, where, why */}
-            <Tag x={ROW1.x + 80} y={ROW1.y + 24} w={ROW1.w - 76} h={44} label={SCORE_COPY.what} p={what * tagsOut} />
-            <Tag x={PAGE_X + (PAGE_R - FIGURE_W - 14) * PAGE_K} y={PANE.y + (CLOSE_Y - 6) * PAGE_K} w={(FIGURE_W + 28) * PAGE_K} h={(CLOSE_H + 12) * PAGE_K} label={SCORE_COPY.where} p={where * tagsOut} tone={colors.red} />
-            <Tag x={ROW1.x + 80} y={ROW1.y + 70} w={ROW1.w - 76} h={22} label={SCORE_COPY.why} p={why * tagsOut} tone={colors.amber} />
+            <Tag x={SUMMARY.x - 6} y={SUMMARY.y - 4} w={SUMMARY.w + 12} h={SUMMARY.h + 8} label={SCORE_COPY.what} p={what * tagsOut} />
+            <Tag x={PAGE_X + (PAGE_R - FIGURE_W - 14) * PAGE_K} y={PANE.y + (CLOSE_Y - 2) * PAGE_K} w={(FIGURE_W + 28) * PAGE_K} h={(CLOSE_H + 4) * PAGE_K} label={SCORE_COPY.where} p={where * tagsOut} tone={colors.red} side="left" />
+            <Tag x={RATIONALE.x - 6} y={RATIONALE.y - 3} w={RATIONALE.w + 12} h={RATIONALE.h + 6} label={SCORE_COPY.why} p={why * tagsOut} tone={colors.amber} />
             {/* the note, typed */}
             {dismissed > 0 && typing < 1 && <div style={{ position: "absolute", left: NOTE.x + NOTE.w * typing, top: NOTE.y, width: NOTE.w * (1 - typing), height: NOTE.h, background: colors.white }} />}
             {saved > 0 && (
@@ -106,7 +112,18 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
           </Screen>
         </Window>
       )}
-      <ProductHeader step={2} headline={SCORE_COPY.headline} headlineIn={T.headlineIn} showText={showText}
+      {swipeAdd !== null && (
+        <Window enter={1} swipe={swipeAdd} tilt={{ rx: 5, ry: -5 }}>
+          <Screen {...SCREENS_STORY2.additional} zoom={1.12} focus={{ x: 760, y: 420 }}>
+            <Tag {...ADDITIONAL_BOXES.now} label="Risk if the documents support the client" p={nowP} tone={colors.steel} />
+            {ADDITIONAL_BOXES.items.map((b, i) => {
+              const p = land(interpolate(t, [T.recsStart + 0.45 * i, T.recsStart + 0.45 * i + 0.3], [0, 1], clamp));
+              return p > 0 ? <div key={i} style={{ position: "absolute", left: b.x, top: b.y, width: b.w, height: b.h, background: `rgba(53,95,150,${0.06 * p})`, borderLeft: `4px solid rgba(53,95,150,${p})` }} /> : null;
+            })}
+          </Screen>
+        </Window>
+      )}
+      <ProductHeader step={2} fromStep={1} length={T.length} headline={SCORE_COPY.headline} headlineIn={T.headlineIn} showText={showText}
         beats={SCORE_COPY.beats.map((b) => ({ ...b, at: T[b.at as keyof typeof T] }))} />
     </AbsoluteFill>
   );
