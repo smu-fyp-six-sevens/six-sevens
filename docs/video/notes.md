@@ -44,3 +44,7 @@
 - Owner: use stock-style person icons (own version, some personality), no names (just Loan Officer and Customer), follow the caption.
 - Built WaitingScene2 + Silhouette; WAITING_VERSION "v2" default, v1 renders moved to renders/v1/. Section is 9 s so the 28-word caption can be read.
 - Measured: stills at frames 0, 100, 140, 230: caption on four lines, no wrapping or clipping; clock and counters agree. Not watched in motion.
+
+## Wave 8 - gentler numbers
+- Owner: "of 212" -> "of 95"; inbox checks end at 8x, not 14x.
+- Owner noticed soft quality: previews were 1080p at about 1.8 Mbit/s. Deliverables now rendered 4K, CRF 10, x264 slow (renders/4k).

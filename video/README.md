@@ -19,7 +19,7 @@ ping lands in the middle ("Customer's on the line again. Any update on Anchorpoi
 details on the screen," then "while the loan customer anxiously waits on the other end for any news of approval."
 Two silhouette avatars, roles only: the Loan Officer (glasses, tie, a slow nod toward the screen, a glint on the
 lenses) and the Customer (phone to the ear, fidgeting, a sweat drop, a "..." typing bubble), either side of a clock
-racing from 9:02 to 10:14. Her status creeps from page 14 to 19 of 212; their "Checked inbox" count climbs to 14×.
+racing from 9:02 to 10:14. Her status creeps from page 14 to 19 of 95; their "Checked inbox" count climbs to 8×.
 The customer starts pulsing and typing when their half of the caption appears. The first version (initials and
 names) is kept behind `WAITING_VERSION`; its renders are in `renders/v1/`.
 

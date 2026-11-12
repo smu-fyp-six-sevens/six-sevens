@@ -10,7 +10,7 @@ export const OFFICER = {
   /** "Reviewing page {n} of {total}": n creeps from pageFrom to pageTo over the hour. */
   pageFrom: 14,
   pageTo: 19,
-  pageTotal: 212,
+  pageTotal: 95,
 };
 
 export const CUSTOMER = {
@@ -20,7 +20,7 @@ export const CUSTOMER = {
   tint: "#c6820a",
   /** "Checked inbox {n}×": n climbs from checksFrom to checksTo over the hour. */
   checksFrom: 1,
-  checksTo: 14,
+  checksTo: 8,
 };
 
 export const CLOCK = {

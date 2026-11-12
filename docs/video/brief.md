@@ -27,7 +27,7 @@ One case is too much paper for one person to read; the portal reads all of it, a
 **Hook v1 (kept behind HOOK_VERSION) · 0:00-0:11 · package + tooMany.** The portal's upload box filling with the case's 20 real files, then a pull-back. Renders in `video/renders/v1/`.
 
 **Section 2 · after the hook · 0:09 · waiting (v2, default).**
-- Visual: two silhouette avatars, roles only. Loan Officer: glasses, tie, slow nod, lens glint. Customer: phone to the ear, fidgets, sweat drop, "..." typing bubble, pulse ring. A clock between them fast-forwards 9:02 to 10:14; dashed line joins them ("on the other end"). Status pills: "Reviewing page 14 of 212" creeps to 19; "Checked inbox 1×" climbs to 14×.
+- Visual: two silhouette avatars, roles only. Loan Officer: glasses, tie, slow nod, lens glint. Customer: phone to the ear, fidgets, sweat drop, "..." typing bubble, pulse ring. A clock between them fast-forwards 9:02 to 10:14; dashed line joins them ("on the other end"). Status pills: "Reviewing page 14 of 95" creeps to 19; "Checked inbox 1×" climbs to 8×.
 - On-screen copy (locked, the script line): **A loan officer may spend over an hour / staring at details on the screen,** then **while the loan customer anxiously waits / on the other end for any news of approval.**
 - v1 (initials, invented names) kept behind WAITING_VERSION.
 
