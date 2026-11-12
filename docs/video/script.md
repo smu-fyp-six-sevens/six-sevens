@@ -1,32 +1,26 @@
-# Voiceover script (approved)
+# Voiceover script (for the 1:52 cut)
 
-About 2.5 words a second, so every line can be read calmly over its section. Times are where each section starts in the film. Sections 9 to 11 are new.
+Each line fits its section at a calm pace (about 2.5 words a second, with room to breathe). The times are where each section starts in `video/renders/film-novo.mp4`. One audio file per section; the file names are what the film expects in `video/public/vo/`.
 
-| # | Time | Section | Voiceover | Notes |
-|---|---|---|---|---|
-| 1 | 0:00 | Hook | Corporate loan applications come with a mountain of documents. *Waaay* too many to review, for a single case. | Stretch "waaay" with the a's on screen. Then the ping lands: **sigh**. |
-| 2 | 0:09.6 | Waiting | A loan officer can spend over an hour on the details, while the customer waits on the other end for any news of approval. | |
-| 3 | 0:18.6 | Bad actor | And when a bad actor is involved, the smallest edits are the hardest to catch. | |
-| 4 | 0:28.1 | The portal | So that's why we built the GLDB Anomaly Detection Portal. Its agents read every document in the case, and flag what doesn't add up. | Pause after "built…" for the name to land. |
-| 5 | 0:40.6 | ① Upload | Start by uploading the full package. Every document is classified, and its key fields extracted, even from scans. | |
-| 6 | 0:52.1 | ② Detect | A lead agent plans the investigation. Specialists check metadata, fonts, alignment, totals, spelling, and whether the documents agree. So a doctored figure, or a mismatched address, gets caught. | |
-| 7 | 1:04.6 | ② Trace | And it's not a black box. The agent trace shows every step: which tools ran, what they returned, and how each flag was reached. Every finding can be audited. | |
-| 8 | 1:15.1 | ③ Score | Every case gets a risk rating, with the evidence behind it: what was flagged, where, and why. The officer confirms or dismisses each finding, and adds notes. And the portal recommends the documents that would settle any doubt. | |
-| 8b | — | Finalise *(new)* | Then lock the case: finalised cases become view-only, with every step on record. | Real Finalise Case flow. |
-| 9 | 1:31.1 | Dashboard *(new)* | From the dashboard, officers see every case at a glance, drill into anything flagged, and keep a full audit trail for compliance. | Real dashboard screen, zooms only. |
-| 10 | ~1:40 | The difference *(new)* | What took hours of screening now takes minutes. The AI does the reading, your loan officers make the call, and customers hear back sooner. | Bookends section 2: the same Loan Officer and Customer, the clock barely moving, the officer's status "Review complete", and the customer gets the good-news ping (answering the hook's ping). |
-| 11 | ~1:50 | Call to action *(new)* | Bring your next loan case. Upload the package, and see what the portal catches. Try the GLDB Anomaly Detection Portal today. | Name, then a "Try it on your next case" button. No contact line. About 7 s; the music resolves on the button. |
+| # | Starts | Length | File | Voiceover | On screen at the time |
+|---|---|---|---|---|---|
+| 1 | 0:00.0 | 9.1 s | `hook` | Corporate loan applications come with a mountain of documents. *Waaay* too many to review, for a single case. **[sigh]** | PDFs and pings pile up; "Waaaay" stretches; the big ping lands at 0:07.1, then a 2 s hold for the sigh |
+| 2 | 0:09.1 | 8.3 s | `waiting` | A loan officer can spend over an hour on the details, while the customer waits for any news of approval. | Officer and customer, the clock racing |
+| 3 | 0:17.4 | 8.0 s | `tamper` | And when a bad actor slips in an edit, the smallest changes are the hardest to catch. | The closing balance retyped; it vanishes into the pile |
+| 4 | 0:25.4 | 12.2 s | `portal` | So that's why we built… the G-L-D-B Anomaly Detection Portal. Its agents read every document in the case, and flag what doesn't add up. | "So that's why we introduce…" at 0:25.6; the name lands at 0:27.3. Pause before the name. |
+| 5 | 0:37.6 | 11.0 s | `upload` | Start by uploading the documents. Each one is classified, and its key fields extracted, even from scans. | Upload, then Classify (0:41.4), then Extract (0:44.9) light up |
+| 6 | 0:48.6 | 11.5 s | `detect` | A lead agent plans the investigation. Specialists check metadata, fonts, alignment, totals, spelling, and whether the documents agree, so a doctored figure or mismatched address gets caught. | The plan, six checks, the two catches (from 0:54.9) |
+| 7 | 1:00.1 | 10.0 s | `trace` | And it's not a black box. The agent trace shows every step and every tool it ran, so every finding can be audited. | Agent trace, a tool's output; the audit trail from 1:06.4 |
+| 8 | 1:10.1 | 14.5 s | `score` | Every case gets a risk rating, with the evidence behind it: what was flagged, where, and why. Officers confirm or dismiss each finding, add notes, and see which documents would settle any doubt. | The 72; What / Where / Why from 1:14.4; the review from 1:17.5; recommendations from 1:21.3 |
+| 9 | 1:24.6 | 4.8 s | `finalise` | When the review is done, they lock the case. | Finalise Case, confirm, Finalised |
+| 10 | 1:29.4 | 8.5 s | `dashboard` | And the dashboard shows every case at a glance: the pipeline, the common flags, and the riskiest cases first. | A tour of the dashboard |
+| 11 | 1:37.9 | 6.4 s | `difference` | Hours of screening, down to minutes. Your officers make the call, and customers hear back sooner. | Review complete; the good-news ping at 1:41.6 |
+| 12 | 1:44.3 | 7.5 s | `cta` | Bring your next loan case, and see what the portal catches. Try the G-L-D-B Anomaly Detection Portal today. | The name, then "Try it on your next case" pressed at 1:48.1 |
 
-Running length: about 1:57.
+About 240 words in all. The same lines, as plain text for pasting into ElevenLabs, are in `video/public/vo/lines.json`.
 
-Music: `video/public/music/synthwave-music4video.mp3` (107.7 BPM, steady), extended on bar lines to cover the film. Alternative kept: `corporate-2bstudio.mp3`.
-
-## Sound
-- **Music:** your track under everything, ducked under the voice. It's quieter and tense through sections 1–3, lifts when the portal arrives (section 4), and resolves on the close.
-- **Sound effects** (synthesised, subtle):
-  - chat pings in the hook, with a heavier one for the final ping
-  - a soft tick for the racing clock
-  - typing clicks for the bad actor's edit
-  - a whoosh on each swipe between screens
-  - a light click on each cursor press
-  - a gentle chime on "Review saved" and on the customer's good news
+## Recording notes
+- **"G-L-D-B"** is spelled with hyphens so the voice reads it letter by letter. In ElevenLabs you can also add a pronunciation dictionary entry for "GLDB".
+- **The sigh:** most ElevenLabs voices won't sigh on cue. Record it yourself, or generate it as its own clip (the Sound Effects tool, "tired exhale sigh") and save it as `video/public/vo/sigh.wav`.
+- **"Waaay":** type it as "Waaay" and pick the take that stretches it best; or regenerate with a lower Stability for more expression.
+- **A line runs long?** Raise that section's `length` in `video/src/timing.ts`; everything after it moves along, sound included.

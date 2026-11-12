@@ -1,13 +1,14 @@
 {
-  "hook": "<speak>Corporate loan applications come with a mountain of documents. <break time=\"250ms\"/> <prosody rate=\"35%\">Way</prosody> too many to review, for a single case.</speak>",
-  "waiting": "<speak>A loan officer can spend over an hour on the details, <break time=\"200ms\"/> while the customer waits on the other end for any news of approval.</speak>",
-  "tamper": "<speak>And when a bad actor is involved, <break time=\"200ms\"/> the smallest edits are the hardest to catch.</speak>",
-  "portal": "<speak>So that's why we built <break time=\"500ms\"/> the G L D B Anomaly Detection Portal. <break time=\"300ms\"/> Its agents read every document in the case, and flag what doesn't add up.</speak>",
-  "upload": "<speak>Start by uploading the full package. <break time=\"250ms\"/> Every document is classified, and its key fields extracted, <break time=\"150ms\"/> even from scans.</speak>",
-  "detect": "<speak>A lead agent plans the investigation. <break time=\"250ms\"/> Specialists check metadata, fonts, alignment, totals, spelling, and whether the documents agree. <break time=\"250ms\"/> So a doctored figure, or a mismatched address, gets caught.</speak>",
-  "trace": "<speak>And it's not a black box. <break time=\"250ms\"/> The agent trace shows every step: which tools ran, what they returned, and how each flag was reached. <break time=\"250ms\"/> Every finding can be audited.</speak>",
-  "score": "<speak>Every case gets a risk rating, with the evidence behind it: what was flagged, where, and why. <break time=\"300ms\"/> The officer confirms or dismisses each finding, and adds notes. <break time=\"300ms\"/> And the portal recommends the documents that would settle any doubt.</speak>",
-  "dashboard": "<speak>From the dashboard, officers see every case at a glance, <break time=\"150ms\"/> drill into anything flagged, <break time=\"150ms\"/> and keep a full audit trail for compliance.</speak>",
-  "difference": "<speak>What took hours of screening now takes minutes. <break time=\"300ms\"/> The AI does the reading, your loan officers make the call, <break time=\"200ms\"/> and customers hear back sooner.</speak>",
-  "cta": "<speak>Bring your next loan case. <break time=\"250ms\"/> Upload the package, and see what the portal catches. <break time=\"350ms\"/> Try the G L D B Anomaly Detection Portal today.</speak>"
+ "hook": "Corporate loan applications come with a mountain of documents. Waaay too many to review, for a single case.",
+ "waiting": "A loan officer can spend over an hour on the details, while the customer waits for any news of approval.",
+ "tamper": "And when a bad actor slips in an edit, the smallest changes are the hardest to catch.",
+ "portal": "So that's why we built... the G-L-D-B Anomaly Detection Portal. Its agents read every document in the case, and flag what doesn't add up.",
+ "upload": "Start by uploading the documents. Each one is classified, and its key fields extracted, even from scans.",
+ "detect": "A lead agent plans the investigation. Specialists check metadata, fonts, alignment, totals, spelling, and whether the documents agree, so a doctored figure or mismatched address gets caught.",
+ "trace": "And it's not a black box. The agent trace shows every step and every tool it ran, so every finding can be audited.",
+ "score": "Every case gets a risk rating, with the evidence behind it: what was flagged, where, and why. Officers confirm or dismiss each finding, add notes, and see which documents would settle any doubt.",
+ "finalise": "When the review is done, they lock the case.",
+ "dashboard": "And the dashboard shows every case at a glance: the pipeline, the common flags, and the riskiest cases first.",
+ "difference": "Hours of screening, down to minutes. Your officers make the call, and customers hear back sooner.",
+ "cta": "Bring your next loan case, and see what the portal catches. Try the G-L-D-B Anomaly Detection Portal today."
 }

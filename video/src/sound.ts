@@ -15,12 +15,12 @@ import {
 export type SectionName = "finalise" | "buried" | "waiting" | "tamper" | "portal" | "upload" | "detect" | "trace" | "score" | "dashboard" | "difference" | "cta";
 const VO_FILE: Partial<Record<SectionName, keyof typeof durations>> = {
   buried: "hook", waiting: "waiting", tamper: "tamper", portal: "portal", upload: "upload", detect: "detect",
-  trace: "trace", score: "score", dashboard: "dashboard", difference: "difference", cta: "cta",
+  trace: "trace", score: "score", finalise: "finalise", dashboard: "dashboard", difference: "difference", cta: "cta",
 };
 /** Seconds into each section the voice starts. */
 export const VO_OFFSET: Partial<Record<SectionName, number>> = {
   buried: 0.2, waiting: 0.3, tamper: 0.3, portal: 0.15, upload: 0.25, detect: 0.2, trace: 0.3, score: 0.3,
-  dashboard: 0.25, difference: 0.25, cta: 0.3,
+  finalise: 0.2, dashboard: 0.25, difference: 0.2, cta: 0.2,
 };
 
 const start = (n: SectionName) => (SCENES as Record<string, { start: number }>)[n]?.start ?? 0;
