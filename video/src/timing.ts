@@ -77,6 +77,25 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
  */
 export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
+/**
+ * Section 2 version.
+ *   "v2"  silhouette avatars (Loan Officer, Customer), the script line as the caption. Default.
+ *   "v1"  initials avatars with invented names (first version).
+ */
+export const WAITING_VERSION: "v1" | "v2" = "v2";
+
+/** Section 2 v2. All times in seconds from the start of the section. */
+export const WAITING2 = {
+  length: 9,              // whole section
+  avatarsIn: -0.25,       // the two avatars and the clock land, staggered. Negative = already arriving on the first frame
+  officerLineIn: 0.3,     // "A loan officer may spend over an hour staring at details on the screen,"
+  customerLineIn: 3.9,    // "while the loan customer anxiously waits..." (the customer starts pulsing here)
+  clockStart: 0.8,        // the clock starts racing...
+  clockEnd: 7.4,          // ...and reaches 10:14. Statuses tick along with it
+  pulseEvery: 1.1,        // seconds between the customer's "waiting" pulses
+  fidget: 1.3,            // seconds per sway of the anxious customer
+};
+
 /** Section 2, "waiting". All times in seconds from the start of the section. */
 export const WAITING = {
   length: 7,              // whole section
@@ -157,7 +176,7 @@ export const s = (seconds: number): number => Math.round(seconds * FPS);
 
 const SCENE_LENGTHS: Record<string, number> =
   HOOK_VERSION === "v3"
-    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING.length) }
+    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length) }
     : HOOK_VERSION === "v2"
     ? { overwhelm: atSeconds(OVERWHELM.length) }
     : { package: atSeconds(HOOK.package.length), tooMany: atSeconds(HOOK.tooMany.length) };

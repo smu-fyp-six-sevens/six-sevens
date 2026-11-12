@@ -7,8 +7,9 @@ import { OverwhelmScene } from "./scenes/OverwhelmScene";
 import { PackageScene } from "./scenes/PackageScene";
 import { TooManyScene } from "./scenes/TooManyScene";
 import { WaitingScene } from "./scenes/WaitingScene";
+import { WaitingScene2 } from "./scenes/WaitingScene2";
 import { colors } from "./theme";
-import { HOOK, HOOK_VERSION, OVERWHELM, OVERWHELM3, WAITING, atSeconds } from "./timing";
+import { HOOK, HOOK_VERSION, OVERWHELM, OVERWHELM3, WAITING, WAITING2, WAITING_VERSION, atSeconds } from "./timing";
 
 export const Master: React.FC<{ showText?: boolean }> = ({ showText = true }) => (
   <AbsoluteFill style={{ background: colors.paper }}>
@@ -18,9 +19,15 @@ export const Master: React.FC<{ showText?: boolean }> = ({ showText = true }) =>
           <BuriedScene showText={showText} />
         </Sequence>
         {/* Section 2 follows the v3 hook. */}
-        <Sequence from={atSeconds(OVERWHELM3.length)} durationInFrames={atSeconds(WAITING.length)}>
-          <WaitingScene showText={showText} />
-        </Sequence>
+        {WAITING_VERSION === "v2" ? (
+          <Sequence from={atSeconds(OVERWHELM3.length)} durationInFrames={atSeconds(WAITING2.length)}>
+            <WaitingScene2 showText={showText} />
+          </Sequence>
+        ) : (
+          <Sequence from={atSeconds(OVERWHELM3.length)} durationInFrames={atSeconds(WAITING.length)}>
+            <WaitingScene showText={showText} />
+          </Sequence>
+        )}
       </>
     ) : HOOK_VERSION === "v2" ? (
       <Sequence durationInFrames={atSeconds(OVERWHELM.length)}>

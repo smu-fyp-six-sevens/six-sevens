@@ -12,8 +12,9 @@ import { OverwhelmScene } from "./scenes/OverwhelmScene";
 import { PackageScene } from "./scenes/PackageScene";
 import { TooManyScene } from "./scenes/TooManyScene";
 import { WaitingScene } from "./scenes/WaitingScene";
+import { WaitingScene2 } from "./scenes/WaitingScene2";
 import { canvas } from "./theme";
-import { FPS, HOOK, OVERWHELM, OVERWHELM3, TOTAL_FRAMES, WAITING, atSeconds } from "./timing";
+import { FPS, HOOK, OVERWHELM, OVERWHELM3, TOTAL_FRAMES, WAITING, WAITING2, atSeconds } from "./timing";
 
 // Inter, bundled in public/fonts (OFL, see Inter-LICENSE.txt), so renders work offline.
 for (const weight of ["400", "500", "600", "700"]) {
@@ -26,7 +27,8 @@ export const RemotionRoot: React.FC = () => (
   <>
     <Composition id="Master" component={Master} defaultProps={{ showText: true }} durationInFrames={TOTAL_FRAMES} {...size} />
     <Composition id="Master-NoText" component={Master} defaultProps={{ showText: false }} durationInFrames={TOTAL_FRAMES} {...size} />
-    <Composition id="Scene-Waiting" component={WaitingScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(WAITING.length)} {...size} />
+    <Composition id="Scene-Waiting" component={WaitingScene2} defaultProps={{ showText: true }} durationInFrames={atSeconds(WAITING2.length)} {...size} />
+    <Composition id="Scene-Waiting-v1" component={WaitingScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(WAITING.length)} {...size} />
     <Composition id="Scene-Buried" component={BuriedScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(OVERWHELM3.length)} {...size} />
     <Composition id="Scene-Overwhelm" component={OverwhelmScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(OVERWHELM.length)} {...size} />
     <Composition id="Scene-Package" component={PackageScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(HOOK.package.length)} {...size} />

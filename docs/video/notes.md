@@ -39,3 +39,8 @@
 - Built WaitingScene (7 s) after the v3 hook in Master; knobs in WAITING, words and people in data/waiting.ts.
 - Decision: the avatars are already arriving on the first frame (avatarsIn -0.25) so the cut from the hook lands on a picture.
 - Measured: stills at frames 0, 10, 60, 120, 200 and a contact sheet every 18 frames: nothing clipped, counters and clock agree (10:14, page 19, 14×). Not watched in motion.
+
+## Wave 7 - section 2 v2: silhouettes, roles only, caption = script
+- Owner: use stock-style person icons (own version, some personality), no names (just Loan Officer and Customer), follow the caption.
+- Built WaitingScene2 + Silhouette; WAITING_VERSION "v2" default, v1 renders moved to renders/v1/. Section is 9 s so the 28-word caption can be read.
+- Measured: stills at frames 0, 100, 140, 230: caption on four lines, no wrapping or clipping; clock and counters agree. Not watched in motion.

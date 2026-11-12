@@ -35,3 +35,15 @@ export const COPY_WAIT = {
   officerStatus: (page: number, total: number) => `Reviewing page ${page} of ${total}`,
   customerStatus: (n: number) => `Checked inbox ${n}×`,
 };
+
+// ---- v2 (default): silhouette avatars, roles only, the script line as the caption -------------
+export const ROLES = {
+  officer: { label: "Loan Officer", tint: "#355f96", bg: "#e4ebf4" },
+  customer: { label: "Customer", tint: "#c6820a", bg: "#fbf0da" },
+};
+
+/** The script line, in two halves: the first lands with the officer, the second with the customer. */
+export const CAPTION = {
+  officer: "A loan officer may spend over an hour\nstaring at details on the screen,",
+  customer: "while the loan customer anxiously waits\non the other end for any news of approval.",
+};

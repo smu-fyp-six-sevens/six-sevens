@@ -26,10 +26,10 @@ One case is too much paper for one person to read; the portal reads all of it, a
 
 **Hook v1 (kept behind HOOK_VERSION) · 0:00-0:11 · package + tooMany.** The portal's upload box filling with the case's 20 real files, then a pull-back. Renders in `video/renders/v1/`.
 
-**Section 2 · after the hook · 0:07 · waiting.**
-- Visual: officer and customer as avatar circles (initials) either side of a clock fast-forwarding 9:02 to 10:14; a dashed line joins them behind the clock ("on the other end"). Officer status "Reviewing page 14 of 212" creeps to 19; customer status "Checked inbox 1×" climbs to 14×; the customer's avatar pulses.
-- On-screen copy (placeholder): **Over an hour on the details, / while the customer waits for news.**
-- People are invented: Sarah Ng (Loan Officer), Jason Koh (Director, Anchorpoint Insurance Brokers).
+**Section 2 · after the hook · 0:09 · waiting (v2, default).**
+- Visual: two silhouette avatars, roles only. Loan Officer: glasses, tie, slow nod, lens glint. Customer: phone to the ear, fidgets, sweat drop, "..." typing bubble, pulse ring. A clock between them fast-forwards 9:02 to 10:14; dashed line joins them ("on the other end"). Status pills: "Reviewing page 14 of 212" creeps to 19; "Checked inbox 1×" climbs to 14×.
+- On-screen copy (locked, the script line): **A loan officer may spend over an hour / staring at details on the screen,** then **while the loan customer anxiously waits / on the other end for any news of approval.**
+- v1 (initials, invented names) kept behind WAITING_VERSION.
 
 ## Assumptions (veto any)
 0. v2: people, teams and filenames are invented; documents are schematic (grey bars, made-up figures). The company name Anchorpoint Insurance Brokers comes from the test fixture.
