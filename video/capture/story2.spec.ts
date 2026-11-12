@@ -203,3 +203,27 @@ test('dashboard', async ({ page, backend }) => {
   }).filter((b) => b.w > 0 && b.text));
   writeFileSync(`${OUT}/story2-dashboard.json`, JSON.stringify({ cards }, null, 2));
 });
+
+test('finalise the case', async ({ page, backend }) => {
+  test.setTimeout(120_000);
+  const { fx } = setup(backend);
+  fx.case.status = 'case_analysed';
+  await page.goto(`${fx.caseUrl}?section=summary`);
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${OUT}/finalise-ready.png` });
+  const card = page.getByRole('region', { name: 'Case Status' });
+  const button = await card.getByRole('button', { name: 'Finalise Case' }).boundingBox();
+  await card.getByRole('button', { name: 'Finalise Case' }).click();
+  const confirm = page.getByRole('alertdialog');
+  await confirm.waitFor();
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/finalise-confirm.png` });
+  const confirmButton = await confirm.getByRole('button', { name: 'Finalise Case' }).boundingBox();
+  await confirm.getByRole('button', { name: 'Finalise Case' }).click();
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: `${OUT}/finalise-done.png` });
+  const cardBox = await card.boundingBox();
+  const badge = await card.locator('.case-stage-badge').boundingBox();
+  writeFileSync(`${OUT}/story2-finalise.json`, JSON.stringify({ button, confirmButton, card: cardBox, badge }, null, 2));
+});

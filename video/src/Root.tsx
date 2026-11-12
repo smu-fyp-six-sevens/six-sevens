@@ -19,12 +19,13 @@ import { DetectScene } from "./scenes/DetectScene";
 import { TraceScene } from "./scenes/TraceScene";
 import { ScoreScene } from "./scenes/ScoreScene";
 import { DashboardScene } from "./scenes/DashboardScene";
+import { FinaliseScene } from "./scenes/FinaliseScene";
 import { DifferenceScene } from "./scenes/DifferenceScene";
 import { CtaScene } from "./scenes/CtaScene";
 import { WaitingScene } from "./scenes/WaitingScene";
 import { WaitingScene2 } from "./scenes/WaitingScene2";
 import { canvas } from "./theme";
-import { FPS, HOOK, OVERWHELM, OVERWHELM3, PORTAL, PORTAL2, TAMPER, UPLOAD, DETECT, TRACE, SCORE, DASHBOARD, DIFFERENCE, CTA, TOTAL_FRAMES, WAITING, WAITING2, atSeconds } from "./timing";
+import { FPS, HOOK, OVERWHELM, OVERWHELM3, PORTAL, PORTAL2, TAMPER, UPLOAD, DETECT, TRACE, SCORE, DASHBOARD, DIFFERENCE, CTA, FINALISE, TOTAL_FRAMES, WAITING, WAITING2, atSeconds } from "./timing";
 
 // Inter, bundled in public/fonts (OFL, see Inter-LICENSE.txt), so renders work offline.
 for (const weight of ["400", "500", "600", "700"]) {
@@ -41,6 +42,7 @@ export const RemotionRoot: React.FC = () => (
     <Composition id="Master-NoVO" component={Master} defaultProps={{ showText: true, vo: false }} durationInFrames={TOTAL_FRAMES} {...size} />
     {/* Picture only */}
     <Composition id="Master-Silent" component={Master} defaultProps={{ showText: true, vo: false, music: false, sfx: false }} durationInFrames={TOTAL_FRAMES} {...size} />
+    <Composition id="Scene-Finalise" component={FinaliseScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(FINALISE.length)} {...size} />
     <Composition id="Scene-Dashboard" component={DashboardScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(DASHBOARD.length)} {...size} />
     <Composition id="Scene-Difference" component={DifferenceScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(DIFFERENCE.length)} {...size} />
     <Composition id="Scene-Cta" component={CtaScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(CTA.length)} {...size} />

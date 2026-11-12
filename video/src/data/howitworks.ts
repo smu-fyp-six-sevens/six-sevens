@@ -71,6 +71,9 @@ export const SCREENS_STORY2 = {
   audit: { src: "ui/story/audit.png", w: 1440, h: 900 },
   additional: { src: "ui/story/additional.png", w: 1440, h: 900 },
   dashboard: { src: "ui/story/dashboard-full.png", w: 1440, h: 1967 },
+  finaliseReady: { src: "ui/story/finalise-ready.png", w: 1440, h: 900 },
+  finaliseConfirm: { src: "ui/story/finalise-confirm.png", w: 1440, h: 900 },
+  finaliseDone: { src: "ui/story/finalise-done.png", w: 1440, h: 900 },
 };
 
 /** Additional Documents, measured on its capture (CSS px): the score line and each recommended document. */
@@ -84,6 +87,22 @@ export const ADDITIONAL_BOXES = {
 };
 
 // ---- Sections 9-11: the business value and the call to action ----------------------------------
+
+export const FINALISE_COPY = {
+  headline: "Then lock the case.",
+  beats: [
+    { text: "Finalised cases become view-only, with every step on record.", at: "readyAt", accent: true },
+  ],
+};
+
+export const FINALISE_BOXES = {
+  sidebarSummary: { x: 44, y: 170 },
+  button: { x: 1240.75, y: 205.5, w: 139.25, h: 37.5 },
+  confirm: { x: 586.5, y: 491.75, w: 132, h: 44.5 },
+  card: { x: 553.7, y: 188.5, w: 847.3, h: 194 },
+  badge: { x: 672.7, y: 205.5, w: 90.9, h: 24 },
+  banner: { x: 1140, y: 112, w: 330, h: 22 },
+};
 
 export const DASHBOARD_COPY = {
   headline: "Every case, at a glance.",

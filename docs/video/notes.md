@@ -127,3 +127,8 @@
 - Owner: the steps are Upload > Classify > Extract > Detect > Score > Finalise.
 - Mapping: Upload section lights Upload, then Classify as the table stamps types (classifyStart), then Extract with the scan (scanAt); Detect and Trace light Detect; Score lights Score, then Finalise from the review tick (tickAt); Dashboard stays on Finalise. ProductHeader takes stepAt for changes within a section; tracker chips slimmed to fit six.
 - Spliced a fresh render of frames 1218-3002 (sections 5-9) into renders/film-novo.mp4; soundtrack unchanged.
+
+## Wave 22 - Finalise means locking the case
+- Owner: Finalise = lock the case. The review (confirm / dismiss, notes) stays under Score.
+- New beat "finalise" (5.5 s) between Score and the dashboard: from Additional Documents, Summary in the sidebar, "Finalise Case", the real confirmation, "Finalised" ringed and the view-only banner (captured in story2.spec.ts, case at case_analysed). Tracker lights Finalise here.
+- Score 15 -> 14.5, dashboard 10 -> 9.5 (it now starts on the finalised summary): film 119.1 s, under 2 minutes. Full re-render (everything after shifts, sound too).

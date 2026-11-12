@@ -77,9 +77,21 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
  */
 export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
+/** Section 8b, "finalise": the officer locks the case. All times in seconds from the start of the section. */
+export const FINALISE = {
+  length: 5.5,
+  headlineIn: 0.2,        // "Then lock the case."
+  summaryClick: 0.6,      // on the Additional Documents page, the cursor clicks "Summary" in the sidebar
+  readyAt: 0.75,          // the case summary: "Ready to Finalise"
+  buttonClick: 1.7,       // the cursor clicks "Finalise Case"
+  confirmAt: 1.85,        // the confirmation: view-only, can't be undone
+  confirmClick: 2.9,      // it confirms
+  doneAt: 3.05,           // "Finalised": the case is locked, view-only
+};
+
 /** Section 9, "dashboard": the officer navigates the portal; the camera follows the cursor. */
 export const DASHBOARD = {
-  length: 10,
+  length: 9.5,
   headlineIn: 0.2,        // "Every case, at a glance."
   navClick: 0.9,          // on the Additional Documents page, the cursor clicks "Dashboard" in the top bar
   pipelineAt: 1.1,        // the dashboard: its case pipeline...
@@ -143,7 +155,7 @@ export const TRACE = {
 
 /** Section 8, "score" (how it works, step 3). */
 export const SCORE = {
-  length: 15,
+  length: 14.5,
   headlineIn: 0.2,        // "Every case gets a risk rating."
   line1In: 0.6,           // "With the exact evidence behind it."
   gaugeAt: 1.0,           // the risk gauge is ringed...
@@ -342,7 +354,7 @@ export const s = (seconds: number): number => Math.round(seconds * FPS);
 
 const SCENE_LENGTHS: Record<string, number> =
   HOOK_VERSION === "v3"
-    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length), portal: atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length), upload: atSeconds(UPLOAD.length), detect: atSeconds(DETECT.length), trace: atSeconds(TRACE.length), score: atSeconds(SCORE.length), dashboard: atSeconds(DASHBOARD.length), difference: atSeconds(DIFFERENCE.length), cta: atSeconds(CTA.length) }
+    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length), portal: atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length), upload: atSeconds(UPLOAD.length), detect: atSeconds(DETECT.length), trace: atSeconds(TRACE.length), score: atSeconds(SCORE.length), finalise: atSeconds(FINALISE.length), dashboard: atSeconds(DASHBOARD.length), difference: atSeconds(DIFFERENCE.length), cta: atSeconds(CTA.length) }
     : HOOK_VERSION === "v2"
     ? { overwhelm: atSeconds(OVERWHELM.length) }
     : { package: atSeconds(HOOK.package.length), tooMany: atSeconds(HOOK.tooMany.length) };

@@ -6,6 +6,7 @@ import { AbsoluteFill, Sequence, interpolate, staticFile } from "remotion";
 import { Sfx } from "./components/Sfx";
 import { CtaScene } from "./scenes/CtaScene";
 import { DashboardScene } from "./scenes/DashboardScene";
+import { FinaliseScene } from "./scenes/FinaliseScene";
 import { DifferenceScene } from "./scenes/DifferenceScene";
 import { CUES, MUSIC, VO, musicLevel, type SectionName } from "./sound";
 import { BuriedScene } from "./scenes/BuriedScene";
@@ -34,6 +35,7 @@ const SECTIONS: { name: SectionName; node: (showText: boolean) => React.ReactNod
   { name: "detect", node: (t) => <DetectScene showText={t} /> },
   { name: "trace", node: (t) => <TraceScene showText={t} /> },
   { name: "score", node: (t) => <ScoreScene showText={t} /> },
+  { name: "finalise", node: (t) => <FinaliseScene showText={t} /> },
   { name: "dashboard", node: (t) => <DashboardScene showText={t} /> },
   { name: "difference", node: (t) => <DifferenceScene showText={t} /> },
   { name: "cta", node: (t) => <CtaScene showText={t} /> },

@@ -9,16 +9,16 @@
 import durations from "../public/vo/durations.json";
 import { SWIPE } from "./components/swipe";
 import {
-  CTA, DASHBOARD, DETECT, DIFFERENCE, FPS, OVERWHELM3, PORTAL2, SCENES, SCORE, TAMPER, TRACE, UPLOAD, WAITING2,
+  CTA, DASHBOARD, DETECT, DIFFERENCE, FINALISE, FPS, OVERWHELM3, PORTAL2, SCENES, SCORE, TAMPER, TRACE, UPLOAD, WAITING2,
 } from "./timing";
 
-export type SectionName = "buried" | "waiting" | "tamper" | "portal" | "upload" | "detect" | "trace" | "score" | "dashboard" | "difference" | "cta";
-const VO_FILE: Record<SectionName, keyof typeof durations> = {
+export type SectionName = "finalise" | "buried" | "waiting" | "tamper" | "portal" | "upload" | "detect" | "trace" | "score" | "dashboard" | "difference" | "cta";
+const VO_FILE: Partial<Record<SectionName, keyof typeof durations>> = {
   buried: "hook", waiting: "waiting", tamper: "tamper", portal: "portal", upload: "upload", detect: "detect",
   trace: "trace", score: "score", dashboard: "dashboard", difference: "difference", cta: "cta",
 };
 /** Seconds into each section the voice starts. */
-export const VO_OFFSET: Record<SectionName, number> = {
+export const VO_OFFSET: Partial<Record<SectionName, number>> = {
   buried: 0.2, waiting: 0.3, tamper: 0.3, portal: 0.15, upload: 0.25, detect: 0.2, trace: 0.3, score: 0.3,
   dashboard: 0.25, difference: 0.25, cta: 0.3,
 };
@@ -29,8 +29,8 @@ const at = (n: SectionName, seconds: number) => start(n) + Math.round(seconds * 
 export const VO = (Object.keys(VO_FILE) as SectionName[]).map((n) => ({
   section: n,
   src: `vo/${VO_FILE[n]}.wav`,
-  from: at(n, VO_OFFSET[n]),
-  frames: Math.ceil((durations[VO_FILE[n]] + 0.1) * FPS),
+  from: at(n, VO_OFFSET[n] ?? 0),
+  frames: Math.ceil((durations[VO_FILE[n]!] + 0.1) * FPS),
 }));
 
 /** Music level by frame: quieter for the problem, lifted for the product, ducked under the voice. */
@@ -81,6 +81,10 @@ export const CUES: Cue[] = [
   cue("score", SCORE.saveAt, CLICK, 0.45),
   cue("score", SCORE.saveAt + 0.05, PING, 0.3),
   cue("score", SCORE.addAt + SWIPE / 2, WHOOSH, 0.3),
+  cue("finalise", FINALISE.summaryClick, CLICK, 0.45),
+  cue("finalise", FINALISE.buttonClick, CLICK, 0.45),
+  cue("finalise", FINALISE.confirmClick, CLICK, 0.5),
+  cue("finalise", FINALISE.doneAt + 0.15, THUMP, 0.35),
   cue("dashboard", DASHBOARD.navClick, CLICK, 0.45),
   cue("dashboard", DASHBOARD.clickAt, CLICK, 0.45),
   cue("dashboard", DASHBOARD.auditClick, CLICK, 0.45),

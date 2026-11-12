@@ -167,7 +167,7 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
           </Screen>
         </Window>
       )}
-      <ProductHeader step={4} fromStep={3} stepAt={[[T.tickAt, 5]]} length={T.length} headline={SCORE_COPY.headline} headlineIn={T.headlineIn} showText={showText}
+      <ProductHeader step={4} fromStep={3} length={T.length} headline={SCORE_COPY.headline} headlineIn={T.headlineIn} showText={showText}
         beats={SCORE_COPY.beats.map((b) => ({ ...b, at: T[b.at as keyof typeof T] }))} />
     </AbsoluteFill>
   );

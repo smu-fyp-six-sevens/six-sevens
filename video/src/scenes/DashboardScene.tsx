@@ -1,5 +1,5 @@
 // Section 9 - "dashboard": the officer navigates the real portal, and the camera follows the cursor.
-//   On the Additional Documents page (where section 8 ends), the cursor clicks "Dashboard" in the top bar.
+//   On the finalised case's summary (where the finalise beat ends), the cursor clicks "Dashboard" in the top bar.
 //   The dashboard: the case pipeline; the page scrolls to the risk overview, then to "Needs attention".
 //   The cursor clicks GLDB-02: its risk summary opens. It clicks "Audit" in the sidebar: the audit trail opens.
 // The camera works on the browser's viewport (1440 x 900 CSS px) and pages scroll inside it, as in a browser, so a
@@ -27,7 +27,7 @@ const path = (t: number, keys: [number, number, number][]) => {
 };
 
 /** The viewport, zoomed on a point (viewport px), clamped to its edges like a real crop. */
-const Viewport: React.FC<{ zoom: number; x: number; y: number; children: React.ReactNode }> = ({ zoom, x, y, children }) => {
+export const Viewport: React.FC<{ zoom: number; x: number; y: number; children: React.ReactNode }> = ({ zoom, x, y, children }) => {
   const k = K0 * zoom;
   const tx = Math.min(0, Math.max(WIN.w - VW * k, WIN.w / 2 - k * x));
   const ty = Math.min(0, Math.max(WIN.h - VH * k, WIN.h / 2 - k * y));
@@ -84,7 +84,7 @@ export const DashboardScene: React.FC<{ showText?: boolean }> = ({ showText = tr
     <AbsoluteFill style={{ background: colors.paper }}>
       <Window enter={1} swipe={swipe}>
         <Viewport zoom={cam.zoom} x={cam.x} y={cam.y}>
-          <Img src={staticFile(SCREENS_STORY2.additional.src)} style={{ position: "absolute", left: 0, top: 0, width: VW, height: VH }} />
+          <Img src={staticFile(SCREENS_STORY2.finaliseDone.src)} style={{ position: "absolute", left: 0, top: 0, width: VW, height: VH }} />
           {toDash > 0 && (
             <div style={{ position: "absolute", left: 0, top: -scroll, width: VW, height: SCREENS_STORY2.dashboard.h, opacity: toDash }}>
               <Img src={staticFile(SCREENS_STORY2.dashboard.src)} style={{ width: VW, height: SCREENS_STORY2.dashboard.h, display: "block" }} />
