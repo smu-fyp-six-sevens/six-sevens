@@ -72,3 +72,10 @@
 - Captured documents table and fields card styles (capture/howitworks.spec.ts); rebuilt the moving parts. The fixture's scanned file carried a real-looking person and broker, so the scan is the film's own invented December statement (closing 96,250.00 = January's opening).
 - Fixes after the first stills: the upload footer no longer takes space when empty (it covered the table header); the captured, already-processed table is hidden before the upload; framing widened.
 - Measured: stills at frames 20, 40, 55, 70, 88, 115, 150, 190, 235, 265, 300, 340. Not watched in motion.
+
+## Wave 13 - sections 6-8 together; steps renamed Upload / Detect / Score
+- Owner: generate the rest of the "how it works" lines together, consistently; steps Upload > Detect > Score.
+- One format, ProductHeader: tracker + headline + a line that changes per beat.
+- Captured (capture/story2.spec.ts): risk summary (story risk: forged balance high, font medium, PDF editor medium, cross-document address high = High 72), the review dialog before and after a dismissal with a note, the trace with a tool call opened, the audit trail. The fixture case predates reviews, so reviews_required is set on it.
+- Detect is rebuilt in the portal's style (no screen in the portal shows the plan and checks this way); Trace and Score are the real screens with overlays.
+- Measured: stills across all three; the doctored-figure crop fixed after the first stills. Not watched in motion.

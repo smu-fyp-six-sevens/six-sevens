@@ -42,9 +42,15 @@ One case is too much paper for one person to read; the portal reads all of it, a
 - The app's header reads "GLDB Fraud Review"; the film names the product "GLDB Fraud Detection Portal" (owner's call).
 
 **Section 5 · after section 4 · 0:11.5 · upload (how it works, step 1).**
-- Format for every product section from here: step tracker on top (the portal's own Upload / Check / Score), one headline, a short line; the real portal in the same window below.
+- Format for every product section from here: step tracker on top (Upload / Detect / Score, owner's names), one headline, a short line that changes with each beat; the real portal in the same window below.
 - Visual: drag the package in, 20 rows cascade, click Upload; table fills row by row (Processing, type stamps on, Extracted); scanned December statement read by a beam into the Extracted Information card.
 - On-screen copy: **Upload the whole package.** / **Every file is classified and its key fields read, even from scans.**
+
+**Section 6 · detect (step 2) · 12.5 s.** Lead agent's plan types out; six checks branch out and run; four findings; catches: doctored figure, mismatched address. Copy: **Agents investigate every document.** / beats: A lead agent plans the investigation. → Specialists check metadata, fonts, alignment, totals, spelling, and across documents. → A doctored figure or a mismatched address gets caught.
+
+**Section 7 · trace (step 2) · 10.5 s.** Real Agent trace, a tool call opened and its output boxed; real audit trail. Copy: **And it's not a black box.** / The agent trace shows every step, every tool call, and what it returned. → Every finding can be audited.
+
+**Section 8 · score (step 3) · 13.5 s.** Real Risk Summary (High 72); real review dialog with What / Where / Why; one finding dismissed with a reason and a note; saved. Copy: **Every case gets a risk rating.** / With the exact evidence behind it. → What was flagged, where, and why. → Officers confirm or dismiss each finding, and add notes.
 
 ## Assumptions (veto any)
 0. v2: people, teams and filenames are invented; documents are schematic (grey bars, made-up figures). The company name Anchorpoint Insurance Brokers comes from the test fixture.

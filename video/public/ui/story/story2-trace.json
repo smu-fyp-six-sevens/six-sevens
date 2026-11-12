@@ -1,0 +1,159 @@
+{
+  "trace": {
+    "rows": [
+      {
+        "text": "◆Fraud detection⚠ 14.7k tokens · $0.00737.00s",
+        "x": 153,
+        "y": 123.453125,
+        "w": 524.1875,
+        "h": 38
+      },
+      {
+        "text": "Detection started",
+        "x": 213,
+        "y": 161.453125,
+        "w": 464.1875,
+        "h": 38
+      },
+      {
+        "text": "◇Lead agent4.0k tokens · $0.00612.50s",
+        "x": 213,
+        "y": 199.453125,
+        "w": 464.1875,
+        "h": 38
+      },
+      {
+        "text": "✦Plan4.0k tokens · $0.00612.40s",
+        "x": 243,
+        "y": 237.453125,
+        "w": 434.1875,
+        "h": 38
+      },
+      {
+        "text": "Investigation planbriefs for 2 specialists100 ms",
+        "x": 243,
+        "y": 275.453125,
+        "w": 434.1875,
+        "h": 38
+      },
+      {
+        "text": "◇Specialists700 tokens · $0.00123.50s",
+        "x": 213,
+        "y": 313.453125,
+        "w": 464.1875,
+        "h": 38
+      },
+      {
+        "text": "◉Layout specialist700 tokens · $0.00123.50s",
+        "x": 243,
+        "y": 351.453125,
+        "w": 434.1875,
+        "h": 38
+      },
+      {
+        "text": "⚒Font consistency check1 finding(s)800 ms",
+        "x": 273,
+        "y": 389.453125,
+        "w": 404.1875,
+        "h": 38
+      },
+      {
+        "text": "✦Layout⚠ 1700 tokens · $0.00121.50s",
+        "x": 273,
+        "y": 427.453125,
+        "w": 404.1875,
+        "h": 38
+      },
+      {
+        "text": "Specialist finished1 finding(s) · tools: Font consistency check100 ms",
+        "x": 273,
+        "y": 465.453125,
+        "w": 404.1875,
+        "h": 38
+      },
+      {
+        "text": "◉Authenticity specialist2.00s",
+        "x": 243,
+        "y": 503.453125,
+        "w": 434.1875,
+        "h": 38
+      },
+      {
+        "text": "Run audit2/12 model calls · 1 repaired output(s)800 ms",
+        "x": 213,
+        "y": 541.453125,
+        "w": 464.1875,
+        "h": 38
+      }
+    ],
+    "details": [
+      {
+        "text": "⚒ToolFont consistency checktool.font_consistency_toolStatus✓ OKStarts+3.10sTook800 msOverv",
+        "x": 708.1875,
+        "y": 69.0625,
+        "w": 716.8125,
+        "h": 830.9375
+      }
+    ]
+  },
+  "audit": {
+    "entries": [
+      {
+        "text": "2:00:00 amUploaded documentAnchorpoint_BankStatement_Jan2026.pdfBy officer",
+        "x": 137,
+        "y": 321.75,
+        "w": 1243,
+        "h": 70.25
+      },
+      {
+        "text": "2:00:40 amClassified and extracted documentAnchorpoint_BankStatement_Jan2026.pdfClassified",
+        "x": 137,
+        "y": 392,
+        "w": 1243,
+        "h": 92
+      },
+      {
+        "text": "2:03:00 amApproved documentAnchorpoint_BankStatement_Jan2026.pdfBy officer",
+        "x": 137,
+        "y": 484,
+        "w": 1243,
+        "h": 70.25
+      },
+      {
+        "text": "2:03:30 amRan Font consistency checkAnchorpoint_BankStatement_Jan2026.pdf1 finding(s)Syste",
+        "x": 137,
+        "y": 554.25,
+        "w": 1243,
+        "h": 92
+      },
+      {
+        "text": "2:03:40 amRan metadata checkAnchorpoint_BankStatement_Jan2026.pdf1 finding(s)System · star",
+        "x": 137,
+        "y": 646.25,
+        "w": 1243,
+        "h": 92
+      },
+      {
+        "text": "2:09:00 amReviewed findingsAnchorpoint_BankStatement_Jan2026.pdf2 real issue(s) · 1 false ",
+        "x": 137,
+        "y": 738.25,
+        "w": 1243,
+        "h": 92
+      },
+      {
+        "text": "2:10:00 amReviewed findingsGLDB-02Cross-document findings: 1 real issue(s)By officer",
+        "x": 137,
+        "y": 830.25,
+        "w": 1243,
+        "h": 92
+      },
+      {
+        "text": "2:11:00 amAdded noteGLDB-02By officer",
+        "x": 137,
+        "y": 922.25,
+        "w": 1243,
+        "h": 70.25
+      }
+    ]
+  }
+}

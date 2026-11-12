@@ -15,10 +15,13 @@ import { PortalScene2 } from "./scenes/PortalScene2";
 import { TamperScene } from "./scenes/TamperScene";
 import { TooManyScene } from "./scenes/TooManyScene";
 import { UploadScene } from "./scenes/UploadScene";
+import { DetectScene } from "./scenes/DetectScene";
+import { TraceScene } from "./scenes/TraceScene";
+import { ScoreScene } from "./scenes/ScoreScene";
 import { WaitingScene } from "./scenes/WaitingScene";
 import { WaitingScene2 } from "./scenes/WaitingScene2";
 import { canvas } from "./theme";
-import { FPS, HOOK, OVERWHELM, OVERWHELM3, PORTAL, PORTAL2, TAMPER, UPLOAD, TOTAL_FRAMES, WAITING, WAITING2, atSeconds } from "./timing";
+import { FPS, HOOK, OVERWHELM, OVERWHELM3, PORTAL, PORTAL2, TAMPER, UPLOAD, DETECT, TRACE, SCORE, TOTAL_FRAMES, WAITING, WAITING2, atSeconds } from "./timing";
 
 // Inter, bundled in public/fonts (OFL, see Inter-LICENSE.txt), so renders work offline.
 for (const weight of ["400", "500", "600", "700"]) {
@@ -31,6 +34,9 @@ export const RemotionRoot: React.FC = () => (
   <>
     <Composition id="Master" component={Master} defaultProps={{ showText: true }} durationInFrames={TOTAL_FRAMES} {...size} />
     <Composition id="Master-NoText" component={Master} defaultProps={{ showText: false }} durationInFrames={TOTAL_FRAMES} {...size} />
+    <Composition id="Scene-Detect" component={DetectScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(DETECT.length)} {...size} />
+    <Composition id="Scene-Trace" component={TraceScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(TRACE.length)} {...size} />
+    <Composition id="Scene-Score" component={ScoreScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(SCORE.length)} {...size} />
     <Composition id="Scene-Upload" component={UploadScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(UPLOAD.length)} {...size} />
     <Composition id="Scene-Portal" component={PortalScene2} defaultProps={{ showText: true }} durationInFrames={atSeconds(PORTAL2.length)} {...size} />
     <Composition id="Scene-Portal-v1" component={PortalScene} defaultProps={{ showText: true }} durationInFrames={atSeconds(PORTAL.length)} {...size} />

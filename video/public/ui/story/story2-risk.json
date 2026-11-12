@@ -1,0 +1,153 @@
+{
+  "risk": {
+    "documents": [
+      {
+        "text": "Anchorpoint_BankStatement_Jan2026.pdfBank Statement1 high2 mediumClosing balance 812,400.0",
+        "x": 117,
+        "y": 520.25,
+        "w": 1283,
+        "h": 94.5
+      },
+      {
+        "text": "Across documentsCross-document findings1 highThe registered address is \"6 Serangoon North ",
+        "x": 117,
+        "y": 614.75,
+        "w": 1283,
+        "h": 93.5
+      }
+    ],
+    "card": [
+      {
+        "text": "Customer Risk SummaryHigh RiskLow: 0–24Medium: 25–49High: 50–79Critical: 80–10072out of 10",
+        "x": 116,
+        "y": 188.5,
+        "w": 1285,
+        "h": 249
+      },
+      {
+        "text": "Documents to Review2 of 2 to reviewSave all reviewsAnchorpoint_BankStatement_Jan2026.pdfBa",
+        "x": 116,
+        "y": 455.5,
+        "w": 1285,
+        "h": 425
+      }
+    ]
+  },
+  "review1": {
+    "dialog": [
+      {
+        "text": "Anchorpoint_BankStatement_Jan2026.pdfBank Statement1 high2 medium×Nothing placed on the pa",
+        "x": 24,
+        "y": 36,
+        "w": 1377,
+        "h": 828
+      }
+    ],
+    "rows": [
+      {
+        "text": "highBank statement totalsClosing balance 812,400.00 does not reconcile: the opening balanc",
+        "x": 827,
+        "y": 199,
+        "w": 536,
+        "h": 111.46875
+      },
+      {
+        "text": "mediumFont consistencyThe closing balance is set in a different weight from the rest of th",
+        "x": 827,
+        "y": 310.46875,
+        "w": 536,
+        "h": 112.46875
+      },
+      {
+        "text": "mediumMetadataThe file was last saved by a PDF editor, not by the bank.A bank statement sh",
+        "x": 827,
+        "y": 422.9375,
+        "w": 536,
+        "h": 93.625
+      }
+    ],
+    "wrong": [
+      {
+        "text": "",
+        "x": 827,
+        "y": 117.125,
+        "w": 16,
+        "h": 16
+      },
+      {
+        "text": "",
+        "x": 827,
+        "y": 210,
+        "w": 16,
+        "h": 16
+      },
+      {
+        "text": "",
+        "x": 827,
+        "y": 322.46875,
+        "w": 16,
+        "h": 16
+      },
+      {
+        "text": "",
+        "x": 827,
+        "y": 434.9375,
+        "w": 16,
+        "h": 16
+      }
+    ],
+    "save": [
+      {
+        "text": "Save review",
+        "x": 1256.09375,
+        "y": 153.25,
+        "w": 106.90625,
+        "h": 32.75
+      }
+    ]
+  },
+  "review2": {
+    "rows": [
+      {
+        "text": "highBank statement totalsClosing balance 812,400.00 does not reconcile: the opening balanc",
+        "x": 827,
+        "y": 199,
+        "w": 536,
+        "h": 111.46875
+      },
+      {
+        "text": "mediumFont consistencyThe closing balance is set in a different weight from the rest of th",
+        "x": 827,
+        "y": 310.46875,
+        "w": 536,
+        "h": 112.46875
+      },
+      {
+        "text": "mediumMetadataThe file was last saved by a PDF editor, not by the bank.A bank statement sh",
+        "x": 827,
+        "y": 422.9375,
+        "w": 536,
+        "h": 189.796875
+      }
+    ],
+    "reasons": [
+      {
+        "text": "False alarm because (required)Normal for this documentWithin toleranceTool misread itExpla",
+        "x": 939,
+        "y": 494.71875,
+        "w": 424,
+        "h": 90.171875
+      }
+    ],
+    "note": [],
+    "save": [
+      {
+        "text": "Save review",
+        "x": 1256.09375,
+        "y": 153.25,
+        "w": 106.90625,
+        "h": 32.75
+      }
+    ]
+  }
+}

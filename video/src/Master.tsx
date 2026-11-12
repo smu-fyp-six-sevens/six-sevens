@@ -10,10 +10,13 @@ import { PortalScene2 } from "./scenes/PortalScene2";
 import { TamperScene } from "./scenes/TamperScene";
 import { TooManyScene } from "./scenes/TooManyScene";
 import { UploadScene } from "./scenes/UploadScene";
+import { DetectScene } from "./scenes/DetectScene";
+import { TraceScene } from "./scenes/TraceScene";
+import { ScoreScene } from "./scenes/ScoreScene";
 import { WaitingScene } from "./scenes/WaitingScene";
 import { WaitingScene2 } from "./scenes/WaitingScene2";
 import { colors } from "./theme";
-import { HOOK, HOOK_VERSION, OVERWHELM, OVERWHELM3, PORTAL, PORTAL2, PORTAL_VERSION, TAMPER, UPLOAD, WAITING, WAITING2, WAITING_VERSION, atSeconds } from "./timing";
+import { HOOK, HOOK_VERSION, OVERWHELM, OVERWHELM3, PORTAL, PORTAL2, PORTAL_VERSION, TAMPER, UPLOAD, DETECT, TRACE, SCORE, WAITING, WAITING2, WAITING_VERSION, atSeconds } from "./timing";
 
 export const Master: React.FC<{ showText?: boolean }> = ({ showText = true }) => (
   <AbsoluteFill style={{ background: colors.paper }}>
@@ -41,9 +44,21 @@ export const Master: React.FC<{ showText?: boolean }> = ({ showText = true }) =>
           {PORTAL_VERSION === "v2" ? <PortalScene2 showText={showText} /> : <PortalScene showText={showText} />}
         </Sequence>
         {/* Section 5 */}
-        <Sequence from={atSeconds(OVERWHELM3.length) + atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length) + atSeconds(TAMPER.length) + atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length)} durationInFrames={atSeconds(UPLOAD.length)}>
-          <UploadScene showText={showText} />
-        </Sequence>
+        {(() => {
+          // Sections 5-8, one after another from the end of section 4.
+          let at = atSeconds(OVERWHELM3.length) + atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length) + atSeconds(TAMPER.length) + atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length);
+          const parts: [number, React.ReactNode][] = [
+            [atSeconds(UPLOAD.length), <UploadScene showText={showText} />],
+            [atSeconds(DETECT.length), <DetectScene showText={showText} />],
+            [atSeconds(TRACE.length), <TraceScene showText={showText} />],
+            [atSeconds(SCORE.length), <ScoreScene showText={showText} />],
+          ];
+          return parts.map(([len, node], i) => {
+            const from = at;
+            at += len;
+            return <Sequence key={i} from={from} durationInFrames={len}>{node}</Sequence>;
+          });
+        })()}
       </>
     ) : HOOK_VERSION === "v2" ? (
       <Sequence durationInFrames={atSeconds(OVERWHELM.length)}>

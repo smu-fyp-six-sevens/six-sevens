@@ -3,8 +3,8 @@
 // Files and types are case GLDB-02's from the portal's regression fixture (names neutralised); the scanned
 // December statement is the film's own. "\n" is a line break you chose.
 
-/** The "how it works" steps, in the portal's own words (its sign-in page). Every product section shows them. */
-export const STEPS = ["Upload", "Check", "Score"] as const;
+/** The "how it works" steps (Upload, Detect, Score). Every product section shows them. */
+export const STEPS = ["Upload", "Detect", "Score"] as const;
 
 export const UPLOAD_COPY = {
   headline: "Upload the whole package.",

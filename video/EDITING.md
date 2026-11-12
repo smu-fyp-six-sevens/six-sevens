@@ -13,6 +13,9 @@ time and every word lives in two kinds of files you can edit without touching th
 | Section 2 ("waiting") | 0:09.6 - 0:18.6 | Loan Officer and Customer avatars either side of a clock racing 9:02 to 10:14 |
 | Section 3 ("tamper") | 0:18.6 - 0:28.1 | A bad actor edits a bank statement's closing balance; it vanishes into the pile |
 | Section 5 ("upload") | 0:40.6 - 0:52.1 | Step 1 Upload: drag the package in, the table classifies and extracts row by row, a scan beam reads a scanned statement |
+| Section 6 ("detect") | 0:52.1 - 1:04.6 | Step 2 Detect: the lead agent's plan, six checks branch out and run, the doctored figure and mismatched address are caught |
+| Section 7 ("trace") | 1:04.6 - 1:15.1 | Step 2 Detect: the real Agent trace and a tool call's output, then the real audit trail |
+| Section 8 ("score") | 1:15.1 - 1:28.6 | Step 3 Score: the real Risk Summary, the review dialog (what, where, why), a finding dismissed with a note and saved |
 | Section 4 ("portal") | 0:28.1 - 0:40.6 | "So that's why we introduce..." then the name, centred; the real app in 3D angles: Case Summary, Agent trace, Detection catching the forged statement |
 
 No sound: you add the voiceover and music in your video editor.
@@ -64,7 +67,7 @@ This opens **Remotion Studio** in your browser (usually http://localhost:3000).
 - **Left sidebar:** pick what to watch.
   - `Master`: the whole film so far, with captions.
   - `Master-NoText`: the same, without captions.
-  - `Scene-Buried`, `Scene-Waiting`, `Scene-Tamper`, `Scene-Portal`, `Scene-Upload`: one section alone. These are quicker to work on.
+  - `Scene-Buried`, `Scene-Waiting`, `Scene-Tamper`, `Scene-Portal`, `Scene-Upload`, `Scene-Detect`, `Scene-Trace`, `Scene-Score`: one section alone. These are quicker to work on.
 - **Playback:** Space plays and pauses. The left and right arrow keys step one frame. You can also drag along the timeline at the bottom.
 - **Right panel ("Props"):** switch `showText` off to hide the captions.
 - **Live edits:** keep Studio open while you edit. Every time you save a file, the preview updates by itself.
@@ -81,6 +84,7 @@ Everything you're likely to change is in two folders.
 |---|---|---|
 | Hook | `OVERWHELM3` | `stretchStart` / `stretchEnd` (how long you drag out "waaaay"), `finalPingIn` (the sigh moment), `length` (the hold after it), `pings` (one time per message) |
 | Section 2 | `WAITING2` | `officerLineIn`, `customerLineIn`, `clockStart` / `clockEnd` (how long the "hour" takes), `length` |
+| Sections 6, 7, 8 | `DETECT`, `TRACE`, `SCORE` | each beat's time; the line under the headline changes on the beat named in `src/data/howitworks.ts` |
 | Section 5 | `UPLOAD` | `dropAt`, `clickAt`, `classifyStart` / `classifyEnd`, `scanAt`, `beamStart` / `beamEnd`, `length` |
 | Section 4 | `PORTAL2` | `introIn` / `introOut`, `titleIn`, `heroStart` / `heroEnd`, `traceAt`, `detectionAt`, `flatten` / `flattenEnd`, `findingAt`, `length` |
 | Section 3 | `TAMPER` | `cursorIn`, `select`, `typeStart` / `typeEnd`, `line2In`, `shrinkStart` / `shrinkEnd`, `length` |
@@ -91,7 +95,8 @@ Everything you're likely to change is in two folders.
 |---|---|
 | `overwhelm.ts` | Hook: the PDFs, the extra tabs, the chat pings (`PINGS3`), the final ping (`FINAL_PING`), the headlines (`COPY2`), and how long "Waaaay" gets (`WAY3_MAX_A`) |
 | `waiting.ts` | Section 2: the caption (`CAPTION`), the role labels (`ROLES`), the page and inbox counts, the clock's start and end times |
-| `upload.ts` | Section 5: the step names (`STEPS`, shared by every product section), captions, the package's files and types, the scanned statement and its fields |
+| `howitworks.ts` | Sections 6-8: headlines and beats, the lead agent's plan, the six checks, the two catches, the What / Where / Why tags |
+| `upload.ts` | Section 5: the step names (`STEPS`: Upload, Detect, Score, shared by every product section), captions, the package's files and types, the scanned statement and its fields |
 | `portal.ts` | Section 4: the lead-in (`intro`), the title and the two short lines. (The app's own wording is in the captured screenshots, from `capture/story.spec.ts`.) |
 | `tamper.ts` | Section 3: the caption (`CAPTION3`), the statement's rows, and the edited figure (`before` / `after`) |
 

@@ -40,7 +40,7 @@ kept behind `PORTAL_VERSION`; its renders are in `renders/v1/`. Screens are capt
 backend by `capture/story.spec.ts`, with a detection report written for the story.
 
 **Section 5 "upload", 11.5 s. How it works, step 1.** From here on every product section carries the same step
-tracker at the top, in the portal's own words (its sign-in page): **1 Upload, 2 Check, 3 Score**, the current step lit.
+tracker at the top: **1 Upload, 2 Detect, 3 Score**, the current step lit.
 Headline "Upload the whole package." A cursor drags a fanned stack of "20 files" into the portal's upload box (it
 lights up as the stack hovers), the case's 20 files cascade in, and it clicks "Upload 20 files". The box clears and
 the documents table fills row by row: a spinner and "Processing", then the document type stamps on, the mark turns
@@ -50,7 +50,26 @@ its closing balance January's opening balance): a scan beam runs down the page, 
 portal's Extracted Information card fills in as it goes, with confidences: "even from scans." The page behind is the
 real portal (`capture/howitworks.spec.ts`); the upload box, table and fields card are rebuilt from its measured styles.
 
-Renders: `renders/film-so-far.mp4` (hook + sections 2-5, 52.1 s), `renders/05-upload.mp4` (section 5 alone), `renders/04-portal.mp4` (section 4 alone), `renders/03-tamper.mp4` (section 3 alone), `renders/02-waiting.mp4` (section 2 alone), each with a
+**Section 6 "detect", 12.5 s. Step 2.** "Agents investigate every document." The lead agent's card types out its
+investigation plan; six specialist checks branch out under it (Metadata, Fonts, Alignment, Totals, Spelling, Across
+documents), each running across the 20 files; four turn up a finding (red, with a little shake), two come back
+clean. Then the two catches side by side: the doctored figure (the statement's 812,400.00 boxed, "does not
+reconcile") and the mismatched address (the business profile's registered address against the bank statement's,
+both boxed, a red "≠" between). Rebuilt in the portal's style.
+
+**Section 7 "trace", 10.5 s. Step 2.** "And it's not a black box." The portal's real Agent trace swings in; its rows
+light up, the cursor opens the font consistency check and the tool's returned output is boxed as the camera moves in.
+Then the case's real audit trail, angled, its entries lighting up one by one: "Every finding can be audited."
+
+**Section 8 "score", 13.5 s. Step 3.** "Every case gets a risk rating." The real Risk Summary (High, 72) rises in; the
+gauge is ringed, then the documents to review. The cursor opens the bank statement's real review dialog, with the
+statement on its page: "What", "Where" (the forged figure, boxed) and "Why" are tagged in turn. The officer ticks the
+metadata finding as a false alarm, picks "Other", types a note, and saves: "Review saved".
+
+Sections 6-8 use the portal on its mock backend with the story's risk, review and audit events
+(`capture/story2.spec.ts`).
+
+Renders: `renders/film-so-far.mp4` (hook + sections 2-8, 88.6 s), `renders/05-upload.mp4` ... `renders/08-score.mp4` (each section alone), `renders/04-portal.mp4` (section 4 alone), `renders/03-tamper.mp4` (section 3 alone), `renders/02-waiting.mp4` (section 2 alone), each with a
 `-no-text` twin. `renders/hook.mp4` (with headlines), `renders/hook-no-text.mp4` (same shots, no headlines), `renders/hook-poster.png`.
 
 ## Fine-tuning
@@ -61,6 +80,8 @@ npm install
 npm run dev        # Remotion Studio: scrub, preview, edit props live
 ```
 
+- **Timing (sections 6-8):** `DETECT`, `TRACE` and `SCORE` in `src/timing.ts`, all in seconds.
+- **Words (sections 6-8):** `src/data/howitworks.ts`: each section's headline and beats (the line under it, which changes with the beat named in `at`), the lead agent's plan, the six checks and what they find, the two catches, and the What / Where / Why tags.
 - **Timing (section 5):** `UPLOAD` in `src/timing.ts`: `dragStart`/`dropAt`, `cascadeEnd`, `clickAt`, `tableAt`, `classifyStart`/`classifyEnd`, `scanAt`, `beamStart`/`beamEnd`, `headlineIn`/`line1In`/`line2In`, `length`.
 - **Words, files, fields (section 5):** `src/data/upload.ts`: the steps (`STEPS`), the captions, the package (`PACKAGE`: file and type), the scanned statement (`DEC_STATEMENT`) and the fields read off it (`SCAN_FIELDS`).
 - **Timing (section 4):** `PORTAL2` in `src/timing.ts`: `introIn`/`introOut`, `titleIn`, `underline`, `heroStart`/`heroEnd`, `traceAt`, `traceStart`/`traceEnd`, `detectionAt`, `boxIn`, `flatten`/`flattenEnd`, `findingAt`, `line1In`/`line2In`, `length`. The angles are in `src/scenes/PortalScene2.tsx` (`summaryTilt`, `traceTilt`, `detectionTilt`, in degrees).
@@ -102,7 +123,7 @@ npx remotion render Scene-Waiting renders/02-waiting.mp4 --color-space=bt709 --c
 npx remotion render Scene-Tamper renders/03-tamper.mp4 --color-space=bt709 --crf=16
 ```
 
-Single scenes for quick checks: `Scene-Upload` (section 5), `Scene-Portal` (section 4), `Scene-Tamper` (section 3), `Scene-Waiting` (section 2), `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
+Single scenes for quick checks: `Scene-Score` (8), `Scene-Trace` (7), `Scene-Detect` (6), `Scene-Upload` (section 5), `Scene-Portal` (section 4), `Scene-Tamper` (section 3), `Scene-Waiting` (section 2), `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
 
 ## Where the UI comes from (v1)
 

@@ -77,6 +77,49 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
  */
 export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
+/** Section 6, "detect" (how it works, step 2). All times in seconds from the start of the section. */
+export const DETECT = {
+  length: 12.5,
+  headlineIn: 0.2,        // "Agents investigate every document."
+  planIn: 0.4,            // the lead agent's card; its plan types out...
+  planEnd: 2.4,           // ...line by line
+  specialistsIn: 2.7,     // the six checks branch out under it and start running...
+  checksEnd: 5.6,         // ...finishing one after another by here (four turn up a finding)
+  catchAt: 6.3,           // the two catches: the doctored figure...
+  addressAt: 7.6,         // ...and the mismatched address
+};
+
+/** Section 7, "trace" (how it works, step 2 continued). */
+export const TRACE = {
+  length: 10.5,
+  headlineIn: 0.2,        // "And it's not a black box."
+  line1In: 0.6,           // "The agent trace shows every step..."
+  rowsStart: 0.9,         // the trace's rows light up...
+  rowsEnd: 3.0,
+  clickAt: 3.6,           // the cursor opens the font consistency check...
+  outputAt: 4.1,          // ...and its returned output is highlighted
+  auditAt: 6.3,           // cut to the case's audit trail: "Every finding can be audited."
+  entriesStart: 6.7,      // its entries light up one by one...
+  entriesEnd: 9.2,
+};
+
+/** Section 8, "score" (how it works, step 3). */
+export const SCORE = {
+  length: 13.5,
+  headlineIn: 0.2,        // "Every case gets a risk rating."
+  line1In: 0.6,           // "With the exact evidence behind it."
+  gaugeAt: 1.0,           // the risk gauge is ringed...
+  docsAt: 2.0,            // ...then the documents to review
+  openAt: 3.3,            // the cursor opens the bank statement's review
+  reviewAt: 3.7,          // "What was flagged, where, and why." The three are tagged in turn:
+  whatAt: 4.3,
+  whereAt: 5.1,
+  whyAt: 5.9,
+  tickAt: 7.4,            // "Officers confirm or dismiss...": the cursor ticks the metadata finding as wrong...
+  noteAt: 8.1,            // ...picks a reason and types a note...
+  saveAt: 10.0,           // ...and saves the review
+};
+
 /** Section 5, "upload" (how it works, step 1). All times in seconds from the start of the section. */
 export const UPLOAD = {
   length: 11.5,           // whole section
@@ -258,7 +301,7 @@ export const s = (seconds: number): number => Math.round(seconds * FPS);
 
 const SCENE_LENGTHS: Record<string, number> =
   HOOK_VERSION === "v3"
-    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length), portal: atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length), upload: atSeconds(UPLOAD.length) }
+    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length), portal: atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length), upload: atSeconds(UPLOAD.length), detect: atSeconds(DETECT.length), trace: atSeconds(TRACE.length), score: atSeconds(SCORE.length) }
     : HOOK_VERSION === "v2"
     ? { overwhelm: atSeconds(OVERWHELM.length) }
     : { package: atSeconds(HOOK.package.length), tooMany: atSeconds(HOOK.tooMany.length) };
