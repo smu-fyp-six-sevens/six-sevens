@@ -34,7 +34,7 @@ export const VO = (Object.keys(VO_FILE) as SectionName[]).map((n) => ({
 }));
 
 /** Music level by frame: quieter for the problem, lifted for the product, ducked under the voice. */
-export const MUSIC = { src: "music/soundtrack.mp3", quiet: 0.3, lifted: 0.5, ducked: 0.55, fadeFrames: 12 };
+export const MUSIC = { src: "music/soundtrack.mp3", quiet: 0.25, lifted: 0.42, ducked: 0.3, fadeFrames: 12 };
 export const musicLevel = (f: number) => {
   const lifted = f >= start("portal") ? MUSIC.lifted : MUSIC.quiet;
   const speaking = VO.some((v) => f >= v.from - 6 && f <= v.from + v.frames + 6);
