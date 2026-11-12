@@ -191,7 +191,16 @@
         "h": 90.171875
       }
     ],
-    "note": [],
+    "note": [
+      {
+        "x": 1097.15625,
+        "y": 557.5,
+        "w": 265.84375,
+        "h": 27.390625,
+        "pl": "10px",
+        "font": "12px / 17.4px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif"
+      }
+    ],
     "save": [
       {
         "text": "Save review",

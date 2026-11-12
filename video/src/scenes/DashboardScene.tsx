@@ -1,68 +1,103 @@
-// Section 9 - "dashboard": every case at a glance. The real dashboard (story case GLDB-02 on top of "Needs
-// attention"): the camera pushes in on the pipeline, the risk overview, then the case; the cursor drills in; swipe
-// to its risk summary, then its audit trail. Flat screens, zooms only. Times: DASHBOARD in timing.ts.
+// Section 9 - "dashboard": the officer navigates the real portal, and the camera follows the cursor.
+//   On the Additional Documents page (where section 8 ends), the cursor clicks "Dashboard" in the top bar.
+//   The dashboard: the case pipeline; the page scrolls to the risk overview, then to "Needs attention".
+//   The cursor clicks GLDB-02: its risk summary opens. It clicks "Audit" in the sidebar: the audit trail opens.
+// The camera works on the browser's viewport (1440 x 900 CSS px) and pages scroll inside it, as in a browser, so a
+// new page opens at its top. Times: DASHBOARD in timing.ts. Words: data/howitworks.ts.
 
-import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { cameraAt } from "../components/keys";
 import { Pointer } from "../components/Pointer";
 import { ProductHeader } from "../components/ProductHeader";
-import { shotSwipe, SWIPE } from "../components/swipe";
+import { shotSwipe } from "../components/swipe";
 import { DASHBOARD_BOXES as B, DASHBOARD_COPY, SCREENS_STORY2 } from "../data/howitworks";
 import { colors } from "../theme";
 import { DASHBOARD as T, FPS } from "../timing";
-import { Screen, Window } from "./PortalScene";
+import { WIN, Window } from "./PortalScene";
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
-const land = Easing.bezier(0.2, 0.9, 0.1, 1);
-const even = Easing.bezier(0.37, 0, 0.63, 1);
+const VW = 1440;
+const VH = 900;
+const K0 = WIN.w / VW;
+
+/** A path of [time, a, b] keys on an even ease (pointer x, y or page scroll). */
+const path = (t: number, keys: [number, number, number][]) => {
+  const ts = keys.map((k) => k[0]);
+  return [1, 2].map((i) => interpolate(t, ts, keys.map((k) => k[i]), clamp)) as [number, number];
+};
+
+/** The viewport, zoomed on a point (viewport px), clamped to its edges like a real crop. */
+const Viewport: React.FC<{ zoom: number; x: number; y: number; children: React.ReactNode }> = ({ zoom, x, y, children }) => {
+  const k = K0 * zoom;
+  const tx = Math.min(0, Math.max(WIN.w - VW * k, WIN.w / 2 - k * x));
+  const ty = Math.min(0, Math.max(WIN.h - VH * k, WIN.h / 2 - k * y));
+  return <div style={{ position: "absolute", left: 0, top: 0, width: VW, height: VH, overflow: "hidden", background: colors.paper, transformOrigin: "0 0", transform: `translate(${tx}px, ${ty}px) scale(${k})` }}>{children}</div>;
+};
 
 const Ring: React.FC<{ b: { x: number; y: number; w: number; h: number }; p: number; tone?: string }> = ({ b, p, tone = colors.steel }) =>
-  p <= 0 ? null : <div style={{ position: "absolute", left: b.x - 4, top: b.y - 4, width: b.w + 8, height: b.h + 8, borderRadius: 12, border: `3px solid ${tone}`, opacity: p, transform: `scale(${1.03 - 0.03 * p})` }} />;
+  p <= 0 ? null : <div style={{ position: "absolute", left: b.x - 4, top: b.y - 4, width: b.w + 8, height: b.h + 8, borderRadius: 12, border: `3px solid ${tone}`, opacity: p }} />;
 
 export const DashboardScene: React.FC<{ showText?: boolean }> = ({ showText = true }) => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
-  const swipeDash = shotSwipe(t, 0, T.riskViewAt + SWIPE);
-  const swipeRisk = shotSwipe(t, T.riskViewAt, T.auditAt + SWIPE);
-  const swipeAudit = shotSwipe(t, T.auditAt, T.length);
-  const ring = (at: number, until: number) => land(interpolate(t, [at + 0.3, at + 0.6], [0, 1], clamp)) * interpolate(t, [until, until + 0.3], [1, 0], clamp);
+  const swipe = shotSwipe(t, 0, T.length, { enter: false }) ?? 0;
 
+  // Which page is showing (a few frames' cross-fade, like a page load).
+  const fade = (at: number) => interpolate(t, [at, at + 0.1], [0, 1], clamp);
+  const toDash = fade(T.navClick + 0.1);
+  const toRisk = fade(T.riskViewAt);
+  const toAudit = fade(T.auditAt);
+
+  // The dashboard's own scroll.
+  const [scroll] = path(t, [[0, 0, 0], [T.riskAt, 0, 0], [T.riskAt + 0.6, 400, 0], [T.attentionAt, 400, 0], [T.attentionAt + 0.6, 760, 0]]);
+
+  // The camera, in viewport px: it only ever moves toward what the cursor is doing.
   const cam = cameraAt(t, [
-    [0, 1.0, 720, 420],
-    [T.pipelineAt, 1.0, 720, 420],
-    [T.pipelineAt + 0.6, 1.25, 712, 225],
-    [T.riskAt, 1.25, 712, 225],
-    [T.riskAt + 0.6, 1.2, 712, 662],
-    [T.attentionAt, 1.2, 712, 662],
-    [T.attentionAt + 0.6, 1.55, 430, 990],
+    [0, 1.15, 740, 470],
+    [0.5, 1.0, 720, 450],
+    [T.navClick, 1.0, 720, 450],
+    [T.pipelineAt + 0.5, 1.12, 712, 300],
+    [T.riskAt, 1.12, 712, 300],
+    [T.riskAt + 0.6, 1.08, 712, 280],
+    [T.attentionAt, 1.08, 712, 280],
+    [T.attentionAt + 0.6, 1.2, 500, 300],
+    [T.clickAt, 1.2, 500, 300],
+    [T.riskViewAt + 0.6, 1.08, 650, 360],
+    [T.auditClick - 0.7, 1.0, 600, 450],
+    [T.auditAt + 0.6, 1.1, 640, 420],
+    [T.length, 1.18, 640, 500],
   ]);
-  const toRow = interpolate(t, [T.clickAt - 0.6, T.clickAt - 0.05], [0, 1], { ...clamp, easing: even });
-  const press = interpolate(t, [T.clickAt - 0.05, T.clickAt + 0.05, T.clickAt + 0.2], [0, 1, 0], clamp);
-  const riskCam = cameraAt(t, [[T.riskViewAt, 1.0, 720, 420], [T.riskViewAt + 1.2, 1.25, 600, 340]]);
-  const auditCam = cameraAt(t, [[T.auditAt, 1.0, 720, 420], [T.length, 1.3, 640, 560]]);
+  const [px, py] = path(t, [
+    [0, 900, 520],
+    [T.navClick - 0.05, 720, 36],
+    [T.pipelineAt + 0.4, 760, 360],
+    [T.attentionAt + 0.3, 700, 420],
+    [T.clickAt - 0.05, 150, 182],
+    [T.riskViewAt + 0.4, 420, 420],
+    [T.auditClick - 0.05, 47, 574],
+    [T.length, 320, 620],
+  ]);
+  const press = (at: number) => interpolate(t, [at - 0.05, at + 0.05, at + 0.2], [0, 1, 0], clamp);
+  const ring = (at: number, until: number) => interpolate(t, [at + 0.3, at + 0.6, until, until + 0.3], [0, 1, 1, 0], clamp);
 
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
-      {swipeDash !== null && (
-        <Window enter={1} swipe={swipeDash}>
-          <Screen {...SCREENS_STORY2.dashboard} zoom={cam.zoom} focus={{ x: cam.x, y: cam.y }}>
-            <Ring b={B.pipeline} p={ring(T.pipelineAt, T.riskAt)} />
-            <Ring b={B.risk} p={ring(T.riskAt, T.attentionAt)} />
-            <Ring b={B.row} p={ring(T.attentionAt, T.riskViewAt + 1)} tone={colors.red} />
-            {t >= T.clickAt - 0.7 && <Pointer x={B.row.x + 120 + 200 * (1 - toRow)} y={B.row.y + 30 + 120 * (1 - toRow)} size={20} press={press} />}
-          </Screen>
-        </Window>
-      )}
-      {swipeRisk !== null && (
-        <Window enter={1} swipe={swipeRisk}>
-          <Screen {...SCREENS_STORY2.risk} zoom={riskCam.zoom} focus={{ x: riskCam.x, y: riskCam.y }} />
-        </Window>
-      )}
-      {swipeAudit !== null && (
-        <Window enter={1} swipe={swipeAudit}>
-          <Screen {...SCREENS_STORY2.audit} zoom={auditCam.zoom} focus={{ x: auditCam.x, y: auditCam.y }} />
-        </Window>
-      )}
+      <Window enter={1} swipe={swipe}>
+        <Viewport zoom={cam.zoom} x={cam.x} y={cam.y}>
+          <Img src={staticFile(SCREENS_STORY2.additional.src)} style={{ position: "absolute", left: 0, top: 0, width: VW, height: VH }} />
+          {toDash > 0 && (
+            <div style={{ position: "absolute", left: 0, top: -scroll, width: VW, height: SCREENS_STORY2.dashboard.h, opacity: toDash }}>
+              <Img src={staticFile(SCREENS_STORY2.dashboard.src)} style={{ width: VW, height: SCREENS_STORY2.dashboard.h, display: "block" }} />
+              <Ring b={B.pipeline} p={ring(T.pipelineAt, T.riskAt)} />
+              <Ring b={B.risk} p={ring(T.riskAt + 0.3, T.attentionAt)} />
+              <Ring b={B.row} p={ring(T.attentionAt + 0.3, T.riskViewAt)} tone={colors.red} />
+            </div>
+          )}
+          {toRisk > 0 && <Img src={staticFile(SCREENS_STORY2.risk.src)} style={{ position: "absolute", left: 0, top: 0, width: VW, height: VH, opacity: toRisk }} />}
+          {toAudit > 0 && <Img src={staticFile(SCREENS_STORY2.audit.src)} style={{ position: "absolute", left: 0, top: 0, width: VW, height: VH, opacity: toAudit }} />}
+          <Pointer x={px} y={py} size={20} press={Math.max(press(T.navClick), press(T.clickAt), press(T.auditClick))} />
+        </Viewport>
+      </Window>
       <ProductHeader step={3} fromStep={2} length={T.length} headline={DASHBOARD_COPY.headline} headlineIn={T.headlineIn} showText={showText}
         beats={DASHBOARD_COPY.beats.map((b) => ({ ...b, at: T[b.at as keyof typeof T] }))} />
     </AbsoluteFill>

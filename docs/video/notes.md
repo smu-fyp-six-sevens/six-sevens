@@ -103,3 +103,10 @@
 - Music: synthwave extended by one 12-bar loop on downbeats (public/music/soundtrack.mp3) so its ending lands on the call to action; quiet 0.3 for sections 1-3, 0.5 from the portal, ducked to 55% under the voice.
 - SFX: synthesized (make-sfx.sh plus whoosh, chat, pingbig, key, clock, goodnews), cue table in src/sound.ts, each placed with its measured lead. Not listened to: I cannot hear audio.
 - Compositions: Master (all), Master-NoText, Master-NoVO (music + effects, for the owner's recording), Master-Silent.
+
+## Wave 18 - readable note, real navigation on the dashboard, under 2 minutes, no voice
+- Owner: the officer's typed note was unreadable (the captured box was scrolled); the dashboard camera seemed to drift; deliver without the robot voice, under 2 minutes, faster at the end.
+- Note: re-captured with a note that fits its box ("Bank exports via its own PDF tool."), typed in from the left with a caret.
+- Dashboard: rebuilt as navigation driven by the cursor (top-bar Dashboard, scroll, GLDB-02, sidebar Audit); the camera works on the viewport and pages scroll inside it, so a new page opens at its top. Score hands over without a swipe.
+- Length 114.6 s: difference 10 -> 7, cta 9 -> 7.5, detect 13.5 -> 12.5, trace 11 -> 10.5, score 16 -> 15, dashboard 10. Music re-cut with a 9-bar loop so it ends with the film; no ducking when the voice is off.
+- Delivered: renders/film-novo.mp4 (music and effects, no voice). Master (with the guide voice) still renders, but the guide clips no longer fit every shortened section.

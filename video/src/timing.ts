@@ -77,45 +77,47 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
  */
 export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
-/** Section 9, "dashboard". All times in seconds from the start of the section. */
+/** Section 9, "dashboard": the officer navigates the portal; the camera follows the cursor. */
 export const DASHBOARD = {
-  length: 9.5,
+  length: 10,
   headlineIn: 0.2,        // "Every case, at a glance."
-  pipelineAt: 0.6,        // the camera pushes in on the case pipeline...
-  riskAt: 1.8,            // ...then the risk overview...
-  attentionAt: 3.0,       // ...then "Needs attention", GLDB-02 on top
-  clickAt: 4.2,           // the cursor drills into GLDB-02
-  riskViewAt: 4.6,        // swipe to its risk summary: "Drill into anything flagged."
-  auditAt: 6.6,           // swipe to its audit trail: "A full audit trail for compliance."
+  navClick: 0.9,          // on the Additional Documents page, the cursor clicks "Dashboard" in the top bar
+  pipelineAt: 1.1,        // the dashboard: its case pipeline...
+  riskAt: 2.2,            // ...scroll to the risk overview...
+  attentionAt: 3.2,       // ...scroll to "Needs attention", GLDB-02 on top
+  clickAt: 4.3,           // the cursor clicks GLDB-02
+  riskViewAt: 4.45,       // its risk summary: "Drill into anything flagged."
+  auditClick: 6.4,        // the cursor clicks "Audit" in the sidebar
+  auditAt: 6.55,          // its audit trail: "A full audit trail for compliance."
 };
 
 /** Section 10, "difference": the same two people as section 2, after the portal. */
 export const DIFFERENCE = {
-  length: 10,
+  length: 7,
   avatarsIn: -0.25,       // already arriving on the first frame
-  line1In: 0.3,           // "What took hours of screening now takes minutes."
-  clockStart: 0.6,        // the clock barely moves...
-  clockEnd: 3.2,
-  doneAt: 3.2,            // the officer's status flips to "Review complete"
-  line2In: 3.6,           // "The AI does the reading, your loan officers make the call,"
-  sendAt: 4.6,            // the answer travels down the line...
-  newsAt: 5.6,            // ...and the good-news ping lands with the customer
-  line3In: 6.2,           // "and customers hear back sooner."
+  line1In: 0.2,           // "What took hours of screening now takes minutes."
+  clockStart: 0.4,        // the clock barely moves...
+  clockEnd: 2.1,
+  doneAt: 2.1,            // the officer's status flips to "Review complete"
+  line2In: 2.4,           // "The AI does the reading. Your loan officers make the call."
+  sendAt: 3.0,            // the answer travels down the line...
+  newsAt: 3.7,            // ...and the good-news ping lands with the customer
+  line3In: 4.1,           // "And customers hear back sooner."
 };
 
 /** Section 11, "cta". */
 export const CTA = {
-  length: 9,
-  leadIn: 0.3,            // "Bring your next loan case."
-  nameIn: 1.2,            // "GLDB Anomaly Detection Portal"
-  buttonIn: 2.6,          // the button pops in...
-  hoverAt: 4.4,           // ...the cursor arrives...
-  pressAt: 5.2,           // ...and presses it
+  length: 7.5,
+  leadIn: 0.2,            // "Bring your next loan case."
+  nameIn: 0.8,            // "GLDB Anomaly Detection Portal"
+  buttonIn: 1.9,          // the button pops in...
+  hoverAt: 3.2,           // ...the cursor arrives...
+  pressAt: 3.8,           // ...and presses it
 };
 
 /** Section 6, "detect" (how it works, step 2). All times in seconds from the start of the section. */
 export const DETECT = {
-  length: 13.5,
+  length: 12.5,
   headlineIn: 0.2,        // "Agents investigate every document."
   planIn: 0.15,           // the lead agent's card; its plan types out...
   planEnd: 2.4,           // ...line by line
@@ -127,7 +129,7 @@ export const DETECT = {
 
 /** Section 7, "trace" (how it works, step 2 continued). */
 export const TRACE = {
-  length: 11,
+  length: 10.5,
   headlineIn: 0.2,        // "And it's not a black box."
   line1In: 0.6,           // "The agent trace shows every step..."
   rowsStart: 0.9,         // the trace's rows light up...
@@ -141,7 +143,7 @@ export const TRACE = {
 
 /** Section 8, "score" (how it works, step 3). */
 export const SCORE = {
-  length: 16,
+  length: 15,
   headlineIn: 0.2,        // "Every case gets a risk rating."
   line1In: 0.6,           // "With the exact evidence behind it."
   gaugeAt: 1.0,           // the risk gauge is ringed...

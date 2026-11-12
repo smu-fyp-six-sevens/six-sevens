@@ -42,7 +42,7 @@ const SECTIONS: { name: SectionName; node: (showText: boolean) => React.ReactNod
 /** Voice, music and sound effects. Each can be switched off: `vo` false leaves music and effects for your own recording. */
 const SoundLayer: React.FC<{ vo: boolean; music: boolean; sfx: boolean }> = ({ vo, music, sfx }) => (
   <>
-    {music && <Audio src={staticFile(MUSIC.src)} volume={(f) => musicLevel(f) * interpolate(f, [TOTAL_FRAMES - MUSIC.fadeFrames, TOTAL_FRAMES], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })} />}
+    {music && <Audio src={staticFile(MUSIC.src)} volume={(f) => musicLevel(f, vo) * interpolate(f, [TOTAL_FRAMES - MUSIC.fadeFrames, TOTAL_FRAMES], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })} />}
     {vo && VO.map((v) => (
       <Sequence key={v.section} from={v.from} durationInFrames={v.frames}>
         <Audio src={staticFile(v.src)} />

@@ -35,7 +35,8 @@ const REASONS = boxes.review2.reasons[0];
 const PANE = { x: 37, y: 102, w: 737, h: 715 }; // the review's blank page
 const PAGE_K = Math.min(PANE.w / W, PANE.h / H);
 const PAGE_X = PANE.x + (PANE.w - W * PAGE_K) / 2;
-const NOTE = { x: 1094, y: 556, w: 268, h: 30 }; // the note box in the dismissed capture
+const NOTE = boxes.review2.note[0] as { x: number; y: number; w: number; h: number }; // the note box in the dismissed capture
+const NOTE_TEXT_W = 200; // the typed note's width in the capture (CSS px)
 const STATUS = { x: 1124, y: 158, w: 122, h: 24 }; // "Unsaved changes"
 
 /** A box around a part of the screen, its label just outside it on one side so it never covers the text. */
@@ -51,7 +52,7 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
   const t = frame / FPS;
   const swipeRisk = shotSwipe(t, 0, T.openAt + 0.25 + SWIPE);
   const swipeReview = shotSwipe(t, T.openAt + 0.25, T.addAt + SWIPE);
-  const swipeAdd = shotSwipe(t, T.addAt, T.length);
+  const swipeAdd = shotSwipe(t, T.addAt, T.length, { exit: false });
   const nowP = land(interpolate(t, [T.nowAt, T.nowAt + 0.4], [0, 1], clamp));
   // In on the gauge, out to the documents to review.
   const riskCam = cameraAt(t, [
@@ -121,7 +122,12 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
             <Tag x={PAGE_X + (PAGE_R - FIGURE_W - 14) * PAGE_K} y={PANE.y + (CLOSE_Y - 2) * PAGE_K} w={(FIGURE_W + 28) * PAGE_K} h={(CLOSE_H + 4) * PAGE_K} label={SCORE_COPY.where} p={where * tagsOut} tone={colors.red} side="left" />
             <Tag x={RATIONALE.x - 6} y={RATIONALE.y - 3} w={RATIONALE.w + 12} h={RATIONALE.h + 6} label={SCORE_COPY.why} p={why * tagsOut} tone={colors.amber} />
             {/* the note, typed */}
-            {dismissed > 0 && typing < 1 && <div style={{ position: "absolute", left: NOTE.x + NOTE.w * typing, top: NOTE.y, width: NOTE.w * (1 - typing), height: NOTE.h, background: colors.white }} />}
+            {dismissed > 0 && typing < 1 && (
+              <>
+                <div style={{ position: "absolute", left: NOTE.x + 9 + NOTE_TEXT_W * typing, top: NOTE.y + 4, width: NOTE_TEXT_W * (1 - typing) + 2, height: NOTE.h - 8, background: colors.white }} />
+                <div style={{ position: "absolute", left: NOTE.x + 9 + NOTE_TEXT_W * typing, top: NOTE.y + 6, width: 1.5, height: NOTE.h - 12, background: colors.ink, opacity: Math.floor(t * 3) % 2 === 0 || typing > 0 ? 1 : 0 }} />
+              </>
+            )}
             {saved > 0 && (
               <div style={{ position: "absolute", left: STATUS.x, top: STATUS.y, display: "flex", alignItems: "center", gap: 6, font: `600 12px ${fonts.ui}`, color: "#166d5f", background: "#e1f1ec", borderRadius: 999, padding: "3px 10px", transform: `scale(${1.3 - 0.3 * saved})`, transformOrigin: "100% 50%", boxShadow: `0 0 0 ${10 * (1 - saved)}px rgba(22,109,95,0.2)` }}>✓ {SCORE_COPY.saved}</div>
             )}

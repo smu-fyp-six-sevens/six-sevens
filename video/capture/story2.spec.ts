@@ -105,13 +105,13 @@ test('risk summary and review', async ({ page, backend }) => {
   // The officer dismisses the PDF-editor finding as a false alarm, with a note.
   await dialog.getByRole('checkbox', { name: /^Agents got this wrong: The file was last saved/ }).check();
   await dialog.getByRole('group', { name: 'Why is this a false alarm?' }).getByRole('button', { name: 'Other' }).click();
-  await dialog.getByRole('textbox', { name: 'What was the reason?' }).fill('The bank exports statements through its own PDF tool.');
+  await dialog.getByRole('textbox', { name: 'What was the reason?' }).fill('Bank exports via its own PDF tool.');
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/review-dismissed.png` });
   const review2 = {
     rows: await boxes(page, '[role="dialog"] .risk-findings li'),
     reasons: await boxes(page, '[role="dialog"] [role="group"]'),
-    note: await boxes(page, '[role="dialog"] textarea, [role="dialog"] input[type="text"]'),
+    note: await dialog.getByRole('textbox', { name: 'What was the reason?' }).evaluate((el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return [{ x: r.x, y: r.y, w: r.width, h: r.height, pl: s.paddingLeft, font: s.font }]; }),
     save: await boxes(page, '[role="dialog"] button:has-text("Save review")'),
   };
   writeFileSync(`${OUT}/story2-risk.json`, JSON.stringify({ risk, review1, review2 }, null, 2));
