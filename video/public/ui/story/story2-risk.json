@@ -58,19 +58,19 @@
         "x": 827,
         "y": 199,
         "w": 536,
-        "h": 111.46875
+        "h": 92.625
       },
       {
         "text": "mediumFont consistencyThe closing balance is set in a different weight from the rest of th",
         "x": 827,
-        "y": 310.46875,
+        "y": 291.625,
         "w": 536,
-        "h": 112.46875
+        "h": 93.625
       },
       {
         "text": "mediumMetadataThe file was last saved by a PDF editor, not by the bank.A bank statement sh",
         "x": 827,
-        "y": 422.9375,
+        "y": 385.25,
         "w": 536,
         "h": 93.625
       }
@@ -93,14 +93,14 @@
       {
         "text": "",
         "x": 827,
-        "y": 322.46875,
+        "y": 303.625,
         "w": 16,
         "h": 16
       },
       {
         "text": "",
         "x": 827,
-        "y": 434.9375,
+        "y": 397.25,
         "w": 16,
         "h": 16
       }
@@ -158,12 +158,12 @@
       {
         "cls": "risk-finding-unplaced",
         "text": "On the document, but couldn't pinpoint where",
-        "x": 939,
-        "y": 284.625,
-        "w": 249.40625,
-        "h": 14,
-        "bx": 939,
-        "bw": 249.40625
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "bx": 0,
+        "bw": 0
       }
     ]
   },
@@ -174,19 +174,19 @@
         "x": 827,
         "y": 199,
         "w": 536,
-        "h": 111.46875
+        "h": 92.625
       },
       {
         "text": "mediumFont consistencyThe closing balance is set in a different weight from the rest of th",
         "x": 827,
-        "y": 310.46875,
+        "y": 291.625,
         "w": 536,
-        "h": 112.46875
+        "h": 93.625
       },
       {
         "text": "mediumMetadataThe file was last saved by a PDF editor, not by the bank.A bank statement sh",
         "x": 827,
-        "y": 422.9375,
+        "y": 385.25,
         "w": 536,
         "h": 189.796875
       }
@@ -195,7 +195,7 @@
       {
         "text": "False alarm because (required)Normal for this documentWithin toleranceTool misread itExpla",
         "x": 939,
-        "y": 494.71875,
+        "y": 457.03125,
         "w": 424,
         "h": 90.171875
       }
@@ -203,7 +203,7 @@
     "note": [
       {
         "x": 1097.15625,
-        "y": 557.5,
+        "y": 519.8125,
         "w": 265.84375,
         "h": 27.390625,
         "pl": "10px",

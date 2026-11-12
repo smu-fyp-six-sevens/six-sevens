@@ -87,6 +87,14 @@ test('risk summary and review', async ({ page, backend }) => {
   await page.locator('.risk-document', { hasText: jan.filename }).getByRole('button').first().click();
   const dialog = page.getByRole('dialog', { name: `Review findings on ${jan.filename}` });
   await dialog.waitFor();
+  // For the film: leave out the "couldn't pinpoint where" lines (the film shows the place on the page itself).
+  await page.evaluate(() => {
+    const hide = () => document.querySelectorAll('.risk-finding-unplaced').forEach((el) => {
+      if ((el.textContent ?? '').includes("couldn't pinpoint")) (el as HTMLElement).style.display = 'none';
+    });
+    hide();
+    new MutationObserver(hide).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${OUT}/review.png` });
   const review1 = {

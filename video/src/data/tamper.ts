@@ -7,7 +7,16 @@ export const CAPTION3 = {
   line2: "smaller anomalies are even harder to catch.",
 };
 
-export const BAD_ACTOR = { label: "Bad Actor", tint: "#b3402a", bg: "#fbe8e2" };
+export const BAD_ACTOR = {
+  tint: "#b3402a",
+  bg: "#fbe8e2",
+  /** What the bad actor mutters as they work, one bubble each; `at` names the moment in TAMPER (timing.ts). */
+  lines: [
+    { text: "Let's change the numbers here...", at: "cursorIn", shift: -0.5 },
+    { text: "Just swap two digits.", at: "typeStart", shift: 0 },
+    { text: "No one checks the closing balance anyway 😏", at: "typeEnd", shift: 0.25 },
+  ],
+};
 
 export const STATEMENT = {
   file: "Anchorpoint_BankStatement_Jan2026.pdf",

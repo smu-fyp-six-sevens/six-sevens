@@ -116,3 +116,9 @@
 - The 72: the ring is gone; the number is redrawn over the page's own (measured .severity-gauge-value box) and flashes slowly ink to red with a soft red glow and a gentle swell, about one breath every 1.2 s.
 - Tags: tinted fills, 3.5 px outlines, 19 px uppercase labels; WHAT sits above its box (it clipped at the edge on the right); the camera pushes in gently while they appear.
 - Delivered by splicing a fresh render of Scene-Score into renders/film-novo.mp4 (frames 2253-2702, video only; the film's soundtrack kept as is).
+
+## Wave 20 - no contradictory line; the bad actor speaks
+- Owner: remove "On the document, but couldn't pinpoint where" (contradicts the Where tag); replace the "Bad Actor" label (repeats the caption) with speech bubbles suggesting bad behaviour, the avatar lower.
+- Review re-captured with those lines hidden (capture/story2.spec.ts); every overlay position re-measured from it.
+- Bad actor: label removed, avatar at the bottom of its panel; three bubbles timed to the edit ("Let's change the numbers here...", "Just swap two digits.", "No one checks the closing balance anyway 😏"), newest on top, older ones fading out (BAD_ACTOR.lines in data/tamper.ts).
+- Spliced fresh renders of Scene-Tamper (frames 558-842) and Scene-Score (2253-2702) into renders/film-novo.mp4; soundtrack unchanged.

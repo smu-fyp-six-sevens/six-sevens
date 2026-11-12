@@ -123,12 +123,27 @@ export const TamperScene: React.FC<{ showText?: boolean }> = ({ showText = true 
   return (
     <Stage duration={duration} background={colors.paper} camera={[{ frame: 0, scale: 1 }, { frame: duration, scale: 1.02, ease: "even" }]}>
       <AbsoluteFill>
-        {/* Left: the bad actor */}
-        <div style={{ position: "absolute", left: LEFT.x, top: PANEL.top, width: LEFT.w, height: PANEL.bottom - PANEL.top, borderRadius: 28, background: BAD_ACTOR.bg, opacity: panelsP * panelsOut, transform: `translateX(${(1 - panelsP) * -60 - (1 - panelsOut) * 80}px)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ width: 320, height: 320, borderRadius: "50%", border: `6px solid ${BAD_ACTOR.tint}`, boxShadow: "0 18px 40px rgba(18,32,61,0.16)", overflow: "visible" }}>
-            <Silhouette role="badActor" size={308} tint={BAD_ACTOR.tint} bg={colors.white} t={t} fidget={1} />
+        {/* Left: the bad actor, low in the panel, muttering in speech bubbles as they work */}
+        <div style={{ position: "absolute", left: LEFT.x, top: PANEL.top, width: LEFT.w, height: PANEL.bottom - PANEL.top, borderRadius: 28, background: BAD_ACTOR.bg, opacity: panelsP * panelsOut, transform: `translateX(${(1 - panelsP) * -60 - (1 - panelsOut) * 80}px)`, overflow: "hidden" }}>
+          <div style={{ position: "absolute", left: LEFT.w / 2 - 150, bottom: 46, width: 300, height: 300, borderRadius: "50%", border: `6px solid ${BAD_ACTOR.tint}`, boxShadow: "0 18px 40px rgba(18,32,61,0.16)", boxSizing: "border-box" }}>
+            <Silhouette role="badActor" size={288} tint={BAD_ACTOR.tint} bg={colors.white} t={t} fidget={1} />
           </div>
-          <div style={{ marginTop: 34, fontFamily: fonts.ui, fontSize: 44, fontWeight: 700, color: colors.ink }}>{BAD_ACTOR.label}</div>
+          {BAD_ACTOR.lines.map((line, i) => {
+            const at = T[line.at as keyof typeof T] + line.shift;
+            const p = land(interpolate(t, [at, at + 0.35], [0, 1], { ...clamp, easing: Easing.bezier(0.34, 1.56, 0.64, 1) }));
+            if (p <= 0) return null;
+            // each newer bubble pushes the older ones up, and they fade a little
+            const newer = BAD_ACTOR.lines.slice(i + 1).reduce((n, l) => n + land(interpolate(t, [T[l.at as keyof typeof T] + l.shift, T[l.at as keyof typeof T] + l.shift + 0.35], [0, 1], clamp)), 0);
+            const latest = newer < 0.5;
+            return (
+              <div key={i} style={{ position: "absolute", left: 0, right: 0, bottom: 376 + newer * 118, display: "flex", justifyContent: "center", opacity: Math.min(1, p * 1.4) * (1 - 0.35 * Math.min(1, newer)) * (1 - Math.max(0, Math.min(1, newer - 1))), transform: `translateX(${(i % 2 ? 1 : -1) * 22}px) scale(${0.7 + 0.3 * p})`, transformOrigin: "50% 100%" }}>
+                <div style={{ position: "relative", maxWidth: 680, padding: "18px 28px", borderRadius: 26, background: colors.white, boxShadow: "0 12px 30px rgba(18,32,61,0.14)", border: `2px solid ${latest ? BAD_ACTOR.tint : "rgba(179,64,42,0.25)"}`, font: `600 30px/1.25 ${fonts.ui}`, color: colors.ink, textAlign: "center" }}>
+                  {line.text}
+                  {latest && <span style={{ position: "absolute", left: "50%", bottom: -15, width: 26, height: 26, background: colors.white, borderRight: `2px solid ${BAD_ACTOR.tint}`, borderBottom: `2px solid ${BAD_ACTOR.tint}`, transform: "translateX(-50%) rotate(45deg)" }} />}
+                </div>
+              </div>
+            );
+          })}
         </div>
         {/* Right: the desk the statement sits on */}
         <div style={{ position: "absolute", left: RIGHT.x, top: PANEL.top, width: RIGHT.w, height: PANEL.bottom - PANEL.top, borderRadius: 28, background: "#e6e4df", opacity: panelsP * panelsOut, transform: `translateX(${(1 - panelsP) * 60}px)` }} />
