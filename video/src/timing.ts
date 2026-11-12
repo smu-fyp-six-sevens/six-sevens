@@ -198,7 +198,7 @@ export const PORTAL_VERSION: "v1" | "v2" = "v2";
 /** Section 4 v2. All times in seconds from the start of the section. */
 export const PORTAL2 = {
   length: 12.2,           // whole section
-  introIn: 0.25,          // "So that's why we introduce..." rises, centred
+  introIn: 0.1,          // "So that's why we introduce..." rises, centred
   introOut: 1.7,          // ...and lifts away
   titleIn: 1.85,          // "GLDB Anomaly Detection Portal", big and centred
   underline: 2.5,         // a line draws under it
@@ -237,7 +237,7 @@ export const PORTAL = {
 
 /** Section 3, "tamper". All times in seconds from the start of the section. */
 export const TAMPER = {
-  length: 8.0,            // whole section
+  length: 7.0,            // whole section
   panelsIn: -0.25,        // the two halves land. Negative = already arriving on the first frame
   line1In: 0.3,           // "Even worse, when bad actors are involved,"
   cursorIn: 1.1,          // the text cursor appears on the statement...

@@ -43,18 +43,14 @@ export const DashboardScene: React.FC<{ showText?: boolean }> = ({ showText = tr
   const swipe = shotSwipe(t, 0, T.length, { enter: false }) ?? 0;
   const toDash = interpolate(t, [T.navClick + 0.1, T.navClick + 0.2], [0, 1], clamp);
   // The page scrolls panel by panel; the camera frames each one.
-  const [scroll] = path(t, [[0, 0, 0], [T.flagsAt - 0.3, 0, 0], [T.flagsAt + 0.3, 255, 0], [T.riskAt - 0.3, 255, 0], [T.riskAt + 0.3, 560, 0], [T.attentionAt - 0.3, 560, 0], [T.attentionAt + 0.3, 960, 0]]);
+  const [scroll] = path(t, [[0, 0, 0], [T.flagsAt - 0.3, 0, 0], [T.flagsAt + 0.3, 140, 0], [T.riskAt - 0.3, 140, 0], [T.riskAt + 0.3, 500, 0], [T.attentionAt - 0.3, 500, 0], [T.attentionAt + 0.3, 940, 0]]);
   const cam = cameraAt(t, [
+    // full-width panels (pipeline, flags + types, risk) are shown whole: no zoom, the page scrolls under them
     [0, 1.0, 720, 450],
-    [T.navClick, 1.0, 720, 450],
-    [T.pipelineAt + 0.5, 1.12, 712, 225],
-    [T.flagsAt - 0.3, 1.12, 712, 225],
-    [T.flagsAt + 0.4, 1.02, 712, 240],
-    [T.riskAt - 0.3, 1.02, 712, 240],
-    [T.riskAt + 0.4, 1.12, 712, 270],
-    [T.attentionAt - 0.3, 1.12, 712, 270],
-    [T.attentionAt + 0.4, 1.25, 440, 300],
-    [T.length, 1.32, 440, 300],
+    [T.attentionAt - 0.2, 1.0, 720, 450],
+    // "Needs attention" is half the page wide: push in on it
+    [T.attentionAt + 0.5, 1.22, 470, 330],
+    [T.length, 1.28, 470, 330],
   ]);
   const [px, py] = path(t, [[0, 900, 520], [T.navClick - 0.05, 720, 36], [T.pipelineAt + 0.5, 980, 420], [T.length, 1040, 560]]);
   const press = interpolate(t, [T.navClick - 0.05, T.navClick + 0.05, T.navClick + 0.2], [0, 1, 0], clamp);

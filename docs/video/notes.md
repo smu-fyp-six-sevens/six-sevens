@@ -138,3 +138,8 @@
 - Dashboard: captured with a month of invented cases (story2.spec.ts "a month of cases": pipeline, flags, documents by type, risk, needs attention); the beat is a scroll tour of those panels, no drill-in.
 - Section lengths trimmed to their last event: hook 9.1, waiting 8.3, tamper 8.0, portal 12.2, upload 11.0, detect 11.5, trace 10.0, finalise 4.8, dashboard 8.5, difference 6.4 (score 14.5, cta 7.5): 111.8 s. Music re-cut with a 4-bar loop to end with it.
 - People: avatars 260 -> 330, closer together (520 / 1400), larger labels and status pills.
+
+## Wave 24 - dashboard framing, shorter gap
+- Owner: dashboard zoom cut off the pipeline and the risk overview; still a lag between "harder to catch" and "why we introduce".
+- Dashboard: no zoom on full-width panels (pipeline, flags + types, risk); the page scrolls under them; push in only on Needs attention.
+- Tamper 8.0 -> 7.0 s; the portal intro line rises at 0.1 s (was 0.25). Film 110.8 s; script times updated.
