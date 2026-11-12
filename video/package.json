@@ -5,12 +5,14 @@
   "scripts": {
     "dev": "remotion studio",
     "typecheck": "tsc --noEmit",
-    "render": "remotion render Master renders/4k/film-so-far-4k.mp4 --scale=2 --crf=10 --x264-preset=slow --color-space=bt709",
+    "render": "remotion render Master renders/4k/film-4k.mp4 --scale=2 --crf=10 --x264-preset=slow --color-space=bt709 --audio-bitrate=320k",
     "still": "remotion still Master renders/poster.png --frame=150",
     "timing": "node tools/dump-timing.mjs",
     "stills": "node tools/stills.mjs",
-    "render:notext": "remotion render Master-NoText renders/4k/film-so-far-no-text-4k.mp4 --scale=2 --crf=10 --x264-preset=slow --color-space=bt709",
-    "render:preview": "remotion render Master renders/film-so-far.mp4 --crf=16 --color-space=bt709"
+    "render:notext": "remotion render Master-NoText renders/4k/film-no-text-4k.mp4 --scale=2 --crf=10 --x264-preset=slow --color-space=bt709 --audio-bitrate=320k",
+    "render:preview": "remotion render Master renders/film.mp4 --crf=16 --color-space=bt709 --audio-bitrate=256k",
+    "render:novo": "remotion render Master-NoVO renders/4k/film-novo-4k.mp4 --scale=2 --crf=10 --x264-preset=slow --color-space=bt709 --audio-bitrate=320k",
+    "vo:durations": "python3 -c \"import json,subprocess;d={k:float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0','public/vo/'+k+'.wav'])) for k in json.load(open('public/vo/lines.json'))};json.dump(d,open('public/vo/durations.json','w'),indent=1);print(d)\""
   },
   "dependencies": {
     "@remotion/bundler": "4.0.532",

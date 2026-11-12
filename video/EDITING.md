@@ -117,15 +117,27 @@ In a caption, `\n` is a line break. Lines never wrap on their own, so if a line 
 
 The drawings themselves (avatars, horns, glasses and so on) are in `src/components/Silhouette.tsx`, and each scene's layout is in `src/scenes/`. You only need those to change how things look, not what they say or when.
 
-## 5. Export
+## 5. Sound: voiceover, music, effects
+
+Everything is placed in `src/sound.ts`, from the same knobs as the picture, so retiming a section moves its sound too.
+
+- **Voiceover** is one clip per section in `public/vo/` (`hook.wav`, `waiting.wav`, ... `cta.wav`). The current clips are a robot guide voice (espeak-ng) for timing only. The script is `docs/video/script.md`.
+  - **Your own recording:** record each section's line as its own file, save it over the guide clip with the same name (any format converts with `ffmpeg -i take.m4a -ar 48000 -ac 1 public/vo/detect.wav`), then run `npm run vo:durations` so the film knows each clip's length. If a take runs longer than its section, raise that section's `length` in `src/timing.ts`. `VO_OFFSET` in `src/sound.ts` sets how far into a section each line starts.
+  - **An AI voice later** (ElevenLabs, OpenAI, Google): generate each line from `public/vo/lines.json` with the service, save each as `public/vo/<name>.wav`, then `npm run vo:durations`. Nothing else changes.
+- **Music** is `public/music/soundtrack.mp3`: the synthwave track extended by a 12-bar loop so it ends on the call to action. Levels are `MUSIC` in `src/sound.ts` (`quiet` for sections 1-3, `lifted` from the portal on, `ducked` under the voice). The other track you sent is kept as `corporate-2bstudio.mp3`.
+- **Sound effects** are synthesized files in `public/sfx/`; the cue list (`CUES`) names each one, the moment it plays and its volume.
+- **Versions:** `Master` (everything), `Master-NoVO` (music and effects only, to lay your own voice over in an editor), `Master-NoText` (no captions), `Master-Silent` (picture only).
+
+## 6. Export
 
 All of these write into `video/renders/`.
 
 | Command | What you get |
 |---|---|
-| `npm run render` | **Use this one for your edit.** The whole film in 4K at high quality: `renders/4k/film-so-far-4k.mp4` |
+| `npm run render` | **The finished film in 4K**, with voice, music and effects: `renders/4k/film-4k.mp4` |
+| `npm run render:novo` | The same without the voice (music and effects only): `renders/4k/film-novo-4k.mp4` |
 | `npm run render:notext` | The same, without captions |
-| `npm run render:preview` | A quick, small 1080p preview: `renders/film-so-far.mp4`. The text is softer, so don't use it for the final edit |
+| `npm run render:preview` | A quick 1080p preview with sound: `renders/film.mp4` |
 | `npm run still` | One frame as a PNG (change `--frame=` in `package.json`) |
 
 One section on its own, in 4K:
