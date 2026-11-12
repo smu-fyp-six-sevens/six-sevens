@@ -48,11 +48,24 @@ npm run dev        # Remotion Studio: scrub, preview, edit props live
 
 ## Rendering
 
+For your editor, export in 4K at high quality (sharp text, and it still looks crisp in a 1080p timeline):
+
 ```bash
-npx remotion render Master renders/hook.mp4 --color-space=bt709 --crf=16
-npx remotion render Master-NoText renders/hook-no-text.mp4 --color-space=bt709 --crf=16
+npx remotion render Master renders/4k/film-so-far-4k.mp4 --scale=2 --crf=10 --x264-preset=slow --color-space=bt709
+npx remotion render Master-NoText renders/4k/film-so-far-no-text-4k.mp4 --scale=2 --crf=10 --x264-preset=slow --color-space=bt709
+```
+
+Lowest loss of all, for editing (big files, plays in Premiere, Final Cut, DaVinci Resolve):
+
+```bash
+npx remotion render Master renders/film-so-far.mov --codec=prores --prores-profile=4444 --scale=2
+```
+
+Quick previews (1080p, small files; text is softer):
+
+```bash
+npx remotion render Master renders/film-so-far.mp4 --color-space=bt709 --crf=16
 npx remotion render Scene-Waiting renders/02-waiting.mp4 --color-space=bt709 --crf=16
-npx remotion still Master renders/hook-poster.png --frame=175
 ```
 
 Single scenes for quick checks: `Scene-Waiting` (section 2), `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
