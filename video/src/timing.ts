@@ -77,6 +77,17 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
  */
 export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
+/** Section 2, "waiting". All times in seconds from the start of the section. */
+export const WAITING = {
+  length: 7,              // whole section
+  avatarsIn: -0.25,       // the two avatars and the clock land, staggered. Negative = already arriving on the first frame
+  line1In: 0.4,           // "Over an hour on the details,"
+  clockStart: 0.8,        // the clock starts racing...
+  clockEnd: 5.4,          // ...and reaches 10:14. Statuses tick along with it
+  line2In: 2.6,           // "while the customer waits for news."
+  pulseEvery: 1.1,        // seconds between the customer's "waiting" pulses
+};
+
 /** v3 hook. All times in seconds from the start of the hook. */
 export const OVERWHELM3 = {
   length: 9.6,            // whole hook, including the hold on the final ping
@@ -146,7 +157,7 @@ export const s = (seconds: number): number => Math.round(seconds * FPS);
 
 const SCENE_LENGTHS: Record<string, number> =
   HOOK_VERSION === "v3"
-    ? { buried: atSeconds(OVERWHELM3.length) }
+    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING.length) }
     : HOOK_VERSION === "v2"
     ? { overwhelm: atSeconds(OVERWHELM.length) }
     : { package: atSeconds(HOOK.package.length), tooMany: atSeconds(HOOK.tooMany.length) };

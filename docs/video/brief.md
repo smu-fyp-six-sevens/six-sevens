@@ -26,6 +26,11 @@ One case is too much paper for one person to read; the portal reads all of it, a
 
 **Hook v1 (kept behind HOOK_VERSION) · 0:00-0:11 · package + tooMany.** The portal's upload box filling with the case's 20 real files, then a pull-back. Renders in `video/renders/v1/`.
 
+**Section 2 · after the hook · 0:07 · waiting.**
+- Visual: officer and customer as avatar circles (initials) either side of a clock fast-forwarding 9:02 to 10:14; a dashed line joins them behind the clock ("on the other end"). Officer status "Reviewing page 14 of 212" creeps to 19; customer status "Checked inbox 1×" climbs to 14×; the customer's avatar pulses.
+- On-screen copy (placeholder): **Over an hour on the details, / while the customer waits for news.**
+- People are invented: Sarah Ng (Loan Officer), Jason Koh (Director, Anchorpoint Insurance Brokers).
+
 ## Assumptions (veto any)
 0. v2: people, teams and filenames are invented; documents are schematic (grey bars, made-up figures). The company name Anchorpoint Insurance Brokers comes from the test fixture.
 1. On-screen headlines included by default; `Master-NoText` has none.

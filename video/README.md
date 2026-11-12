@@ -15,7 +15,14 @@ ping lands in the middle ("Customer's on the line again. Any update on Anchorpoi
 **v2 "overwhelm"** (the same pile on a screen at the side) and **v1 "portal"** (the upload box) are kept. Switch with
 `HOOK_VERSION` in `src/timing.ts`; their renders are in `renders/v2/` and `renders/v1/`.
 
-Renders: `renders/hook.mp4` (with headlines), `renders/hook-no-text.mp4` (same shots, no headlines), `renders/hook-poster.png`.
+**Section 2 "waiting", 7 s.** "A loan officer may spend over an hour staring at details on the screen, while the
+loan customer anxiously waits..." The officer (SN, Sarah Ng) and the customer (JK, Jason Koh, Director, Anchorpoint
+Insurance Brokers) as avatar circles either side of a clock racing from 9:02 to 10:14. Her status creeps from page
+14 to 19 of 212; his "Checked inbox" count climbs to 14×; his avatar pulses while he waits. Headline: "Over an hour on
+the details, / while the customer waits for news."
+
+Renders: `renders/film-so-far.mp4` (hook + section 2, 16.6 s), `renders/02-waiting.mp4` (section 2 alone), each with a
+`-no-text` twin. `renders/hook.mp4` (with headlines), `renders/hook-no-text.mp4` (same shots, no headlines), `renders/hook-poster.png`.
 
 ## Fine-tuning
 
@@ -25,6 +32,8 @@ npm install
 npm run dev        # Remotion Studio: scrub, preview, edit props live
 ```
 
+- **Timing (section 2):** `WAITING` in `src/timing.ts`: `clockStart`/`clockEnd` (how long the hour takes), `line1In`, `line2In`, `pulseEvery`, `length`.
+- **People, clock, words (section 2):** `src/data/waiting.ts`: names, initials, roles, colours, page and inbox counts, the clock's start and end time, the headline.
 - **Timing (v3):** `src/timing.ts`, the `OVERWHELM3` object, all in seconds. Line the knobs up with your voiceover: `title1In`/`title1Out` (first line), `wayIn`, `stretchStart`/`stretchEnd` (how long you drag the "waaaay": the a's, and their documents, land evenly in between), `title2In`, `footnoteIn`, `pings` (one per message), `finalPingIn` (the sigh moment), and `length` (sets how long the hold lasts after it).
 - **How long the word gets:** `WAY3_MAX_A` (28) in `src/data/overwhelm.ts`; `WAY3_DOCS` is how many documents open during the stretch.
 - **Final ping text:** `FINAL_PING` in `src/data/overwhelm.ts`. Messages before it: `PINGS3` (add or remove one, and its time in `OVERWHELM3.pings`).
@@ -40,10 +49,11 @@ npm run dev        # Remotion Studio: scrub, preview, edit props live
 ```bash
 npx remotion render Master renders/hook.mp4 --color-space=bt709 --crf=16
 npx remotion render Master-NoText renders/hook-no-text.mp4 --color-space=bt709 --crf=16
-npx remotion still Master renders/hook-poster.png --frame=320
+npx remotion render Scene-Waiting renders/02-waiting.mp4 --color-space=bt709 --crf=16
+npx remotion still Master renders/hook-poster.png --frame=175
 ```
 
-Single scenes for quick checks: `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
+Single scenes for quick checks: `Scene-Waiting` (section 2), `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
 
 ## Where the UI comes from (v1)
 

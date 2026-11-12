@@ -33,3 +33,9 @@
 - Priya's team is now "Sales Team" (both pings).
 - Every v3 time tightened by about 20%: 12 s -> 9.6 s; final ping at 7.1 s, hold 2.5 s; stretch 4.0-5.6 s.
 - Measured: stills at frames 50, 175, 245. Not watched in motion.
+
+## Wave 6 - section 2, "waiting"
+- Owner's picks: avatar circles + clock (over split screen, illustrated people, footage); the clock fast-forwards to show "over an hour".
+- Built WaitingScene (7 s) after the v3 hook in Master; knobs in WAITING, words and people in data/waiting.ts.
+- Decision: the avatars are already arriving on the first frame (avatarsIn -0.25) so the cut from the hook lands on a picture.
+- Measured: stills at frames 0, 10, 60, 120, 200 and a contact sheet every 18 frames: nothing clipped, counters and clock agree (10:14, page 19, 14×). Not watched in motion.
