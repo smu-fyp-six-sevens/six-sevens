@@ -1,4 +1,4 @@
-# Voiceover script (draft for approval)
+# Voiceover script (approved)
 
 About 2.5 words a second, so every line can be read calmly over its section. Times are where each section starts in the film. Sections 9 to 11 are new.
 
@@ -13,10 +13,12 @@ About 2.5 words a second, so every line can be read calmly over its section. Tim
 | 7 | 1:04.6 | ② Trace | And it's not a black box. The agent trace shows every step: which tools ran, what they returned, and how each flag was reached. Every finding can be audited. | |
 | 8 | 1:15.1 | ③ Score | Every case gets a risk rating, with the evidence behind it: what was flagged, where, and why. The officer confirms or dismisses each finding, and adds notes. And the portal recommends the documents that would settle any doubt. | |
 | 9 | 1:31.1 | Dashboard *(new)* | From the dashboard, officers see every case at a glance, drill into anything flagged, and keep a full audit trail for compliance. | Real dashboard screen, zooms only. |
-| 10 | ~1:40 | The difference *(new)* | What took hours of screening now takes minutes. The AI does the reading. Your loan officers make the call. And customers hear back sooner. | Bookends section 2: the same Loan Officer and Customer, the clock barely moving, the officer's status "Review complete", and the customer gets the good-news ping (answering the hook's ping). |
-| 11 | ~1:50 | Call to action *(new)* | Ready to cut review time from hours to minutes? Book a demo of the GLDB Anomaly Detection Portal today. | Name, then a "Book a demo" button with a contact line under it (email or URL, to confirm). About 6 s; the music resolves on the button. Alternatives: "Try it on your next case" or "Join the pilot". |
+| 10 | ~1:40 | The difference *(new)* | What took hours of screening now takes minutes. The AI does the reading, your loan officers make the call, and customers hear back sooner. | Bookends section 2: the same Loan Officer and Customer, the clock barely moving, the officer's status "Review complete", and the customer gets the good-news ping (answering the hook's ping). |
+| 11 | ~1:50 | Call to action *(new)* | Bring your next loan case. Upload the package, and see what the portal catches. Try the GLDB Anomaly Detection Portal today. | Name, then a "Try it on your next case" button. No contact line. About 7 s; the music resolves on the button. |
 
-Running length: about 1:56.
+Running length: about 1:57.
+
+Music: `video/public/music/synthwave-music4video.mp3` (107.7 BPM, steady), extended on bar lines to cover the film. Alternative kept: `corporate-2bstudio.mp3`.
 
 ## Sound
 - **Music:** your track under everything, ducked under the voice. It's quieter and tense through sections 1–3, lifts when the portal arrives (section 4), and resolves on the close.
