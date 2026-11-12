@@ -70,6 +70,7 @@ export const SCREENS_STORY2 = {
   traceTool: { src: "ui/story/trace-tool.png", w: 1440, h: 900 },
   audit: { src: "ui/story/audit.png", w: 1440, h: 900 },
   additional: { src: "ui/story/additional.png", w: 1440, h: 900 },
+  dashboard: { src: "ui/story/dashboard-full.png", w: 1440, h: 1967 },
 };
 
 /** Additional Documents, measured on its capture (CSS px): the score line and each recommended document. */
@@ -80,4 +81,41 @@ export const ADDITIONAL_BOXES = {
     { x: 117, y: 410, w: 1283, h: 101 },
     { x: 117, y: 512, w: 1283, h: 148 },
   ],
+};
+
+// ---- Sections 9-11: the business value and the call to action ----------------------------------
+
+export const DASHBOARD_COPY = {
+  headline: "Every case, at a glance.",
+  beats: [
+    { text: "The whole pipeline, and the riskiest cases first.", at: "pipelineAt" },
+    { text: "Drill into anything flagged.", at: "riskViewAt" },
+    { text: "With a full audit trail for compliance.", at: "auditAt", accent: true },
+  ],
+};
+
+/** The dashboard, measured on its capture (CSS px). */
+export const DASHBOARD_BOXES = {
+  pipeline: { x: 25, y: 135, w: 1375, h: 171 },
+  risk: { x: 25, y: 515, w: 1375, h: 295 },
+  attention: { x: 25, y: 826, w: 805, h: 478 },
+  row: { x: 36, y: 912, w: 782, h: 56 },
+};
+
+export const DIFFERENCE_COPY = {
+  line1: "What took hours of screening now takes minutes.",
+  line2: "The AI does the reading. Your loan officers make the call.",
+  line3: "And customers hear back sooner.",
+  officerBusy: "Reviewing with the portal",
+  officerDone: "Review complete",
+  customerWaiting: "Waiting for news",
+  customerDone: "Heard back",
+  news: { name: "GLDB Lending", team: "Loan team", text: "Good news on your loan application, we're moving to approval.", tint: "#355f96" },
+};
+
+export const CTA_COPY = {
+  lead: "Bring your next loan case.",
+  name: "GLDB Anomaly Detection Portal",
+  sub: "Upload the package, and see what the portal catches.",
+  button: "Try it on your next case",
 };

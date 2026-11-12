@@ -4,6 +4,7 @@
 // Screens at 3x; element boxes saved for overlays (story2-boxes.json).
 import { test } from '../../frontend/e2e/support/test';
 import { loadFixture, readRegressionFixture } from '../../frontend/e2e/support/fixtures';
+import { makeCase } from '../../frontend/e2e/support/mockBackend';
 import { DETECTION_STEPS } from './traceSteps';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
@@ -168,4 +169,29 @@ test('additional documents', async ({ page, backend }) => {
     return { cls: (el as HTMLElement).className, text: (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 90), x: r.x, y: r.y, w: r.width, h: r.height };
   }));
   writeFileSync(`${OUT}/story2-additional.json`, JSON.stringify({ items }, null, 2));
+});
+
+test('dashboard', async ({ page, backend }) => {
+  test.setTimeout(120_000);
+  await page.clock.setFixedTime(new Date('2026-11-05T04:00:00Z'));
+  const { fx } = setup(backend);
+  fx.case.status = 'pending_review';
+  loadFixture(backend, 'harbor-light');
+  backend.cases.push(
+    makeCase({ id: 'c3', greenlink_case_id: 'GLDB-21', company_name: 'Meridian Freight Pte Ltd', status: 'pending_review', ...CASE_VIEWS['recommendations'] } as never),
+    makeCase({ id: 'c4', greenlink_case_id: 'GLDB-22', company_name: 'Cedar Holdings', status: 'in_progress', ...CASE_VIEWS['nothing needed'] } as never),
+    makeCase({ id: 'c5', greenlink_case_id: 'GLDB-23', company_name: 'Bolt Logistics', status: 'pending_review' }),
+    makeCase({ id: 'c6', greenlink_case_id: 'GLDB-24', company_name: 'Orchard Lane Trading', status: 'in_progress', ...CASE_VIEWS['no reducible findings'] } as never),
+  );
+  await page.goto('/dashboard');
+  await page.getByRole('button', { name: 'Date range' }).click();
+  await page.getByRole('button', { name: 'All time' }).click();
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: `${OUT}/dashboard-full.png`, fullPage: true });
+  const cards = await page.locator('h2, h3, [class*="card"] > header, a, li').evaluateAll((els) => els.map((el) => {
+    const r = el.getBoundingClientRect();
+    return { tag: el.tagName, cls: (el as HTMLElement).className, text: (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 70), x: r.x, y: r.y + window.scrollY, w: r.width, h: r.height };
+  }).filter((b) => b.w > 0 && b.text));
+  writeFileSync(`${OUT}/story2-dashboard.json`, JSON.stringify({ cards }, null, 2));
 });

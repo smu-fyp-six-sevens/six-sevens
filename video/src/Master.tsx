@@ -1,7 +1,13 @@
-// Master - the film so far (hook, then section 2), visuals only (no soundtrack, no voiceover: you lay those in your editor).
+// Master - the whole film: eleven sections, with the guide voiceover, music and sound effects (sound.ts).
 // HOOK_VERSION in timing.ts picks the version; every time is a knob there, in seconds.
 
-import { AbsoluteFill, Sequence } from "remotion";
+import { Audio } from "@remotion/media";
+import { AbsoluteFill, Sequence, interpolate, staticFile } from "remotion";
+import { Sfx } from "./components/Sfx";
+import { CtaScene } from "./scenes/CtaScene";
+import { DashboardScene } from "./scenes/DashboardScene";
+import { DifferenceScene } from "./scenes/DifferenceScene";
+import { CUES, MUSIC, VO, musicLevel, type SectionName } from "./sound";
 import { BuriedScene } from "./scenes/BuriedScene";
 import { OverwhelmScene } from "./scenes/OverwhelmScene";
 import { PackageScene } from "./scenes/PackageScene";
@@ -16,49 +22,45 @@ import { ScoreScene } from "./scenes/ScoreScene";
 import { WaitingScene } from "./scenes/WaitingScene";
 import { WaitingScene2 } from "./scenes/WaitingScene2";
 import { colors } from "./theme";
-import { HOOK, HOOK_VERSION, OVERWHELM, OVERWHELM3, PORTAL, PORTAL2, PORTAL_VERSION, TAMPER, UPLOAD, DETECT, TRACE, SCORE, WAITING, WAITING2, WAITING_VERSION, atSeconds } from "./timing";
+import { HOOK, HOOK_VERSION, OVERWHELM, PORTAL_VERSION, SCENES, TOTAL_FRAMES, WAITING_VERSION, atSeconds } from "./timing";
 
-export const Master: React.FC<{ showText?: boolean }> = ({ showText = true }) => (
+/** The v3 film, in order. Each section's start and length come from SCENES in timing.ts. */
+const SECTIONS: { name: SectionName; node: (showText: boolean) => React.ReactNode }[] = [
+  { name: "buried", node: (t) => <BuriedScene showText={t} /> },
+  { name: "waiting", node: (t) => (WAITING_VERSION === "v2" ? <WaitingScene2 showText={t} /> : <WaitingScene showText={t} />) },
+  { name: "tamper", node: (t) => <TamperScene showText={t} /> },
+  { name: "portal", node: (t) => (PORTAL_VERSION === "v2" ? <PortalScene2 showText={t} /> : <PortalScene showText={t} />) },
+  { name: "upload", node: (t) => <UploadScene showText={t} /> },
+  { name: "detect", node: (t) => <DetectScene showText={t} /> },
+  { name: "trace", node: (t) => <TraceScene showText={t} /> },
+  { name: "score", node: (t) => <ScoreScene showText={t} /> },
+  { name: "dashboard", node: (t) => <DashboardScene showText={t} /> },
+  { name: "difference", node: (t) => <DifferenceScene showText={t} /> },
+  { name: "cta", node: (t) => <CtaScene showText={t} /> },
+];
+
+/** Voice, music and sound effects. Each can be switched off: `vo` false leaves music and effects for your own recording. */
+const SoundLayer: React.FC<{ vo: boolean; music: boolean; sfx: boolean }> = ({ vo, music, sfx }) => (
+  <>
+    {music && <Audio src={staticFile(MUSIC.src)} volume={(f) => musicLevel(f) * interpolate(f, [TOTAL_FRAMES - MUSIC.fadeFrames, TOTAL_FRAMES], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })} />}
+    {vo && VO.map((v) => (
+      <Sequence key={v.section} from={v.from} durationInFrames={v.frames}>
+        <Audio src={staticFile(v.src)} />
+      </Sequence>
+    ))}
+    {sfx && CUES.map((c, i) => <Sfx key={i} at={c.at} src={staticFile(c.src)} lead={c.lead} volume={c.volume} />)}
+  </>
+);
+
+export const Master: React.FC<{ showText?: boolean; vo?: boolean; music?: boolean; sfx?: boolean }> = ({ showText = true, vo = true, music = true, sfx = true }) => (
   <AbsoluteFill style={{ background: colors.paper }}>
     {HOOK_VERSION === "v3" ? (
       <>
-        <Sequence durationInFrames={atSeconds(OVERWHELM3.length)}>
-          <BuriedScene showText={showText} />
-        </Sequence>
-        {/* Section 2 follows the v3 hook. */}
-        {WAITING_VERSION === "v2" ? (
-          <Sequence from={atSeconds(OVERWHELM3.length)} durationInFrames={atSeconds(WAITING2.length)}>
-            <WaitingScene2 showText={showText} />
-          </Sequence>
-        ) : (
-          <Sequence from={atSeconds(OVERWHELM3.length)} durationInFrames={atSeconds(WAITING.length)}>
-            <WaitingScene showText={showText} />
-          </Sequence>
-        )}
-        {/* Section 3 */}
-        <Sequence from={atSeconds(OVERWHELM3.length) + atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length)} durationInFrames={atSeconds(TAMPER.length)}>
-          <TamperScene showText={showText} />
-        </Sequence>
-        {/* Section 4 */}
-        <Sequence from={atSeconds(OVERWHELM3.length) + atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length) + atSeconds(TAMPER.length)} durationInFrames={atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length)}>
-          {PORTAL_VERSION === "v2" ? <PortalScene2 showText={showText} /> : <PortalScene showText={showText} />}
-        </Sequence>
-        {/* Section 5 */}
-        {(() => {
-          // Sections 5-8, one after another from the end of section 4.
-          let at = atSeconds(OVERWHELM3.length) + atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length) + atSeconds(TAMPER.length) + atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length);
-          const parts: [number, React.ReactNode][] = [
-            [atSeconds(UPLOAD.length), <UploadScene showText={showText} />],
-            [atSeconds(DETECT.length), <DetectScene showText={showText} />],
-            [atSeconds(TRACE.length), <TraceScene showText={showText} />],
-            [atSeconds(SCORE.length), <ScoreScene showText={showText} />],
-          ];
-          return parts.map(([len, node], i) => {
-            const from = at;
-            at += len;
-            return <Sequence key={i} from={from} durationInFrames={len}>{node}</Sequence>;
-          });
-        })()}
+        {SECTIONS.map((sec) => {
+          const sc = (SCENES as Record<string, { start: number; duration: number }>)[sec.name];
+          return <Sequence key={sec.name} from={sc.start} durationInFrames={sc.duration}>{sec.node(showText)}</Sequence>;
+        })}
+        <SoundLayer vo={vo} music={music} sfx={sfx} />
       </>
     ) : HOOK_VERSION === "v2" ? (
       <Sequence durationInFrames={atSeconds(OVERWHELM.length)}>

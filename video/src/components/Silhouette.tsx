@@ -11,7 +11,9 @@ const BODY = "M18 214 C18 158 48 132 78 128 Q100 148 122 128 C152 132 182 158 18
 
 export const Silhouette: React.FC<{
   role: "officer" | "customer" | "badActor"; size: number; tint: string; bg: string; t: number; fidget: number;
-}> = ({ role, size, tint, bg, t, fidget }) => {
+  /** The customer after hearing back: still, smiling, no sweat. */
+  happy?: boolean;
+}> = ({ role, size, tint, bg, t, fidget, happy = false }) => {
   const officer = role === "officer";
   const bad = role === "badActor";
   // Officer: a slow nod toward the screen. Customer: a restless sway. Bad actor: leans in, snickering.
@@ -19,7 +21,7 @@ export const Silhouette: React.FC<{
     ? 3 + 1.5 * Math.sin((t * 2 * Math.PI) / 4)
     : bad
       ? 7 + 1.2 * Math.sin((t * 2 * Math.PI) / 0.45)
-      : 4 * Math.sin((t * 2 * Math.PI) / fidget);
+      : happy ? 1.5 * Math.sin((t * 2 * Math.PI) / 3) : 4 * Math.sin((t * 2 * Math.PI) / fidget);
   // Officer: a glint crosses the glasses every 2.4 s. Customer: a sweat drop slides every 2 s.
   const glint = ((t % 2.4) / 0.5);
   const drop = (t % 2) / 2;
@@ -82,13 +84,14 @@ export const Silhouette: React.FC<{
               {/* phone to the ear, with the hand that holds it */}
               <rect x="130" y="62" width="18" height="38" rx="5" fill={tint} stroke={bg} strokeWidth="3" transform="rotate(14 139 81)" />
               <circle cx="142" cy="104" r="11" fill={colors.ink} stroke={bg} strokeWidth="3" />
+              {happy && <path d="M84 92 Q100 108 118 92" fill="none" stroke={bg} strokeWidth="4.5" strokeLinecap="round" />}
               {/* sweat drop */}
-              <path
+              {!happy && <path
                 d="M0 -9 C4 -3 6 1 6 4 A6 6 0 0 1 -6 4 C-6 1 -4 -3 0 -9 Z"
                 fill="#7fb0e6"
                 opacity={drop < 0.8 ? 1 : 1 - (drop - 0.8) / 0.2}
                 transform={`translate(70 ${58 + drop * 22})`}
-              />
+              />}
             </>
           )}
         </g>

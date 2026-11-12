@@ -1,0 +1,355 @@
+{
+  "cards": [
+    {
+      "tag": "A",
+      "cls": "brand brand-link",
+      "text": "GLDB Fraud Review",
+      "x": 16.5,
+      "y": 18,
+      "w": 173.9375,
+      "h": 27
+    },
+    {
+      "tag": "A",
+      "cls": "app-nav-link",
+      "text": "Case Queue",
+      "x": 562.703125,
+      "y": 14,
+      "w": 105.765625,
+      "h": 35
+    },
+    {
+      "tag": "A",
+      "cls": "app-nav-link active",
+      "text": "Dashboard",
+      "x": 672.46875,
+      "y": 14,
+      "w": 97.015625,
+      "h": 35
+    },
+    {
+      "tag": "A",
+      "cls": "app-nav-link",
+      "text": "AI Agents",
+      "x": 773.484375,
+      "y": 14,
+      "w": 88.796875,
+      "h": 35
+    },
+    {
+      "tag": "H2",
+      "cls": "",
+      "text": "Case pipeline",
+      "x": 44,
+      "y": 154,
+      "w": 150.8125,
+      "h": 22.5
+    },
+    {
+      "tag": "LI",
+      "cls": "case-pipeline-step tone-idle case-pipeline-step--filled",
+      "text": "3Awaiting Documents",
+      "x": 44,
+      "y": 214,
+      "w": 133.6875,
+      "h": 74.1875
+    },
+    {
+      "tag": "LI",
+      "cls": "case-pipeline-step tone-system",
+      "text": "0Processing Documents",
+      "x": 177.6875,
+      "y": 214,
+      "w": 133.703125,
+      "h": 74.1875
+    },
+    {
+      "tag": "LI",
+      "cls": "case-pipeline-step tone-officer case-pipeline-step--filled",
+      "text": "3Pending Review",
+      "x": 311.390625,
+      "y": 214,
+      "w": 133.703125,
+      "h": 74.1875
+    },
+    {
+      "tag": "LI",
+      "cls": "case-pipeline-step tone-blocked",
+      "text": "0Missing Documents",
+      "x": 445.09375,
+      "y": 214,
+      "w": 133.703125,
+      "h": 74.1875
+    },
+    {
+      "tag": "LI",
+      "cls": "case-pipeline-step tone-system",
+      "text": "0Detecting Fraud",
+      "x": 578.796875,
+      "y": 214,
+      "w": 133.6875,
+      "h": 74.1875
+    },
+    {
+      "tag": "LI",
+      "cls": "case-pipeline-step tone-officer",
+      "text": "0Pending Evaluation",
+      "x": 712.484375,
+      "y": 214,
+      "w": 133.703125,
+      "h": 74.1875
+    },
+    {
+      "tag": "LI",
+      "cls": "case-pipeline-step tone-done",
+      "text": "0Ready to Finalise",
+      "x": 846.1875,
+      "y": 214,
+      "w": 133.703125,
+      "h": 74.1875
+    },
+    {
+      "tag": "LI",
+      "cls": "case-pipeline-step tone-closed",
+      "text": "0Finalised",
+      "x": 979.890625,
+      "y": 214,
+      "w": 133.703125,
+      "h": 74.1875
+    },
+    {
+      "tag": "LI",
+      "cls": "case-pipeline-step tone-failed case-pipeline-step--apart",
+      "text": "0Failed",
+      "x": 1113.59375,
+      "y": 214,
+      "w": 133.703125,
+      "h": 74.1875
+    },
+    {
+      "tag": "H2",
+      "cls": "",
+      "text": "Most common flags",
+      "x": 44,
+      "y": 342.1875,
+      "w": 234.890625,
+      "h": 22.5
+    },
+    {
+      "tag": "H2",
+      "cls": "",
+      "text": "Documents by type",
+      "x": 807.640625,
+      "y": 342.1875,
+      "w": 367.0625,
+      "h": 22.5
+    },
+    {
+      "tag": "H2",
+      "cls": "",
+      "text": "Risk overview",
+      "x": 44,
+      "y": 532.6875,
+      "w": 279.578125,
+      "h": 22.5
+    },
+    {
+      "tag": "LI",
+      "cls": "risk-overview-legend--empty",
+      "text": "0Critical",
+      "x": 280,
+      "y": 629.015625,
+      "w": 210.59375,
+      "h": 49.34375
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "2High",
+      "x": 502.59375,
+      "y": 629.015625,
+      "w": 210.59375,
+      "h": 49.34375
+    },
+    {
+      "tag": "LI",
+      "cls": "risk-overview-legend--empty",
+      "text": "0Medium",
+      "x": 725.1875,
+      "y": 629.015625,
+      "w": 210.609375,
+      "h": 49.34375
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "2Low",
+      "x": 947.796875,
+      "y": 629.015625,
+      "w": 210.59375,
+      "h": 49.34375
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "2Not scored",
+      "x": 1170.390625,
+      "y": 629.015625,
+      "w": 210.609375,
+      "h": 49.34375
+    },
+    {
+      "tag": "H2",
+      "cls": "",
+      "text": "Needs attention",
+      "x": 44,
+      "y": 843.8125,
+      "w": 245.578125,
+      "h": 22.5
+    },
+    {
+      "tag": "A",
+      "cls": "text-button",
+      "text": "Open case queue →",
+      "x": 680.828125,
+      "y": 843.8125,
+      "w": 129.84375,
+      "h": 19.5
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "GLDB-02Anchorpoint Insurance BrokersDocuments waiting for reviewSubmit",
+      "x": 36,
+      "y": 906.8125,
+      "w": 782.671875,
+      "h": 63
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "GLDB-24Orchard Lane TradingNo documents uploaded yetSubmitted 64 days ",
+      "x": 36,
+      "y": 969.8125,
+      "w": 782.671875,
+      "h": 64
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "GLDB-21Meridian Freight Pte LtdDocuments waiting for reviewSubmitted 6",
+      "x": 36,
+      "y": 1033.8125,
+      "w": 782.671875,
+      "h": 64
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "GLDB-22Cedar HoldingsNo documents uploaded yetSubmitted 64 days agoNo ",
+      "x": 36,
+      "y": 1097.8125,
+      "w": 782.671875,
+      "h": 64
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "GLDB-23Bolt LogisticsDocuments waiting for reviewSubmitted 64 days ago",
+      "x": 36,
+      "y": 1161.8125,
+      "w": 782.671875,
+      "h": 62
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "GLDB-16Harbor LightNo documents uploaded yetSubmitted 40 days agoNo fl",
+      "x": 36,
+      "y": 1223.8125,
+      "w": 782.671875,
+      "h": 62
+    },
+    {
+      "tag": "H2",
+      "cls": "",
+      "text": "Most requested documents",
+      "x": 864.671875,
+      "y": 843.8125,
+      "w": 332.71875,
+      "h": 22.5
+    },
+    {
+      "tag": "H2",
+      "cls": "",
+      "text": "Cases over time",
+      "x": 44,
+      "y": 1337.8125,
+      "w": 243.09375,
+      "h": 22.5
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "Critical",
+      "x": 44,
+      "y": 1394.8125,
+      "w": 54.828125,
+      "h": 18
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "High",
+      "x": 112.828125,
+      "y": 1394.8125,
+      "w": 41.28125,
+      "h": 18
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "Medium",
+      "x": 168.109375,
+      "y": 1394.8125,
+      "w": 60.703125,
+      "h": 18
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "Low",
+      "x": 242.8125,
+      "y": 1394.8125,
+      "w": 38.59375,
+      "h": 18
+    },
+    {
+      "tag": "LI",
+      "cls": "",
+      "text": "Not scored",
+      "x": 295.40625,
+      "y": 1394.8125,
+      "w": 77.59375,
+      "h": 18
+    },
+    {
+      "tag": "H2",
+      "cls": "",
+      "text": "Processing time & cost",
+      "x": 864.671875,
+      "y": 1337.8125,
+      "w": 407.828125,
+      "h": 22.5
+    },
+    {
+      "tag": "H2",
+      "cls": "",
+      "text": "Detection accuracy",
+      "x": 44,
+      "y": 1648.8125,
+      "w": 395.875,
+      "h": 22.5
+    }
+  ]
+}

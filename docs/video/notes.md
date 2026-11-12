@@ -95,3 +95,11 @@
 
 ## Wave 16 - product renamed
 - Owner: the product is now "GLDB Anomaly Detection Portal" (title card in section 4, docs). The app header in the captured screens still reads "GLDB Fraud Review".
+
+## Wave 17 - the whole film, with sound
+- Owner: piece the whole film together with voiceover, music and sound effects; show the business value; close as a call to action (B, "Try it on your next case", no contact line); robot guide voice for now; music: the synthwave track (my pick of the two uploads, on measurement: steady 106 BPM, "good" grid; the corporate one drifts).
+- New sections: 9 dashboard (real, story case on top of Needs attention), 10 difference (section 2 bookended: clock barely moves, review complete, the good-news ping), 11 call to action.
+- Guide VO: espeak-ng (installed from the system mirror), one clip per section from public/vo/lines.json, loudness-normalised. Detect and Trace lengthened to fit their lines.
+- Music: synthwave extended by one 12-bar loop on downbeats (public/music/soundtrack.mp3) so its ending lands on the call to action; quiet 0.3 for sections 1-3, 0.5 from the portal, ducked to 55% under the voice.
+- SFX: synthesized (make-sfx.sh plus whoosh, chat, pingbig, key, clock, goodnews), cue table in src/sound.ts, each placed with its measured lead. Not listened to: I cannot hear audio.
+- Compositions: Master (all), Master-NoText, Master-NoVO (music + effects, for the owner's recording), Master-Silent.

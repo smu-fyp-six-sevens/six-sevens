@@ -77,9 +77,45 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
  */
 export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
+/** Section 9, "dashboard". All times in seconds from the start of the section. */
+export const DASHBOARD = {
+  length: 9.5,
+  headlineIn: 0.2,        // "Every case, at a glance."
+  pipelineAt: 0.6,        // the camera pushes in on the case pipeline...
+  riskAt: 1.8,            // ...then the risk overview...
+  attentionAt: 3.0,       // ...then "Needs attention", GLDB-02 on top
+  clickAt: 4.2,           // the cursor drills into GLDB-02
+  riskViewAt: 4.6,        // swipe to its risk summary: "Drill into anything flagged."
+  auditAt: 6.6,           // swipe to its audit trail: "A full audit trail for compliance."
+};
+
+/** Section 10, "difference": the same two people as section 2, after the portal. */
+export const DIFFERENCE = {
+  length: 10,
+  avatarsIn: -0.25,       // already arriving on the first frame
+  line1In: 0.3,           // "What took hours of screening now takes minutes."
+  clockStart: 0.6,        // the clock barely moves...
+  clockEnd: 3.2,
+  doneAt: 3.2,            // the officer's status flips to "Review complete"
+  line2In: 3.6,           // "The AI does the reading, your loan officers make the call,"
+  sendAt: 4.6,            // the answer travels down the line...
+  newsAt: 5.6,            // ...and the good-news ping lands with the customer
+  line3In: 6.2,           // "and customers hear back sooner."
+};
+
+/** Section 11, "cta". */
+export const CTA = {
+  length: 9,
+  leadIn: 0.3,            // "Bring your next loan case."
+  nameIn: 1.2,            // "GLDB Anomaly Detection Portal"
+  buttonIn: 2.6,          // the button pops in...
+  hoverAt: 4.4,           // ...the cursor arrives...
+  pressAt: 5.2,           // ...and presses it
+};
+
 /** Section 6, "detect" (how it works, step 2). All times in seconds from the start of the section. */
 export const DETECT = {
-  length: 12.5,
+  length: 13.5,
   headlineIn: 0.2,        // "Agents investigate every document."
   planIn: 0.15,           // the lead agent's card; its plan types out...
   planEnd: 2.4,           // ...line by line
@@ -91,7 +127,7 @@ export const DETECT = {
 
 /** Section 7, "trace" (how it works, step 2 continued). */
 export const TRACE = {
-  length: 10.5,
+  length: 11,
   headlineIn: 0.2,        // "And it's not a black box."
   line1In: 0.6,           // "The agent trace shows every step..."
   rowsStart: 0.9,         // the trace's rows light up...
@@ -304,7 +340,7 @@ export const s = (seconds: number): number => Math.round(seconds * FPS);
 
 const SCENE_LENGTHS: Record<string, number> =
   HOOK_VERSION === "v3"
-    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length), portal: atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length), upload: atSeconds(UPLOAD.length), detect: atSeconds(DETECT.length), trace: atSeconds(TRACE.length), score: atSeconds(SCORE.length) }
+    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length), portal: atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length), upload: atSeconds(UPLOAD.length), detect: atSeconds(DETECT.length), trace: atSeconds(TRACE.length), score: atSeconds(SCORE.length), dashboard: atSeconds(DASHBOARD.length), difference: atSeconds(DIFFERENCE.length), cta: atSeconds(CTA.length) }
     : HOOK_VERSION === "v2"
     ? { overwhelm: atSeconds(OVERWHELM.length) }
     : { package: atSeconds(HOOK.package.length), tooMany: atSeconds(HOOK.tooMany.length) };

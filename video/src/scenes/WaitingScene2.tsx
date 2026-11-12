@@ -15,8 +15,8 @@ const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 const land = Easing.bezier(0.2, 0.9, 0.1, 1);
 const even = Easing.bezier(0.37, 0, 0.63, 1);
 
-const ROW_Y = 640;
-const AVATAR = 260;
+export const ROW_Y = 640;
+export const AVATAR = 260;
 const CLOCK_R = 150;
 
 const fmtTime = (mins: number) => {
@@ -40,9 +40,9 @@ const Typing: React.FC<{ t: number; p: number }> = ({ t, p }) => (
   </div>
 );
 
-const Person: React.FC<{
-  x: number; p: number; role: "officer" | "customer"; t: number; status: string; dot: string; pulse?: number; typing?: number;
-}> = ({ x, p, role, t, status, dot, pulse, typing }) => {
+export const Person: React.FC<{
+  x: number; p: number; role: "officer" | "customer"; t: number; status: string; dot: string; pulse?: number; typing?: number; happy?: boolean;
+}> = ({ x, p, role, t, status, dot, pulse, typing, happy }) => {
   const r = ROLES[role];
   return (
     <div
@@ -57,7 +57,7 @@ const Person: React.FC<{
         )}
         <div style={{ position: "absolute", inset: 0, borderRadius: "50%", boxShadow: "0 18px 40px rgba(18,32,61,0.16)", border: `5px solid ${r.tint}` }} />
         <div style={{ position: "absolute", inset: 0 }}>
-          <Silhouette role={role} size={AVATAR} tint={r.tint} bg={r.bg} t={t} fidget={T.fidget} />
+          <Silhouette role={role} size={AVATAR} tint={r.tint} bg={r.bg} t={t} fidget={T.fidget} happy={happy} />
         </div>
         {typing !== undefined && typing > 0 && <Typing t={t} p={typing} />}
       </div>
@@ -76,7 +76,7 @@ const Person: React.FC<{
   );
 };
 
-const Clock: React.FC<{ p: number; mins: number }> = ({ p, mins }) => (
+export const Clock: React.FC<{ p: number; mins: number; showTime?: boolean }> = ({ p, mins, showTime = true }) => (
   <div
     style={{
       position: "absolute", left: 960 - CLOCK_R, top: ROW_Y - CLOCK_R, width: CLOCK_R * 2, display: "flex", flexDirection: "column",
@@ -93,9 +93,9 @@ const Clock: React.FC<{ p: number; mins: number }> = ({ p, mins }) => (
       <line x1="0" y1="12" x2="0" y2="-72" stroke={colors.steel} strokeWidth="4.5" strokeLinecap="round" transform={`rotate(${(mins % 60) * 6})`} />
       <circle r="6" fill={colors.amber} />
     </svg>
-    <div style={{ marginTop: 26, fontFamily: fonts.ui, fontSize: 48, fontWeight: 700, color: colors.ink, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+    {showTime && <div style={{ marginTop: 26, fontFamily: fonts.ui, fontSize: 48, fontWeight: 700, color: colors.ink, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
       {fmtTime(mins)}
-    </div>
+    </div>}
   </div>
 );
 
