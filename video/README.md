@@ -30,7 +30,15 @@ and a grin, snickering); on the right, a corporate bank statement zoomed in. A t
 lighter weight, a hair lower, a little wider spaced. Then the statement shrinks into a grid of the case's other
 documents and is impossible to pick out.
 
-Renders: `renders/film-so-far.mp4` (hook + sections 2 and 3, 28.1 s), `renders/03-tamper.mp4` (section 3 alone), `renders/02-waiting.mp4` (section 2 alone), each with a
+**Section 4 "portal", 10.5 s. The real app arrives.** Title "GLDB Fraud Detection Portal", then "Agents read every
+document, and flag what doesn't add up." (A) A scan line sweeps the pile from section 3, ticking each document and
+flagging the doctored statement. (B) The camera pushes into it and cuts to the portal's real Agent trace; its rows
+light up as the lead agent and specialists work (amber where they found something). (C) Cut to the portal's real
+Detection panel for the statement: the forged 812,400.00 boxed in red in the preview, the Flagged badge pulsing, the
+camera pushing in to the HIGH finding "Closing balance 812,400.00 does not reconcile...". The screens are captured from
+`frontend/` on its mock backend by `capture/story.spec.ts`, with a detection report written for the story.
+
+Renders: `renders/film-so-far.mp4` (hook + sections 2-4, 38.6 s), `renders/04-portal.mp4` (section 4 alone), `renders/03-tamper.mp4` (section 3 alone), `renders/02-waiting.mp4` (section 2 alone), each with a
 `-no-text` twin. `renders/hook.mp4` (with headlines), `renders/hook-no-text.mp4` (same shots, no headlines), `renders/hook-poster.png`.
 
 ## Fine-tuning
@@ -41,6 +49,8 @@ npm install
 npm run dev        # Remotion Studio: scrub, preview, edit props live
 ```
 
+- **Timing (section 4):** `PORTAL` in `src/timing.ts`: `scanStart`/`scanEnd`, `pushStart`/`pushEnd`, `traceStart`/`traceEnd`, `detectionAt`, `boxIn`, `zoomStart`/`zoomEnd`, `findingAt`, `line1In`/`line2In`, `length`.
+- **Words (section 4):** `src/data/portal.ts`. The portal's own text is in the screenshots; to change it, change the story report in `capture/story.spec.ts` and re-run the capture (see Where the UI comes from).
 - **Timing (section 3):** `TAMPER` in `src/timing.ts`: `line1In`, `cursorIn`/`cursorAt`, `select`, `erase`, `typeStart`/`typeEnd`, `line2In`, `shrinkStart`/`shrinkEnd`, `length`.
 - **Words and figures (section 3):** `src/data/tamper.ts`: the caption, the statement's rows, and `before`/`after` for the edited balance. The bad actor is drawn in `src/components/Silhouette.tsx`.
 - **Timing (section 2):** `WAITING2` in `src/timing.ts`: `officerLineIn`, `customerLineIn`, `clockStart`/`clockEnd` (how long the hour takes), `pulseEvery`, `fidget`, `length`.
@@ -78,7 +88,7 @@ npx remotion render Scene-Waiting renders/02-waiting.mp4 --color-space=bt709 --c
 npx remotion render Scene-Tamper renders/03-tamper.mp4 --color-space=bt709 --crf=16
 ```
 
-Single scenes for quick checks: `Scene-Tamper` (section 3), `Scene-Waiting` (section 2), `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
+Single scenes for quick checks: `Scene-Portal` (section 4), `Scene-Tamper` (section 3), `Scene-Waiting` (section 2), `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
 
 ## Where the UI comes from (v1)
 
@@ -90,7 +100,8 @@ and measurements to `public/ui/`.
 ```bash
 # from frontend/, after npm ci
 VITE_API_URL=http://api.test npx vite build --outDir dist-capture
-CAPTURE_DIST=dist-capture npx playwright test -c ../video/capture/playwright.config.ts
+CAPTURE_DIST=dist-capture npx playwright test -c ../video/capture/playwright.config.ts            # all captures
+CAPTURE_DIST=dist-capture CAPTURE_OUT=../video/public/ui/story npx playwright test -c ../video/capture/playwright.config.ts story   # section 4's screens
 ```
 
 (`capture/` needs `node_modules` linked to the frontend's: `ln -s ../../frontend/node_modules video/capture/node_modules`.)

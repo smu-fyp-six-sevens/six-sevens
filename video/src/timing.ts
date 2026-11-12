@@ -77,6 +77,25 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
  */
 export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
+/** Section 4, "portal". All times in seconds from the start of the section. */
+export const PORTAL = {
+  length: 10.5,           // whole section
+  titleIn: 0.2,           // "GLDB Fraud Detection Portal"
+  scanStart: 0.5,         // a scan line sweeps the pile, checking each document...
+  scanEnd: 1.9,           // ...and flags the doctored statement as it passes
+  pushStart: 2.2,         // the camera pushes into the flagged statement...
+  pushEnd: 2.7,           // ...and cuts to the agent trace
+  line1In: 2.6,           // "Agents read every document,"
+  traceStart: 3.1,        // the trace's rows light up one by one...
+  traceEnd: 5.3,          // ...through the lead agent and the specialists
+  detectionAt: 5.8,       // cut to the document's Detection panel
+  line2In: 6.1,           // "and flag what doesn't add up."
+  boxIn: 6.5,             // a red box lands on the forged figure in the preview
+  zoomStart: 7.2,         // the camera pushes to the Detection panel...
+  zoomEnd: 8.4,
+  findingAt: 8.6,         // ...and the top finding is highlighted
+};
+
 /** Section 3, "tamper". All times in seconds from the start of the section. */
 export const TAMPER = {
   length: 9.5,            // whole section
@@ -193,7 +212,7 @@ export const s = (seconds: number): number => Math.round(seconds * FPS);
 
 const SCENE_LENGTHS: Record<string, number> =
   HOOK_VERSION === "v3"
-    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length) }
+    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length), portal: atSeconds(PORTAL.length) }
     : HOOK_VERSION === "v2"
     ? { overwhelm: atSeconds(OVERWHELM.length) }
     : { package: atSeconds(HOOK.package.length), tooMany: atSeconds(HOOK.tooMany.length) };

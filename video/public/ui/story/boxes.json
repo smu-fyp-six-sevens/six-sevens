@@ -1,0 +1,151 @@
+{
+  "viewport": {
+    "w": 1440,
+    "h": 900
+  },
+  "dpr": 3,
+  "detection": {
+    "panel": [
+      {
+        "text": "FlaggedThe closing balance does not match the statement's own transactions, and ",
+        "x": 797.5,
+        "y": 549.421875,
+        "w": 576.5,
+        "h": 89.875
+      }
+    ],
+    "label": [
+      {
+        "text": "Flagged",
+        "x": 797.5,
+        "y": 549.421875,
+        "w": 67.140625,
+        "h": 22
+      }
+    ],
+    "summary": [
+      {
+        "text": "The closing balance does not match the statement's own transactions, and that on",
+        "x": 876.640625,
+        "y": 549.421875,
+        "w": 497.359375,
+        "h": 89.875
+      }
+    ],
+    "findings": [
+      {
+        "text": "highClosing balance 812,400.00 does not reconcile: the opening balance plus the ",
+        "x": 797.5,
+        "y": 692.296875,
+        "w": 576.5,
+        "h": 98.75
+      },
+      {
+        "text": "mediumFont deviation on the closing balance: font 'Helvetica' vs. expected 'Helv",
+        "x": 797.5,
+        "y": 791.046875,
+        "w": 576.5,
+        "h": 109.75
+      },
+      {
+        "text": "mediumproducer: a PDF editor can change existing content, and a bank statement s",
+        "x": 797.5,
+        "y": 900.796875,
+        "w": 576.5,
+        "h": 109.75
+      }
+    ],
+    "page": {
+      "w": 1433,
+      "h": 2293
+    }
+  },
+  "trace": {
+    "rows": [
+      {
+        "text": "◆Fraud detection⚠ 14.7k tokens · $0.00737.00s",
+        "x": 153,
+        "y": 123.453125,
+        "w": 524.1875,
+        "h": 38
+      },
+      {
+        "text": "Detection started",
+        "x": 213,
+        "y": 161.453125,
+        "w": 464.1875,
+        "h": 38
+      },
+      {
+        "text": "◇Lead agent4.0k tokens · $0.00612.50s",
+        "x": 213,
+        "y": 199.453125,
+        "w": 464.1875,
+        "h": 38
+      },
+      {
+        "text": "✦Plan4.0k tokens · $0.00612.40s",
+        "x": 243,
+        "y": 237.453125,
+        "w": 434.1875,
+        "h": 38
+      },
+      {
+        "text": "Investigation planbriefs for 2 specialists100 ms",
+        "x": 243,
+        "y": 275.453125,
+        "w": 434.1875,
+        "h": 38
+      },
+      {
+        "text": "◇Specialists700 tokens · $0.00123.50s",
+        "x": 213,
+        "y": 313.453125,
+        "w": 464.1875,
+        "h": 38
+      },
+      {
+        "text": "◉Layout specialist700 tokens · $0.00123.50s",
+        "x": 243,
+        "y": 351.453125,
+        "w": 434.1875,
+        "h": 38
+      },
+      {
+        "text": "⚒Font consistency check1 finding(s)800 ms",
+        "x": 273,
+        "y": 389.453125,
+        "w": 404.1875,
+        "h": 38
+      },
+      {
+        "text": "✦Layout⚠ 1700 tokens · $0.00121.50s",
+        "x": 273,
+        "y": 427.453125,
+        "w": 404.1875,
+        "h": 38
+      },
+      {
+        "text": "Specialist finished1 finding(s) · tools: Font consistency check100 ms",
+        "x": 273,
+        "y": 465.453125,
+        "w": 404.1875,
+        "h": 38
+      },
+      {
+        "text": "◉Authenticity specialist2.00s",
+        "x": 243,
+        "y": 503.453125,
+        "w": 434.1875,
+        "h": 38
+      },
+      {
+        "text": "Run audit2/12 model calls · 1 repaired output(s)800 ms",
+        "x": 213,
+        "y": 541.453125,
+        "w": 464.1875,
+        "h": 38
+      }
+    ]
+  }
+}

@@ -8,7 +8,7 @@ const DIST = process.env.CAPTURE_DIST ?? 'dist-capture';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: /(capture|product)\.spec\.ts/,
+  testMatch: /(capture|product|story)\.spec\.ts/,
   workers: 1,
   reporter: [['list']],
   use: {

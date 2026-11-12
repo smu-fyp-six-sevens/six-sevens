@@ -35,6 +35,12 @@ One case is too much paper for one person to read; the portal reads all of it, a
 - Visual: split screen. Left: Bad Actor silhouette (horns, tail, scheming eyes, grin). Right: corporate bank statement, zoomed; cursor selects the closing balance 182,400.00 and types 812,400.00 (digits swapped) with tiny tells (lighter weight, a hair low, wider spacing). Then the statement shrinks into an 18-document grid and blends in.
 - On-screen copy (owner chose the tidied line): **Even worse, when bad actors are involved, / smaller anomalies are even harder to catch.**
 
+**Section 4 · after section 3 · 0:10.5 · portal (the product arrives).**
+- Visual: (A) scan line over the pile; checks on each document; the doctored statement flagged. (B) push in, cut to the real Agent trace; rows light up (amber where a finding was made). (C) the real Detection panel for the statement: the forged figure boxed in the preview, Flagged badge pulse, push to the HIGH finding.
+- On-screen copy: **GLDB Fraud Detection Portal** / **Agents read every document, and flag what doesn't add up.** (owner: capture what's important, not the whole line).
+- Data: the portal's real UI on its mock backend; the detection report is written for the story (BS.TOTALS high, font weight medium, PDF editor medium), in the backend's real report shape. File names on screen are invented.
+- The app's header reads "GLDB Fraud Review"; the film names the product "GLDB Fraud Detection Portal" (owner's call).
+
 ## Assumptions (veto any)
 0. v2: people, teams and filenames are invented; documents are schematic (grey bars, made-up figures). The company name Anchorpoint Insurance Brokers comes from the test fixture.
 1. On-screen headlines included by default; `Master-NoText` has none.

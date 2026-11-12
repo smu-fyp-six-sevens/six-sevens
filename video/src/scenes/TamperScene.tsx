@@ -18,17 +18,17 @@ const land = Easing.bezier(0.2, 0.9, 0.1, 1);
 const even = Easing.bezier(0.37, 0, 0.63, 1);
 
 // ---- The statement, at the same size and chrome as the hook's PDF windows (440 x 560). ----
-const W = 440;
-const H = 560;
+export const W = 440;
+export const H = 560;
 const PAGE_X = 22 + 24; // window padding + page padding
-const PAGE_R = W - 22 - 24; // right edge of the page's content
+export const PAGE_R = W - 22 - 24; // right edge of the page's content
 const ROWS_TOP = 174;
 const ROW_H = 22;
-const CLOSE_Y = ROWS_TOP + STATEMENT.rows.length * ROW_H + 6; // top of the closing balance row
-const CLOSE_H = 30;
-const FIGURE_W = 78; // width of the closing figure, for the selection
+export const CLOSE_Y = ROWS_TOP + STATEMENT.rows.length * ROW_H + 6; // top of the closing balance row
+export const CLOSE_H = 30;
+export const FIGURE_W = 78; // width of the closing figure, for the selection
 
-const Statement: React.FC<{ figure: React.ReactNode; selection: number; caret: { x: number; on: boolean } | null }> = ({ figure, selection, caret }) => (
+export const Statement: React.FC<{ figure: React.ReactNode; selection: number; caret: { x: number; on: boolean } | null }> = ({ figure, selection, caret }) => (
   <div style={{ position: "relative", width: W, height: H, borderRadius: 10, overflow: "hidden", background: "#eceae6", border: "1px solid rgba(18,32,61,0.10)", boxShadow: "0 18px 40px rgba(18,32,61,0.18)", fontFamily: fonts.ui }}>
     <div style={{ height: 34, display: "flex", alignItems: "center", gap: 8, padding: "0 12px", background: "#f6f5f2", borderBottom: `1px solid ${colors.line}` }}>
       <div style={{ width: 18, height: 18, borderRadius: 3, background: colors.red, color: "#fff", fontSize: 6.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>PDF</div>
@@ -70,14 +70,22 @@ const FOCUS = { x: W / 2, y: (72 + CLOSE_Y + CLOSE_H) / 2 }; // the statement po
 const PANEL_C = { x: RIGHT.x + RIGHT.w / 2, y: (PANEL.top + PANEL.bottom) / 2 };
 
 // The pile: 6 x 3 thumbnails; the doctored statement lands in slot 8.
-const COLS = 6;
-const ROWS = 3;
-const THUMB = 0.41;
+export const COLS = 6;
+export const ROWS = 3;
+export const THUMB = 0.41;
 const PITCH = 250;
 const GRID_X = (1920 - (COLS - 1) * PITCH - W * THUMB) / 2;
 const GRID_Y = 290;
-const SLOT = 8;
-const slotXY = (i: number) => ({ x: GRID_X + (i % COLS) * PITCH, y: GRID_Y + Math.floor(i / COLS) * PITCH });
+export const SLOT = 8;
+/** Which of the hook's documents sits in grid slot i. */
+export const pileDoc = (i: number) => DOCS[(i * 5 + 3) % DOCS.length];
+/** The edited figure, with its tells: a touch lighter, a hair low, a little wider spaced. */
+export const ForgedFigure: React.FC<{ chars?: number }> = ({ chars }) => (
+  <span style={{ fontWeight: 600, transform: "translateY(0.6px)", letterSpacing: "0.02em", display: "inline-block" }}>
+    {chars === undefined ? STATEMENT.after : STATEMENT.after.slice(STATEMENT.after.length - chars)}
+  </span>
+);
+export const slotXY = (i: number) => ({ x: GRID_X + (i % COLS) * PITCH, y: GRID_Y + Math.floor(i / COLS) * PITCH });
 
 export const TamperScene: React.FC<{ showText?: boolean }> = ({ showText = true }) => {
   const frame = useCurrentFrame();
@@ -97,7 +105,7 @@ export const TamperScene: React.FC<{ showText?: boolean }> = ({ showText = true 
   // The forgery's tells: a touch lighter, a hair low, a little wider spaced.
   const figure = frame < s(T.erase)
     ? <span style={{ fontWeight: 700 }}>{STATEMENT.before}</span>
-    : <span style={{ fontWeight: 600, transform: "translateY(0.6px)", letterSpacing: "0.02em", display: "inline-block" }}>{STATEMENT.after.slice(STATEMENT.after.length - typed)}</span>;
+    : <ForgedFigure chars={typed} />;
 
   // The shrink into the pile.
   const q = interpolate(frame, [s(T.shrinkStart), s(T.shrinkEnd)], [0, 1], { ...clamp, easing: Easing.bezier(0.6, 0, 0.2, 1) });
@@ -127,7 +135,7 @@ export const TamperScene: React.FC<{ showText?: boolean }> = ({ showText = true 
         {/* The pile the statement disappears into */}
         {Array.from({ length: COLS * ROWS }, (_, i) => {
           if (i === SLOT) return null;
-          const d = DOCS[(i * 5 + 3) % DOCS.length];
+          const d = pileDoc(i);
           const at = s(T.shrinkStart) + s(0.15) + Math.abs(i - SLOT) * s(T.pileStagger);
           const p = land(interpolate(frame, [at, at + 12], [0, 1], clamp));
           if (p <= 0) return null;

@@ -54,3 +54,9 @@
 - Owner's picks: bank statement closing balance (182,400.00 -> 812,400.00); end "lost in the pile"; caption tidied.
 - Decision: the forgery's tells match the product's later checks (fonts, alignment, totals) so the film can pay them off when the product appears.
 - Measured: stills at frames 0, 70, 105, 125, 175, 210, 280: statement readable at 2.1x, no clipping, the doctored statement lands in slot 8 of the grid. Not watched in motion.
+
+## Wave 10 - section 4, "portal"
+- Owner: tailor the portal's data to the story; name it GLDB Fraud Detection Portal; caption only what's important.
+- Captured the real frontend at 3x on its mock backend (capture/story.spec.ts) with a story detection report, plus element boxes (public/ui/story/boxes.json) for the overlays.
+- Decision: the empty document preview in the capture is filled with the film's statement, boxed at the forged figure.
+- Measured: stills at frames 0, 40, 62, 76, 100, 145, 185, 215, 260, 290, 300: overlays sit on their rows and badge; no clipping. Not watched in motion. The title sits over the pile during the 0.5 s push.
