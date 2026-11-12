@@ -7,6 +7,7 @@
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { ProductHeader } from "../components/ProductHeader";
 import { shotSwipe } from "../components/swipe";
+import { cameraAt } from "../components/keys";
 import { CATCHES, CHECKS, DETECT_COPY, PLAN } from "../data/howitworks";
 import { colors, fonts } from "../theme";
 import { DETECT as T, FPS, s } from "../timing";
@@ -53,11 +54,23 @@ export const DetectScene: React.FC<{ showText?: boolean }> = ({ showText = true 
   const hlB = land(interpolate(t, [T.addressAt + 0.8, T.addressAt + 1.05], [0, 1], clamp));
   const neq = land(interpolate(t, [T.addressAt + 1.1, T.addressAt + 1.35], [0, 1], { ...clamp, easing: pop }));
 
+  // The camera: close on the plan, out as the checks branch, in on each catch, out to show both.
+  const cam = cameraAt(t, [
+    [0, 1.45, WIN.w / 2, LEAD.y + LEAD.h / 2],
+    [T.specialistsIn - 0.1, 1.45, WIN.w / 2, LEAD.y + LEAD.h / 2],
+    [T.specialistsIn + 0.9, 1.0, WIN.w / 2, WIN.h / 2],
+    [T.catchAt, 1.0, WIN.w / 2, WIN.h / 2],
+    [T.catchAt + 0.9, 1.18, 410, 395],
+    [T.addressAt + 0.2, 1.18, 410, 395],
+    [T.addressAt + 0.9, 1.18, 1190, 395],
+    [T.addressAt + 2.4, 1.18, 1190, 395],
+    [T.addressAt + 3.4, 1.0, WIN.w / 2, WIN.h / 2],
+  ]);
   let left = typed;
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
-      <Window enter={1} swipe={shotSwipe(t, 0, T.length) ?? 0} tilt={{ rx: 4 + Math.sin(t / 3) * 0.6, ry: -3 + Math.sin(t / 4) * 1.2 }}>
-        <AbsoluteFill style={{ background: "#f3f2ef", fontFamily: fonts.ui }}>
+      <Window enter={1} swipe={shotSwipe(t, 0, T.length) ?? 0}>
+        <AbsoluteFill style={{ background: "#f3f2ef", fontFamily: fonts.ui, transformOrigin: "0 0", transform: `translate(${WIN.w / 2 - cam.x * cam.zoom}px, ${WIN.h / 2 - cam.y * cam.zoom}px) scale(${cam.zoom})` }}>
           {/* A + B: the plan and the checks */}
           {away < 1 && (
             <AbsoluteFill style={{ opacity: 1 - away, transform: `translateY(${-50 * away}px)` }}>

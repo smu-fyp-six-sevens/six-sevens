@@ -9,6 +9,7 @@ import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame } f
 import { Pointer } from "../components/Pointer";
 import { ProductHeader } from "../components/ProductHeader";
 import { shotSwipe, SWIPE } from "../components/swipe";
+import { cameraAt } from "../components/keys";
 import boxes from "../../public/ui/story/story2-risk.json";
 import { ADDITIONAL_BOXES, SCORE_COPY, SCREENS_STORY2 } from "../data/howitworks";
 import { colors, fonts } from "../theme";
@@ -52,6 +53,22 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
   const swipeReview = shotSwipe(t, T.openAt + 0.25, T.addAt + SWIPE);
   const swipeAdd = shotSwipe(t, T.addAt, T.length);
   const nowP = land(interpolate(t, [T.nowAt, T.nowAt + 0.4], [0, 1], clamp));
+  // In on the gauge, out to the documents to review.
+  const riskCam = cameraAt(t, [
+    [0, 1.0, 720, 420],
+    [T.gaugeAt - 0.3, 1.0, 720, 420],
+    [T.gaugeAt + 0.5, 1.7, 330, 300],
+    [T.docsAt - 0.1, 1.7, 330, 300],
+    [T.docsAt + 0.7, 1.12, 740, 560],
+  ]);
+  // In on the score line, then out along the recommendations.
+  const addCam = cameraAt(t, [
+    [T.addAt, 1.0, 720, 420],
+    [T.nowAt - 0.1, 1.0, 720, 420],
+    [T.nowAt + 0.5, 1.8, 420, 284],
+    [T.recsStart - 0.1, 1.8, 420, 284],
+    [T.recsStart + 0.8, 1.15, 740, 470],
+  ]);
 
   // A
   const ring = land(interpolate(t, [T.gaugeAt, T.gaugeAt + 0.4], [0, 1], clamp));
@@ -79,8 +96,8 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
       {swipeRisk !== null && (
-        <Window enter={1} swipe={swipeRisk} tilt={{ rx: 6, ry: 5 }}>
-          <Screen {...SCREENS_STORY2.risk} zoom={1.05} focus={{ x: 720, y: 400 }}>
+        <Window enter={1} swipe={swipeRisk}>
+          <Screen {...SCREENS_STORY2.risk} zoom={riskCam.zoom} focus={{ x: riskCam.x, y: riskCam.y }}>
             {ring > 0 && <div style={{ position: "absolute", left: GAUGE.x - GAUGE.r, top: GAUGE.y - GAUGE.r, width: GAUGE.r * 2, height: GAUGE.r * 2, borderRadius: "50%", border: `4px solid ${colors.red}`, opacity: ring, transform: `scale(${1.3 - 0.3 * ring})` }} />}
             {DOCS.map((d, i) => {
               const p = land(interpolate(t, [T.docsAt + 0.3 * i, T.docsAt + 0.3 * i + 0.3], [0, 1], clamp));
@@ -91,7 +108,7 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
         </Window>
       )}
       {swipeReview !== null && (
-        <Window enter={1} swipe={swipeReview} tilt={{ rx: 2, ry: -2 }}>
+        <Window enter={1} swipe={swipeReview}>
           <Screen {...SCREENS_STORY2.review} zoom={zoom} focus={focus}>
             {dismissed > 0 && <Img src={staticFile(SCREENS_STORY2.dismissed.src)} style={{ position: "absolute", left: 0, top: 0, width: 1440, height: 900, opacity: dismissed }} />}
             {/* the statement on the review's page, the forged figure boxed: the "where" */}
@@ -113,8 +130,8 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
         </Window>
       )}
       {swipeAdd !== null && (
-        <Window enter={1} swipe={swipeAdd} tilt={{ rx: 5, ry: -5 }}>
-          <Screen {...SCREENS_STORY2.additional} zoom={1.12} focus={{ x: 760, y: 420 }}>
+        <Window enter={1} swipe={swipeAdd}>
+          <Screen {...SCREENS_STORY2.additional} zoom={addCam.zoom} focus={{ x: addCam.x, y: addCam.y }}>
             <Tag {...ADDITIONAL_BOXES.now} label="Risk if the documents support the client" p={nowP} tone={colors.steel} />
             {ADDITIONAL_BOXES.items.map((b, i) => {
               const p = land(interpolate(t, [T.recsStart + 0.45 * i, T.recsStart + 0.45 * i + 0.3], [0, 1], clamp));

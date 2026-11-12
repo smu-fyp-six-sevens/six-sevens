@@ -11,6 +11,7 @@ import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { Pointer } from "../components/Pointer";
 import { ProductHeader } from "../components/ProductHeader";
 import { shotSwipe, SWIPE } from "../components/swipe";
+import { cameraAt } from "../components/keys";
 import { BOX, UploadBox } from "../components/UploadBox";
 import { DEC_STATEMENT, PACKAGE, SCAN_FIELDS, SCREENS_HOW, UPLOAD_COPY } from "../data/upload";
 import { colors, fonts } from "../theme";
@@ -238,7 +239,13 @@ export const UploadScene: React.FC<{ showText?: boolean }> = ({ showText = true 
   const pointerOn = t >= T.dragStart && t < T.tableAt;
   const cam = camera(frame);
   const tableIn = t >= T.clickAt + 0.15;
-  const scanZoom = interpolate(t, [T.scanAt, T.length], [1.0, 1.1], clamp);
+  const scanCam = cameraAt(t, [
+    [T.scanAt, 1.0, 740, 560],
+    [T.beamStart, 1.45, 430, 520],
+    [T.beamStart + 1.0, 1.45, 430, 520],
+    [T.beamEnd - 0.3, 1.45, 1085, 640],
+    [T.length - 0.4, 1.1, 760, 600],
+  ]);
 
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
@@ -262,7 +269,7 @@ export const UploadScene: React.FC<{ showText?: boolean }> = ({ showText = true 
       )}
       {swipeScan !== null && (
         <Window enter={1} swipe={swipeScan}>
-          <Screen {...SCREENS_HOW.scan} zoom={scanZoom} focus={{ x: 740, y: 560 }}>
+          <Screen {...SCREENS_HOW.scan} zoom={scanCam.zoom} focus={{ x: scanCam.x, y: scanCam.y }}>
             <Scan f={frame} />
           </Screen>
         </Window>

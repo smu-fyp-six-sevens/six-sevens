@@ -86,3 +86,9 @@
 - One transition for sections 5-8 (swipe.ts): overlapping swipe between shots and at stage boundaries; tracker animates the step change; headlines lift away at a section's end.
 - Captured Additional Documents with a story recommendation set (two that would lower the score, one checklist request). Score is 16 s.
 - Measured: stills of the tags, the recommendations, and frames either side of each stage boundary. Not watched in motion.
+
+## Wave 15 - flat screens, zooms (sections 5-8)
+- Owner: no angled screens from Upload to Score (not value adding); zooms in and out are welcome.
+- Decision: removed every tilt and sway in sections 5-8; the swipe slides flat. Added camera paths (keys.ts): Detect close on the plan, out to the checks, in on each catch, out; Upload's scan in on the page then the fields; the audit trail zooms in along its entries; Score in on the gauge, out to the documents, in on the score line in Additional Documents.
+- Sections 1-4 keep their angles (the owner asked for angles in section 4).
+- Measured: stills of each zoom. Not watched in motion.

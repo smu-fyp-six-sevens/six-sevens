@@ -69,8 +69,9 @@ Documents section: "And it recommends the documents that would settle it." The s
 20 Low) is boxed, then each recommended document lights up (a bank-certified January statement, proof of the
 registered address, a purchase order for the December supplier payment).
 
-**Between screens and between stages (sections 5-8)** there is one move: the outgoing window swipes off to the left,
-turning a little in 3D, as the next swipes in from the right (`src/components/swipe.ts`, `SWIPE` seconds). The step
+**Between screens and between stages (sections 5-8)** there is one move: the outgoing window slides off to the left as
+the next slides in from the right, flat (`src/components/swipe.ts`, `SWIPE` seconds). Within a screen the camera zooms
+in and out on what matters (`src/components/keys.ts`; each scene's path is a list of [time, zoom, x, y] keys). The step
 tracker animates from one step to the next, and each section's headline lifts away at its end.
 
 Sections 6-8 use the portal on its mock backend with the story's risk, review and audit events

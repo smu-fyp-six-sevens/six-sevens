@@ -46,7 +46,7 @@ export const TraceScene: React.FC<{ showText?: boolean }> = ({ showText = true }
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
       {swipeA !== null && (
-        <Window enter={1} swipe={swipeA} tilt={{ rx: 5, ry: 8 - 6 * push }}>
+        <Window enter={1} swipe={swipeA}>
           <Screen {...SCREENS_STORY2.trace} zoom={lerp(push, 1, 1.32)} focus={{ x: lerp(push, 600, 1060), y: lerp(push, 353, 430) }}>
             {opened > 0 && <Img src={staticFile(SCREENS_STORY2.traceTool.src)} style={{ position: "absolute", left: 0, top: 0, width: 1440, height: 900, opacity: opened }} />}
             {opened < 1 && <Trace frame={frame} start={T.rowsStart} end={T.rowsEnd} />}
@@ -58,8 +58,8 @@ export const TraceScene: React.FC<{ showText?: boolean }> = ({ showText = true }
         </Window>
       )}
       {swipeB !== null && (
-        <Window enter={1} swipe={swipeB} tilt={{ rx: 5, ry: -6 }}>
-          <Screen {...SCREENS_STORY2.audit} zoom={1.08} focus={{ x: 760, y: lerp(pan, 420, 560) }}>
+        <Window enter={1} swipe={swipeB}>
+          <Screen {...SCREENS_STORY2.audit} zoom={lerp(pan, 1.0, 1.35)} focus={{ x: lerp(pan, 720, 640), y: lerp(pan, 420, 640) }}>
             {entries.map((e, i) => {
               if (i > u) return null;
               const live = i === Math.floor(u) && u < entries.length;
