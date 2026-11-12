@@ -4,6 +4,8 @@
 // detection report written for the film's story. "\n" is a line break you chose.
 
 export const PORTAL_COPY = {
+  /** v2: the plain-text lead-in, centred, before the name. */
+  intro: "So that's why we introduce...",
   title: "GLDB Fraud Detection Portal",
   line1: "Agents read every document,",
   line2: "and flag what doesn't add up.",
@@ -15,4 +17,5 @@ export const PORTAL_COPY = {
 export const SCREENS = {
   trace: { src: "ui/story/trace.png", w: 1440, h: 900 },
   detection: { src: "ui/story/detection-top.png", w: 1440, h: 1100 },
+  summary: { src: "ui/story/case-summary.png", w: 1440, h: 900 },
 };

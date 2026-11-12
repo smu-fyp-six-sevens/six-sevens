@@ -101,13 +101,15 @@ export interface UploadBoxProps {
   u: number;
   /** Box width in film px. */
   width: number;
+  /** The "Upload supporting documents" heading above the box (default true). */
+  heading?: boolean;
 }
 
-export const UploadBox: React.FC<UploadBoxProps> = ({ files, progress, fresh, u, width }) => {
+export const UploadBox: React.FC<UploadBoxProps> = ({ files, progress, fresh, u, width, heading = true }) => {
   const count = progress.filter((p) => p >= 0.5).length;
   return (
     <div style={{ width, fontFamily: fonts.ui, color: colors.ink }}>
-      <div
+      {heading && <div
         style={{
           height: BOX.headingH * u,
           fontSize: 18 * u,
@@ -117,7 +119,7 @@ export const UploadBox: React.FC<UploadBoxProps> = ({ files, progress, fresh, u,
         }}
       >
         {UI.sectionTitle}
-      </div>
+      </div>}
       <div
         style={{
           background: colors.boxBg,

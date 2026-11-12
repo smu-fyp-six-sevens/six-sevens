@@ -6,12 +6,13 @@ import { BuriedScene } from "./scenes/BuriedScene";
 import { OverwhelmScene } from "./scenes/OverwhelmScene";
 import { PackageScene } from "./scenes/PackageScene";
 import { PortalScene } from "./scenes/PortalScene";
+import { PortalScene2 } from "./scenes/PortalScene2";
 import { TamperScene } from "./scenes/TamperScene";
 import { TooManyScene } from "./scenes/TooManyScene";
 import { WaitingScene } from "./scenes/WaitingScene";
 import { WaitingScene2 } from "./scenes/WaitingScene2";
 import { colors } from "./theme";
-import { HOOK, HOOK_VERSION, OVERWHELM, OVERWHELM3, PORTAL, TAMPER, WAITING, WAITING2, WAITING_VERSION, atSeconds } from "./timing";
+import { HOOK, HOOK_VERSION, OVERWHELM, OVERWHELM3, PORTAL, PORTAL2, PORTAL_VERSION, TAMPER, WAITING, WAITING2, WAITING_VERSION, atSeconds } from "./timing";
 
 export const Master: React.FC<{ showText?: boolean }> = ({ showText = true }) => (
   <AbsoluteFill style={{ background: colors.paper }}>
@@ -35,8 +36,8 @@ export const Master: React.FC<{ showText?: boolean }> = ({ showText = true }) =>
           <TamperScene showText={showText} />
         </Sequence>
         {/* Section 4 */}
-        <Sequence from={atSeconds(OVERWHELM3.length) + atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length) + atSeconds(TAMPER.length)} durationInFrames={atSeconds(PORTAL.length)}>
-          <PortalScene showText={showText} />
+        <Sequence from={atSeconds(OVERWHELM3.length) + atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length) + atSeconds(TAMPER.length)} durationInFrames={atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length)}>
+          {PORTAL_VERSION === "v2" ? <PortalScene2 showText={showText} /> : <PortalScene showText={showText} />}
         </Sequence>
       </>
     ) : HOOK_VERSION === "v2" ? (

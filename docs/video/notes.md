@@ -60,3 +60,8 @@
 - Captured the real frontend at 3x on its mock backend (capture/story.spec.ts) with a story detection report, plus element boxes (public/ui/story/boxes.json) for the overlays.
 - Decision: the empty document preview in the capture is filled with the film's statement, boxed at the forged figure.
 - Measured: stills at frames 0, 40, 62, 76, 100, 145, 185, 215, 260, 290, 300: overlays sit on their rows and badge; no clipping. Not watched in motion. The title sits over the pile during the 0.5 s push.
+
+## Wave 11 - section 4 v2: a pronounced introduction, angles
+- Owner: make the introduction more pronounced ("So that's why we introduce..." then the name, centred), more angles, less flat.
+- Built PortalScene2: lead-in and name centred (the lead-in shows even without captions, it is the introduction), name glides to the top band; Case Summary rises tilted, the trace swings in from the right, detection from the left and flattens for the readable finding. Gentle sways keep angled shots alive. v1 kept behind PORTAL_VERSION.
+- Measured: stills at frames 30, 75, 108, 125, 150, 200, 230, 275, 300, 350: no clipping of text; the final finding is flat and legible. Not watched in motion.

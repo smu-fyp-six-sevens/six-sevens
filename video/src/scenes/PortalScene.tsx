@@ -80,40 +80,46 @@ const Pile: React.FC<{ frame: number }> = ({ frame }) => {
 };
 
 // ---- B and C: the real portal in a window ---------------------------------------------------
-const WIN = { x: 160, y: 250, w: 1600, h: 785 };
+export const WIN = { x: 160, y: 250, w: 1600, h: 785 };
 const K0 = WIN.w / 1440; // CSS px to film px at zoom 1
 
 /** The portal screen at a zoom, holding CSS point `focus` at the window's centre (clamped to the screen's edges). */
-const Screen: React.FC<{ src: string; w: number; h: number; zoom: number; focus: { x: number; y: number }; children?: React.ReactNode }> = ({ src, w, h, zoom, focus, children }) => {
+export const Screen: React.FC<{ src: string; w: number; h: number; zoom: number; focus: { x: number; y: number }; children?: React.ReactNode; imgH?: number }> = ({ src, w, h, zoom, focus, children, imgH }) => {
   const k = K0 * zoom;
   const tx = Math.min(0, Math.max(WIN.w - w * k, WIN.w / 2 - k * focus.x));
   const ty = Math.min(0, Math.max(WIN.h - h * k, WIN.h / 2 - k * focus.y));
   return (
-    <div style={{ position: "absolute", left: 0, top: 0, width: w, height: h, transformOrigin: "0 0", transform: `translate(${tx}px, ${ty}px) scale(${k})` }}>
-      <Img src={staticFile(src)} style={{ width: w, height: h, display: "block" }} />
+    <div style={{ position: "absolute", left: 0, top: 0, width: w, height: h, background: colors.paper, transformOrigin: "0 0", transform: `translate(${tx}px, ${ty}px) scale(${k})` }}>
+      <Img src={staticFile(src)} style={{ width: w, height: imgH ?? h, display: "block" }} />
       {children}
     </div>
   );
 };
 
-const Window: React.FC<{ enter: number; children: React.ReactNode }> = ({ enter, children }) => (
-  <div
-    style={{
-      position: "absolute", left: WIN.x, top: WIN.y, width: WIN.w, height: WIN.h, borderRadius: 18, overflow: "hidden",
-      background: colors.white, border: "1px solid rgba(18,32,61,0.12)", boxShadow: "0 30px 70px rgba(18,32,61,0.18)",
-      transform: `scale(${1.05 - 0.05 * enter})`, filter: enter < 1 ? `blur(${(1 - enter) * 3}px)` : undefined,
-    }}
-  >
-    {children}
-  </div>
+/** A tilt in degrees (x: top away from the viewer, y: right side away), and an offset in px. */
+export type Tilt = { rx?: number; ry?: number; rz?: number; dx?: number; dy?: number; scale?: number };
+
+export const Window: React.FC<{ enter: number; children: React.ReactNode; tilt?: Tilt; opacity?: number }> = ({ enter, children, tilt, opacity = 1 }) => (
+  <AbsoluteFill style={{ perspective: 2400, perspectiveOrigin: `${WIN.x + WIN.w / 2}px ${WIN.y + WIN.h / 2}px`, opacity }}>
+    <div
+      style={{
+        position: "absolute", left: WIN.x, top: WIN.y, width: WIN.w, height: WIN.h, borderRadius: 18, overflow: "hidden",
+        background: colors.white, border: "1px solid rgba(18,32,61,0.12)", boxShadow: "0 40px 90px rgba(18,32,61,0.22)",
+        transform: `translate(${tilt?.dx ?? 0}px, ${tilt?.dy ?? 0}px) rotateX(${tilt?.rx ?? 0}deg) rotateY(${tilt?.ry ?? 0}deg) rotateZ(${tilt?.rz ?? 0}deg) scale(${(tilt?.scale ?? 1) * (1.05 - 0.05 * enter)})`,
+        filter: enter < 1 ? `blur(${(1 - enter) * 3}px)` : undefined,
+      }}
+    >
+      {children}
+    </div>
+  </AbsoluteFill>
 );
 
 const TRACE_ROWS = boxes.trace.rows;
 /** Rows where the agents found something: they keep an amber tint. */
 const FOUND = TRACE_ROWS.map((r) => /finding\(s\)|⚠/.test(r.text) && !/Specialist finished|Fraud detection/.test(r.text));
 
-const Trace: React.FC<{ frame: number }> = ({ frame }) => {
-  const u = interpolate(frame, [s(T.traceStart), s(T.traceEnd)], [0, TRACE_ROWS.length], clamp);
+export const Trace: React.FC<{ frame: number; start?: number; end?: number }> = ({ frame, start = T.traceStart, end = T.traceEnd }) => {
+  const u = interpolate(frame, [s(start), s(end)], [0, TRACE_ROWS.length], clamp);
   const current = Math.floor(u);
   return (
     <>
@@ -133,10 +139,10 @@ const Trace: React.FC<{ frame: number }> = ({ frame }) => {
 const PREVIEW = { x: 118, y: 236, w: 627, h: 745 };
 const PREVIEW_K = Math.min(PREVIEW.w / W, PREVIEW.h / H);
 
-const Detection: React.FC<{ frame: number }> = ({ frame }) => {
-  const box = land(interpolate(frame, [s(T.boxIn), s(T.boxIn) + 10], [0, 1], clamp));
-  const ring = interpolate(frame, [s(T.boxIn) + 6, s(T.boxIn) + 30], [0, 1], clamp);
-  const sweep = interpolate(frame, [s(T.findingAt), s(T.findingAt) + 14], [0, 1], { ...clamp, easing: even });
+export const Detection: React.FC<{ frame: number; boxIn?: number; findingAt?: number }> = ({ frame, boxIn = T.boxIn, findingAt = T.findingAt }) => {
+  const box = land(interpolate(frame, [s(boxIn), s(boxIn) + 10], [0, 1], clamp));
+  const ring = interpolate(frame, [s(boxIn) + 6, s(boxIn) + 30], [0, 1], clamp);
+  const sweep = interpolate(frame, [s(findingAt), s(findingAt) + 14], [0, 1], { ...clamp, easing: even });
   const label = boxes.detection.label[0];
   const finding = boxes.detection.findings[0];
   return (

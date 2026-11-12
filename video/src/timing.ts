@@ -77,6 +77,34 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
  */
 export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
+/**
+ * Section 4 version.
+ *   "v2"  a pronounced intro: "So that's why we introduce..." and the name centred, then the product in 3D angles. Default.
+ *   "v1"  the pile is scanned, then flat shots of the trace and detection (first version).
+ */
+export const PORTAL_VERSION: "v1" | "v2" = "v2";
+
+/** Section 4 v2. All times in seconds from the start of the section. */
+export const PORTAL2 = {
+  length: 12.5,           // whole section
+  introIn: 0.25,          // "So that's why we introduce..." rises, centred
+  introOut: 1.7,          // ...and lifts away
+  titleIn: 1.85,          // "GLDB Fraud Detection Portal", big and centred
+  underline: 2.5,         // a line draws under it
+  heroStart: 3.4,         // the name glides up to the top band as the Case Summary rises in, tilted
+  heroEnd: 4.6,
+  traceAt: 6.0,           // the Agent trace swings in from the other side
+  line1In: 6.2,           // "Agents read every document,"
+  traceStart: 6.5,        // its rows light up...
+  traceEnd: 8.3,
+  detectionAt: 8.7,       // the Detection screen, angled
+  line2In: 8.9,           // "and flag what doesn't add up."
+  boxIn: 9.3,             // the forged figure gets its red box
+  flatten: 10.0,          // the screen turns flat and the camera pushes to the finding...
+  flattenEnd: 11.2,
+  findingAt: 11.3,        // ...and the top finding is highlighted
+};
+
 /** Section 4, "portal". All times in seconds from the start of the section. */
 export const PORTAL = {
   length: 10.5,           // whole section
@@ -212,7 +240,7 @@ export const s = (seconds: number): number => Math.round(seconds * FPS);
 
 const SCENE_LENGTHS: Record<string, number> =
   HOOK_VERSION === "v3"
-    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length), portal: atSeconds(PORTAL.length) }
+    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length), portal: atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length) }
     : HOOK_VERSION === "v2"
     ? { overwhelm: atSeconds(OVERWHELM.length) }
     : { package: atSeconds(HOOK.package.length), tooMany: atSeconds(HOOK.tooMany.length) };

@@ -30,15 +30,16 @@ and a grin, snickering); on the right, a corporate bank statement zoomed in. A t
 lighter weight, a hair lower, a little wider spaced. Then the statement shrinks into a grid of the case's other
 documents and is impossible to pick out.
 
-**Section 4 "portal", 10.5 s. The real app arrives.** Title "GLDB Fraud Detection Portal", then "Agents read every
-document, and flag what doesn't add up." (A) A scan line sweeps the pile from section 3, ticking each document and
-flagging the doctored statement. (B) The camera pushes into it and cuts to the portal's real Agent trace; its rows
-light up as the lead agent and specialists work (amber where they found something). (C) Cut to the portal's real
-Detection panel for the statement: the forged 812,400.00 boxed in red in the preview, the Flagged badge pulsing, the
-camera pushing in to the HIGH finding "Closing balance 812,400.00 does not reconcile...". The screens are captured from
-`frontend/` on its mock backend by `capture/story.spec.ts`, with a detection report written for the story.
+**Section 4 "portal", 12.5 s. The real app arrives, introduced properly.** Plain text centred: "So that's why we
+introduce...", then "GLDB Fraud Detection Portal" big and centred with a line drawing in. The name glides up to the
+top band as the portal's real Case Summary rises in, tilted in 3D. The real Agent trace swings in from the other side;
+its rows light up as the agents work (amber where they found something): "Agents read every document,". The real
+Detection screen arrives angled, the forged 812,400.00 boxed in red in the preview, then turns flat as the camera
+pushes in to the HIGH finding: "and flag what doesn't add up." The first version (the pile scanned, flat shots) is
+kept behind `PORTAL_VERSION`; its renders are in `renders/v1/`. Screens are captured from `frontend/` on its mock
+backend by `capture/story.spec.ts`, with a detection report written for the story.
 
-Renders: `renders/film-so-far.mp4` (hook + sections 2-4, 38.6 s), `renders/04-portal.mp4` (section 4 alone), `renders/03-tamper.mp4` (section 3 alone), `renders/02-waiting.mp4` (section 2 alone), each with a
+Renders: `renders/film-so-far.mp4` (hook + sections 2-4, 40.6 s), `renders/04-portal.mp4` (section 4 alone), `renders/03-tamper.mp4` (section 3 alone), `renders/02-waiting.mp4` (section 2 alone), each with a
 `-no-text` twin. `renders/hook.mp4` (with headlines), `renders/hook-no-text.mp4` (same shots, no headlines), `renders/hook-poster.png`.
 
 ## Fine-tuning
@@ -49,7 +50,7 @@ npm install
 npm run dev        # Remotion Studio: scrub, preview, edit props live
 ```
 
-- **Timing (section 4):** `PORTAL` in `src/timing.ts`: `scanStart`/`scanEnd`, `pushStart`/`pushEnd`, `traceStart`/`traceEnd`, `detectionAt`, `boxIn`, `zoomStart`/`zoomEnd`, `findingAt`, `line1In`/`line2In`, `length`.
+- **Timing (section 4):** `PORTAL2` in `src/timing.ts`: `introIn`/`introOut`, `titleIn`, `underline`, `heroStart`/`heroEnd`, `traceAt`, `traceStart`/`traceEnd`, `detectionAt`, `boxIn`, `flatten`/`flattenEnd`, `findingAt`, `line1In`/`line2In`, `length`. The angles are in `src/scenes/PortalScene2.tsx` (`summaryTilt`, `traceTilt`, `detectionTilt`, in degrees).
 - **Words (section 4):** `src/data/portal.ts`. The portal's own text is in the screenshots; to change it, change the story report in `capture/story.spec.ts` and re-run the capture (see Where the UI comes from).
 - **Timing (section 3):** `TAMPER` in `src/timing.ts`: `line1In`, `cursorIn`/`cursorAt`, `select`, `erase`, `typeStart`/`typeEnd`, `line2In`, `shrinkStart`/`shrinkEnd`, `length`.
 - **Words and figures (section 3):** `src/data/tamper.ts`: the caption, the statement's rows, and `before`/`after` for the edited balance. The bad actor is drawn in `src/components/Silhouette.tsx`.

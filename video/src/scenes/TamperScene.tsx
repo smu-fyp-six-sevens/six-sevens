@@ -28,29 +28,30 @@ export const CLOSE_Y = ROWS_TOP + STATEMENT.rows.length * ROW_H + 6; // top of t
 export const CLOSE_H = 30;
 export const FIGURE_W = 78; // width of the closing figure, for the selection
 
-export const Statement: React.FC<{ figure: React.ReactNode; selection: number; caret: { x: number; on: boolean } | null }> = ({ figure, selection, caret }) => (
+export type StatementData = Omit<typeof STATEMENT, "before" | "after">;
+export const Statement: React.FC<{ figure: React.ReactNode; selection: number; caret: { x: number; on: boolean } | null; data?: StatementData }> = ({ figure, selection, caret, data = STATEMENT }) => (
   <div style={{ position: "relative", width: W, height: H, borderRadius: 10, overflow: "hidden", background: "#eceae6", border: "1px solid rgba(18,32,61,0.10)", boxShadow: "0 18px 40px rgba(18,32,61,0.18)", fontFamily: fonts.ui }}>
     <div style={{ height: 34, display: "flex", alignItems: "center", gap: 8, padding: "0 12px", background: "#f6f5f2", borderBottom: `1px solid ${colors.line}` }}>
       <div style={{ width: 18, height: 18, borderRadius: 3, background: colors.red, color: "#fff", fontSize: 6.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>PDF</div>
-      <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: colors.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{STATEMENT.file}</div>
+      <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: colors.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{data.file}</div>
       <div style={{ fontSize: 11, color: colors.textMuted }}>1 / 6</div>
     </div>
     <div style={{ position: "absolute", left: 22, top: 50, right: 22, bottom: 0, background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }} />
     <div style={{ position: "absolute", left: PAGE_X, top: 72, right: W - PAGE_R }}>
-      <div style={{ fontSize: 17, fontWeight: 700, color: colors.ink, marginBottom: 4 }}>{STATEMENT.title}</div>
-      <div style={{ fontSize: 10.5, color: colors.textMuted }}>{STATEMENT.company}</div>
-      <div style={{ fontSize: 9.5, color: colors.textMuted, marginTop: 6 }}>{STATEMENT.account} · {STATEMENT.period}</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: colors.ink, marginBottom: 4 }}>{data.title}</div>
+      <div style={{ fontSize: 10.5, color: colors.textMuted }}>{data.company}</div>
+      <div style={{ fontSize: 9.5, color: colors.textMuted, marginTop: 6 }}>{data.account} · {data.period}</div>
     </div>
     <div style={{ position: "absolute", left: PAGE_X, right: W - PAGE_R, top: ROWS_TOP - 24, height: 20, display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 600, color: colors.textMuted, borderBottom: `1px solid ${colors.line}` }}>
       <span style={{ width: 44 }}>DATE</span><span style={{ flex: 1 }}>DESCRIPTION</span><span>AMOUNT</span>
     </div>
-    {STATEMENT.rows.map((r, i) => (
+    {data.rows.map((r, i) => (
       <div key={i} style={{ position: "absolute", left: PAGE_X, right: W - PAGE_R, top: ROWS_TOP + i * ROW_H, height: ROW_H, display: "flex", alignItems: "center", fontSize: 10, color: colors.inkSoft, borderBottom: "1px solid #f0efec", fontVariantNumeric: "tabular-nums" }}>
         <span style={{ width: 44 }}>{r.date}</span><span style={{ flex: 1 }}>{r.text}</span><span>{r.amount}</span>
       </div>
     ))}
     <div style={{ position: "absolute", left: PAGE_X, right: W - PAGE_R, top: CLOSE_Y, height: CLOSE_H, display: "flex", alignItems: "center", borderTop: `1.5px solid ${colors.ink}`, fontSize: 12, fontWeight: 700, color: colors.ink }}>
-      <span style={{ flex: 1 }}>{STATEMENT.closingLabel}</span>
+      <span style={{ flex: 1 }}>{data.closingLabel}</span>
     </div>
     {/* selection, figure and caret, right-aligned to the page's edge */}
     <div style={{ position: "absolute", right: W - PAGE_R - 2, top: CLOSE_Y + 7, height: 17, width: FIGURE_W * selection, background: "rgba(53,95,150,0.30)", borderRadius: 2 }} />
