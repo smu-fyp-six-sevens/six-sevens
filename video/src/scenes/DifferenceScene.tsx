@@ -10,14 +10,14 @@ import { DIFFERENCE_COPY as C } from "../data/howitworks";
 import { CLOCK } from "../data/waiting";
 import { colors, fonts } from "../theme";
 import { DIFFERENCE as T, FPS, atSeconds, s } from "../timing";
-import { AVATAR, Clock, Person, ROW_Y } from "./WaitingScene2";
+import { AVATAR, Clock, PEOPLE_X, Person, ROW_Y } from "./WaitingScene2";
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 const land = Easing.bezier(0.2, 0.9, 0.1, 1);
 const even = Easing.bezier(0.37, 0, 0.63, 1);
 const pop = Easing.bezier(0.34, 1.56, 0.64, 1);
 
-const LINE = { from: 400 + AVATAR / 2 + 20, to: 1520 - AVATAR / 2 - 20 };
+const LINE = { from: PEOPLE_X.officer + AVATAR / 2 + 20, to: PEOPLE_X.customer - AVATAR / 2 - 20 };
 const CAPTION = { fontFamily: fonts.display, fontSize: 50, fontWeight: 700, letterSpacing: "-0.015em", lineHeight: 1.16 } as const;
 
 export const DifferenceScene: React.FC<{ showText?: boolean }> = ({ showText = true }) => {
@@ -41,11 +41,11 @@ export const DifferenceScene: React.FC<{ showText?: boolean }> = ({ showText = t
         {t >= T.sendAt && t < T.newsAt + 0.1 && (
           <div style={{ position: "absolute", left: LINE.from + (LINE.to - LINE.from) * send - 14, top: ROW_Y - 14, width: 28, height: 28, borderRadius: 14, background: colors.steel, boxShadow: "0 0 18px 6px rgba(53,95,150,0.35)" }} />
         )}
-        <Person x={400} p={popIn(0)} role="officer" t={t} status={done ? `✓ ${C.officerDone}` : C.officerBusy} dot={done ? "#166d5f" : colors.steel} />
+        <Person x={PEOPLE_X.officer} p={popIn(0)} role="officer" t={t} status={done ? `✓ ${C.officerDone}` : C.officerBusy} dot={done ? "#166d5f" : colors.steel} />
         <Clock p={popIn(0.1)} mins={mins} showTime={false} />
-        <Person x={1520} p={popIn(0.2)} role="customer" t={t} status={happy ? `✓ ${C.customerDone}` : C.customerWaiting} dot={happy ? "#166d5f" : colors.amber} happy={happy} />
+        <Person x={PEOPLE_X.customer} p={popIn(0.2)} role="customer" t={t} status={happy ? `✓ ${C.customerDone}` : C.customerWaiting} dot={happy ? "#166d5f" : colors.amber} happy={happy} />
         {news > 0 && (
-          <div style={{ position: "absolute", left: 1520 - 250, top: ROW_Y - AVATAR / 2 - 150, transform: `scale(${0.6 + 0.4 * news})`, transformOrigin: "50% 100%", opacity: Math.min(1, news * 1.5) }}>
+          <div style={{ position: "absolute", left: PEOPLE_X.customer - 250, top: ROW_Y - AVATAR / 2 - 140, transform: `scale(${0.6 + 0.4 * news})`, transformOrigin: "50% 100%", opacity: Math.min(1, news * 1.5) }}>
             <ChatToast {...C.news} width={500} />
           </div>
         )}

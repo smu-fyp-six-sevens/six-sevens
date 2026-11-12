@@ -79,7 +79,7 @@ export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
 /** Section 8b, "finalise": the officer locks the case. All times in seconds from the start of the section. */
 export const FINALISE = {
-  length: 5.5,
+  length: 4.8,
   headlineIn: 0.2,        // "Then lock the case."
   summaryClick: 0.6,      // on the Additional Documents page, the cursor clicks "Summary" in the sidebar
   readyAt: 0.75,          // the case summary: "Ready to Finalise"
@@ -89,23 +89,20 @@ export const FINALISE = {
   doneAt: 3.05,           // "Finalised": the case is locked, view-only
 };
 
-/** Section 9, "dashboard": the officer navigates the portal; the camera follows the cursor. */
+/** Section 9, "dashboard": a tour of the dashboard over a month of cases; the camera follows the page. */
 export const DASHBOARD = {
-  length: 9.5,
+  length: 8.5,
   headlineIn: 0.2,        // "Every case, at a glance."
-  navClick: 0.9,          // on the Additional Documents page, the cursor clicks "Dashboard" in the top bar
-  pipelineAt: 1.1,        // the dashboard: its case pipeline...
-  riskAt: 2.2,            // ...scroll to the risk overview...
-  attentionAt: 3.2,       // ...scroll to "Needs attention", GLDB-02 on top
-  clickAt: 4.3,           // the cursor clicks GLDB-02
-  riskViewAt: 4.45,       // its risk summary: "Drill into anything flagged."
-  auditClick: 6.4,        // the cursor clicks "Audit" in the sidebar
-  auditAt: 6.55,          // its audit trail: "A full audit trail for compliance."
+  navClick: 0.6,          // on the finalised case, the cursor clicks "Dashboard" in the top bar
+  pipelineAt: 0.8,        // the case pipeline
+  flagsAt: 2.6,           // scroll: the most common flags and documents by type
+  riskAt: 4.6,            // scroll: the risk overview
+  attentionAt: 6.2,       // scroll: needs attention, riskiest first
 };
 
 /** Section 10, "difference": the same two people as section 2, after the portal. */
 export const DIFFERENCE = {
-  length: 7,
+  length: 6.4,
   avatarsIn: -0.25,       // already arriving on the first frame
   line1In: 0.2,           // "What took hours of screening now takes minutes."
   clockStart: 0.4,        // the clock barely moves...
@@ -129,7 +126,7 @@ export const CTA = {
 
 /** Section 6, "detect" (how it works, step 2). All times in seconds from the start of the section. */
 export const DETECT = {
-  length: 12.5,
+  length: 11.5,
   headlineIn: 0.2,        // "Agents investigate every document."
   planIn: 0.15,           // the lead agent's card; its plan types out...
   planEnd: 2.4,           // ...line by line
@@ -141,7 +138,7 @@ export const DETECT = {
 
 /** Section 7, "trace" (how it works, step 2 continued). */
 export const TRACE = {
-  length: 10.5,
+  length: 10.0,
   headlineIn: 0.2,        // "And it's not a black box."
   line1In: 0.6,           // "The agent trace shows every step..."
   rowsStart: 0.9,         // the trace's rows light up...
@@ -175,7 +172,7 @@ export const SCORE = {
 
 /** Section 5, "upload" (how it works, step 1). All times in seconds from the start of the section. */
 export const UPLOAD = {
-  length: 11.5,           // whole section
+  length: 11.0,           // whole section
   headlineIn: 0.2,        // the step tracker is already up; "Upload the whole package." rises
   dragStart: 0.4,         // the cursor drags the stack of files in...
   dropAt: 1.5,            // ...and drops it on the upload box
@@ -200,7 +197,7 @@ export const PORTAL_VERSION: "v1" | "v2" = "v2";
 
 /** Section 4 v2. All times in seconds from the start of the section. */
 export const PORTAL2 = {
-  length: 12.5,           // whole section
+  length: 12.2,           // whole section
   introIn: 0.25,          // "So that's why we introduce..." rises, centred
   introOut: 1.7,          // ...and lifts away
   titleIn: 1.85,          // "GLDB Anomaly Detection Portal", big and centred
@@ -240,7 +237,7 @@ export const PORTAL = {
 
 /** Section 3, "tamper". All times in seconds from the start of the section. */
 export const TAMPER = {
-  length: 9.5,            // whole section
+  length: 8.0,            // whole section
   panelsIn: -0.25,        // the two halves land. Negative = already arriving on the first frame
   line1In: 0.3,           // "Even worse, when bad actors are involved,"
   cursorIn: 1.1,          // the text cursor appears on the statement...
@@ -264,7 +261,7 @@ export const WAITING_VERSION: "v1" | "v2" = "v2";
 
 /** Section 2 v2. All times in seconds from the start of the section. */
 export const WAITING2 = {
-  length: 9,              // whole section
+  length: 8.3,              // whole section
   avatarsIn: -0.25,       // the two avatars and the clock land, staggered. Negative = already arriving on the first frame
   officerLineIn: 0.3,     // "A loan officer may spend over an hour staring at details on the screen,"
   customerLineIn: 3.9,    // "while the loan customer anxiously waits..." (the customer starts pulsing here)
@@ -287,7 +284,7 @@ export const WAITING = {
 
 /** v3 hook. All times in seconds from the start of the hook. */
 export const OVERWHELM3 = {
-  length: 9.6,            // whole hook, including the hold on the final ping
+  length: 9.1,            // whole hook, including the hold on the final ping
   title1In: 0.2,          // "Corporate loan applications need extensive documentation."
   title1Out: 3.5,         // ...lifts away
   firstDocIn: 0.3,        // first PDF window opens

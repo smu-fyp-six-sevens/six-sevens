@@ -132,3 +132,9 @@
 - Owner: Finalise = lock the case. The review (confirm / dismiss, notes) stays under Score.
 - New beat "finalise" (5.5 s) between Score and the dashboard: from Additional Documents, Summary in the sidebar, "Finalise Case", the real confirmation, "Finalised" ringed and the view-only banner (captured in story2.spec.ts, case at case_analysed). Tracker lights Finalise here.
 - Score 15 -> 14.5, dashboard 10 -> 9.5 (it now starts on the finalised summary): film 119.1 s, under 2 minutes. Full re-render (everything after shifts, sound too).
+
+## Wave 23 - no overlap, tighter, "Upload the documents", bigger people
+- Owner: the dashboard repeated the audit trail (Trace shows it); show the dashboard as populated as the real one; cut the dead air at each section's end; "Upload the whole package" -> "Upload the documents"; larger avatars and more central text in the officer/customer scenes.
+- Dashboard: captured with a month of invented cases (story2.spec.ts "a month of cases": pipeline, flags, documents by type, risk, needs attention); the beat is a scroll tour of those panels, no drill-in.
+- Section lengths trimmed to their last event: hook 9.1, waiting 8.3, tamper 8.0, portal 12.2, upload 11.0, detect 11.5, trace 10.0, finalise 4.8, dashboard 8.5, difference 6.4 (score 14.5, cta 7.5): 111.8 s. Music re-cut with a 4-bar loop to end with it.
+- People: avatars 260 -> 330, closer together (520 / 1400), larger labels and status pills.

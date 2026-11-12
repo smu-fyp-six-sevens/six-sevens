@@ -70,7 +70,7 @@ export const SCREENS_STORY2 = {
   traceTool: { src: "ui/story/trace-tool.png", w: 1440, h: 900 },
   audit: { src: "ui/story/audit.png", w: 1440, h: 900 },
   additional: { src: "ui/story/additional.png", w: 1440, h: 900 },
-  dashboard: { src: "ui/story/dashboard-full.png", w: 1440, h: 1967 },
+  dashboard: { src: "ui/story/dashboard-month-full.png", w: 1440, h: 2169 },
   finaliseReady: { src: "ui/story/finalise-ready.png", w: 1440, h: 900 },
   finaliseConfirm: { src: "ui/story/finalise-confirm.png", w: 1440, h: 900 },
   finaliseDone: { src: "ui/story/finalise-done.png", w: 1440, h: 900 },
@@ -107,18 +107,20 @@ export const FINALISE_BOXES = {
 export const DASHBOARD_COPY = {
   headline: "Every case, at a glance.",
   beats: [
-    { text: "The whole pipeline, and the riskiest cases first.", at: "pipelineAt" },
-    { text: "Drill into anything flagged.", at: "riskViewAt" },
-    { text: "With a full audit trail for compliance.", at: "auditAt", accent: true },
+    { text: "The whole pipeline, from upload to finalised.", at: "pipelineAt" },
+    { text: "The most common flags, across every case.", at: "flagsAt" },
+    { text: "Risk across every case in view.", at: "riskAt" },
+    { text: "And the riskiest cases first.", at: "attentionAt", accent: true },
   ],
 };
 
-/** The dashboard, measured on its capture (CSS px). */
+/** The dashboard with a month of cases (story2-dashboard-month.json), CSS px of the full page. */
 export const DASHBOARD_BOXES = {
-  pipeline: { x: 25, y: 135, w: 1375, h: 171 },
-  risk: { x: 25, y: 515, w: 1375, h: 295 },
-  attention: { x: 25, y: 826, w: 805, h: 478 },
-  row: { x: 36, y: 912, w: 782, h: 56 },
+  pipeline: { x: 24, y: 135, w: 1377, h: 172 },
+  flags: { x: 24, y: 323, w: 750, h: 342 },
+  types: { x: 788, y: 323, w: 613, h: 342 },
+  risk: { x: 24, y: 679, w: 1377, h: 297 },
+  attention: { x: 24, y: 990, w: 808, h: 516 },
 };
 
 export const DIFFERENCE_COPY = {

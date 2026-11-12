@@ -1,5 +1,5 @@
 // Section 9 - "dashboard": the officer navigates the real portal, and the camera follows the cursor.
-//   On the finalised case's summary (where the finalise beat ends), the cursor clicks "Dashboard" in the top bar.
+//   On the finalised case's summary (where the finalise beat ends), the cursor clicks "Dashboard" in the top bar,
 //   The dashboard: the case pipeline; the page scrolls to the risk overview, then to "Needs attention".
 //   The cursor clicks GLDB-02: its risk summary opens. It clicks "Audit" in the sidebar: the audit trail opens.
 // The camera works on the browser's viewport (1440 x 900 CSS px) and pages scroll inside it, as in a browser, so a
@@ -41,44 +41,24 @@ export const DashboardScene: React.FC<{ showText?: boolean }> = ({ showText = tr
   const frame = useCurrentFrame();
   const t = frame / FPS;
   const swipe = shotSwipe(t, 0, T.length, { enter: false }) ?? 0;
-
-  // Which page is showing (a few frames' cross-fade, like a page load).
-  const fade = (at: number) => interpolate(t, [at, at + 0.1], [0, 1], clamp);
-  const toDash = fade(T.navClick + 0.1);
-  const toRisk = fade(T.riskViewAt);
-  const toAudit = fade(T.auditAt);
-
-  // The dashboard's own scroll.
-  const [scroll] = path(t, [[0, 0, 0], [T.riskAt, 0, 0], [T.riskAt + 0.6, 400, 0], [T.attentionAt, 400, 0], [T.attentionAt + 0.6, 760, 0]]);
-
-  // The camera, in viewport px: it only ever moves toward what the cursor is doing.
+  const toDash = interpolate(t, [T.navClick + 0.1, T.navClick + 0.2], [0, 1], clamp);
+  // The page scrolls panel by panel; the camera frames each one.
+  const [scroll] = path(t, [[0, 0, 0], [T.flagsAt - 0.3, 0, 0], [T.flagsAt + 0.3, 255, 0], [T.riskAt - 0.3, 255, 0], [T.riskAt + 0.3, 560, 0], [T.attentionAt - 0.3, 560, 0], [T.attentionAt + 0.3, 960, 0]]);
   const cam = cameraAt(t, [
-    [0, 1.15, 740, 470],
-    [0.5, 1.0, 720, 450],
+    [0, 1.0, 720, 450],
     [T.navClick, 1.0, 720, 450],
-    [T.pipelineAt + 0.5, 1.12, 712, 300],
-    [T.riskAt, 1.12, 712, 300],
-    [T.riskAt + 0.6, 1.08, 712, 280],
-    [T.attentionAt, 1.08, 712, 280],
-    [T.attentionAt + 0.6, 1.2, 500, 300],
-    [T.clickAt, 1.2, 500, 300],
-    [T.riskViewAt + 0.6, 1.08, 650, 360],
-    [T.auditClick - 0.7, 1.0, 600, 450],
-    [T.auditAt + 0.6, 1.1, 640, 420],
-    [T.length, 1.18, 640, 500],
+    [T.pipelineAt + 0.5, 1.12, 712, 225],
+    [T.flagsAt - 0.3, 1.12, 712, 225],
+    [T.flagsAt + 0.4, 1.02, 712, 240],
+    [T.riskAt - 0.3, 1.02, 712, 240],
+    [T.riskAt + 0.4, 1.12, 712, 270],
+    [T.attentionAt - 0.3, 1.12, 712, 270],
+    [T.attentionAt + 0.4, 1.25, 440, 300],
+    [T.length, 1.32, 440, 300],
   ]);
-  const [px, py] = path(t, [
-    [0, 900, 520],
-    [T.navClick - 0.05, 720, 36],
-    [T.pipelineAt + 0.4, 760, 360],
-    [T.attentionAt + 0.3, 700, 420],
-    [T.clickAt - 0.05, 150, 182],
-    [T.riskViewAt + 0.4, 420, 420],
-    [T.auditClick - 0.05, 47, 574],
-    [T.length, 320, 620],
-  ]);
-  const press = (at: number) => interpolate(t, [at - 0.05, at + 0.05, at + 0.2], [0, 1, 0], clamp);
-  const ring = (at: number, until: number) => interpolate(t, [at + 0.3, at + 0.6, until, until + 0.3], [0, 1, 1, 0], clamp);
+  const [px, py] = path(t, [[0, 900, 520], [T.navClick - 0.05, 720, 36], [T.pipelineAt + 0.5, 980, 420], [T.length, 1040, 560]]);
+  const press = interpolate(t, [T.navClick - 0.05, T.navClick + 0.05, T.navClick + 0.2], [0, 1, 0], clamp);
+  const ring = (at: number, until: number) => interpolate(t, [at + 0.2, at + 0.5, until - 0.3, until], [0, 1, 1, 0], clamp);
 
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
@@ -88,14 +68,14 @@ export const DashboardScene: React.FC<{ showText?: boolean }> = ({ showText = tr
           {toDash > 0 && (
             <div style={{ position: "absolute", left: 0, top: -scroll, width: VW, height: SCREENS_STORY2.dashboard.h, opacity: toDash }}>
               <Img src={staticFile(SCREENS_STORY2.dashboard.src)} style={{ width: VW, height: SCREENS_STORY2.dashboard.h, display: "block" }} />
-              <Ring b={B.pipeline} p={ring(T.pipelineAt, T.riskAt)} />
-              <Ring b={B.risk} p={ring(T.riskAt + 0.3, T.attentionAt)} />
-              <Ring b={B.row} p={ring(T.attentionAt + 0.3, T.riskViewAt)} tone={colors.red} />
+              <Ring b={B.pipeline} p={ring(T.pipelineAt, T.flagsAt)} />
+              <Ring b={B.flags} p={ring(T.flagsAt, T.riskAt)} tone={colors.red} />
+              <Ring b={B.types} p={ring(T.flagsAt + 0.4, T.riskAt)} />
+              <Ring b={B.risk} p={ring(T.riskAt, T.attentionAt)} />
+              <Ring b={B.attention} p={ring(T.attentionAt, T.length + 1)} tone={colors.red} />
             </div>
           )}
-          {toRisk > 0 && <Img src={staticFile(SCREENS_STORY2.risk.src)} style={{ position: "absolute", left: 0, top: 0, width: VW, height: VH, opacity: toRisk }} />}
-          {toAudit > 0 && <Img src={staticFile(SCREENS_STORY2.audit.src)} style={{ position: "absolute", left: 0, top: 0, width: VW, height: VH, opacity: toAudit }} />}
-          <Pointer x={px} y={py} size={20} press={Math.max(press(T.navClick), press(T.clickAt), press(T.auditClick))} />
+          {t < T.pipelineAt + 1 && <Pointer x={px} y={py} size={20} press={press} />}
         </Viewport>
       </Window>
       <ProductHeader step={5} fromStep={5} length={T.length} headline={DASHBOARD_COPY.headline} headlineIn={T.headlineIn} showText={showText}

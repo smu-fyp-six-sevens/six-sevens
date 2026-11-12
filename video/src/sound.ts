@@ -86,8 +86,6 @@ export const CUES: Cue[] = [
   cue("finalise", FINALISE.confirmClick, CLICK, 0.5),
   cue("finalise", FINALISE.doneAt + 0.15, THUMP, 0.35),
   cue("dashboard", DASHBOARD.navClick, CLICK, 0.45),
-  cue("dashboard", DASHBOARD.clickAt, CLICK, 0.45),
-  cue("dashboard", DASHBOARD.auditClick, CLICK, 0.45),
   // 10 the answer arrives
   cue("difference", DIFFERENCE.newsAt, GOOD, 0.55),
   // 11 the button

@@ -7,7 +7,7 @@
 export const STEPS = ["Upload", "Classify", "Extract", "Detect", "Score", "Finalise"] as const;
 
 export const UPLOAD_COPY = {
-  headline: "Upload the whole package.",
+  headline: "Upload the documents.",
   line1: "Every file is classified and its key fields read.",
   line2: "Even from scans.",
   /** On the stack the cursor drags in. */

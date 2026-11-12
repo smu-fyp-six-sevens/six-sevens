@@ -227,3 +227,41 @@ test('finalise the case', async ({ page, backend }) => {
   const badge = await card.locator('.case-stage-badge').boundingBox();
   writeFileSync(`${OUT}/story2-finalise.json`, JSON.stringify({ button, confirmButton, card: cardBox, badge }, null, 2));
 });
+
+// The dashboard with a month of cases, so every panel has data (pipeline, flags, document types, risk, needs
+// attention). Invented companies; GLDB-02 is the story case, finalised.
+test('dashboard, a month of cases', async ({ page, backend }) => {
+  test.setTimeout(120_000);
+  const NOW = new Date('2026-11-05T04:00:00Z');
+  await page.clock.setFixedTime(NOW);
+  const { fx } = setup(backend);
+  const day = (n: number) => new Date(NOW.getTime() - n * 86400000).toISOString();
+  const risk = (level: string, score: number) => ({ state: 'scored', level, score, points: score / 2, documents_scanned: 6, documents_total: 6, contributing_findings: [], dismissed_findings: [], unassessed_checks: [], reasons: [`Rated ${level} from the combined severity of its findings.`] });
+  const f = (check: string, severity: string, count: number, types: string[]) => ({ check, severity, count, document_types: types });
+  const T = { bs: 'bank_statement', inc: 'certificate_of_incorporation', fatca: 'fatca_crs_declaration', incumbency: 'certificate_of_incumbency', credit: 'credit_report', pay: 'payslip', nric: 'nric', cons: 'company_constitution' };
+  const all = Object.values(T);
+  Object.assign(fx.case, { status: 'finalised', created_at: day(3), document_types: all, flags: [f('external_validation', 'high', 1, [T.inc]), f('numerical_checks', 'high', 1, [T.bs]), f('font_consistency', 'medium', 1, [T.bs])] });
+  const rows: [string, string, string, number, Record<string, unknown>][] = [
+    ['GLDB-31', 'Meridian Freight Pte Ltd', 'pending_review', 4, { risk: risk('Critical', 86), document_types: all, flags: [f('external_validation', 'high', 2, [T.inc]), f('numerical_checks', 'high', 1, [T.bs]), f('layout_anomalies', 'medium', 1, [T.pay])] }],
+    ['GLDB-32', 'Orchard Lane Trading', 'pending_evaluation', 6, { risk: risk('Critical', 81), document_types: all.slice(0, 7), flags: [f('external_validation', 'high', 1, [T.inc]), f('spelling', 'medium', 1, [T.bs]), f('date_consistency', 'low', 1, [T.pay])] }],
+    ['GLDB-33', 'Cedar Holdings', 'pending_evaluation', 8, { risk: risk('High', 72), document_types: [T.bs, T.inc, T.fatca, T.credit, T.pay, T.nric], flags: [f('external_validation', 'high', 1, [T.inc]), f('numerical_checks', 'high', 1, [T.bs])] }],
+    ['GLDB-34', 'Bolt Logistics', 'pending_review', 10, { risk: risk('High', 66), document_types: [T.bs, T.inc, T.incumbency, T.pay, T.nric, T.cons], flags: [f('external_validation', 'high', 1, [T.inc]), f('font_consistency', 'medium', 1, [T.pay])] }],
+    ['GLDB-35', 'Harbourside Foods', 'pending_evaluation', 12, { risk: risk('High', 61), document_types: [T.bs, T.fatca, T.incumbency, T.credit, T.nric], flags: [f('external_validation', 'high', 1, [T.inc]), f('numerical_checks', 'high', 1, [T.bs]), f('layout_anomalies', 'medium', 1, [T.bs])] }],
+    ['GLDB-36', 'Silverline Manufacturing', 'pending_evaluation', 14, { risk: risk('High', 58), document_types: [T.bs, T.inc, T.fatca, T.credit, T.cons], flags: [f('external_validation', 'high', 1, [T.inc]), f('numerical_checks', 'high', 1, [T.bs]), f('spelling', 'medium', 1, [T.fatca])] }],
+    ['GLDB-37', 'Northstar Trading Pte Ltd', 'pending_review', 16, { risk: risk('High', 55), document_types: [T.bs, T.incumbency, T.pay, T.nric, T.cons], flags: [f('external_validation', 'high', 1, [T.inc]), f('numerical_checks', 'high', 1, [T.bs])] }],
+    ['GLDB-38', 'Evergreen Medical Supplies', 'finalised', 19, { document_types: [T.bs, T.inc, T.fatca, T.incumbency, T.credit, T.pay], flags: [] }],
+    ['GLDB-39', 'Brightpath Logistics', 'missing_documents', 22, { document_types: [T.bs, T.fatca, T.incumbency, T.credit], flags: [] }],
+    ['GLDB-40', 'Orchid Systems', 'open', 25, { document_types: [], flags: [] }],
+  ];
+  rows.forEach(([n, name, status, ago, extra], i) => backend.cases.push(makeCase({ id: `m${i}`, greenlink_case_id: n, company_name: name, status, created_at: day(ago), ...extra } as never)));
+  await page.goto('/dashboard');
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: `${OUT}/dashboard-month-full.png`, fullPage: true });
+  const panels = await page.locator('section, article, [class*="card"]').evaluateAll((els) => els.map((el) => {
+    const r = el.getBoundingClientRect(); const h = el.querySelector('h2, h3');
+    return { title: (h?.textContent ?? '').trim(), x: r.x, y: r.y + window.scrollY, w: r.width, h: r.height };
+  }).filter((b) => b.title && b.w > 300));
+  const row = await page.getByText('GLDB-31', { exact: true }).first().boundingBox();
+  writeFileSync(`${OUT}/story2-dashboard-month.json`, JSON.stringify({ panels, row }, null, 2));
+});

@@ -15,9 +15,11 @@ const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 const land = Easing.bezier(0.2, 0.9, 0.1, 1);
 const even = Easing.bezier(0.37, 0, 0.63, 1);
 
-export const ROW_Y = 640;
-export const AVATAR = 260;
-const CLOCK_R = 150;
+export const ROW_Y = 620;
+/** Where the officer and the customer stand. */
+export const PEOPLE_X = { officer: 520, customer: 1400 };
+export const AVATAR = 330;
+const CLOCK_R = 165;
 
 const fmtTime = (mins: number) => {
   const h = Math.floor(mins / 60);
@@ -61,11 +63,11 @@ export const Person: React.FC<{
         </div>
         {typing !== undefined && typing > 0 && <Typing t={t} p={typing} />}
       </div>
-      <div style={{ marginTop: 30, fontSize: 40, fontWeight: 700, color: colors.ink, letterSpacing: "-0.01em" }}>{r.label}</div>
+      <div style={{ marginTop: 30, fontSize: 46, fontWeight: 700, color: colors.ink, letterSpacing: "-0.01em" }}>{r.label}</div>
       <div
         style={{
-          marginTop: 18, display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderRadius: 999,
-          background: colors.white, border: `1px solid ${colors.line}`, fontSize: 26, fontWeight: 600, color: colors.ink,
+          marginTop: 18, display: "flex", alignItems: "center", gap: 12, padding: "12px 24px", borderRadius: 999,
+          background: colors.white, border: `1px solid ${colors.line}`, fontSize: 30, fontWeight: 600, color: colors.ink,
           fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
         }}
       >
@@ -120,13 +122,13 @@ export const WaitingScene2: React.FC<{ showText?: boolean }> = ({ showText = tru
   return (
     <Stage duration={duration} background={colors.paper} camera={[{ frame: 0, scale: 1 }, { frame: duration, scale: 1.03, ease: "even" }]}>
       <AbsoluteFill>
-        <div style={{ position: "absolute", left: 400 + AVATAR / 2 + 20, right: 1920 - 1520 + AVATAR / 2 + 20, top: ROW_Y - 2, borderTop: `4px dashed ${colors.line}`, opacity: pop(0.2) }} />
-        <Person x={400} p={pop(0)} role="officer" t={t} status={COPY_WAIT.officerStatus(page, OFFICER.pageTotal)} dot={colors.amber} />
+        <div style={{ position: "absolute", left: PEOPLE_X.officer + AVATAR / 2 + 20, right: 1920 - PEOPLE_X.customer + AVATAR / 2 + 20, top: ROW_Y - 2, borderTop: `4px dashed ${colors.line}`, opacity: pop(0.2) }} />
+        <Person x={PEOPLE_X.officer} p={pop(0)} role="officer" t={t} status={COPY_WAIT.officerStatus(page, OFFICER.pageTotal)} dot={colors.amber} />
         <Clock p={pop(0.1)} mins={mins} />
-        <Person x={1520} p={pop(0.2)} role="customer" t={t} status={COPY_WAIT.customerStatus(checks)} dot={colors.red} pulse={pulse} typing={typing} />
+        <Person x={PEOPLE_X.customer} p={pop(0.2)} role="customer" t={t} status={COPY_WAIT.customerStatus(checks)} dot={colors.red} pulse={pulse} typing={typing} />
 
         {showText && (
-          <div style={{ position: "absolute", left: 0, right: 0, top: 70, display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+          <div style={{ position: "absolute", left: 0, right: 0, top: 64, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
             <Title text={CAPTION.officer} enterAt={s(T.officerLineIn)} exit="none" align="center" style={{ ...CAPTION_STYLE, color: colors.ink }} />
             <Title text={CAPTION.customer} enterAt={s(T.customerLineIn)} exit="none" align="center" style={{ ...CAPTION_STYLE, color: colors.inkSoft }} />
           </div>
