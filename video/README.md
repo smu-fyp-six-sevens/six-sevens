@@ -1,4 +1,4 @@
-# GLDB Fraud Detection Portal - demo film (Remotion)
+# GLDB Anomaly Detection Portal - demo film (Remotion)
 
 Visuals only: no music, no voiceover. You set the timing.
 
@@ -31,7 +31,7 @@ lighter weight, a hair lower, a little wider spaced. Then the statement shrinks 
 documents and is impossible to pick out.
 
 **Section 4 "portal", 12.5 s. The real app arrives, introduced properly.** Plain text centred: "So that's why we
-introduce...", then "GLDB Fraud Detection Portal" big and centred with a line drawing in. The name glides up to the
+introduce...", then "GLDB Anomaly Detection Portal" big and centred with a line drawing in. The name glides up to the
 top band as the portal's real Case Summary rises in, tilted in 3D. The real Agent trace swings in from the other side;
 its rows light up as the agents work (amber where they found something): "Agents read every document,". The real
 Detection screen arrives angled, the forged 812,400.00 boxed in red in the preview, then turns flat as the camera

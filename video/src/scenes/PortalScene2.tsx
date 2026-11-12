@@ -1,6 +1,6 @@
 // Section 4 v2 - "portal", with a pronounced introduction.
 //   1. Plain text, centred: "So that's why we introduce..."
-//   2. "GLDB Fraud Detection Portal", big and centred, a line drawing in beneath it.
+//   2. "GLDB Anomaly Detection Portal", big and centred, a line drawing in beneath it.
 //   3. The name glides up to the top band as the real Case Summary rises in, tilted in 3D.
 //   4. The real Agent trace swings in from the other side; its rows light up.
 //   5. The real Detection screen, angled, turns flat as the camera pushes to the finding.

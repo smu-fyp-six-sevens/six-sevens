@@ -92,3 +92,6 @@
 - Decision: removed every tilt and sway in sections 5-8; the swipe slides flat. Added camera paths (keys.ts): Detect close on the plan, out to the checks, in on each catch, out; Upload's scan in on the page then the fields; the audit trail zooms in along its entries; Score in on the gauge, out to the documents, in on the score line in Additional Documents.
 - Sections 1-4 keep their angles (the owner asked for angles in section 4).
 - Measured: stills of each zoom. Not watched in motion.
+
+## Wave 16 - product renamed
+- Owner: the product is now "GLDB Anomaly Detection Portal" (title card in section 4, docs). The app header in the captured screens still reads "GLDB Fraud Review".

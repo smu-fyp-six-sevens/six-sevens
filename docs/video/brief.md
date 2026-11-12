@@ -1,7 +1,7 @@
-# Brief - GLDB Fraud Detection Portal demo film
+# Brief - GLDB Anomaly Detection Portal demo film
 
 ## Inputs
-- Product: GLDB Fraud Detection Portal (`frontend/`), UI captured from the real app on its mock backend, case GLDB-02 (Anchorpoint Insurance Brokers, 20 documents).
+- Product: GLDB Anomaly Detection Portal (`frontend/`), UI captured from the real app on its mock backend, case GLDB-02 (Anchorpoint Insurance Brokers, 20 documents).
 - Brand: `frontend/DESIGN.md` tokens (ink #12203d, steel #355f96, paper #f9f9f8). Font: Inter, standing in for the portal's system UI stack.
 - Format: 16:9, 1920x1080, 30 fps.
 - Sound: none. The owner adds voiceover/music and sets timing themselves.
@@ -37,9 +37,9 @@ One case is too much paper for one person to read; the portal reads all of it, a
 
 **Section 4 · after section 3 · 0:10.5 · portal (the product arrives).**
 - Visual: (A) scan line over the pile; checks on each document; the doctored statement flagged. (B) push in, cut to the real Agent trace; rows light up (amber where a finding was made). (C) the real Detection panel for the statement: the forged figure boxed in the preview, Flagged badge pulse, push to the HIGH finding.
-- On-screen copy: **GLDB Fraud Detection Portal** / **Agents read every document, and flag what doesn't add up.** (owner: capture what's important, not the whole line).
+- On-screen copy: **GLDB Anomaly Detection Portal** / **Agents read every document, and flag what doesn't add up.** (owner: capture what's important, not the whole line).
 - Data: the portal's real UI on its mock backend; the detection report is written for the story (BS.TOTALS high, font weight medium, PDF editor medium), in the backend's real report shape. File names on screen are invented.
-- The app's header reads "GLDB Fraud Review"; the film names the product "GLDB Fraud Detection Portal" (owner's call).
+- The app's header reads "GLDB Fraud Review"; the film names the product "GLDB Anomaly Detection Portal" (owner's call).
 
 **Section 5 · after section 4 · 0:11.5 · upload (how it works, step 1).**
 - Format for every product section from here: step tracker on top (Upload / Detect / Score, owner's names), one headline, a short line that changes with each beat; the real portal in the same window below.

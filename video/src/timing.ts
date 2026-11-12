@@ -153,7 +153,7 @@ export const PORTAL2 = {
   length: 12.5,           // whole section
   introIn: 0.25,          // "So that's why we introduce..." rises, centred
   introOut: 1.7,          // ...and lifts away
-  titleIn: 1.85,          // "GLDB Fraud Detection Portal", big and centred
+  titleIn: 1.85,          // "GLDB Anomaly Detection Portal", big and centred
   underline: 2.5,         // a line draws under it
   heroStart: 3.4,         // the name glides up to the top band as the Case Summary rises in, tilted
   heroEnd: 4.6,
@@ -172,7 +172,7 @@ export const PORTAL2 = {
 /** Section 4, "portal". All times in seconds from the start of the section. */
 export const PORTAL = {
   length: 10.5,           // whole section
-  titleIn: 0.2,           // "GLDB Fraud Detection Portal"
+  titleIn: 0.2,           // "GLDB Anomaly Detection Portal"
   scanStart: 0.5,         // a scan line sweeps the pile, checking each document...
   scanEnd: 1.9,           // ...and flags the doctored statement as it passes
   pushStart: 2.2,         // the camera pushes into the flagged statement...
