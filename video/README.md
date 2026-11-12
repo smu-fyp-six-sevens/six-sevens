@@ -39,7 +39,18 @@ pushes in to the HIGH finding: "and flag what doesn't add up." The first version
 kept behind `PORTAL_VERSION`; its renders are in `renders/v1/`. Screens are captured from `frontend/` on its mock
 backend by `capture/story.spec.ts`, with a detection report written for the story.
 
-Renders: `renders/film-so-far.mp4` (hook + sections 2-4, 40.6 s), `renders/04-portal.mp4` (section 4 alone), `renders/03-tamper.mp4` (section 3 alone), `renders/02-waiting.mp4` (section 2 alone), each with a
+**Section 5 "upload", 11.5 s. How it works, step 1.** From here on every product section carries the same step
+tracker at the top, in the portal's own words (its sign-in page): **1 Upload, 2 Check, 3 Score**, the current step lit.
+Headline "Upload the whole package." A cursor drags a fanned stack of "20 files" into the portal's upload box (it
+lights up as the stack hovers), the case's 20 files cascade in, and it clicks "Upload 20 files". The box clears and
+the documents table fills row by row: a spinner and "Processing", then the document type stamps on, the mark turns
+into a green tick and the status flips to "Extracted"; "Documents n of 11 required" climbs as required types are
+covered. "Every file is classified and its key fields read," Then the scanned December statement (crooked, grainy,
+its closing balance January's opening balance): a scan beam runs down the page, boxing each field it reads, and the
+portal's Extracted Information card fills in as it goes, with confidences: "even from scans." The page behind is the
+real portal (`capture/howitworks.spec.ts`); the upload box, table and fields card are rebuilt from its measured styles.
+
+Renders: `renders/film-so-far.mp4` (hook + sections 2-5, 52.1 s), `renders/05-upload.mp4` (section 5 alone), `renders/04-portal.mp4` (section 4 alone), `renders/03-tamper.mp4` (section 3 alone), `renders/02-waiting.mp4` (section 2 alone), each with a
 `-no-text` twin. `renders/hook.mp4` (with headlines), `renders/hook-no-text.mp4` (same shots, no headlines), `renders/hook-poster.png`.
 
 ## Fine-tuning
@@ -50,6 +61,8 @@ npm install
 npm run dev        # Remotion Studio: scrub, preview, edit props live
 ```
 
+- **Timing (section 5):** `UPLOAD` in `src/timing.ts`: `dragStart`/`dropAt`, `cascadeEnd`, `clickAt`, `tableAt`, `classifyStart`/`classifyEnd`, `scanAt`, `beamStart`/`beamEnd`, `headlineIn`/`line1In`/`line2In`, `length`.
+- **Words, files, fields (section 5):** `src/data/upload.ts`: the steps (`STEPS`), the captions, the package (`PACKAGE`: file and type), the scanned statement (`DEC_STATEMENT`) and the fields read off it (`SCAN_FIELDS`).
 - **Timing (section 4):** `PORTAL2` in `src/timing.ts`: `introIn`/`introOut`, `titleIn`, `underline`, `heroStart`/`heroEnd`, `traceAt`, `traceStart`/`traceEnd`, `detectionAt`, `boxIn`, `flatten`/`flattenEnd`, `findingAt`, `line1In`/`line2In`, `length`. The angles are in `src/scenes/PortalScene2.tsx` (`summaryTilt`, `traceTilt`, `detectionTilt`, in degrees).
 - **Words (section 4):** `src/data/portal.ts`. The portal's own text is in the screenshots; to change it, change the story report in `capture/story.spec.ts` and re-run the capture (see Where the UI comes from).
 - **Timing (section 3):** `TAMPER` in `src/timing.ts`: `line1In`, `cursorIn`/`cursorAt`, `select`, `erase`, `typeStart`/`typeEnd`, `line2In`, `shrinkStart`/`shrinkEnd`, `length`.
@@ -89,7 +102,7 @@ npx remotion render Scene-Waiting renders/02-waiting.mp4 --color-space=bt709 --c
 npx remotion render Scene-Tamper renders/03-tamper.mp4 --color-space=bt709 --crf=16
 ```
 
-Single scenes for quick checks: `Scene-Portal` (section 4), `Scene-Tamper` (section 3), `Scene-Waiting` (section 2), `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
+Single scenes for quick checks: `Scene-Upload` (section 5), `Scene-Portal` (section 4), `Scene-Tamper` (section 3), `Scene-Waiting` (section 2), `Scene-Buried` (v3), `Scene-Overwhelm` (v2), `Scene-Package` and `Scene-TooMany` (v1).
 
 ## Where the UI comes from (v1)
 

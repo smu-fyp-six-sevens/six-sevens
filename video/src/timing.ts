@@ -77,6 +77,24 @@ export const isBackbeat = (frame: number, tolerance = 1): boolean =>
  */
 export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
+/** Section 5, "upload" (how it works, step 1). All times in seconds from the start of the section. */
+export const UPLOAD = {
+  length: 11.5,           // whole section
+  headlineIn: 0.2,        // the step tracker is already up; "Upload the whole package." rises
+  dragStart: 0.4,         // the cursor drags the stack of files in...
+  dropAt: 1.5,            // ...and drops it on the upload box
+  cascadeEnd: 2.4,        // the 20 rows have cascaded in by here
+  clickAt: 3.0,           // the cursor clicks "Upload 20 files"
+  tableAt: 3.4,           // the box clears; the camera moves to the documents table
+  line1In: 3.7,           // "Every file is classified and its key fields read,"
+  classifyStart: 3.8,     // row by row: processing, then the type stamps on and the status flips to Extracted...
+  classifyEnd: 6.9,       // ...last row
+  scanAt: 7.3,            // cut to the scanned December statement
+  line2In: 7.6,           // "even from scans."
+  beamStart: 7.8,         // the scan beam runs down the page; fields fill in as it passes them...
+  beamEnd: 9.8,
+};
+
 /**
  * Section 4 version.
  *   "v2"  a pronounced intro: "So that's why we introduce..." and the name centred, then the product in 3D angles. Default.
@@ -240,7 +258,7 @@ export const s = (seconds: number): number => Math.round(seconds * FPS);
 
 const SCENE_LENGTHS: Record<string, number> =
   HOOK_VERSION === "v3"
-    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length), portal: atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length) }
+    ? { buried: atSeconds(OVERWHELM3.length), waiting: atSeconds(WAITING_VERSION === "v2" ? WAITING2.length : WAITING.length), tamper: atSeconds(TAMPER.length), portal: atSeconds(PORTAL_VERSION === "v2" ? PORTAL2.length : PORTAL.length), upload: atSeconds(UPLOAD.length) }
     : HOOK_VERSION === "v2"
     ? { overwhelm: atSeconds(OVERWHELM.length) }
     : { package: atSeconds(HOOK.package.length), tooMany: atSeconds(HOOK.tooMany.length) };

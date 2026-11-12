@@ -65,3 +65,10 @@
 - Owner: make the introduction more pronounced ("So that's why we introduce..." then the name, centred), more angles, less flat.
 - Built PortalScene2: lead-in and name centred (the lead-in shows even without captions, it is the introduction), name glides to the top band; Case Summary rises tilted, the trace swings in from the right, detection from the left and flattens for the readable finding. Gentle sways keep angled shots alive. v1 kept behind PORTAL_VERSION.
 - Measured: stills at frames 30, 75, 108, 125, 150, 200, 230, 275, 300, 350: no clipping of text; the final finding is flat and legible. Not watched in motion.
+
+## Wave 12 - section 5, "upload"
+- Owner: generate "Start by uploading the full package..."; keep the graphics consistent so viewers can follow the product sections, with some personality.
+- Decision: one format for all product sections: the portal's own steps (Upload / Check / Score, from its sign-in page) as a tracker on top, one headline, one short line; the real portal in the window below.
+- Captured documents table and fields card styles (capture/howitworks.spec.ts); rebuilt the moving parts. The fixture's scanned file carried a real-looking person and broker, so the scan is the film's own invented December statement (closing 96,250.00 = January's opening).
+- Fixes after the first stills: the upload footer no longer takes space when empty (it covered the table header); the captured, already-processed table is hidden before the upload; framing widened.
+- Measured: stills at frames 20, 40, 55, 70, 88, 115, 150, 190, 235, 265, 300, 340. Not watched in motion.

@@ -152,8 +152,10 @@ export const UploadBox: React.FC<UploadBoxProps> = ({ files, progress, fresh, u,
         )}
         <div
           style={{
-            height: BOX.footerH * u,
-            borderTop: `${Math.max(1, u)}px solid ${colors.line}`,
+            // The footer only takes space once a file is staged (as in the portal).
+            height: count > 0 ? BOX.footerH * u : 0,
+            overflow: "hidden",
+            borderTop: count > 0 ? `${Math.max(1, u)}px solid ${colors.line}` : "none",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
