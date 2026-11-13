@@ -46,7 +46,7 @@ const SoundLayer: React.FC<{ vo: boolean; music: boolean; sfx: boolean }> = ({ v
   <>
     {music && <Audio src={staticFile(MUSIC.src)} volume={(f) => musicLevel(f, vo) * interpolate(f, [TOTAL_FRAMES - MUSIC.fadeFrames, TOTAL_FRAMES], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })} />}
     {vo && VO.map((v) => (
-      <Sequence key={v.section} from={v.from} durationInFrames={v.frames}>
+      <Sequence key={v.src} from={v.from} durationInFrames={v.frames}>
         <Audio src={staticFile(v.src)} />
       </Sequence>
     ))}

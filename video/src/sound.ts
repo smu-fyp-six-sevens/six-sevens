@@ -1,5 +1,5 @@
 // sound.ts - the film's sound, placed from the same knobs as the picture.
-//   VO: one guide clip per section (public/vo, made with espeak-ng from public/vo/lines.json), starting VO_OFFSET
+//   VO: one clip per section (public/vo: ElevenLabs, voice Brian, eleven_multilingual_v2, from public/vo/lines.json), starting VO_OFFSET
 //       seconds into its section. Replace a clip with your own recording of the same name and everything else follows.
 //   Music: public/music/soundtrack.mp3 (the synthwave track, extended by a 12-bar loop so its own ending lands on
 //       the call to action). Quieter through the problem (sections 1-3), lifted from the portal on, and ducked under
@@ -19,19 +19,25 @@ const VO_FILE: Partial<Record<SectionName, keyof typeof durations>> = {
 };
 /** Seconds into each section the voice starts. */
 export const VO_OFFSET: Partial<Record<SectionName, number>> = {
-  buried: 0.2, waiting: 0.3, tamper: 0.3, portal: 0.15, upload: 0.25, detect: 0.2, trace: 0.3, score: 0.3,
+  buried: 0.2, waiting: 0.3, tamper: 0.3, portal: 0.15, upload: 0.25, detect: 0.05, trace: 0.3, score: 0.3,
   finalise: 0.2, dashboard: 0.25, difference: 0.2, cta: 0.2,
 };
 
 const start = (n: SectionName) => (SCENES as Record<string, { start: number }>)[n]?.start ?? 0;
 const at = (n: SectionName, seconds: number) => start(n) + Math.round(seconds * FPS);
 
+/** Seconds after the big ping that the sigh starts. */
+export const SIGH_AFTER_PING = 0.25;
+
 export const VO = (Object.keys(VO_FILE) as SectionName[]).map((n) => ({
   section: n,
   src: `vo/${VO_FILE[n]}.wav`,
   from: at(n, VO_OFFSET[n] ?? 0),
   frames: Math.ceil((durations[VO_FILE[n]!] + 0.1) * FPS),
-}));
+})).concat([
+  // The sigh after the hook's big ping (ElevenLabs Sound Effects; sigh-alt.wav is the other take).
+  { section: "buried" as SectionName, src: "vo/sigh.wav", from: at("buried", OVERWHELM3.finalPingIn + SIGH_AFTER_PING), frames: Math.ceil(1.9 * FPS) },
+]);
 
 /** Music level by frame: quieter for the problem, lifted for the product, ducked under the voice. */
 export const MUSIC = { src: "music/soundtrack.mp3", quiet: 0.25, lifted: 0.42, ducked: 0.3, fadeFrames: 12 };

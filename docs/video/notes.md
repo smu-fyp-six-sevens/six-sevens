@@ -143,3 +143,9 @@
 - Owner: dashboard zoom cut off the pipeline and the risk overview; still a lag between "harder to catch" and "why we introduce".
 - Dashboard: no zoom on full-width panels (pipeline, flags + types, risk); the page scrolls under them; push in only on Needs attention.
 - Tamper 8.0 -> 7.0 s; the portal intro line rises at 0.1 s (was 0.25). Film 110.8 s; script times updated.
+
+## Wave 25 - ElevenLabs voice
+- Owner connected ElevenLabs (free plan; credit "Voice by ElevenLabs"). Voice: Brian (nPczCjzI2devNBz1zQrb), eleven_multilingual_v2, stability 0.45, similarity 0.8, style 0.15.
+- All 12 lines fit their sections; Detect ran 0.2 s over: started at 0.05 s and sped 3%.
+- Sigh: ElevenLabs Sound Effects, two takes (vo/sigh.wav, vo/sigh-alt.wav), 0.25 s after the hook's big ping; part of the voice track (not in Master-NoVO).
+- Delivered: renders/film.mp4 (voice, music ducked, effects).
