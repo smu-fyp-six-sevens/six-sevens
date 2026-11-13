@@ -166,3 +166,6 @@
 
 ## Wave 29 - faster bad-actor section
 - Owner: the "Even worse..." section at most 6.5 s, text sooner, tampering faster. Now 5.35 s: edit finishes by 2.55 s (was 3.9), second caption at 2.3 s (was 4.5), shrink at 3.55 s; t1/t2 sped 12%. Film 113.4 s; stems re-exported.
+
+## Owner preference (from wave 29)
+- Deliver visuals only: renders/picture.mp4 (Master-Silent, no audio). No voice, music or effects renders unless asked; the owner aligns sound in their own editor (stems from wave 28 are in renders/stems).

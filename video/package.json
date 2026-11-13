@@ -12,7 +12,8 @@
     "render:notext": "remotion render Master-NoText renders/4k/film-no-text-4k.mp4 --scale=2 --crf=10 --x264-preset=slow --color-space=bt709 --audio-bitrate=320k",
     "render:preview": "remotion render Master renders/film.mp4 --crf=16 --color-space=bt709 --audio-bitrate=256k",
     "render:novo": "remotion render Master-NoVO renders/4k/film-novo-4k.mp4 --scale=2 --crf=10 --x264-preset=slow --color-space=bt709 --audio-bitrate=320k",
-    "vo:fit": "python3 tools/fit-vo.py"
+    "vo:fit": "python3 tools/fit-vo.py",
+    "render:picture": "remotion render Master-Silent renders/picture.mp4 --muted --color-space=bt709 --crf=16"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.532",
