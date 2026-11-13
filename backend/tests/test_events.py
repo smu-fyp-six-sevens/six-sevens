@@ -87,6 +87,66 @@ async def test_in_process_dispatch_runs_every_installed_role(clean_registry, mon
     assert sorted(seen) == ["audit", "worker"]
 
 
+async def test_a_failing_in_process_handler_is_logged_and_the_others_still_run(clean_registry, monkeypatch, caplog) -> None:
+    monkeypatch.setattr(bus, "_dispatch_in_process", _REAL_DISPATCH)
+    seen: list[str] = []
+
+    async def broken(event: Event) -> None:
+        raise RuntimeError("boom")
+
+    async def audit(event: Event) -> None:
+        seen.append(event.type)
+
+    registry.install("case-worker", {types.CASE_ANALYSIS_REQUESTED: broken})
+    registry.install("audit-metrics", {types.EVERY_TYPE: audit})
+    await bus.publish(Event(type=types.CASE_ANALYSIS_REQUESTED, case_id="c"))
+    await bus.drain()
+
+    assert seen == [types.CASE_ANALYSIS_REQUESTED]
+    assert any("failed on" in record.getMessage() and "boom" in (record.exc_text or str(record.exc_info)) for record in caplog.records)
+
+
+async def test_drain_waits_for_handlers_started_by_handlers(clean_registry, monkeypatch) -> None:
+    monkeypatch.setattr(bus, "_dispatch_in_process", _REAL_DISPATCH)
+    seen: list[str] = []
+
+    async def worker(event: Event) -> None:
+        await asyncio.sleep(0.01)
+        await bus.publish(Event(type=types.CASE_ANALYSIS_COMPLETED, case_id="c"))
+
+    async def audit(event: Event) -> None:
+        seen.append(event.type)
+
+    registry.install("case-worker", {types.CASE_ANALYSIS_REQUESTED: worker})
+    registry.install("audit-metrics", {types.EVERY_TYPE: audit})
+    await bus.publish(Event(type=types.CASE_ANALYSIS_REQUESTED, case_id="c"))
+    await bus.drain()
+
+    assert sorted(seen) == sorted([types.CASE_ANALYSIS_REQUESTED, types.CASE_ANALYSIS_COMPLETED])
+    assert not bus._tasks
+
+
+async def test_shutdown_cancels_running_handlers_and_lets_them_clean_up(clean_registry, monkeypatch) -> None:
+    monkeypatch.setattr(bus, "_dispatch_in_process", _REAL_DISPATCH)
+    started, cleaned_up = asyncio.Event(), asyncio.Event()
+
+    async def worker(event: Event) -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()  # never set: only a cancel ends it
+        finally:
+            cleaned_up.set()
+
+    registry.install("case-worker", {types.CASE_ANALYSIS_REQUESTED: worker})
+    await bus.publish(Event(type=types.CASE_ANALYSIS_REQUESTED, case_id="c"))
+    await asyncio.wait_for(started.wait(), timeout=2)
+
+    await bus.shutdown()
+
+    assert cleaned_up.is_set()
+    assert not bus._tasks
+
+
 def test_push_runs_only_the_named_roles_handler(clean_registry) -> None:
     worker, audit = AsyncMock(), AsyncMock()
     registry.install("detection-worker", {types.DOCUMENT_APPROVED: worker})

@@ -11,7 +11,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
-from .. import document_repository, events, query_stats
+from .. import document_repository, events
 from ..config import settings
 from ..events import Event, Stopwatch, types
 from ..events.envelope import officer_of
@@ -80,23 +80,19 @@ async def _run(
     officer whose upload, retry or retype started the run, for the audit trail.
     """
     timer = Stopwatch()
-    usage: dict[str, float | int] = {}
+    meter = recovery.Meter()
     ran = True
     try:
         # The cancel route writes CANCELLED; a run in another instance notices it here.
-        with _runs.track(document_id, lambda: _cancelled_elsewhere(document_id)):
-            async with _slots:
-                with query_stats.scope(f"{label} doc={document_id[:8]}", work=kind) as unit:
-                    try:
-                        ran = await work()
-                    finally:
-                        usage = unit.llm_detail()
+        async with _runs.slot(document_id, lambda: _cancelled_elsewhere(document_id), _slots):
+            with recovery.metered(f"{label} doc={document_id[:8]}", kind, meter):
+                ran = await work()
     except asyncio.CancelledError:
         if not _runs.cancelled_by_officer(document_id):
             raise
         # The officer's cancel already wrote CANCELLED and its own event; this one carries what the run spent.
         logger.info("Processing of document %s was cancelled", document_id)
-        await _record_stopped(document_id, timer, {"run": kind, **usage}, requested_by)
+        await _record_stopped(document_id, timer, {"run": kind, **meter.usage}, requested_by)
         return
     except Exception as exc:
         logger.exception("Unhandled error processing document %s", document_id)
@@ -110,7 +106,7 @@ async def _run(
         except Exception:
             logger.exception("Failed to mark document %s FAILED after an unhandled error", document_id)
     if ran:
-        await _announce(document_id, timer, {"run": kind, **usage}, requested_by)
+        await _announce(document_id, timer, {"run": kind, **meter.usage}, requested_by)
 
 
 async def _record_stopped(document_id: str, timer: Stopwatch, usage: dict, requested_by: str | None) -> None:

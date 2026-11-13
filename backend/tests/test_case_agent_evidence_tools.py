@@ -46,10 +46,10 @@ async def test_the_documents_are_listed_by_the_names_the_tools_take() -> None:
 
     listed = (await call(tools, "list_documents"))["documents"]
 
+    # No file names: one can hold a person's name or a protected word (bias.py).
     assert listed == [
-        {"document": "certificate_of_incumbency_1", "type": "certificate_of_incumbency", "filename": "doc-coi.pdf",
-         "detection_findings": 1},
-        {"document": "payslip_1", "type": "payslip", "filename": "doc-pay.pdf", "detection_findings": 0},
+        {"document": "certificate_of_incumbency_1", "type": "certificate_of_incumbency", "detection_findings": 1},
+        {"document": "payslip_1", "type": "payslip", "detection_findings": 0},
     ]
 
 
@@ -217,6 +217,31 @@ async def test_the_same_person_in_another_order_or_case_matches_and_another_pers
 
     assert (same["same"], same["breach_flags"]) == (True, [])
     assert (different["same"], different["breach_flags"]) == (False, ["PERSON_MISMATCH"])
+
+
+async def test_one_person_with_two_id_numbers_is_an_identifier_conflict() -> None:
+    # Linked by the same name on both documents; the ID numbers then disagree.
+    tools, kit = toolkit(document("nric", "doc-id", individual_name="Tan Wei Ming", nric_number="S1234567D"),
+                         document("credit_report", "doc-cr", individual_name="TAN WEI MING", id_number="S7654321A"))
+
+    ids = await call(tools, "compare_linked_people", document_a="nric_1", document_b="credit_report_1", check="id")
+    names = await call(tools, "compare_linked_people", document_a="nric_1", document_b="credit_report_1", check="name")
+
+    assert (ids["available"], ids["same"], ids["breach_flags"]) == (True, False, ["IDENTIFIER_CONFLICT"])
+    [mismatch] = ids["mismatches"]
+    assert mismatch["check"] == "individual_id"
+    assert [flag_on(kit, ref) for ref in mismatch["refs"]] == ["IDENTIFIER_CONFLICT"] * 2
+    assert (names["same"], names["breach_flags"]) == (True, [])
+
+
+async def test_documents_naming_no_one_in_common_cannot_be_compared() -> None:
+    tools, kit = toolkit(document("nric", "doc-id", individual_name="Tan Wei Ming", nric_number="S1234567D"),
+                         document("credit_report", "doc-cr", individual_name="Lim Ah Kow", id_number="S7654321A"))
+
+    result = await call(tools, "compare_linked_people", document_a="nric_1", document_b="credit_report_1")
+
+    assert result["available"] is False
+    assert kit.context.ledger.refs == {}
 
 
 async def test_a_personal_attribute_is_never_compared() -> None:

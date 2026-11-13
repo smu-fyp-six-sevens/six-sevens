@@ -37,7 +37,7 @@ How Six Sevens would move from Cloud Run to Kubernetes, and when. Planned only: 
 |---|---|---|
 | Cluster | GKE Autopilot, regional, `asia-southeast1`, one per environment | No nodes to manage; survives a zone loss |
 | Namespaces | One per role, plus `gateway`, `frontend`, `observability` | A boundary each; dashboards already key on `namespace` |
-| Ingress | One Google load balancer → Kong; services internal (ClusterIP) | One front door; closes CODEBASE_AUDIT 6.1.1 |
+| Ingress | One Google load balancer → Kong; services internal (ClusterIP) | One front door, by the network rather than Cloud Run's gateway key (backend `gateway.py`) |
 | Events | Same topic; workers switch from push to pull | Private services can't take push; removes the 600 s limit |
 | Scaling | KEDA on undelivered messages, 0 to max | Keeps scale to zero |
 | Database | Supabase outside; egress via Cloud NAT on a static IP, allow-listed | A leaked key is useless elsewhere |
@@ -87,13 +87,12 @@ Actions builds, signs (cosign) and attaches an SBOM, then opens a PR bumping the
 
 | Audit row | On GKE |
 |---|---|
-| 6.1.1 direct access to api, audit-metrics | Gone: internal services |
-| 6.9.1 token-spending routes not rate-limited | Still an app fix; a quota per worker namespace caps spend |
 | 6.3.1 every role holds the database key | Still true; the NAT allow-list limits where it works |
 | 6.7.2 pinning by tag | Closed by §5 (digests, Binary Authorization) |
-
-Kong's real-IP settings (`deploy/kong/render.sh`) need the load balancer's ranges as trusted IPs on GKE.
 | 6.1.5 any service can publish any event | Unchanged |
+| Cross-instance detection cancel (was CODEBASE_AUDIT 2.18): a cancel that lands on another instance is seen only through the audit trail, so not while audit-metrics is down | Do it with the move: a `cancel_requested_at` column on `documents` that the detection run polls (`workers/detection.py`, `_cancel_requested_since`), so a cancel needs only the database. More pods make a cross-instance cancel likelier. M |
+
+Kong's real-IP settings (`deploy/kong/render.sh`) need the load balancer's ranges as trusted IPs on GKE, and the gateway key (backend `gateway.py`) can go once the services are internal.
 
 ## 8. Cost (rough; check Google's calculator before quoting)
 

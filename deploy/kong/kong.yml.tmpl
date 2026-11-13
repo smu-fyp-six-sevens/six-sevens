@@ -3,6 +3,7 @@
 # real-IP header), the token-spending routes per officer (their bearer token).
 # ${API_URL}, ${AUDIT_URL}: upstreams (http://api:8000 locally, https://<service>.run.app on Cloud Run).
 # ${PRESERVE_HOST}: false on Cloud Run, which routes by Host. ${CORS_ORIGINS}: the frontend origins, quoted.
+# ${GATEWAY_SECRET}: the shared secret the upstreams check (Secret Manager on Cloud Run; a fixed value in compose).
 _format_version: "3.0"
 
 services:
@@ -80,6 +81,12 @@ plugins:
       max_age: 600
   - name: correlation-id
     config: { header_name: X-Request-ID, generator: uuid, echo_downstream: true }
+  # Proves to api and audit-metrics that a request came through here: they refuse any without it (backend
+  # app/gateway.py). A client's own copy of the header is dropped first.
+  - name: request-transformer
+    config:
+      remove: { headers: [X-Gateway-Key] }
+      add: { headers: ["X-Gateway-Key:${GATEWAY_SECRET}"] }
   # Served on the status port (8100), scraped by the collector sidecar; off by default in Kong 3.
   - name: prometheus
     config: { status_code_metrics: true, latency_metrics: true, bandwidth_metrics: true }

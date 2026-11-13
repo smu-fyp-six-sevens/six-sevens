@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from .. import audit, detection_results, document_repository, events, metrics, query_stats
+from .. import audit, detection_results, document_repository, events, metrics
 from ..case_pipeline import service as analysis_service
 from ..config import settings
 from ..events import Event, Stopwatch, types
@@ -49,24 +49,20 @@ async def run(
     timer = Stopwatch()
     outcome: Outcome = "success"
     detail: dict[str, Any] = {}
-    usage: dict[str, float | int] = {}
+    meter = recovery.Meter()
     started = False
     try:
         # The cancel event is the flag: the audit trail shows one made through another instance.
-        with _runs.track(document_id, lambda: _cancel_requested_since(document_id, timer.started_at)):
-            async with _slots:
-                if start_from is not None and not await asyncio.to_thread(
-                    document_repository.update_status, document_id, DocumentStatus.DETECTING,
-                    expected_current_statuses=list(start_from),
-                ):
-                    logger.info("Document %s is no longer waiting for detection; ignoring the repeat", document_id)
-                    return
-                started = True
-                with query_stats.scope(f"detection doc={document_id[:8]}", work="detection") as unit:
-                    try:
-                        result = await run_detection(document_id)
-                    finally:
-                        usage = unit.llm_detail()
+        async with _runs.slot(document_id, lambda: _cancel_requested_since(document_id, timer.started_at), _slots):
+            if start_from is not None and not await asyncio.to_thread(
+                document_repository.update_status, document_id, DocumentStatus.DETECTING,
+                expected_current_statuses=list(start_from),
+            ):
+                logger.info("Document %s is no longer waiting for detection; ignoring the repeat", document_id)
+                return
+            started = True
+            with recovery.metered(f"detection doc={document_id[:8]}", "detection", meter):
+                result = await run_detection(document_id)
         detail = {"verdict": result.get("verdict"), "findings": len(result.get("findings") or [])}
         metrics.detection_verdicts.labels(str(detail["verdict"] or "none")).inc()
     except asyncio.CancelledError:
@@ -81,7 +77,7 @@ async def run(
         outcome, detail = "cancelled", {"error": reason}
         if not by_officer:
             # Shutting down: what the run spent still goes on the record before the cancel carries on.
-            await _record_end(document_id, case_id, requested_by, timer, outcome, detail, usage, trigger_event_id)
+            await _record_end(document_id, case_id, requested_by, timer, outcome, detail, meter.usage, trigger_event_id)
             raise
     except Exception as exc:
         logger.exception("Fraud detection failed for approved document %s", document_id)
@@ -90,7 +86,7 @@ async def run(
         if case_id and started:
             # Every ending writes the document's status last, which Realtime reports.
             await push_case_snapshot(case_id, realtime_covers=True)
-    await _record_end(document_id, case_id, requested_by, timer, outcome, detail, usage, trigger_event_id)
+    await _record_end(document_id, case_id, requested_by, timer, outcome, detail, meter.usage, trigger_event_id)
     # The last approved document scanned starts the case analysis.
     await analysis_service.start_if_due(case_id)
 

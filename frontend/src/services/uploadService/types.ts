@@ -114,6 +114,9 @@ export interface DetectionFinding {
   via_second_look: boolean;
   confidence?: number;
   agent_confidences?: { specialist: string; confidence: number }[];
+  // Set when a severity floor overruled the specialist: its own rating, and the rule's reason.
+  agent_severity?: DetectionSeverity | 'dismissed';
+  severity_floor_reason?: string;
   // Where on the document it was found, for the checks that measure an area (image and layout checks).
   // `page` is 1-based (null for an image upload); `bbox` is [x0, y0, x1, y1] from the top-left, in
   // `bbox_units`, within a page of `page_size` when the check reports it.

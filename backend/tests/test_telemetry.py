@@ -36,6 +36,46 @@ def current_trace_id() -> int:
     return trace.get_current_span().get_span_context().trace_id
 
 
+class _RecordingSpan:
+    def __init__(self) -> None:
+        self.attributes: dict = {}
+
+    def set_attribute(self, key: str, value) -> None:
+        self.attributes[key] = value
+
+
+def test_a_calls_usage_and_cost_are_put_on_its_span() -> None:
+    from langchain_core.messages import AIMessage
+
+    # 1,500 input tokens, 1,000 of them read from the cache: 500 uncached.
+    response = AIMessage(
+        content="ok", response_metadata={"model_name": "claude-sonnet-5-5"},
+        usage_metadata={"input_tokens": 1500, "output_tokens": 200, "total_tokens": 1700,
+                        "input_token_details": {"cache_read": 1000}},
+    )
+    span = _RecordingSpan()
+
+    telemetry.record_usage(span, response)
+
+    assert span.attributes == {
+        "llm.model": "claude-sonnet-5-5", "llm.input_tokens": 500, "llm.output_tokens": 200,
+        "llm.cache_read_tokens": 1000, "llm.cache_write_tokens": 0,
+        # Sonnet 5.5 per million: 2 in, 10 out, 0.10 cache read.
+        "llm.cost_usd": round((500 * 2 + 200 * 10 + 1000 * 0.10) / 1_000_000, 6),
+    }
+
+
+def test_a_call_without_usage_puts_nothing_on_its_span() -> None:
+    from langchain_core.messages import AIMessage
+
+    span = _RecordingSpan()
+
+    telemetry.record_usage(span, AIMessage(content="ok"))
+    telemetry.record_usage(span, object())  # never raises, whatever it's given
+
+    assert span.attributes == {}
+
+
 @pytest.mark.usefixtures("in_a_trace")
 def test_the_current_trace_is_carried_as_a_traceparent() -> None:
     assert telemetry.inject() == {"traceparent": TRACEPARENT}

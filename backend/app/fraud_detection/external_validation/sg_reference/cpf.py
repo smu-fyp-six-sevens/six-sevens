@@ -40,14 +40,29 @@ CPF_RATE_TABLES: dict[str, tuple[CpfBand, ...]] = {
                           (0.165, 0.075, 0.09, 0.225), (0.125, 0.05, 0.075, 0.15)]),
     "2026-01-01": _bands([(0.37, 0.20, 0.17, 0.6), (0.34, 0.18, 0.16, 0.54), (0.25, 0.125, 0.125, 0.375),
                           (0.165, 0.075, 0.09, 0.225), (0.125, 0.05, 0.075, 0.15)]),
+    # ASSUMED, not published: 2026's rates carried over. When CPF Board publishes "CPF Contribution Rate Table
+    # from 1 January 2027", replace these five rows with its Table 1, add its URL above, and remove the date from
+    # PROVISIONAL_RATE_TABLES below.
+    "2027-01-01": _bands([(0.37, 0.20, 0.17, 0.6), (0.34, 0.18, 0.16, 0.54), (0.25, 0.125, 0.125, 0.375),
+                          (0.165, 0.075, 0.09, 0.225), (0.125, 0.05, 0.075, 0.15)]),
 }
 
+# Tables entered on an assumption. A payslip they'd apply to is skipped, as if there were no table, unless
+# settings.CPF_USE_PROVISIONAL_RATES is on: a wrong guess would otherwise call a genuine payslip impossible.
+PROVISIONAL_RATE_TABLES: frozenset[str] = frozenset({"2027-01-01"})
 
-NEWEST_RATE_YEAR = max(date.fromisoformat(k).year for k in CPF_RATE_TABLES)
+
+def _confirmed_tables(use_provisional: bool) -> list[str]:
+    return [k for k in CPF_RATE_TABLES if use_provisional or k not in PROVISIONAL_RATE_TABLES]
 
 
-def bands_in_force(on: date) -> tuple[CpfBand, ...] | None:
-    applicable = [k for k in CPF_RATE_TABLES if date.fromisoformat(k) <= on]
+def newest_rate_year(use_provisional: bool = False) -> int:
+    """The newest year with rates (published only, unless use_provisional): a later pay date is skipped."""
+    return max(date.fromisoformat(k).year for k in _confirmed_tables(use_provisional))
+
+
+def bands_in_force(on: date, use_provisional: bool = False) -> tuple[CpfBand, ...] | None:
+    applicable = [k for k in _confirmed_tables(use_provisional) if date.fromisoformat(k) <= on]
     return CPF_RATE_TABLES[max(applicable)] if applicable else None
 
 
@@ -102,6 +117,8 @@ def band_for_age(bands: tuple[CpfBand, ...], date_of_birth: date, pay_date: date
 ORDINARY_WAGE_CEILINGS: dict[str, int] = {
     "2016-01-01": 6_000, "2023-09-01": 6_300, "2024-01-01": 6_800,
     "2025-01-01": 7_400, "2026-01-01": 8_000,
+    # ASSUMED: $8,000 was the last announced step. Confirm (or change) with the 2027 rate table above.
+    "2027-01-01": 8_000,
 }
 
 

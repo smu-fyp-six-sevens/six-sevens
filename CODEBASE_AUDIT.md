@@ -6,7 +6,6 @@ Open items only: delete a row once it's fixed. Read from the code, 2026-11-13; n
 
 | Items | In plain words |
 |---|---|
-| 6.1.1 | Two services can be called around the gateway (needs you: it changes the deploy) |
 | 6.5.1 | The audit log keeps personal data forever, even after a case is deleted (needs a decision, §7) |
 | 6.2.1 | Any officer can see and change any case (needs a decision, §7) |
 
@@ -14,10 +13,8 @@ Open items only: delete a row once it's fixed. Read from the code, 2026-11-13; n
 
 | # | Sev | In plain words | Fix | Where | Size |
 |---|---|---|---|---|---|
-| 2.6 | Medium | The AI decides each finding's severity and can dismiss most findings, so it effectively shapes the score | Decide the rule (§7); then maybe a minimum severity per check for income documents and bank statements | `case_pipeline/risk/case_risk.py:156-168`; `langgraph/detection/specialists.py:48-59` | M |
 | 2.14 | Low | One unassessed finding alone makes a case Medium (3 points = the Medium threshold) | Decide (§7): lower its points or raise the threshold | `case_pipeline/risk/case_risk.py:58`, `:62` | S |
-| 2.18 | Low | Cancelling a detection on another instance only works if audit-metrics is up | Read a cancel flag on the document row | `workers/detection.py:30-32` | M |
-| 2.22 | Low | No CPF rate table for 2027 yet, so 2027 payslips skip the CPF checks | Add the 2027 table and ceiling once CPF publishes them | `fraud_detection/external_validation/sg_reference/cpf.py` | S |
+| 2.22 | Low | The 2027 CPF table is a placeholder (2026's rates), so 2027 payslips skip the CPF checks unless `CPF_USE_PROVISIONAL_RATES` is on | When CPF publishes, replace the five 2027 rows and the ceiling, and remove the date from `PROVISIONAL_RATE_TABLES` | `fraud_detection/external_validation/sg_reference/cpf.py` | S |
 
 ## 3. Performance
 
@@ -33,10 +30,7 @@ Also in STABILITY §2: sweeper scan, case search, `list_reviews`.
 
 | # | In plain words | Fix | Where |
 |---|---|---|---|
-| 4.2.1 | The two workers' run wrappers are near-copies | One shared runner in `workers/recovery.py` (M) | `workers/detection.py`; `workers/documents.py` |
-| 4.2.2 | Token and ticket signing are written twice | One sign/verify pair | `auth.py` |
 | 4.3.1 | Raw colours outside the tokens in 8 frontend files | Move to tokens | `frontend/src/styles/*.css`, `DashboardPage.tsx` |
-| 4.3.2 | Settings are read three ways; a bad number fails with a bare `ValueError` | One typed reader that names the variable | `config.py` |
 
 ## 5. Bigger reorganisations (optional, in order)
 
@@ -49,7 +43,6 @@ Also in STABILITY §2: sweeper scan, case search, `list_reviews`.
 
 | # | Sev | In plain words | Fix | Where | Size |
 |---|---|---|---|---|---|
-| 6.1.1 | High | `api` and `audit-metrics` are public, so attackers can skip Kong's login rate limit and read `/metrics` | Only Kong's service account may call them (needs the user: changes the deploy) | `deploy/terraform/run.tf`; `main.tf` | M |
 | 6.1.5 | Low | Any service can publish any event type, including ones that look like an officer's | Handlers check which role may send each type | `deploy/terraform/iam.tf:37-42` | M |
 | 6.2.1 | High | Any officer can read, change or delete any case | Decide the rule (§7), then one check per route | `routers/_dependencies.py:85-97`; `routers/audit.py` | L |
 | 6.2.2 | Medium | Passwords stored in plain text, no lockout, 7-day tokens that can't be revoked one by one | Store hashes; a token version per user | `auth.py`; `config.py:32-43` | M |
@@ -65,7 +58,6 @@ Also in STABILITY §2: sweeper scan, case search, `list_reviews`.
 
 - **Who may see which case?** Today every officer can see, change and delete every case. Options: keep it and document it; everyone sees all but changes only their own; or only assigned cases, with a supervisor role. *Recommended: see all, change own.*
 - **What should the audit log keep, and for how long?** It's permanent on purpose, but it keeps the values officers corrected (names, IDs, amounts). Options: keep values forever; keep only "field X changed, by whom, when"; or delete entries after a set period. *Recommended: "changed" only, and ask GLDB how long audit records must be kept.*
-- **How much may the AI overrule the checks?** Code already stops it lowering anything proved impossible. Option still open: a minimum severity for arithmetic and identity findings on payslips, tax notices and bank statements. *Recommended: yes, after checking with the sponsor.*
 - **Should one unassessed finding make a case Medium? (2.14)** *Recommended: no; give it 2 points so it takes two to reach Medium.*
 - **Extraction retry cost (3.2.4):** *Recommended: accept; retries are rare and caching every first call costs more.*
 - **File link lifetime (6.3.3):** *Recommended: 5 minutes for previews, 30 for runs.*

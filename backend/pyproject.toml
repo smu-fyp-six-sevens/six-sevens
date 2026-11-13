@@ -42,6 +42,7 @@ markers = [
   "sprint4: regression test for a Sprint 4 test case",
   "sprint5: regression test for a Sprint 5 test case",
   "story(jira_id, test_case_id): the Jira story and manual test case ID this test covers",
+  "real_case_chain: keep the stage sync, automatic case analysis and finalised check real (tests/conftest.py)",
 ]
 filterwarnings = [
   # langgraph-checkpoint's own internal import (JsonPlusSerializer) trips a

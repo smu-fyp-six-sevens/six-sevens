@@ -1293,6 +1293,15 @@ _FLAGGED_ONCE = [
         'FATCA.US_PERSON', "fatca_crs_declaration", [_field("specified_us_person", "No"), _field("us_tin", "123-45-6789")],
         id='fatca_us_person_flags_no_answer_with_a_us_tin',
     ),
+    pytest.param(
+        # 100,000 at 100 a month is 1,000 months: past the 480-month ceiling.
+        'CR.TENOR', "credit_report", [_field("accounts", [{"current_balance": 100000, "monthly_instalment": 100}])],
+        id='cr_tenor_flags_a_term_beyond_any_facility',
+    ),
+    pytest.param(
+        'FATCA.TIN_FORMAT', "fatca_crs_declaration", [_field("tax_residences", [{"country": "Singapore", "tin": "ABC123"}])],
+        id='fatca_tin_format_flags_a_singapore_tin_that_is_not_a_uen',
+    ),
 ]
 
 
@@ -1332,6 +1341,17 @@ _NOT_FLAGGED = [
                  {"month": "Jan", "usage": 380}, {"month": "Feb", "usage": 420}, {"month": "Mar", "usage": 500},
              ])],
         id='poa_usage_match_accepts_an_oldest_first_trend',
+    ),
+    pytest.param(
+        # 100,000 at 2,000 a month is 50 months.
+        'CR.TENOR', "credit_report", [_field("accounts", [{"current_balance": 100000, "monthly_instalment": 2000}])],
+        id='cr_tenor_accepts_an_ordinary_term',
+    ),
+    pytest.param(
+        'FATCA.TIN_FORMAT', "fatca_crs_declaration", [_field("tax_residences", [
+            {"country": "Singapore", "tin": "202312345K"}, {"country": "Malaysia", "tin": "ABC123"},
+        ])],
+        id='fatca_tin_format_accepts_a_uen_and_ignores_other_countries',
     ),
 ]
 

@@ -11,6 +11,8 @@ services:
       AUDIT_URL: http://audit-metrics:8000
       PRESERVE_HOST: "true"
       CORS_ORIGINS: http://localhost:5173
+      # Kong always sends the gateway key; locally api and audit-metrics don't check it (backend app/gateway.py).
+      GATEWAY_SECRET: local-gateway-secret
     depends_on:
       - api
       - audit-metrics

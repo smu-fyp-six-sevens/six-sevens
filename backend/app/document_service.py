@@ -483,19 +483,21 @@ async def delete_field(document: DocumentRecord, field_id: str) -> DocumentRecor
 # --- The officer's decision -------------------------------------------------------------------------------------
 
 
-async def approve(document: DocumentRecord) -> DocumentRecord:
-    """Approves an analysed document after officer review, and starts detection."""
+def approval_refusal(document: DocumentRecord, extracted_fields) -> str | None:
+    """
+    Why this document can't be approved yet, or None. The one statement of the approval rules: the frontend's
+    canApproveDocument and the Playwright mock's approvalRefusal follow it, checked against the same cases
+    (tests/fixtures/regression/approval_rules.json, test_regression_fixtures.py).
+    """
     if document.status != DocumentStatus.ANALYZED:
-        raise Refused("invalid", "Only completed documents can be approved.")
+        return "Only completed documents can be approved."
     if not is_classification_confirmed(document):
-        raise Refused("invalid", "Cannot approve document. Confirm the document type first.")
-
-    extracted_fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document.id)
+        return "Cannot approve document. Confirm the document type first."
     if not case_service.has_extracted_information(extracted_fields):
-        raise Refused("invalid", "Cannot approve document. No information was extracted from it.")
+        return "Cannot approve document. No information was extracted from it."
     missing = case_service.missing_required_fields(document.document_type, extracted_fields)
     if missing:
-        raise Refused("invalid", "Cannot approve document. Required fields are missing or empty: " + ", ".join(missing))
+        return "Cannot approve document. Required fields are missing or empty: " + ", ".join(missing)
     # Saving marks reviewed fields 1.0, so anything under the threshold is unreviewed.
     low_confidence = sorted(
         field.field_name
@@ -503,16 +505,19 @@ async def approve(document: DocumentRecord) -> DocumentRecord:
         if field.confidence is not None and field.confidence < settings.EXTRACTION_CONFIDENCE_THRESHOLD
     )
     if low_confidence:
-        raise Refused(
-            "invalid",
-            "Cannot approve document. Low-confidence fields must be reviewed and saved first: "
-            + ", ".join(low_confidence),
-        )
+        return "Cannot approve document. Low-confidence fields must be reviewed and saved first: " + ", ".join(low_confidence)
     # An Other document's fields come from no schema, so an officer must have saved them.
     if document.document_type == "unrecognised" and document.fields_reviewed_at is None:
-        raise Refused(
-            "invalid", "Cannot approve document. Review and save the fields of a document set to Other first."
-        )
+        return "Cannot approve document. Review and save the fields of a document set to Other first."
+    return None
+
+
+async def approve(document: DocumentRecord) -> DocumentRecord:
+    """Approves an analysed document after officer review, and starts detection."""
+    extracted_fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document.id)
+    refusal = approval_refusal(document, extracted_fields)
+    if refusal:
+        raise Refused("invalid", refusal)
 
     approved = await asyncio.to_thread(document_repository.approve_document, document.id)
     if approved is None:

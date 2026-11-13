@@ -1511,8 +1511,10 @@ def test_approve_document_rejects_a_document_not_yet_analyzed() -> None:
     with (
         patch("app.routers._dependencies.document_repository") as mock_dep_repo,
         patch("app.document_service.document_repository") as mock_repo,
+        patch("app.document_service.extracted_fields_repository") as mock_fields_repo,
     ):
         mock_dep_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = []
 
         response = client.post("/documents/doc-1/approve")
 

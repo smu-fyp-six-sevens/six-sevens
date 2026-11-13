@@ -5,7 +5,8 @@ audit trail records as the actor. No roles, resets or lockouts by design: this i
 a small demo deployment, not a product with an account system.
 
 Token = base64url(payload_json) + "." + base64url(hmac_sha256(secret, payload_b64)),
-where payload is {"sub": <username>, "exp": <unix_ts>}. Verified via constant-time
+where payload is {"purpose": "login", "sub": <username>, "exp": <unix_ts>} (a WebSocket ticket is
+the same with purpose "ws"; _signed and _unsigned make and read both). Verified via constant-time
 comparison; no external JWT dependency needed for something this small.
 """
 from __future__ import annotations
@@ -56,10 +57,29 @@ def _sign(payload_b64: str) -> str:
     return _b64encode(digest)
 
 
-def create_token(username: str) -> str:
-    payload = json.dumps({"sub": username, "exp": int(time.time()) + TOKEN_TTL_SECONDS}).encode("utf-8")
-    payload_b64 = _b64encode(payload)
+def _signed(payload: dict) -> str:
+    """The one way a token or ticket is made: base64url(payload JSON) + "." + its HMAC."""
+    payload_b64 = _b64encode(json.dumps(payload).encode("utf-8"))
     return f"{payload_b64}.{_sign(payload_b64)}"
+
+
+def _unsigned(token: str) -> dict | None:
+    """The one way one is read: its payload, or None if it is malformed or its signature doesn't verify."""
+    try:
+        payload_b64, sig = token.split(".", 1)
+        if not hmac.compare_digest(sig, _sign(payload_b64)):
+            return None
+        payload = json.loads(_b64decode(payload_b64))
+    except (ValueError, TypeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+_LOGIN_PURPOSE = "login"
+
+
+def create_token(username: str) -> str:
+    return _signed({"purpose": _LOGIN_PURPOSE, "sub": username, "exp": int(time.time()) + TOKEN_TTL_SECONDS})
 
 
 def verify_credentials(username: str, password: str) -> str | None:
@@ -74,17 +94,15 @@ def verify_credentials(username: str, password: str) -> str | None:
 
 
 def _verify_token(token: str) -> str | None:
-    """The username the token was issued to, or None if it is forged, expired or has no username."""
-    try:
-        payload_b64, sig = token.split(".", 1)
-    except ValueError:
+    """
+    The username the token was issued to, or None if it is forged, expired, has no username, or is a WebSocket
+    ticket (which names its officer too, so only its purpose tells them apart). A token from before tokens carried
+    a purpose has none, and still counts.
+    """
+    payload = _unsigned(token)
+    if payload is None or payload.get("purpose", _LOGIN_PURPOSE) != _LOGIN_PURPOSE:
         return None
-
-    if not hmac.compare_digest(sig, _sign(payload_b64)):
-        return None
-
     try:
-        payload = json.loads(_b64decode(payload_b64))
         exp = int(payload["exp"])
         username = payload["sub"]
     except (ValueError, KeyError, TypeError):
@@ -101,12 +119,10 @@ def create_ws_ticket(username: str | None = None, case_id: str | None = None) ->
     token already. Signed like the login token but with its own purpose, so neither works as the other.
     The route names the officer and the case: a leaked ticket opens only that case, and says whose it was.
     """
-    payload = json.dumps({
+    return _signed({
         "purpose": _WS_PURPOSE, "nonce": secrets.token_urlsafe(16), "exp": time.time() + WS_TICKET_TTL_SECONDS,
         "sub": username, "case_id": case_id,
-    }).encode("utf-8")
-    payload_b64 = _b64encode(payload)
-    return f"{payload_b64}.{_sign(payload_b64)}"
+    })
 
 
 def consume_ws_ticket(ticket: str, case_id: str | None = None) -> str | None:
@@ -114,14 +130,11 @@ def consume_ws_ticket(ticket: str, case_id: str | None = None) -> str | None:
     For a genuine, unexpired ticket not yet used on this instance, and made for this case if it names one: the
     officer it was made for ("unknown" when it names none). Otherwise None.
     """
+    payload = _unsigned(ticket)
+    if payload is None or payload.get("purpose") != _WS_PURPOSE:
+        return None
     try:
-        payload_b64, sig = ticket.split(".", 1)
-        if not hmac.compare_digest(sig, _sign(payload_b64)):
-            return None
-        payload = json.loads(_b64decode(payload_b64))
         nonce, expires_at = str(payload["nonce"]), float(payload["exp"])
-        if payload.get("purpose") != _WS_PURPOSE:
-            return None
     except (ValueError, KeyError, TypeError):
         return None
     if payload.get("case_id") is not None and payload["case_id"] != case_id:

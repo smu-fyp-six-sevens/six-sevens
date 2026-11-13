@@ -77,10 +77,14 @@ jobs:
           python -m pip install --no-deps -e .
 
       - name: Lint (ruff)
-        run: ruff check app
+        run: ruff check app tests
 
       - name: Type check (pyright) - fails the build
         run: pyright app
+
+      # The tests too: a wrong mock signature or a typo'd attribute is a test that passes for the wrong reason.
+      - name: Type check the tests (pyright)
+        run: pyright tests
 
       - name: Reject type-check suppressions and weakened pyright config
         run: |
@@ -288,10 +292,42 @@ jobs:
           terraform init -backend=false -input=false
           terraform validate
 
+  infrastructure:
+    # The configuration nothing else runs before a deploy: Kong's routes, the compose files, the dashboards' queries,
+    # and, on a pull request, the images themselves (a push to main builds them in deploy.yml).
+    name: Infrastructure checks
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Kong config parses
+        run: |
+          docker build -q -t kong-check -f deploy/kong/Dockerfile .
+          docker run --rm -e KONG_CONFIG_CHECK_ONLY=1 -e API_URL=http://api:8000 -e AUDIT_URL=http://audit-metrics:8000 \
+            -e CORS_ORIGINS=http://localhost:5173 -e GATEWAY_SECRET=ci-placeholder kong-check
+
+      - name: Compose files are valid
+        run: docker compose config -q && docker compose --profile frontend --profile observability config -q
+
+      - name: Dashboard queries are valid PromQL
+        run: |
+          python3 deploy/grafana/check_promql.py > "$RUNNER_TEMP/dashboard-rules.yml"
+          docker run --rm -v "$RUNNER_TEMP:/check:ro" --entrypoint promtool prom/prometheus:v3.1.0 \
+            check rules /check/dashboard-rules.yml
+
+      - name: Images build
+        if: github.event_name == 'pull_request'
+        run: |
+          docker build -q -f backend/Dockerfile --target api .
+          docker build -q -f frontend/Dockerfile .
+          docker build -q -f deploy/grafana/Dockerfile .
+
   deploy:
     # Continuous deployment: every push to main whose checks all pass goes to Cloud Run.
     name: Deploy to Cloud Run
-    needs: [backend-ci, frontend-ci, security]
+    needs: [backend-ci, frontend-ci, security, infrastructure]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read

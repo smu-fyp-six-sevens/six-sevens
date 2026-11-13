@@ -182,6 +182,12 @@ jobs:
           expect 200 GET "$FRONTEND_URL/"
           # Only Pub/Sub's identity may invoke a worker.
           expect 403 POST "$WORKER_URL/push/detection-worker"
+          # api and audit-metrics answer only Kong (its gateway key): called directly, they refuse.
+          API_URL=$(gcloud run services describe api --region "$REGION" --format='value(status.url)')
+          AUDIT_URL=$(gcloud run services describe audit-metrics --region "$REGION" --format='value(status.url)')
+          expect 403 POST "$API_URL/auth/login" -H 'Content-Type: application/json' -d '{"username":"x","password":"x"}'
+          expect 403 GET "$AUDIT_URL/metrics"
+          expect 200 GET "$API_URL/health"
           # Grafana is up and asks for a login.
           GRAFANA_URL=$(gcloud run services describe grafana --region "$REGION" --format='value(status.url)')
           expect 200 GET "$GRAFANA_URL/api/health"

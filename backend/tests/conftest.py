@@ -24,42 +24,52 @@ def _no_correction_hint_cache(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "CORRECTION_HINTS_CACHE_SECONDS", 0)
 
 
+def _real_case_chain(request: pytest.FixtureRequest) -> bool:
+    """A test marked real_case_chain keeps the stage sync, the automatic analysis and the finalised check real."""
+    return request.node.get_closest_marker("real_case_chain") is not None
+
+
 @pytest.fixture(autouse=True)
-def _skip_case_stage_sync(monkeypatch: pytest.MonkeyPatch):
+def _skip_case_stage_sync(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
     """
     Document writes and analysis runs move the case's stage, which reads the
     case back from Supabase. Tests of those writes aren't about the stage, so
-    it is a no-op here; test_case_stage.py exercises the real one.
+    it is a no-op here; test_case_stage.py exercises the real one, and so does
+    any test marked real_case_chain (test_regression_approval_chain.py).
     """
     from app import case_stage
 
-    monkeypatch.setattr(case_stage, "sync_case_stage", lambda case_id: None)
+    if not _real_case_chain(request):
+        monkeypatch.setattr(case_stage, "sync_case_stage", lambda case_id: None)
 
 
 @pytest.fixture(autouse=True)
-def _no_automatic_case_analysis(monkeypatch: pytest.MonkeyPatch):
+def _no_automatic_case_analysis(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
     """
     Detection runs and an officer's document changes may start the case analysis, which reads the case back.
-    Tests of those aren't about it; test_case_auto_analysis.py exercises the real one.
+    Tests of those aren't about it; test_case_auto_analysis.py and real_case_chain tests exercise the real one.
     """
     from app.case_pipeline import service
 
     async def _skip(case_id):
         return None
 
-    monkeypatch.setattr(service, "start_if_due", _skip)
+    if not _real_case_chain(request):
+        monkeypatch.setattr(service, "start_if_due", _skip)
 
 
 @pytest.fixture(autouse=True)
-def _cases_are_not_finalised(monkeypatch: pytest.MonkeyPatch):
+def _cases_are_not_finalised(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
     """
     Every route that changes a document or case first checks its case isn't
     finalised, which reads the case. Tests of those routes aren't about that,
-    so every case reads as open; test_case_stage.py covers the refusal.
+    so every case reads as open; test_case_stage.py covers the refusal, and
+    real_case_chain tests keep the real check.
     """
     from app import case_service
 
-    monkeypatch.setattr(case_service, "is_case_finalised", lambda case_id: False)
+    if not _real_case_chain(request):
+        monkeypatch.setattr(case_service, "is_case_finalised", lambda case_id: False)
 
 
 @pytest.fixture(autouse=True)

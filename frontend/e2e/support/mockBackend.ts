@@ -1,53 +1,6 @@
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Page, Route, WebSocketRoute } from '@playwright/test';
 import type { AuditEvent, CaseAnalysis, CaseRisk } from '../../src/services/uploadService/types';
-
-/**
- * Each document type's required extraction fields, exported from the
- * backend's EXTRACTION_SCHEMAS (kept in sync by
- * backend/tests/test_regression_fixtures.py), so approval is blocked by
- * exactly the same rule as routers/documents.py.
- */
-const REQUIRED_FIELDS: Record<
-  string,
-  { required: string[]; allow_empty: string[]; required_when_individual: string[] }
-> = JSON.parse(
-  readFileSync(
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../backend/tests/fixtures/regression/required_fields.json'),
-    'utf8',
-  ),
-);
-
-/** Same rule as backend case_service.missing_required_fields. */
-function missingRequiredFields(document: { document_type: string | null; extracted_fields: Record<string, unknown> | null }): string[] {
-  const fields = document.extracted_fields ?? {};
-  const schema = REQUIRED_FIELDS[document.document_type ?? ''] ?? {
-    required: [],
-    allow_empty: [],
-    required_when_individual: [],
-  };
-  const unwrap = (raw: unknown): unknown =>
-    raw && typeof raw === 'object' && 'value' in (raw as object) ? (raw as { value: unknown }).value : raw;
-  const isEmpty = (value: unknown): boolean => {
-    if (value === null || value === undefined) return true;
-    if (typeof value === 'string') return !value.trim();
-    if (Array.isArray(value)) return value.length === 0;
-    if (typeof value === 'object') return Object.keys(value as object).length === 0;
-    return false;
-  };
-  const hasValue = (name: string) => !isEmpty(unwrap(fields[name]));
-  const individualAccount =
-    schema.required_when_individual.length > 0 && hasValue('account_holder_name') && !hasValue('uen');
-  const required = individualAccount ? schema.required_when_individual : schema.required;
-  return [...required].sort().filter((name) => {
-    if (!(name in fields)) return true;
-    const value = unwrap(fields[name]);
-    if (Array.isArray(value) && value.length === 0) return !schema.allow_empty.includes(name);
-    return isEmpty(value);
-  });
-}
+import { approvalRefusal, isClassificationConfirmed, missingRequiredFields } from './approvalRules';
 
 /**
  * A fake backend for one test: an in-memory "database" plus handlers for
@@ -64,6 +17,8 @@ function missingRequiredFields(document: { document_type: string | null; extract
  * backend test keeps in step (it fails when the backend changes; regenerate
  * with REGENERATE_REGRESSION_FIXTURES=1):
  *   required_fields.json            test_regression_fixtures.py (approval's required fields)
+ *   approval_rules.json             test_regression_fixtures.py; approvalRules.test.ts runs the mock's and the page's
+ *                                   approval rules against it (approvalRules.ts, documentStatus.ts)
  *   checklist-variants.json         test_regression_checklist.py (the checklist for a set of documents)
  *   case-match-foreign-company.json test_regression_case_match.py
  *   detection-report-{c028,clean,inconclusive}.json  test_regression_detection.py
@@ -130,6 +85,8 @@ export interface DocumentRow {
   fulfilled_requirements: string[];
   extracted_fields: Record<string, unknown> | null;
   extraction_confidence: number | null;
+  /** Set when the officer saves an Other document's fields (backend: fields_reviewed_at). */
+  fields_reviewed_at?: string | null;
   escalation_reason: string | null;
   metadata: Record<string, unknown> | null;
 }
@@ -242,37 +199,6 @@ const IN_FLIGHT = ['uploaded', 'queued', 'processing', 'extracting'];
 const APPROVED = ['approved', 'detecting', 'detected'];
 // The officer's decision is final: approved (and later) and rejected documents are locked (routers/documents.py).
 const LOCKED = [...APPROVED, 'rejected'];
-
-/** Same rule as backend models.is_classification_confirmed: an Other or untyped document needs the officer. */
-function isClassificationConfirmed(document: DocumentRow): boolean {
-  const confidence = document.classification_confidence;
-  if (confidence === null) return false;
-  if (!document.document_type || document.document_type === 'unrecognised') return confidence >= 1.0;
-  return confidence >= 0.85;
-}
-
-/** Same rule as backend case_service.has_extracted_information: at least one non-empty value. */
-function hasExtractedInformation(document: DocumentRow): boolean {
-  const value = (field: unknown) => (field && typeof field === 'object' && 'value' in field ? field.value : field);
-  return Object.values(document.extracted_fields ?? {}).some((field) => {
-    const v = value(field);
-    if (v === null || v === undefined) return false;
-    if (typeof v === 'string') return v.trim() !== '';
-    if (Array.isArray(v)) return v.length > 0;
-    if (typeof v === 'object') return Object.keys(v).length > 0;
-    return true;
-  });
-}
-
-/** Same rules as backend document_service.approve: why this document can't be approved, or null. */
-function approvalRefusal(document: DocumentRow): string | null {
-  if (document.status !== 'analyzed') return 'Only completed documents can be approved.';
-  if (!isClassificationConfirmed(document)) return 'Cannot approve document. Confirm the document type first.';
-  if (!hasExtractedInformation(document)) return 'Cannot approve document. No information was extracted from it.';
-  const missing = missingRequiredFields(document);
-  if (missing.length > 0) return `Cannot approve document. Required fields are missing or empty: ${missing.join(', ')}`;
-  return null;
-}
 
 // The finished runs backend audit.case_cost reads (its _COSTED).
 const COSTED_EVENTS = new Set([
@@ -1046,6 +972,7 @@ export class MockBackend {
         document.extracted_fields = merged;
         document.extraction_confidence = 1.0;
         document.routing_status = 'accepted';
+        if (document.document_type === 'unrecognised') document.fields_reviewed_at = new Date().toISOString();
         return json(document);
       }
       if (method === 'POST' && rest === '/extracted-fields') {
@@ -1083,7 +1010,11 @@ export class MockBackend {
         document.document_type = documentType;
         document.routing_status = 'accepted';
         document.classification_confidence = 1.0;
-        if (needsExtraction) document.status = 'extracting';
+        // A new extraction replaces the fields, so an earlier review no longer covers them.
+        if (needsExtraction) {
+          document.status = 'extracting';
+          document.fields_reviewed_at = null;
+        }
         return json(document);
       }
       // Fraud-detection report and LangGraph trace: the real backend answers

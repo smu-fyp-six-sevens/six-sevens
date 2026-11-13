@@ -1,5 +1,8 @@
 
+import time
+
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app import auth
@@ -128,3 +131,25 @@ def test_a_malformed_auth_users_entry_is_refused_at_start_up(bad: str):
 
     with pytest.raises(ValueError):
         _users(bad)
+
+
+def test_a_websocket_ticket_is_not_a_login_token():
+    ticket = auth.create_ws_ticket("alice", "case-1")
+    with pytest.raises(HTTPException) as refused:
+        require_auth(f"Bearer {ticket}")
+    assert refused.value.status_code == 401
+
+
+def test_a_login_token_is_not_a_websocket_ticket():
+    assert auth.consume_ws_ticket(auth.create_token("alice"), "case-1") is None
+
+
+def test_a_login_token_from_before_purposes_still_works():
+    old = auth._signed({"sub": "alice", "exp": int(time.time()) + 60})
+    assert require_auth(f"Bearer {old}") == "alice"
+
+
+def test_a_token_with_another_purpose_is_refused():
+    other = auth._signed({"purpose": "reset", "sub": "alice", "exp": int(time.time()) + 60})
+    with pytest.raises(HTTPException):
+        require_auth(f"Bearer {other}")

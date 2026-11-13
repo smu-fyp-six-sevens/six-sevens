@@ -5,6 +5,11 @@ set -eu
 : "${API_URL:?API_URL is required}"
 : "${AUDIT_URL:?AUDIT_URL is required}"
 : "${CORS_ORIGINS:?CORS_ORIGINS is required (comma-separated frontend origins)}"
+: "${GATEWAY_SECRET:?GATEWAY_SECRET is required (the key api and audit-metrics check)}"
+# It goes into a sed replacement and a YAML string: letters, digits, - and _ only (openssl rand -hex 32).
+case "$GATEWAY_SECRET" in
+  *[!A-Za-z0-9_-]*) echo "GATEWAY_SECRET may contain only letters, digits, - and _" >&2; exit 1 ;;
+esac
 PRESERVE_HOST="${PRESERVE_HOST:-true}"
 ORIGINS=$(printf '%s' "$CORS_ORIGINS" | sed 's/[[:space:]]//g; s/,/", "/g; s/^/"/; s/$/"/')
 
@@ -12,9 +17,14 @@ sed -e "s|\${API_URL}|$API_URL|g" \
     -e "s|\${AUDIT_URL}|$AUDIT_URL|g" \
     -e "s|\${PRESERVE_HOST}|$PRESERVE_HOST|g" \
     -e "s|\${CORS_ORIGINS}|$ORIGINS|g" \
+    -e "s|\${GATEWAY_SECRET}|$GATEWAY_SECRET|g" \
     /kong/kong.yml.tmpl > /tmp/kong.yml
 
 export KONG_DATABASE=off
+# CI: render, check the config is valid, and stop (ci-cd.yml, "Infrastructure checks").
+if [ -n "${KONG_CONFIG_CHECK_ONLY:-}" ]; then
+  exec kong config parse /tmp/kong.yml
+fi
 export KONG_DECLARATIVE_CONFIG=/tmp/kong.yml
 export KONG_PROXY_LISTEN="0.0.0.0:${PORT:-8000}"
 export KONG_ADMIN_LISTEN=off

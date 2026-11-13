@@ -33,7 +33,7 @@ terraform apply
 ```
 
 - **Existing account or registry:** import instead of creating (`terraform import google_service_account.deployer projects/<id>/serviceAccounts/github-deployer@<id>.iam.gserviceaccount.com`; `terraform import google_artifact_registry_repository.app projects/<id>/locations/asia-southeast1/repositories/app`).
-- **Secret values:** every secret needs a version or its service won't start (`terraform output secrets_to_fill`). For a key you don't have, store one space. In PowerShell write the value to a file first (piping adds a newline): `$f = New-TemporaryFile; [IO.File]::WriteAllText($f, 'the-value'); gcloud secrets versions add anthropic-api-key --data-file=$f; Remove-Item $f`. Then apply again. `auth-secret-key` can be any long random value.
+- **Secret values:** every secret needs a version or its service won't start (`terraform output secrets_to_fill`). For a key you don't have, store one space. In PowerShell write the value to a file first (piping adds a newline): `$f = New-TemporaryFile; [IO.File]::WriteAllText($f, 'the-value'); gcloud secrets versions add anthropic-api-key --data-file=$f; Remove-Item $f`. Then apply again. `auth-secret-key` can be any long random value. `gateway-secret` (the key Kong sends api and audit-metrics, which refuse any request without it) must be letters and digits only: `openssl rand -hex 32`.
 - **GitHub:** `terraform output github_variables`; set them as repository **variables** (not secrets). The only repo secrets are `DATA_GOV_SG_API_KEY` and `SNYK_TOKEN`.
 - **Alerts:** set `alert_email`, apply, confirm Google's email.
 

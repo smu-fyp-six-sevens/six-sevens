@@ -35,7 +35,7 @@ locals {
       max       = 3
       public    = true
       publishes = true
-      secrets   = concat(local.supabase, ["AUTH_USERS", "AUTH_SECRET_KEY"])
+      secrets   = concat(local.supabase, ["AUTH_USERS", "AUTH_SECRET_KEY", "GATEWAY_SECRET"])
       env       = tomap({ CORS_IN_APP = "false" })
     }
     doc-worker = {
@@ -65,11 +65,11 @@ locals {
       concurrency = 40
       timeout     = 60
       max         = 2
-      # Public so Kong can reach it; its /push checks Pub/Sub's OIDC token itself.
+      # Public so Kong can reach it; it answers only Kong's GATEWAY_SECRET, and its /push checks Pub/Sub's OIDC token.
       public = true
       # It runs the sweeper (Cloud Scheduler's sweep.requested), which publishes recovery requests.
       publishes = true
-      secrets   = concat(local.supabase, ["AUTH_SECRET_KEY"])
+      secrets   = concat(local.supabase, ["AUTH_SECRET_KEY", "GATEWAY_SECRET"])
       env = tomap({
         SWEEPER_ENABLED = "true"
         CORS_IN_APP     = "false"

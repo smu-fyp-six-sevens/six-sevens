@@ -6,13 +6,39 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def _env(name: str, default: str = "") -> str:
+def _str(name: str, default: str = "") -> str:
     """
     os.environ.get, stripped — a copy-pasted secret easily picks up a
     trailing newline, which is silently harmless for most settings but
     fatal as an HTTP header value (e.g. SUPABASE_SECRET_KEY).
     """
     return os.environ.get(name, default).strip()
+
+
+def _int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be a whole number, got {raw!r}") from None
+
+
+def _float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be a number, got {raw!r}") from None
+
+
+def _bool(name: str, default: bool) -> bool:
+    """On only when set to "true" (any case); any other value is off, as it always was."""
+    raw = os.environ.get(name)
+    return default if raw is None else raw.lower() == "true"
 
 
 ALL_ROLES = ("api", "doc-worker", "detection-worker", "case-worker", "audit-metrics")
@@ -50,54 +76,57 @@ class Settings:
     """
     # Every account that can log in, in one place (see app/auth.py).
     # AUTH_SECRET_KEY signs bearer tokens; outside local dev an empty one stops startup (main.check_signing_key).
-    AUTH_USERS: dict[str, str] = _users(_env("AUTH_USERS"))
-    AUTH_SECRET_KEY: str = _env("AUTH_SECRET_KEY")
+    AUTH_USERS: dict[str, str] = _users(_str("AUTH_USERS"))
+    AUTH_SECRET_KEY: str = _str("AUTH_SECRET_KEY")
 
     # --- Services and events (CLOUD_ARCHITECTURE_PLAN.md) ---
     # Which roles this process runs; the default runs all of them, as uvicorn always has.
-    ROLES: frozenset[str] = _roles(_env("ROLE", "all"))
+    ROLES: frozenset[str] = _roles(_str("ROLE", "all"))
     # "inprocess" calls handlers in this process; "pubsub" publishes to Pub/Sub (or the emulator
     # when PUBSUB_EMULATOR_HOST is set) and workers receive events on POST /push.
-    EVENT_TRANSPORT: str = _env("EVENT_TRANSPORT", "inprocess").lower()
-    PUBSUB_TOPIC: str = _env("PUBSUB_TOPIC", "domain-events")
-    PUBSUB_PUBLISH_TIMEOUT_SECONDS: float = float(os.environ.get("PUBSUB_PUBLISH_TIMEOUT_SECONDS", "30"))
+    EVENT_TRANSPORT: str = _str("EVENT_TRANSPORT", "inprocess").lower()
+    PUBSUB_TOPIC: str = _str("PUBSUB_TOPIC", "domain-events")
+    PUBSUB_PUBLISH_TIMEOUT_SECONDS: float = _float("PUBSUB_PUBLISH_TIMEOUT_SECONDS", 30)
     # When set, POST /push requires a Google OIDC token for this audience from PUSH_SERVICE_ACCOUNT.
     # Needed on a public service (audit-metrics sits behind Kong); private workers are also guarded by Cloud Run IAM.
-    PUSH_AUDIENCE: str = _env("PUSH_AUDIENCE")
-    PUSH_SERVICE_ACCOUNT: str = _env("PUSH_SERVICE_ACCOUNT")
+    PUSH_AUDIENCE: str = _str("PUSH_AUDIENCE")
+    PUSH_SERVICE_ACCOUNT: str = _str("PUSH_SERVICE_ACCOUNT")
+    # Kong sends this in X-Gateway-Key on every request it forwards; api and audit-metrics refuse a request without
+    # it (gateway.py), so nobody can call them around Kong's rate limits. Empty in a plain uvicorn run.
+    GATEWAY_SECRET: str = _str("GATEWAY_SECRET")
     # Off behind Kong, which answers CORS itself; two sets of CORS headers make browsers refuse the response.
-    CORS_IN_APP: bool = os.environ.get("CORS_IN_APP", "true").lower() == "true"
+    CORS_IN_APP: bool = _bool("CORS_IN_APP", True)
     # A case analysis still "running" after this long was interrupted; the sweeper then marks it failed.
-    CASE_ANALYSIS_TIMEOUT_SECONDS: int = int(os.environ.get("CASE_ANALYSIS_TIMEOUT_SECONDS", "900"))
+    CASE_ANALYSIS_TIMEOUT_SECONDS: int = _int("CASE_ANALYSIS_TIMEOUT_SECONDS", 900)
 
     # --- Stuck work and recovery (sweeper.py, CLOUD_ARCHITECTURE_PLAN.md section 5) ---
     # Off by default: the database is shared, so a local process must never sweep cloud work. Terraform turns it on.
-    SWEEPER_ENABLED: bool = os.environ.get("SWEEPER_ENABLED", "false").lower() == "true"
+    SWEEPER_ENABLED: bool = _bool("SWEEPER_ENABLED", False)
     # uploaded/queued past this means its event was lost; processing/extracting/detecting past the other means
     # its run died (both well past the 600 s push deadline, so a recovery never races a live redelivery).
-    STUCK_WAITING_SECONDS: int = int(os.environ.get("STUCK_WAITING_SECONDS", "300"))
-    STUCK_RUNNING_SECONDS: int = int(os.environ.get("STUCK_RUNNING_SECONDS", "900"))
-    RECOVERY_MAX_ATTEMPTS: int = int(os.environ.get("RECOVERY_MAX_ATTEMPTS", "3"))
+    STUCK_WAITING_SECONDS: int = _int("STUCK_WAITING_SECONDS", 300)
+    STUCK_RUNNING_SECONDS: int = _int("STUCK_RUNNING_SECONDS", 900)
+    RECOVERY_MAX_ATTEMPTS: int = _int("RECOVERY_MAX_ATTEMPTS", 3)
     # How often a running pipeline or detection checks for a cancel made through another instance (pubsub only).
-    CANCEL_POLL_SECONDS: float = float(os.environ.get("CANCEL_POLL_SECONDS", "5"))
+    CANCEL_POLL_SECONDS: float = _float("CANCEL_POLL_SECONDS", 5)
 
     # Comma-separated list of exact origins the frontend is served from, in
     # addition to local dev.
     ALLOWED_ORIGINS: list[str] = [
         origin.strip()
-        for origin in _env("ALLOWED_ORIGINS").split(",")
+        for origin in _str("ALLOWED_ORIGINS").split(",")
         if origin.strip()
     ] + ["http://localhost:5173"]
 
     # Regex alternative to ALLOWED_ORIGINS: Cloud Run hands one service
     # multiple valid hostnames, so pinning to one exact origin is fragile.
     # Set by the deploy workflow.
-    ALLOWED_ORIGIN_REGEX: str | None = _env("ALLOWED_ORIGIN_REGEX") or None
+    ALLOWED_ORIGIN_REGEX: str | None = _str("ALLOWED_ORIGIN_REGEX") or None
 
-    SUPABASE_URL: str = _env("SUPABASE_URL")
+    SUPABASE_URL: str = _str("SUPABASE_URL")
     # Bypasses RLS: every backend read, write and Storage call uses it. Never sent to the frontend.
-    SUPABASE_SECRET_KEY: str = _env("SUPABASE_SECRET_KEY")
-    SUPABASE_STORAGE_BUCKET: str = _env("SUPABASE_STORAGE_BUCKET", "documents")
+    SUPABASE_SECRET_KEY: str = _str("SUPABASE_SECRET_KEY")
+    SUPABASE_STORAGE_BUCKET: str = _str("SUPABASE_STORAGE_BUCKET", "documents")
 
     # AC2: invocation should be attempted within this window of being dequeued
     DEQUEUE_TO_INVOKE_TARGET_SECONDS: float = 1.0
@@ -110,33 +139,33 @@ class Settings:
     MAX_RECLASSIFICATION_ATTEMPTS: int = 1
 
     # Documents one doc-worker process runs at once (workers/documents.py) — bounded by Anthropic rate limits.
-    QUEUE_WORKER_CONCURRENCY: int = int(os.environ.get("QUEUE_WORKER_CONCURRENCY", "4"))
+    QUEUE_WORKER_CONCURRENCY: int = _int("QUEUE_WORKER_CONCURRENCY", 4)
 
     # Threads for PDF/OCR/forensic work (cpu_pool.py). 1 = PyMuPDF only ever runs on one thread.
-    CPU_WORKER_CONCURRENCY: int = int(os.environ.get("CPU_WORKER_CONCURRENCY", "1"))
+    CPU_WORKER_CONCURRENCY: int = _int("CPU_WORKER_CONCURRENCY", 1)
     # Processes for that work instead (each with its own PyMuPDF); 0 keeps the thread. Set on the deployed workers.
-    CPU_WORKER_PROCESSES: int = int(os.environ.get("CPU_WORKER_PROCESSES", "0"))
+    CPU_WORKER_PROCESSES: int = _int("CPU_WORKER_PROCESSES", 0)
     # Detection runs (lead + 3 specialists each) allowed at once; the rest wait their turn.
-    DETECTION_CONCURRENCY: int = int(os.environ.get("DETECTION_CONCURRENCY", "2"))
+    DETECTION_CONCURRENCY: int = _int("DETECTION_CONCURRENCY", 2)
     # Most model calls one detection run may make (lead, specialists, reviews, binders). Past it the run
     # stops asking, reports what it has, and the verdict cannot be "clean".
-    DETECTION_MAX_MODEL_CALLS: int = int(os.environ.get("DETECTION_MAX_MODEL_CALLS", "30"))
+    DETECTION_MAX_MODEL_CALLS: int = _int("DETECTION_MAX_MODEL_CALLS", 30)
     # Most model calls one document's classify and extract run may make (agent turns, the two classifier
     # tools, a repair, extraction and its one retry, and one reclassification).
-    DOCUMENT_MAX_MODEL_CALLS: int = int(os.environ.get("DOCUMENT_MAX_MODEL_CALLS", "24"))
+    DOCUMENT_MAX_MODEL_CALLS: int = _int("DOCUMENT_MAX_MODEL_CALLS", 24)
     # A document the content guard finds worded as an instruction to the AI fails at ingest, before classification
     # or extraction (guardrails/content_guard.blocking_reason). "false" lets it through, flagged instead.
-    GUARD_BLOCK_INJECTION: bool = os.environ.get("GUARD_BLOCK_INJECTION", "true").lower() == "true"
+    GUARD_BLOCK_INJECTION: bool = _bool("GUARD_BLOCK_INJECTION", True)
     # Retries the Anthropic client makes by itself on a rate limit or 5xx; each one is billed again.
-    LLM_MAX_RETRIES: int = int(os.environ.get("LLM_MAX_RETRIES", "1"))
+    LLM_MAX_RETRIES: int = _int("LLM_MAX_RETRIES", 1)
     # One model request. Extraction can write 16k tokens, so this is generous.
-    LLM_TIMEOUT_SECONDS: float = float(os.environ.get("LLM_TIMEOUT_SECONDS", "300"))
+    LLM_TIMEOUT_SECONDS: float = _float("LLM_TIMEOUT_SECONDS", 300)
     # One detection tool. This includes waiting for the single CPU worker, so it is not the check's own
     # run time. The slow ones call a model or an outside registry.
-    TOOL_TIMEOUT_SECONDS: float = float(os.environ.get("TOOL_TIMEOUT_SECONDS", "60"))
-    SLOW_TOOL_TIMEOUT_SECONDS: float = float(os.environ.get("SLOW_TOOL_TIMEOUT_SECONDS", "120"))
+    TOOL_TIMEOUT_SECONDS: float = _float("TOOL_TIMEOUT_SECONDS", 60)
+    SLOW_TOOL_TIMEOUT_SECONDS: float = _float("SLOW_TOOL_TIMEOUT_SECONDS", 120)
     # The most a tool waits for the CPU worker before it starts; its own limit only runs once it has started.
-    CPU_QUEUE_TIMEOUT_SECONDS: float = float(os.environ.get("CPU_QUEUE_TIMEOUT_SECONDS", "300"))
+    CPU_QUEUE_TIMEOUT_SECONDS: float = _float("CPU_QUEUE_TIMEOUT_SECONDS", 300)
 
     # Below this, classification is routed to manual review regardless of
     # the guessed document_type (see langgraph/nodes._is_below_threshold).
@@ -166,12 +195,12 @@ class Settings:
     SIGNED_URL_EXPIRY_SECONDS: int = 1800
 
     # --- LLM pipeline (backend/app/langgraph) ---
-    ANTHROPIC_API_KEY: str = _env("ANTHROPIC_API_KEY")
+    ANTHROPIC_API_KEY: str = _str("ANTHROPIC_API_KEY")
     # Two-tier models: Sonnet for
     # classifier/vision/extraction/detection-lead, Haiku for
     # llm_classify/repair/specialists. Overridable per-tier.
-    LANGGRAPH_SONNET_MODEL: str = _env("LANGGRAPH_SONNET_MODEL", "claude-sonnet-5-5")
-    LANGGRAPH_HAIKU_MODEL: str = _env("LANGGRAPH_HAIKU_MODEL", "claude-haiku-5-5")
+    LANGGRAPH_SONNET_MODEL: str = _str("LANGGRAPH_SONNET_MODEL", "claude-sonnet-5-5")
+    LANGGRAPH_HAIKU_MODEL: str = _str("LANGGRAPH_HAIKU_MODEL", "claude-haiku-5-5")
     # Ceiling on the classify agent's tool-call loop and the full
     # record_escalation -> reclassify -> validate -> extract pass —
     # comfortably covers MAX_RECLASSIFICATION_ATTEMPTS with room to spare.
@@ -180,42 +209,45 @@ class Settings:
     # --- Observability (see telemetry.py) ---
     # Off by default: importing the SDK is harmless with no cost/behaviour
     # change until this is set.
-    OTEL_ENABLED: bool = os.environ.get("OTEL_ENABLED", "false").lower() == "true"
+    OTEL_ENABLED: bool = _bool("OTEL_ENABLED", False)
     # httpx's own INFO line per Supabase call. Off by default: query_stats.py logs one summary per unit of work.
-    LOG_HTTP_REQUESTS: bool = os.environ.get("LOG_HTTP_REQUESTS", "false").lower() == "true"
+    LOG_HTTP_REQUESTS: bool = _bool("LOG_HTTP_REQUESTS", False)
     # Required for the Cloud Trace exporter; left unset -> traces print to
     # the console instead.
-    GOOGLE_CLOUD_PROJECT: str = _env("GOOGLE_CLOUD_PROJECT", "")
+    GOOGLE_CLOUD_PROJECT: str = _str("GOOGLE_CLOUD_PROJECT", "")
     # K_SERVICE / K_REVISION are set by Cloud Run, so each service's traces carry its own name.
-    OTEL_SERVICE_NAME: str = _env("OTEL_SERVICE_NAME", os.environ.get("K_SERVICE", "six-sevens-backend"))
-    SERVICE_REVISION: str = os.environ.get("K_REVISION", "local")
+    OTEL_SERVICE_NAME: str = _str("OTEL_SERVICE_NAME", _str("K_SERVICE", "six-sevens-backend"))
+    SERVICE_REVISION: str = _str("K_REVISION", "local")
     # Set to send traces over OTLP instead (e.g. http://jaeger:4318 in the local observability profile).
-    OTEL_EXPORTER_OTLP_ENDPOINT: str = _env("OTEL_EXPORTER_OTLP_ENDPOINT")
-    OTEL_TRACES_SAMPLE_RATIO: float = float(os.environ.get("OTEL_TRACES_SAMPLE_RATIO", "1.0"))
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = _str("OTEL_EXPORTER_OTLP_ENDPOINT")
+    OTEL_TRACES_SAMPLE_RATIO: float = _float("OTEL_TRACES_SAMPLE_RATIO", 1.0)
 
     # --- Public registry lookups (fraud_detection/external_validation/registry_lookups) ---
     # Both optional: without them the anonymous limits apply, and a lookup
     # that hits its rate limit is reported as unable to assess.
-    DATA_GOV_SG_API_KEY: str = _env("DATA_GOV_SG_API_KEY")
-    ONEMAP_API_TOKEN: str = _env("ONEMAP_API_TOKEN")
+    DATA_GOV_SG_API_KEY: str = _str("DATA_GOV_SG_API_KEY")
+    ONEMAP_API_TOKEN: str = _str("ONEMAP_API_TOKEN")
     # URA Data Service access key (eservice.ura.gov.sg/maps/api): for "Approved Residential
     # Use". Optional: without it that lookup is skipped and zoning alone is used.
-    URA_API_KEY: str = _env("URA_API_KEY")
+    URA_API_KEY: str = _str("URA_API_KEY")
     # URA zoning index (registry_lookups/land_use.py): whether a running server may download
     # and build it itself (~35 s, ~200 MB peak, measured) when it's missing or URA has updated the map.
     # The Docker image builds it in and sets this to false; local runs keep it on.
-    LAND_USE_RUNTIME_REBUILD: bool = os.environ.get("LAND_USE_RUNTIME_REBUILD", "true").lower() == "true"
+    LAND_USE_RUNTIME_REBUILD: bool = _bool("LAND_USE_RUNTIME_REBUILD", True)
 
     # --- Per-case analysis (case_pipeline/) ---
     # Kill switch: off falls back to document-level detection and scoring only.
-    CASE_ANALYSIS_ENABLED: bool = os.environ.get("CASE_ANALYSIS_ENABLED", "true").lower() == "true"
+    CASE_ANALYSIS_ENABLED: bool = _bool("CASE_ANALYSIS_ENABLED", True)
+    # Check payslips against CPF rate tables entered on an assumption (sg_reference/cpf.PROVISIONAL_RATE_TABLES,
+    # today 2027's). Off: such a payslip's CPF checks are skipped until CPF publishes the real table.
+    CPF_USE_PROVISIONAL_RATES: bool = _bool("CPF_USE_PROVISIONAL_RATES", False)
     # Runs started automatically per case per hour (each spends about 12k tokens); past it, the officer starts one.
-    CASE_ANALYSIS_AUTO_RUNS_PER_HOUR: int = int(os.environ.get("CASE_ANALYSIS_AUTO_RUNS_PER_HOUR", "4"))
+    CASE_ANALYSIS_AUTO_RUNS_PER_HOUR: int = _int("CASE_ANALYSIS_AUTO_RUNS_PER_HOUR", 4)
     # Runs of any kind per case per hour past which an officer's "Run again" is refused (a stolen token can't loop it).
-    CASE_ANALYSIS_RUNS_PER_HOUR: int = int(os.environ.get("CASE_ANALYSIS_RUNS_PER_HOUR", "10"))
+    CASE_ANALYSIS_RUNS_PER_HOUR: int = _int("CASE_ANALYSIS_RUNS_PER_HOUR", 10)
     # Whether cases created here need every required checklist document approved before they can be analysed.
     # Stored on each case when it's created (cases.checklist_enforced). On only in prod (Terraform).
-    REQUIRE_COMPLETE_CHECKLIST: bool = os.environ.get("REQUIRE_COMPLETE_CHECKLIST", "false").lower() == "true"
+    REQUIRE_COMPLETE_CHECKLIST: bool = _bool("REQUIRE_COMPLETE_CHECKLIST", False)
 
 
 settings = Settings()

@@ -1,13 +1,16 @@
-"""What the owning workers share when handling a sweeper's recovery.requested (sweeper.py)."""
+"""
+What the doc-worker and detection-worker share: how a run is tracked, slotted and metered (RunTracker.slot, metered),
+and how they handle a sweeper's recovery.requested (sweeper.py).
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from contextlib import asynccontextmanager, contextmanager
 
-from .. import events, metrics
+from .. import events, metrics, query_stats
 from ..config import settings
 from ..events import Event, types
 from ..events.envelope import Outcome
@@ -56,6 +59,26 @@ async def cancel_when(task: asyncio.Task, cancelled: Callable[[], Awaitable[bool
             logger.debug("Cancel check failed; trying again", exc_info=True)
 
 
+class Meter:
+    """What a run spent on Claude (query_stats' llm detail), filled in when its metered block ends, however it ends."""
+
+    def __init__(self) -> None:
+        self.usage: dict[str, float | int] = {}
+
+
+@contextmanager
+def metered(label: str, kind: str, meter: Meter) -> Iterator[None]:
+    """
+    The run's perf scope (`label` in the perf log, `kind` its work label in the cost metrics), with its usage on
+    `meter` even when the run raises or is cancelled: what it spent still goes on the record.
+    """
+    with query_stats.scope(label, work=kind) as unit:
+        try:
+            yield
+        finally:
+            meter.usage = unit.llm_detail()
+
+
 class RunTracker:
     """A worker's runs in this process (document_id -> task), so an officer's cancel can interrupt one."""
 
@@ -78,6 +101,15 @@ class RunTracker:
             self._active.pop(document_id, None)
             if watcher is not None:
                 watcher.cancel()
+
+    @asynccontextmanager
+    async def slot(
+        self, document_id: str, cancelled: Callable[[], Awaitable[bool]], slots: asyncio.Semaphore,
+    ) -> AsyncIterator[None]:
+        """track(), then a place among the worker's concurrent runs: the start of every run either worker makes."""
+        with self.track(document_id, cancelled):
+            async with slots:
+                yield
 
     def _note_remote_cancel(self, document_id: str) -> None:
         self._officer_cancels.add(document_id)

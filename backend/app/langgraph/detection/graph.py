@@ -44,7 +44,9 @@ from ... import run_context
 from ...llm_io import message_text, parse_json_object, validate
 from ...run_context import spend_model_call
 from ..detection_report import SCHEMA_VERSION
-from .specialists import SEVERITIES, SPECIALISTS, document_side, run_specialist, today_in_singapore
+from .specialists import (
+    SEVERITIES, SPECIALISTS, combine_floor_notes, document_side, run_specialist, today_in_singapore,
+)
 from .. import trace
 from ... import (
     detection_results, document_repository, extracted_fields_repository, finding_keys, findings_repository,
@@ -484,6 +486,8 @@ def merge_reports(state: DetectionState) -> dict:
                 }
             else:
                 merged["severity"] = _max_severity(merged["severity"], finding["severity"])
+                if "agent_severity" in merged or "agent_severity" in finding:
+                    combine_floor_notes(merged, finding)
                 merged.setdefault("agent_confidences", []).append({
                     "specialist": name, "confidence": finding.get("confidence", 0.0),
                 })

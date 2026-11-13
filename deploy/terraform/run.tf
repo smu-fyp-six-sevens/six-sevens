@@ -132,6 +132,16 @@ resource "google_cloud_run_v2_service" "kong" {
         name  = "CORS_ORIGINS"
         value = join(",", concat([local.url["frontend"], google_cloud_run_v2_service.frontend.uri], var.extra_frontend_origins))
       }
+      # Sent to api and audit-metrics on every request, which refuse any without it (backend app/gateway.py).
+      env {
+        name = "GATEWAY_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.secret["GATEWAY_SECRET"].secret_id
+            version = "latest"
+          }
+        }
+      }
     }
 
     # Managed Prometheus for Kong's own metrics, with the scrape config from observability.tf (port 8100).
@@ -170,7 +180,10 @@ resource "google_cloud_run_v2_service" "kong" {
     ignore_changes = [template[0].containers[0].image, client, client_version, scaling]
   }
 
-  depends_on = [google_secret_manager_secret_version.kong_gmp_config, google_secret_manager_secret_iam_member.kong_gmp_config]
+  depends_on = [
+    google_secret_manager_secret_version.kong_gmp_config, google_secret_manager_secret_iam_member.kong_gmp_config,
+    google_secret_manager_secret_iam_member.kong_gateway_secret,
+  ]
 }
 
 resource "google_cloud_run_v2_service" "frontend" {

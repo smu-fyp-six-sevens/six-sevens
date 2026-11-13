@@ -185,6 +185,13 @@ export function DetectionPanel({
                       <span className="detection-finding-meta">
                         {formatCheck(finding.tool)} · {finding.specialists.map((id) => specialists.get(id) ?? id).join(', ')}
                         {finding.via_second_look ? ' · second look' : ''}
+                        {finding.agent_severity && (
+                          <span title={finding.severity_floor_reason}>
+                            {finding.agent_severity === 'dismissed'
+                              ? ' · kept by rule (the specialist dismissed it)'
+                              : ` · raised from ${finding.agent_severity} by rule`}
+                          </span>
+                        )}
                       </span>
                     </div>
                   </li>

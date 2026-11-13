@@ -55,9 +55,12 @@ DB-less Kong (`deploy/kong/`), routes rendered from `kong.yml.tmpl` at start.
 | Path | Goes to |
 |---|---|
 | `/audit*` | audit-metrics |
-| `/auth/login` (20/min), `/documents/upload-batch` (60/min) | api, rate-limited |
+| `/auth/login` (20/min), `/documents/upload-batch` (60/min) | api, rate-limited per client address |
+| retries, retype, analysis run (10/min, 60/h); on-demand checks (30/min, 300/h) | api, rate-limited per officer (their token) |
 | `/push*`, `/metrics` | blocked (404) |
 | everything else, including the WebSocket | api |
+
+**Only through Kong:** api and audit-metrics are public on their own URLs, so Kong adds `X-Gateway-Key` (secret `gateway-secret`) to every request, and both refuse any request without it (403), except `/health`, Pub/Sub's `/push` and `/metrics` from the container's own sidecar (`backend/app/gateway.py`). Not checked locally.
 
 Gotchas: Cloud Run routes by `Host`, so Kong mustn't preserve it and must use HTTPS upstream; CORS only in Kong (`CORS_IN_APP=false`), never `*`; auth stays in each service.
 
@@ -73,16 +76,16 @@ Pub/Sub redelivery covers a worker dying mid-request; the sweeper covers the res
 
 ## 6. Delivery and security
 
-**CI** (`ci-cd.yml`, PRs and pushes to `main`, not docs-only): backend (ruff, pyright, pytest with coverage), frontend (lint, build, Playwright), security (Checkov; pip-audit and `npm audit` high every run; Snyk only when lock files change, weekly or by hand, non-blocking until its quota resets; Terraform fmt/validate). All blocking except Snyk for now.
+**CI** (`ci-cd.yml`, PRs and pushes to `main`, not docs-only): backend (ruff and pyright on `app` and `tests`, pytest with coverage), frontend (lint, build, Playwright), security (Checkov; pip-audit and `npm audit` high every run; Snyk only when lock files change, weekly or by hand, non-blocking until its quota resets; Terraform fmt/validate), infrastructure (Kong config parses, compose files valid, dashboard PromQL parses with promtool; on a PR, the images build). All blocking except Snyk for now.
 
 **Deploy** (`deploy.yml`, after CI on `main` or by hand; one at a time):
 1. Build each image once (skipping any the commit already has).
 2. Record what each service is serving.
 3. Roll out the workers and audit-metrics, then api, Kong, frontend, Grafana.
-4. Check through Kong (no LLM, no writes): `/health` answers, a protected route gives 401, `/push` and `/metrics` blocked, workers refuse unsigned POSTs, CORS, frontend and Grafana up.
+4. Check through Kong (no LLM, no writes): `/health` answers, a protected route gives 401, `/push` and `/metrics` blocked, workers refuse unsigned POSTs, api and audit-metrics refuse a direct call (403), CORS, frontend and Grafana up.
 5. Any failure rolls every service back.
 
-**Security:** one account per service; each secret readable only by the services that need it (Anthropic key: the three workers; token key: the public services); keyless GitHub sign-in; non-root containers with health checks.
+**Security:** one account per service; each secret readable only by the services that need it (Anthropic key: the three workers; token key and gateway key: the public services; the gateway key also Kong); keyless GitHub sign-in; non-root containers with health checks.
 
 **Cost:** scale to zero; budget alert; Claude spend per agent, document and case; registry cleanup keeps the 5 newest images and nothing older than 7 days.
 
@@ -110,7 +113,7 @@ Pub/Sub redelivery covers a worker dying mid-request; the sweeper covers the res
 
 - **Failure tests** (a deliverable): kill a worker mid-run; flood uploads; stop audit-metrics; a poison message; a lost publish (set a document to `queued` without publishing; the sweeper should recover it).
 - **Shared Anthropic rate budget:** today each instance caps itself.
-- **Kong config test in CI** (routes, CORS, rate limits, WebSocket upgrade).
+- **Kong behaviour test in CI** (routes, CORS, rate limits, WebSocket upgrade): CI only checks the config parses.
 - **Optional:** ingestion out of api; the frontend reading Kong's URL at runtime (needed for staging).
 
 **Staging** (planned, not started): a second GCP project (`fyp-six-sevens-staging`) and a second free Supabase project, same Terraform with its own variables and state.

@@ -34,6 +34,13 @@ resource "google_secret_manager_secret_iam_member" "access" {
   member    = "serviceAccount:${google_service_account.role[each.value.role].email}"
 }
 
+# Kong isn't a backend role, so its one secret is granted here: the key it sends api and audit-metrics.
+resource "google_secret_manager_secret_iam_member" "kong_gateway_secret" {
+  secret_id = google_secret_manager_secret.secret["GATEWAY_SECRET"].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.role["kong"].email}"
+}
+
 resource "google_pubsub_topic_iam_member" "publisher" {
   for_each = { for role, cfg in local.roles : role => cfg if cfg.publishes }
   topic    = google_pubsub_topic.events.id

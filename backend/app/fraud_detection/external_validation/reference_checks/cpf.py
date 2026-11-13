@@ -30,7 +30,8 @@ from ...numerical_validation.payslip_inputs import (
     WageScenario, basic_pay_input, employee_cpf_input, split_earnings, wage_scenarios,
 )
 from ...numerical_validation.registry import Num, check
-from ..sg_reference.cpf import NEWEST_RATE_YEAR, CpfBand, band_for_age, bands_in_force, ceiling_on, contribution
+from ....config import settings
+from ..sg_reference.cpf import CpfBand, band_for_age, bands_in_force, ceiling_on, contribution, newest_rate_year
 
 # CPF rounds to whole dollars (total to the nearest dollar, employee share down), so a
 # payslip can be a dollar off the exact percentage.
@@ -122,14 +123,17 @@ def assess_cpf(inputs: PayslipCpfInputs) -> CpfAssessment | SkippedCheck:
     when = _parse_field_date(pay_date) or _parse_field_date(pay_period_end)
     if when is None:
         return skipped(reason="Required field(s) not extracted: pay_date or pay_period_end")
-    if when.year > NEWEST_RATE_YEAR:
+    # An assumed table (sg_reference/cpf.PROVISIONAL_RATE_TABLES) is used only when switched on.
+    use_provisional = settings.CPF_USE_PROVISIONAL_RATES
+    newest = newest_rate_year(use_provisional)
+    if when.year > newest:
         # CPF sets new rates (and may move the ceiling) each January: last year's table would misjudge it.
-        return skipped(reason=f"CPF's {when.year} rate table is not configured yet (the newest is {NEWEST_RATE_YEAR}), "
+        return skipped(reason=f"CPF's {when.year} rate table is not configured yet (the newest is {newest}), "
                               f"so the contribution on {when.isoformat()} can't be checked")
     ceiling = ceiling_on(when)
     if ceiling is None:
         return skipped(reason=f"CPF ordinary wage ceiling not configured for {when.isoformat()}")
-    in_force = bands_in_force(when)
+    in_force = bands_in_force(when, use_provisional)
     dob = _parse_field_date(date_of_birth)
     if in_force is None:
         # The ceiling table goes back further than the rate tables: the most any employee pays is

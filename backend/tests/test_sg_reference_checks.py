@@ -7,6 +7,8 @@ import pytest
 from datetime import date
 from types import SimpleNamespace
 
+from app.config import settings
+from app.fraud_detection.external_validation.reference_checks.cpf import assess_cpf
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation.runner import run_numerical_checks
 from app.fraud_detection.external_validation.sg_reference.cpf import CPF_RATE_TABLES, band_for_age, bands_in_force, contribution
@@ -337,3 +339,32 @@ def test_cpf_on_basic_pay_alone_is_caught_from_the_earnings_lines_without_a_basi
     assert "basic pay (5,200.00) alone" in base.findings[0].summary
     assert not any(s.check_code == "PAY.CPF_BASE" for s in base.skipped)
     assert [f for f in run("1170").findings if f.check_code.startswith("PAY.CPF")] == []  # 20% of 5,850
+
+
+# --- 2027: an assumed rate table (sg_reference/cpf.PROVISIONAL_RATE_TABLES) --------------------
+
+
+def _payslip_2027() -> list[ExtractedField]:
+    # Aged 58 in March 2027 (above 55 to 60): on 2026's rates 18% of 5,000 is 900, so 950 is wrong.
+    return [_field("employee_cpf", "950"), _field("ordinary_wages", "5000"),
+            _field("pay_date", "2027-03-31"), _field("date_of_birth", "1969-01-10")]
+
+
+def test_a_2027_payslip_skips_the_cpf_checks_while_the_rates_are_assumed(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "CPF_USE_PROVISIONAL_RATES", False)
+    assess_cpf.cache_clear()
+    result = _run(_payslip_2027(), "payslip")
+    assert [f for f in result.findings if f.check_code.startswith("PAY.CPF")] == []
+    skipped = {s.check_code: s.reason for s in result.skipped if s.check_code.startswith("PAY.CPF")}
+    assert set(skipped) == {"PAY.CPF_CEILING", "PAY.CPF_BASE", "PAY.CPF_RATE"}
+    assert all("2027" in reason for reason in skipped.values())
+
+
+def test_a_2027_payslip_is_checked_on_the_assumed_table_when_switched_on(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "CPF_USE_PROVISIONAL_RATES", True)
+    assess_cpf.cache_clear()
+    try:
+        assert bands_in_force(date(2027, 3, 31), use_provisional=True) == CPF_RATE_TABLES["2026-01-01"]
+        assert len(_codes(_run(_payslip_2027(), "payslip"), "PAY.CPF_RATE")) == 1
+    finally:
+        assess_cpf.cache_clear()

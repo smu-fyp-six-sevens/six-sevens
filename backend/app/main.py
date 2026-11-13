@@ -16,6 +16,7 @@ from .events import push as event_push
 from .events.envelope import request_id
 from .fraud_detection.external_validation.registry_lookups import land_use
 from .fraud_detection.spelling import spelling_anomaly
+from .gateway import GatewayOnly
 from .health import check_db_connection
 from .langgraph._anthropic import warm_up
 from .routers import audit as audit_router
@@ -65,6 +66,21 @@ def check_signing_key() -> None:
         raise RuntimeError("AUTH_SECRET_KEY is empty; set it in Secret Manager")
 
 
+# The services Kong forwards to, so the ones that accept requests only from Kong (gateway.py).
+_BEHIND_GATEWAY = {"api", "audit-metrics"}
+
+
+def check_gateway_secret() -> None:
+    """
+    A deployed public service must know Kong's secret, or it would answer anyone who finds its URL. Not locally
+    (in-process, or compose's Pub/Sub emulator): there the services aren't reachable from outside anyway.
+    """
+    if not (ROLES & _BEHIND_GATEWAY) or IN_PROCESS or os.environ.get("PUBSUB_EMULATOR_HOST"):
+        return
+    if not settings.GATEWAY_SECRET:
+        raise RuntimeError("GATEWAY_SECRET is empty; set it in Secret Manager (deploy/terraform/README.md)")
+
+
 def check_push_verification() -> None:
     """A deployed service taking pushes must check Pub/Sub's token, or anyone could post it events."""
     if IN_PROCESS or not registry.installed_roles() or os.environ.get("PUBSUB_EMULATOR_HOST"):
@@ -76,6 +92,7 @@ def check_push_verification() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     check_signing_key()
+    check_gateway_secret()
     check_push_verification()
     logger.info("Starting roles %s with %s events", sorted(ROLES), settings.EVENT_TRANSPORT)
     metrics.set_info(ROLES)
@@ -185,6 +202,11 @@ if settings.CORS_IN_APP:
         # So the frontend can read a download's filename (GET /cases/{id}/report.pdf).
         expose_headers=["Content-Disposition"],
     )
+
+# Added last, so it runs first: a request that didn't come through Kong goes no further (gateway.py). Off in a plain
+# uvicorn run, which has no Kong in front of it.
+if ROLES & _BEHIND_GATEWAY and settings.GATEWAY_SECRET:
+    app.add_middleware(GatewayOnly, secret=settings.GATEWAY_SECRET)
 
 _protected = [Depends(auth.bind_actor)]
 
