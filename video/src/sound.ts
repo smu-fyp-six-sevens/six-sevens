@@ -1,27 +1,17 @@
 // sound.ts - the film's sound, placed from the same knobs as the picture.
-//   VO: one clip per section (public/vo: ElevenLabs, voice Brian, eleven_multilingual_v2, from public/vo/lines.json), starting VO_OFFSET
-//       seconds into its section. Replace a clip with your own recording of the same name and everything else follows.
+//   VO: one clip per on-screen caption (ElevenLabs, voice Brian), each starting as its caption rises (see VO below).
 //   Music: public/music/soundtrack.mp3 (the synthwave track, extended by a 12-bar loop so its own ending lands on
 //       the call to action). Quieter through the problem (sections 1-3), lifted from the portal on, and ducked under
 //       the voice.
 //   SFX: synthesized (public/sfx), each placed on its visual event with its measured lead.
 
-import durations from "../public/vo/durations.json";
+import cues from "../public/vo/cues.json";
 import { SWIPE } from "./components/swipe";
 import {
   CTA, DASHBOARD, DETECT, DIFFERENCE, FINALISE, FPS, OVERWHELM3, PORTAL2, SCENES, SCORE, TAMPER, TRACE, UPLOAD, WAITING2,
 } from "./timing";
 
-export type SectionName = "finalise" | "buried" | "waiting" | "tamper" | "portal" | "upload" | "detect" | "trace" | "score" | "dashboard" | "difference" | "cta";
-const VO_FILE: Partial<Record<SectionName, keyof typeof durations>> = {
-  buried: "hook", waiting: "waiting", tamper: "tamper", portal: "portal", upload: "upload", detect: "detect",
-  trace: "trace", score: "score", finalise: "finalise", dashboard: "dashboard", difference: "difference", cta: "cta",
-};
-/** Seconds into each section the voice starts. */
-export const VO_OFFSET: Partial<Record<SectionName, number>> = {
-  buried: 0.2, waiting: 0.3, tamper: 0.3, portal: 0.15, upload: 0.25, detect: 0.05, trace: 0.3, score: 0.3,
-  finalise: 0.2, dashboard: 0.25, difference: 0.2, cta: 0.2,
-};
+export type SectionName = "buried" | "waiting" | "tamper" | "portal" | "upload" | "detect" | "trace" | "score" | "finalise" | "dashboard" | "difference" | "cta";
 
 const start = (n: SectionName) => (SCENES as Record<string, { start: number }>)[n]?.start ?? 0;
 const at = (n: SectionName, seconds: number) => start(n) + Math.round(seconds * FPS);
@@ -29,14 +19,22 @@ const at = (n: SectionName, seconds: number) => start(n) + Math.round(seconds * 
 /** Seconds after the big ping that the sigh starts. */
 export const SIGH_AFTER_PING = 0.25;
 
-export const VO = (Object.keys(VO_FILE) as SectionName[]).map((n) => ({
-  section: n,
-  src: `vo/${VO_FILE[n]}.wav`,
-  from: at(n, VO_OFFSET[n] ?? 0),
-  frames: Math.ceil((durations[VO_FILE[n]!] + 0.1) * FPS),
+/** Seconds after its caption rises that each voice line starts. tools/fit-vo.py uses the same lead. */
+export const VO_LEAD = 0.05;
+const TIMINGS: Record<string, Record<string, unknown>> = {
+  OVERWHELM3, WAITING2, TAMPER, PORTAL2, UPLOAD, DETECT, TRACE, SCORE, FINALISE, DASHBOARD, DIFFERENCE, CTA,
+};
+
+/** One voice line per on-screen caption (public/vo/cues.json; clips in public/vo/lines), each starting as its
+ * caption rises. After replacing a clip, run `python3 tools/fit-vo.py` so the captions make room for it. */
+export const VO = (cues as { section: SectionName; timing: string; knob: string; file: string; dur: number }[]).map((c) => ({
+  section: c.section,
+  src: `vo/lines/${c.file}.wav`,
+  from: at(c.section, (TIMINGS[c.timing][c.knob] as number) + VO_LEAD),
+  frames: Math.ceil((c.dur + 0.1) * FPS),
 })).concat([
   // The sigh after the hook's big ping (ElevenLabs Sound Effects; sigh-alt.wav is the other take).
-  { section: "buried" as SectionName, src: "vo/sigh.wav", from: at("buried", OVERWHELM3.finalPingIn + SIGH_AFTER_PING), frames: Math.ceil(1.9 * FPS) },
+  { section: "buried", src: "vo/sigh.wav", from: at("buried", OVERWHELM3.finalPingIn + SIGH_AFTER_PING), frames: Math.ceil(1.9 * FPS) },
 ]);
 
 /** Music level by frame: quieter for the problem, lifted for the product, ducked under the voice. */

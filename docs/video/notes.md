@@ -149,3 +149,9 @@
 - All 12 lines fit their sections; Detect ran 0.2 s over: started at 0.05 s and sped 3%.
 - Sigh: ElevenLabs Sound Effects, two takes (vo/sigh.wav, vo/sigh-alt.wav), 0.25 s after the hook's big ping; part of the voice track (not in Master-NoVO).
 - Delivered: renders/film.mp4 (voice, music ducked, effects).
+
+## Wave 26 - the voice follows the captions
+- Owner: "read" was past tense; the ending dragged; read the loan officer line 1:1; align the voice with when each caption appears.
+- One ElevenLabs clip per on-screen caption (40, public/vo/cues.json), each starting 0.05 s after its caption rises, read word for word. "Agents read" spelled "reed" for the voice.
+- tools/fit-vo.py moves a caption (and the rest of its section) later when the previous line has not finished, and ends each section shortly after its last line or event (no carried-over holds). Clips sped 6% to stay under 2 minutes: 119.8 s.
+- CTA gains a subIn knob (the line under the name).

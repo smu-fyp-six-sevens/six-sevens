@@ -1,0 +1,322 @@
+[
+ {
+  "section": "buried",
+  "timing": "OVERWHELM3",
+  "knob": "title1In",
+  "file": "h1",
+  "text": "Corporate loan applications need extensive documentation.",
+  "dur": 2.803
+ },
+ {
+  "section": "buried",
+  "timing": "OVERWHELM3",
+  "knob": "wayIn",
+  "file": "h2",
+  "text": "Waaaaay too many documents to review.",
+  "dur": 2.061
+ },
+ {
+  "section": "buried",
+  "timing": "OVERWHELM3",
+  "knob": "footnoteIn",
+  "file": "h3",
+  "text": "For one case.",
+  "dur": 0.792
+ },
+ {
+  "section": "waiting",
+  "timing": "WAITING2",
+  "knob": "officerLineIn",
+  "file": "w1",
+  "text": "A loan officer may spend over an hour staring at details on the screen,",
+  "dur": 3.345
+ },
+ {
+  "section": "waiting",
+  "timing": "WAITING2",
+  "knob": "customerLineIn",
+  "file": "w2",
+  "text": "while the loan customer anxiously waits on the other end for any news of approval.",
+  "dur": 3.593
+ },
+ {
+  "section": "tamper",
+  "timing": "TAMPER",
+  "knob": "line1In",
+  "file": "t1",
+  "text": "Even worse, when bad actors are involved,",
+  "dur": 1.933
+ },
+ {
+  "section": "tamper",
+  "timing": "TAMPER",
+  "knob": "line2In",
+  "file": "t2",
+  "text": "smaller anomalies are even harder to catch.",
+  "dur": 1.948
+ },
+ {
+  "section": "portal",
+  "timing": "PORTAL2",
+  "knob": "introIn",
+  "file": "p1",
+  "text": "So that's why we introduce...",
+  "dur": 1.401
+ },
+ {
+  "section": "portal",
+  "timing": "PORTAL2",
+  "knob": "titleIn",
+  "file": "p2",
+  "text": "the G-L-D-B Anomaly Detection Portal.",
+  "dur": 2.263
+ },
+ {
+  "section": "portal",
+  "timing": "PORTAL2",
+  "knob": "line1In",
+  "file": "p3",
+  "text": "Agents reed every document,",
+  "dur": 1.538
+ },
+ {
+  "section": "portal",
+  "timing": "PORTAL2",
+  "knob": "line2In",
+  "file": "p4",
+  "text": "and flag what doesn't add up.",
+  "dur": 1.184
+ },
+ {
+  "section": "upload",
+  "timing": "UPLOAD",
+  "knob": "headlineIn",
+  "file": "u1",
+  "text": "Upload the documents.",
+  "dur": 1.073
+ },
+ {
+  "section": "upload",
+  "timing": "UPLOAD",
+  "knob": "line1In",
+  "file": "u2",
+  "text": "Every file is classified, and its key fields read.",
+  "dur": 2.822
+ },
+ {
+  "section": "upload",
+  "timing": "UPLOAD",
+  "knob": "line2In",
+  "file": "u3",
+  "text": "Even from scans.",
+  "dur": 0.981
+ },
+ {
+  "section": "detect",
+  "timing": "DETECT",
+  "knob": "headlineIn",
+  "file": "d1",
+  "text": "Agents investigate every document.",
+  "dur": 1.934
+ },
+ {
+  "section": "detect",
+  "timing": "DETECT",
+  "knob": "planIn",
+  "file": "d2",
+  "text": "A lead agent plans the investigation.",
+  "dur": 2.185
+ },
+ {
+  "section": "detect",
+  "timing": "DETECT",
+  "knob": "specialistsIn",
+  "file": "d3",
+  "text": "Specialists check metadata, fonts, alignment, totals, spelling, and across documents.",
+  "dur": 5.523
+ },
+ {
+  "section": "detect",
+  "timing": "DETECT",
+  "knob": "catchAt",
+  "file": "d4",
+  "text": "A doctored figure, or a mismatched address, gets caught.",
+  "dur": 3.291
+ },
+ {
+  "section": "trace",
+  "timing": "TRACE",
+  "knob": "headlineIn",
+  "file": "r1",
+  "text": "And it's not a black box.",
+  "dur": 1.337
+ },
+ {
+  "section": "trace",
+  "timing": "TRACE",
+  "knob": "line1In",
+  "file": "r2",
+  "text": "The agent trace shows every step, every tool call, and what it returned.",
+  "dur": 3.779
+ },
+ {
+  "section": "trace",
+  "timing": "TRACE",
+  "knob": "auditAt",
+  "file": "r3",
+  "text": "Every finding can be audited.",
+  "dur": 1.391
+ },
+ {
+  "section": "score",
+  "timing": "SCORE",
+  "knob": "headlineIn",
+  "file": "s1",
+  "text": "Every case gets a risk rating,",
+  "dur": 1.3
+ },
+ {
+  "section": "score",
+  "timing": "SCORE",
+  "knob": "line1In",
+  "file": "s2",
+  "text": "with the exact evidence behind it.",
+  "dur": 1.617
+ },
+ {
+  "section": "score",
+  "timing": "SCORE",
+  "knob": "reviewAt",
+  "file": "s3",
+  "text": "What was flagged, where, and why.",
+  "dur": 2.671
+ },
+ {
+  "section": "score",
+  "timing": "SCORE",
+  "knob": "tickAt",
+  "file": "s4",
+  "text": "Officers confirm or dismiss each finding, and add notes.",
+  "dur": 3.412
+ },
+ {
+  "section": "score",
+  "timing": "SCORE",
+  "knob": "addAt",
+  "file": "s5",
+  "text": "And it recommends the documents that would settle it.",
+  "dur": 2.14
+ },
+ {
+  "section": "finalise",
+  "timing": "FINALISE",
+  "knob": "headlineIn",
+  "file": "f1",
+  "text": "Then lock the case.",
+  "dur": 0.797
+ },
+ {
+  "section": "finalise",
+  "timing": "FINALISE",
+  "knob": "readyAt",
+  "file": "f2",
+  "text": "Finalised cases become view-only, with every step on record.",
+  "dur": 2.915
+ },
+ {
+  "section": "dashboard",
+  "timing": "DASHBOARD",
+  "knob": "headlineIn",
+  "file": "b1",
+  "text": "Every case, at a glance.",
+  "dur": 1.135
+ },
+ {
+  "section": "dashboard",
+  "timing": "DASHBOARD",
+  "knob": "pipelineAt",
+  "file": "b2",
+  "text": "The whole pipeline, from upload to finalised.",
+  "dur": 2.261
+ },
+ {
+  "section": "dashboard",
+  "timing": "DASHBOARD",
+  "knob": "flagsAt",
+  "file": "b3",
+  "text": "The most common flags, across every case.",
+  "dur": 2.997
+ },
+ {
+  "section": "dashboard",
+  "timing": "DASHBOARD",
+  "knob": "riskAt",
+  "file": "b4",
+  "text": "Risk across every case in view.",
+  "dur": 1.944
+ },
+ {
+  "section": "dashboard",
+  "timing": "DASHBOARD",
+  "knob": "attentionAt",
+  "file": "b5",
+  "text": "And the riskiest cases first.",
+  "dur": 1.394
+ },
+ {
+  "section": "difference",
+  "timing": "DIFFERENCE",
+  "knob": "line1In",
+  "file": "x1",
+  "text": "What took hours of screening now takes minutes.",
+  "dur": 2.328
+ },
+ {
+  "section": "difference",
+  "timing": "DIFFERENCE",
+  "knob": "line2In",
+  "file": "x2",
+  "text": "The AI does the reading. Your loan officers make the call.",
+  "dur": 2.909
+ },
+ {
+  "section": "difference",
+  "timing": "DIFFERENCE",
+  "knob": "line3In",
+  "file": "x3",
+  "text": "And customers hear back sooner.",
+  "dur": 1.508
+ },
+ {
+  "section": "cta",
+  "timing": "CTA",
+  "knob": "leadIn",
+  "file": "c1",
+  "text": "Bring your next loan case.",
+  "dur": 1.638
+ },
+ {
+  "section": "cta",
+  "timing": "CTA",
+  "knob": "nameIn",
+  "file": "c2",
+  "text": "G-L-D-B Anomaly Detection Portal.",
+  "dur": 1.893
+ },
+ {
+  "section": "cta",
+  "timing": "CTA",
+  "knob": "subIn",
+  "file": "c3",
+  "text": "Upload the package, and see what the portal catches.",
+  "dur": 1.935
+ },
+ {
+  "section": "cta",
+  "timing": "CTA",
+  "knob": "buttonIn",
+  "file": "c4",
+  "text": "Try it on your next case.",
+  "dur": 1.269
+ }
+]

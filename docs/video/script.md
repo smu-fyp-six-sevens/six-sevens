@@ -1,26 +1,54 @@
-# Voiceover script (for the 1:51 cut)
+# Voiceover script (1:59.8 cut, line by line)
 
-Each line fits its section at a calm pace (about 2.5 words a second, with room to breathe). The times are where each section starts in `video/renders/film-novo.mp4`. One audio file per section; the file names are what the film expects in `video/public/vo/`.
+Brian (ElevenLabs) reads each on-screen caption word for word, starting as it rises. Each line is its own clip in
+`video/public/vo/lines/`, listed in `video/public/vo/cues.json` with the caption it belongs to.
 
-| # | Starts | Length | File | Voiceover | On screen at the time |
-|---|---|---|---|---|---|
-| 1 | 0:00.0 | 9.1 s | `hook` | Corporate loan applications come with a mountain of documents. *Waaay* too many to review, for a single case. **[sigh]** | PDFs and pings pile up; "Waaaay" stretches; the big ping lands at 0:07.1, then a 2 s hold for the sigh |
-| 2 | 0:09.1 | 8.3 s | `waiting` | A loan officer can spend over an hour on the details, while the customer waits for any news of approval. | Officer and customer, the clock racing |
-| 3 | 0:17.4 | 7.0 s | `tamper` | And when a bad actor slips in an edit, the smallest changes are the hardest to catch. | The closing balance retyped; it vanishes into the pile |
-| 4 | 0:24.4 | 12.2 s | `portal` | So that's why we built… the G-L-D-B Anomaly Detection Portal. Its agents read every document in the case, and flag what doesn't add up. | "So that's why we introduce…" at 0:24.5; the name lands at 0:26.3. Pause before the name. |
-| 5 | 0:36.6 | 11.0 s | `upload` | Start by uploading the documents. Each one is classified, and its key fields extracted, even from scans. | Upload, then Classify (0:40.4), then Extract (0:43.9) light up |
-| 6 | 0:47.6 | 11.5 s | `detect` | A lead agent plans the investigation. Specialists check metadata, fonts, alignment, totals, spelling, and whether the documents agree, so a doctored figure or mismatched address gets caught. | The plan, six checks, the two catches (from 0:53.9) |
-| 7 | 0:59.1 | 10.0 s | `trace` | And it's not a black box. The agent trace shows every step and every tool it ran, so every finding can be audited. | Agent trace, a tool's output; the audit trail from 1:05.4 |
-| 8 | 1:09.1 | 14.5 s | `score` | Every case gets a risk rating, with the evidence behind it: what was flagged, where, and why. Officers confirm or dismiss each finding, add notes, and see which documents would settle any doubt. | The 72; What / Where / Why from 1:13.4; the review from 1:16.5; recommendations from 1:20.3 |
-| 9 | 1:23.6 | 4.8 s | `finalise` | When the review is done, they lock the case. | Finalise Case, confirm, Finalised |
-| 10 | 1:28.4 | 8.5 s | `dashboard` | And the dashboard shows every case at a glance: the pipeline, the common flags, and the riskiest cases first. | A tour of the dashboard |
-| 11 | 1:36.9 | 6.4 s | `difference` | Hours of screening, down to minutes. Your officers make the call, and customers hear back sooner. | Review complete; the good-news ping at 1:40.6 |
-| 12 | 1:43.3 | 7.5 s | `cta` | Bring your next loan case, and see what the portal catches. Try the G-L-D-B Anomaly Detection Portal today. | The name, then "Try it on your next case" pressed at 1:47.1 |
+| Starts | Section | Clip | Line |
+|---|---|---|---|
+| 0:00.2 | buried | `h1` | Corporate loan applications need extensive documentation. |
+| 0:03.8 | buried | `h2` | Waaaaay too many documents to review. |
+| 0:06.0 | buried | `h3` | For one case. |
+| 0:07.7 | buried | `sigh` | *[sigh]* |
+| 0:10.0 | waiting | `w1` | A loan officer may spend over an hour staring at details on the screen, |
+| 0:13.6 | waiting | `w2` | while the loan customer anxiously waits on the other end for any news of approval. |
+| 0:18.4 | tamper | `t1` | Even worse, when bad actors are involved, |
+| 0:22.6 | tamper | `t2` | smaller anomalies are even harder to catch. |
+| 0:25.2 | portal | `p1` | So that's why we introduce... |
+| 0:26.9 | portal | `p2` | the G-L-D-B Anomaly Detection Portal. |
+| 0:31.3 | portal | `p3` | Agents read every document, |
+| 0:34.0 | portal | `p4` | and flag what doesn't add up. |
+| 0:37.4 | upload | `u1` | Upload the documents. |
+| 0:40.9 | upload | `u2` | Every file is classified, and its key fields read. |
+| 0:44.8 | upload | `u3` | Even from scans. |
+| 0:48.2 | detect | `d1` | Agents investigate every document. |
+| 0:50.2 | detect | `d2` | A lead agent plans the investigation. |
+| 0:52.8 | detect | `d3` | Specialists check metadata, fonts, alignment, totals, spelling, and across documents. |
+| 0:58.5 | detect | `d4` | A doctored figure, or a mismatched address, gets caught. |
+| 1:02.3 | trace | `r1` | And it's not a black box. |
+| 1:03.8 | trace | `r2` | The agent trace shows every step, every tool call, and what it returned. |
+| 1:09.5 | trace | `r3` | Every finding can be audited. |
+| 1:13.6 | score | `s1` | Every case gets a risk rating, |
+| 1:15.1 | score | `s2` | with the exact evidence behind it. |
+| 1:18.2 | score | `s3` | What was flagged, where, and why. |
+| 1:21.9 | score | `s4` | Officers confirm or dismiss each finding, and add notes. |
+| 1:25.7 | score | `s5` | And it recommends the documents that would settle it. |
+| 1:28.4 | finalise | `f1` | Then lock the case. |
+| 1:29.4 | finalise | `f2` | Finalised cases become view-only, with every step on record. |
+| 1:32.9 | dashboard | `b1` | Every case, at a glance. |
+| 1:34.2 | dashboard | `b2` | The whole pipeline, from upload to finalised. |
+| 1:36.6 | dashboard | `b3` | The most common flags, across every case. |
+| 1:39.7 | dashboard | `b4` | Risk across every case in view. |
+| 1:41.8 | dashboard | `b5` | And the riskiest cases first. |
+| 1:43.8 | difference | `x1` | What took hours of screening now takes minutes. |
+| 1:46.3 | difference | `x2` | The AI does the reading. Your loan officers make the call. |
+| 1:49.3 | difference | `x3` | And customers hear back sooner. |
+| 1:51.5 | cta | `c1` | Bring your next loan case. |
+| 1:53.2 | cta | `c2` | G-L-D-B Anomaly Detection Portal. |
+| 1:55.3 | cta | `c3` | Upload the package, and see what the portal catches. |
+| 1:57.4 | cta | `c4` | Try it on your next case. |
 
-About 240 words in all. The same lines, as plain text for pasting into ElevenLabs, are in `video/public/vo/lines.json`.
-
-## Recording notes
-- **"G-L-D-B"** is spelled with hyphens so the voice reads it letter by letter. In ElevenLabs you can also add a pronunciation dictionary entry for "GLDB".
-- **The sigh:** most ElevenLabs voices won't sigh on cue. Record it yourself, or generate it as its own clip (the Sound Effects tool, "tired exhale sigh") and save it as `video/public/vo/sigh.wav`.
-- **"Waaay":** type it as "Waaay" and pick the take that stretches it best; or regenerate with a lower Stability for more expression.
-- **A line runs long?** Raise that section's `length` in `video/src/timing.ts`; everything after it moves along, sound included.
+## Notes
+- **"read"** in "Agents read every document" is spelled "reed" in `cues.json` so the voice says it in the present tense. The upload line's "its key fields read" is past tense, as written.
+- **"G-L-D-B"** is hyphenated so it's read letter by letter.
+- **Changing or re-recording a line:** replace its clip in `public/vo/lines/` (same name), update its `dur` in `cues.json`, then run `npm run vo:fit`. Captions that would rise before the previous line has finished move later, with the rest of their section.
+- Voice: Brian (`nPczCjzI2devNBz1zQrb`), eleven_multilingual_v2, stability 0.45, similarity 0.8, style 0.15; clips sped up 6%. Credit "Voice by ElevenLabs" (free plan).
