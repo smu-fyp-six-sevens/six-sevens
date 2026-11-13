@@ -169,3 +169,6 @@
 
 ## Owner preference (from wave 29)
 - Deliver visuals only: renders/picture.mp4 (Master-Silent, no audio). No voice, music or effects renders unless asked; the owner aligns sound in their own editor (stems from wave 28 are in renders/stems).
+
+## Wave 30 - full-screen dashboard
+- Owner: the dashboard segment should cover the whole screen, no step tracker. The window grows from the Finalise screen to the full frame over 0.5 s; no tracker or headline; the page fills the frame. Spliced into renders/picture.mp4 (frames 2668-2995).

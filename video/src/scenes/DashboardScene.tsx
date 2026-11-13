@@ -5,15 +5,14 @@
 // The camera works on the browser's viewport (1440 x 900 CSS px) and pages scroll inside it, as in a browser, so a
 // new page opens at its top. Times: DASHBOARD in timing.ts. Words: data/howitworks.ts.
 
-import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { cameraAt } from "../components/keys";
 import { Pointer } from "../components/Pointer";
-import { ProductHeader } from "../components/ProductHeader";
 import { shotSwipe } from "../components/swipe";
 import { DASHBOARD_BOXES as B, DASHBOARD_COPY, SCREENS_STORY2 } from "../data/howitworks";
 import { colors } from "../theme";
 import { DASHBOARD as T, FPS } from "../timing";
-import { WIN, Window } from "./PortalScene";
+import { WIN } from "./PortalScene";
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 const VW = 1440;
@@ -27,6 +26,14 @@ const path = (t: number, keys: [number, number, number][]) => {
 };
 
 /** The viewport, zoomed on a point (viewport px), clamped to its edges like a real crop. */
+/** The browser viewport filling a box of the given size (film px), zoomed on a point (viewport px), clamped to its edges. */
+const FrameViewport: React.FC<{ boxW: number; boxH: number; zoom: number; x: number; y: number; children: React.ReactNode }> = ({ boxW, boxH, zoom, x, y, children }) => {
+  const k = (boxW / VW) * zoom;
+  const tx = Math.min(0, Math.max(boxW - VW * k, boxW / 2 - k * x));
+  const ty = Math.min(0, Math.max(boxH - VH * k, boxH / 2 - k * y));
+  return <div style={{ position: "absolute", left: 0, top: 0, width: VW, height: VH, overflow: "hidden", background: colors.paper, transformOrigin: "0 0", transform: `translate(${tx}px, ${ty}px) scale(${k})` }}>{children}</div>;
+};
+
 export const Viewport: React.FC<{ zoom: number; x: number; y: number; children: React.ReactNode }> = ({ zoom, x, y, children }) => {
   const k = K0 * zoom;
   const tx = Math.min(0, Math.max(WIN.w - VW * k, WIN.w / 2 - k * x));
@@ -37,7 +44,7 @@ export const Viewport: React.FC<{ zoom: number; x: number; y: number; children: 
 const Ring: React.FC<{ b: { x: number; y: number; w: number; h: number }; p: number; tone?: string }> = ({ b, p, tone = colors.steel }) =>
   p <= 0 ? null : <div style={{ position: "absolute", left: b.x - 4, top: b.y - 4, width: b.w + 8, height: b.h + 8, borderRadius: 12, border: `3px solid ${tone}`, opacity: p }} />;
 
-export const DashboardScene: React.FC<{ showText?: boolean }> = ({ showText = true }) => {
+export const DashboardScene: React.FC<{ showText?: boolean }> = () => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
   const swipe = shotSwipe(t, 0, T.length, { enter: false }) ?? 0;
@@ -56,10 +63,15 @@ export const DashboardScene: React.FC<{ showText?: boolean }> = ({ showText = tr
   const press = interpolate(t, [T.navClick - 0.05, T.navClick + 0.05, T.navClick + 0.2], [0, 1, 0], clamp);
   const ring = (at: number, until: number) => interpolate(t, [at + 0.2, at + 0.5, until - 0.3, until], [0, 1, 1, 0], clamp);
 
+  // Full screen: no step tracker or headline. The window grows to the frame over GROW seconds.
+  const GROW = 0.5;
+  const g = Easing.bezier(0.37, 0, 0.63, 1)(interpolate(t, [0, GROW], [0, 1], clamp));
+  const box = { x: WIN.x * (1 - g), y: WIN.y * (1 - g), w: WIN.w + (1920 - WIN.w) * g, h: WIN.h + (1080 - WIN.h) * g, r: 18 * (1 - g) };
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
-      <Window enter={1} swipe={swipe}>
-        <Viewport zoom={cam.zoom} x={cam.x} y={cam.y}>
+      {/* The window grows from where the Finalise screen sits to the full frame, then the dashboard fills it. */}
+      <div style={{ position: "absolute", left: box.x, top: box.y, width: box.w, height: box.h, borderRadius: box.r, overflow: "hidden", boxShadow: box.r > 0.5 ? "0 30px 70px rgba(18,32,61,0.18)" : "none", transform: `translateX(${swipe * 1920 * 0.62}px)`, opacity: 1 - 0.85 * Math.abs(swipe) }}>
+        <FrameViewport boxW={box.w} boxH={box.h} zoom={cam.zoom} x={cam.x} y={cam.y}>
           <Img src={staticFile(SCREENS_STORY2.finaliseDone.src)} style={{ position: "absolute", left: 0, top: 0, width: VW, height: VH }} />
           {toDash > 0 && (
             <div style={{ position: "absolute", left: 0, top: -scroll, width: VW, height: SCREENS_STORY2.dashboard.h, opacity: toDash }}>
@@ -72,10 +84,8 @@ export const DashboardScene: React.FC<{ showText?: boolean }> = ({ showText = tr
             </div>
           )}
           {t < T.pipelineAt + 1 && <Pointer x={px} y={py} size={20} press={press} />}
-        </Viewport>
-      </Window>
-      <ProductHeader step={5} fromStep={5} length={T.length} headline={DASHBOARD_COPY.headline} headlineIn={T.headlineIn} showText={showText}
-        beats={DASHBOARD_COPY.beats.map((b) => ({ ...b, at: T[b.at as keyof typeof T] }))} />
+        </FrameViewport>
+      </div>
     </AbsoluteFill>
   );
 };
