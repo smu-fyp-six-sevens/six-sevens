@@ -17,11 +17,9 @@ It automates the forgery-check stage of GLDB's loan workflow: officers upload a 
 | `HOW_IT_WORKS.md` | How the system behaves today, settings, cost logs |
 | `FRAUD_DETECTION_MAP.md` | How the fraud checks and agents are wired; known detection bugs |
 | `CROSS_DOCUMENT_AND_RISK_PLAN.md` | Design of the case analysis and risk score |
-| `CLOUD_ARCHITECTURE_PLAN.md` | The cloud as built, its to-dos and Stage 2 |
-| `KUBERNETES_DEPLOYMENT_PLAN.md` | If and how to move to Kubernetes (planned only) |
-| `CODEBASE_AUDIT.md` | Open bugs, performance and security findings |
-| `STABILITY_AND_REFACTORING_AUDIT.md` | Fragile code, database load, technical debt |
-| `TEST_SUITE_AUDIT.md`, `backend_tests.md`, `PENDING_TESTS.md` | Test gaps, and tests owed for recent fixes |
+| `CLOUD_ARCHITECTURE_PLAN.md` | The cloud as built, its to-dos and Stage 2 (§1–12); if and how to move to Kubernetes, planned only (§13–24) |
+| `CODEBASE_AUDIT.md` | Open bugs, stability, performance, code structure and security findings |
+| `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md` | Test gaps, and tests owed for recent fixes |
 | `PENDING_WORK.md` | Open product and platform work |
 
 ## Run locally

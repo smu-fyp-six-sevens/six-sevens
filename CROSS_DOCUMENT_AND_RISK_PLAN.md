@@ -1,6 +1,6 @@
 # Design: cross-document validation and risk outlook
 
-The case analysis is built (`backend/app/case_pipeline/`). `HOW_IT_WORKS.md` §3 describes it step by step; `FRAUD_DETECTION_MAP.md` §1B lists the files. This doc keeps the design rules and what's still open. Kill switch: `CASE_ANALYSIS_ENABLED=false`. Every run writes a step-by-step `trace` to its row.
+The case analysis is built (`backend/app/case_pipeline/`). `HOW_IT_WORKS.md` §3 describes it step by step; `FRAUD_DETECTION_MAP.md` §3 lists the files. This doc keeps the design rules and what's still open. Kill switch: `CASE_ANALYSIS_ENABLED=false`. Every run writes a step-by-step `trace` to its row.
 
 ## Still open
 

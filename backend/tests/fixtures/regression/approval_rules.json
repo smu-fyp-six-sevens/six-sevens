@@ -1,0 +1,461 @@
+[
+  {
+    "name": "a confident, complete payslip",
+    "document": {
+      "status": "analyzed",
+      "document_type": "payslip",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.95
+      },
+      "net_pay": {
+        "value": "1000",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": null
+  },
+  {
+    "name": "a document still extracting",
+    "document": {
+      "status": "extracting",
+      "document_type": "payslip",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.95
+      },
+      "net_pay": {
+        "value": "1000",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": "Only completed documents can be approved."
+  },
+  {
+    "name": "an approved document",
+    "document": {
+      "status": "approved",
+      "document_type": "payslip",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.95
+      },
+      "net_pay": {
+        "value": "1000",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": "Only completed documents can be approved."
+  },
+  {
+    "name": "a type the classifier is unsure of",
+    "document": {
+      "status": "analyzed",
+      "document_type": "payslip",
+      "classification_confidence": 0.5,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.95
+      },
+      "net_pay": {
+        "value": "1000",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": "Cannot approve document. Confirm the document type first."
+  },
+  {
+    "name": "a type exactly at the classifier threshold",
+    "document": {
+      "status": "analyzed",
+      "document_type": "payslip",
+      "classification_confidence": 0.85,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.95
+      },
+      "net_pay": {
+        "value": "1000",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": null
+  },
+  {
+    "name": "no type and no confidence",
+    "document": {
+      "status": "analyzed",
+      "document_type": null,
+      "classification_confidence": null,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.95
+      },
+      "net_pay": {
+        "value": "1000",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": "Cannot approve document. Confirm the document type first."
+  },
+  {
+    "name": "nothing extracted",
+    "document": {
+      "status": "analyzed",
+      "document_type": "payslip",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "",
+        "confidence": 0.95
+      },
+      "net_pay": {
+        "value": "",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [
+      "company_name",
+      "individual_name",
+      "net_pay"
+    ],
+    "refusal": "Cannot approve document. No information was extracted from it."
+  },
+  {
+    "name": "a required field missing",
+    "document": {
+      "status": "analyzed",
+      "document_type": "payslip",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [
+      "net_pay"
+    ],
+    "refusal": "Cannot approve document. Required fields are missing or empty: net_pay"
+  },
+  {
+    "name": "a required field empty",
+    "document": {
+      "status": "analyzed",
+      "document_type": "payslip",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.95
+      },
+      "net_pay": {
+        "value": "  ",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [
+      "net_pay"
+    ],
+    "refusal": "Cannot approve document. Required fields are missing or empty: net_pay"
+  },
+  {
+    "name": "a field under the extraction threshold",
+    "document": {
+      "status": "analyzed",
+      "document_type": "payslip",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.55
+      },
+      "net_pay": {
+        "value": "1000",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": "Cannot approve document. Low-confidence fields must be reviewed and saved first: company_name"
+  },
+  {
+    "name": "a field exactly at the extraction threshold",
+    "document": {
+      "status": "analyzed",
+      "document_type": "payslip",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.9
+      },
+      "net_pay": {
+        "value": "1000",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": null
+  },
+  {
+    "name": "two low-confidence fields",
+    "document": {
+      "status": "analyzed",
+      "document_type": "payslip",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.4
+      },
+      "net_pay": {
+        "value": "1000",
+        "confidence": 0.3
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": "Cannot approve document. Low-confidence fields must be reviewed and saved first: company_name, net_pay"
+  },
+  {
+    "name": "Other, picked by the officer, fields not saved",
+    "document": {
+      "status": "analyzed",
+      "document_type": "unrecognised",
+      "classification_confidence": 1.0,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "note": {
+        "value": "hello",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": "Cannot approve document. Review and save the fields of a document set to Other first."
+  },
+  {
+    "name": "Other, picked by the officer, fields saved",
+    "document": {
+      "status": "analyzed",
+      "document_type": "unrecognised",
+      "classification_confidence": 1.0,
+      "fields_reviewed_at": "2026-11-01T03:00:00+00:00"
+    },
+    "fields": {
+      "note": {
+        "value": "hello",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": null
+  },
+  {
+    "name": "Other, as the classifier left it",
+    "document": {
+      "status": "analyzed",
+      "document_type": "unrecognised",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "note": {
+        "value": "hello",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": "Cannot approve document. Confirm the document type first."
+  },
+  {
+    "name": "a personal source of wealth (a name, no UEN)",
+    "document": {
+      "status": "analyzed",
+      "document_type": "source_of_wealth",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "account_holder_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": null
+  },
+  {
+    "name": "a company source of wealth without its UEN",
+    "document": {
+      "status": "analyzed",
+      "document_type": "source_of_wealth",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [
+      "uen"
+    ],
+    "refusal": "Cannot approve document. Required fields are missing or empty: uen"
+  },
+  {
+    "name": "a credit report with empty lists",
+    "document": {
+      "status": "analyzed",
+      "document_type": "credit_report",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "id_number": {
+        "value": "S1234567D",
+        "confidence": 0.95
+      },
+      "date_of_birth": {
+        "value": "1990-01-01",
+        "confidence": 0.95
+      },
+      "nationality": {
+        "value": "SG",
+        "confidence": 0.95
+      },
+      "individual_address": {
+        "value": "1 Road",
+        "confidence": 0.95
+      },
+      "defaults": {
+        "value": [],
+        "confidence": 0.95
+      },
+      "bankruptcy_proceedings": {
+        "value": [],
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [],
+    "refusal": null
+  },
+  {
+    "name": "a payslip with an empty list where a value is required",
+    "document": {
+      "status": "analyzed",
+      "document_type": "payslip",
+      "classification_confidence": 0.97,
+      "fields_reviewed_at": null
+    },
+    "fields": {
+      "individual_name": {
+        "value": "Jane Tan",
+        "confidence": 0.95
+      },
+      "company_name": {
+        "value": "Acme Pte Ltd",
+        "confidence": 0.95
+      },
+      "net_pay": {
+        "value": [],
+        "confidence": 0.95
+      }
+    },
+    "missing_required_fields": [
+      "net_pay"
+    ],
+    "refusal": "Cannot approve document. Required fields are missing or empty: net_pay"
+  }
+]

@@ -618,6 +618,7 @@ async def set_type(document: DocumentRecord, requested_type: str) -> None:
         first_pass_generic and document_type != "unrecognised"
     )
 
+    requested_at = datetime.now(timezone.utc)
     if needs_extraction:
         # The old fields came from the wrong schema: self-fulfilment only, and the old evidence is cleared.
         await asyncio.to_thread(
@@ -631,7 +632,6 @@ async def set_type(document: DocumentRecord, requested_type: str) -> None:
         )
         if document.fields_reviewed_at is not None:
             await asyncio.to_thread(document_repository.clear_fields_review, document.id)
-        requested_at = datetime.now(timezone.utc)
         await asyncio.to_thread(
             document_repository.update_status,
             document.id,

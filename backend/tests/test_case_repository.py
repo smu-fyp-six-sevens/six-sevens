@@ -178,6 +178,16 @@ def test_a_case_is_found_by_its_number_or_else_its_id(db) -> None:
     assert by_id is not None and by_id.id == "case-7"
 
 
+def test_an_exact_number_lookup_has_no_wildcards() -> None:
+    with patch("app.case_repository.supabase_client") as mock_client:
+        query = mock_client.table.return_value.select.return_value
+        query.or_.return_value.limit.return_value.execute.return_value = _execute_result([])
+
+        assert case_repository.find_case_numbered("gldb-1%") is None
+
+    query.or_.assert_called_once_with('greenlink_case_id.eq."GLDB-1%",id.eq."gldb-1%"')
+
+
 def test_an_unknown_number_is_none(db) -> None:
     db.add("cases", _row())
 

@@ -30,8 +30,9 @@ def _case(status: str = "open") -> CaseRecord:
 
 
 def _document(status: DocumentStatus, doc_id: str = "doc-1") -> DocumentRecord:
+    # Typed: a document with no type is never scanned, so the stage doesn't wait on it.
     return DocumentRecord(
-        id=doc_id, case_id="case-1", filename=f"{doc_id}.pdf", status=status,
+        id=doc_id, case_id="case-1", filename=f"{doc_id}.pdf", document_type="payslip", status=status,
         uploaded_at=datetime.now(timezone.utc),
     )
 

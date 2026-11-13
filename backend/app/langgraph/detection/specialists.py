@@ -100,11 +100,12 @@ def _rating_rank(rating: str | None) -> int:
 
 
 def combine_floor_notes(kept: dict, other: dict) -> None:
-    """Two specialists rated one finding and `kept` now holds the higher severity: the rule's note stays only while
-    the higher of their own ratings is still below it."""
+    """Two specialists rated one finding (call before `kept`'s severity is raised to the higher): the rule's note
+    stays only while the higher of their own ratings is still below the final severity."""
     ratings = [f.get("agent_severity", f.get("severity")) for f in (kept, other)]
     best = max(ratings, key=_rating_rank)
-    if _rating_rank(best) >= _rating_rank(kept.get("severity")):
+    final = max(kept.get("severity"), other.get("severity"), key=_rating_rank)
+    if _rating_rank(best) >= _rating_rank(final):
         kept.pop("agent_severity", None)
         kept.pop("severity_floor_reason", None)
         return

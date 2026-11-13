@@ -44,6 +44,8 @@ class _World:
         self.documents.add("documents", {
             "id": document_id, "case_id": CASE_ID, "filename": f"{document_id}.pdf", "document_type": "payslip",
             "classification_confidence": 0.97, "status": status.value, "uploaded_at": NOW.isoformat(),
+            # Columns the real table fills by default.
+            "retry_count": 0, "evidence": [], "fulfilled_requirements": [],
         })
 
     def status_of(self, document_id: str) -> str:

@@ -1,6 +1,15 @@
 # Pending work
 
-Open product and platform work only: delete an item once done. Updated 2026-11-13. Elsewhere: bugs and security in `CODEBASE_AUDIT.md`; stability and debt in `STABILITY_AND_REFACTORING_AUDIT.md`; tests in `backend_tests.md`, `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; cloud to-dos in `CLOUD_ARCHITECTURE_PLAN.md` §9–10.
+Open product and platform work only: delete an item once done. Updated 2026-11-13. Elsewhere: bugs, stability, performance and security in `CODEBASE_AUDIT.md`; tests in `TEST_SUITE_AUDIT.md` and `PENDING_TESTS.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §8; cloud to-dos in `CLOUD_ARCHITECTURE_PLAN.md` §9–10 and Kubernetes in §13–24.
+
+## Handover documentation
+
+- **CPF rates each January.** *Issue:* the 2027 CPF table is a placeholder (2026's rates), so 2027 payslips skip the CPF checks unless `CPF_USE_PROVISIONAL_RATES` is on. CPF publishes new rates and ceilings every year, so GLDB's team will need to repeat this. *Do:* when CPF publishes 2027, replace the five 2027 rows and the ceiling in `fraud_detection/external_validation/sg_reference/cpf.py` and remove the date from `PROVISIONAL_RATE_TABLES`; write the yearly steps into the handover documentation.
+
+## Security
+
+- **Hash the passwords.** *Issue:* `AUTH_USERS` (Secret Manager) holds passwords in plain text, and login compares them directly. *Do:* store a salted hash per user (a slow one such as scrypt, from Python's standard library, so no new dependency); at login, hash the submitted password with that user's salt and compare in constant time (`auth.verify_credentials`). Keep a script that makes the stored value from a password. Later, if wanted: a lockout after repeated failures, and a token version per user so one token can be revoked.
+- **Login token in `localStorage`.** *Issue:* the 7-day token sits in `localStorage`, so an injected script could read it (the CSP now makes that much harder). *Do:* a shorter token, or an HttpOnly cookie (`frontend/src/lib/api.ts:11-19`; the WebSocket ticket flow and Kong's CORS would need to follow).
 
 ## Product
 

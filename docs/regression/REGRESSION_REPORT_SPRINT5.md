@@ -19,14 +19,14 @@ The 93 in-scope cases come from four tabs: Case Management CM-037 – CM-092 (56
 
 | Suite | Tests | Passed | Known defects (expected failures) |
 |---|---|---|---|
-| Backend — pytest (all) | 2931 | 2925 (+2 skipped) | 4 (from the Sprint 6 test audit, `backend_tests.md`) |
+| Backend — pytest (all) | 2931 | 2925 (+2 skipped) | 4 (from the Sprint 6 test audit) |
 | └ tagged `sprint5` | 314 | 314 | 0 |
 | └ tagged `sprint1` – `sprint4` (re-run) | 1275 | 1271 (+2 skipped) | 2 (`test_numerical_validation.py`, from the same audit) |
 | Frontend — Playwright (all) | 240 | 240 | 1 (REG-014) |
 | └ tagged `@sprint5` | 41 | 41 | 0 |
 | └ tagged `@sprint1` – `@sprint4` (re-run) | 137 | 137 | 0 |
 
-**Sprints 1 – 4 still pass.** The expected failures in the backend are known defects that new tests in the Sprint 6 test audit found (`backend_tests.md`), not Sprint 5 cases; each is marked `xfail(strict=True)` with its reason.
+**Sprints 1 – 4 still pass.** The expected failures in the backend are known defects that new tests in the Sprint 6 test audit found (the Sprint 6 test audit), not Sprint 5 cases; each is marked `xfail(strict=True)` with its reason.
 
 **Defects:** none new in this regression. AE-014 and AE-015 failed in the live run and were fixed and passed on re-test; the suite keeps both fixed. REG-014 (Sprint 4, a race in the detection panel) is still open. Its test is now an expected failure, so it can't fail the build at random and will flag the fix when it lands.
 

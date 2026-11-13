@@ -89,6 +89,9 @@ class Runs:
         newest = max(rows, key=lambda r: r["started_at"], default=None)
         return (newest["status"], newest["started_at"]) if newest else None
 
+    def count_runs_since(self, case_id, since):
+        return sum(1 for r in self.rows.values() if r["case_id"] == case_id and r["started_at"] >= since)
+
     def write_trace(self, run_id, events):
         self.traces[run_id] = events
 
@@ -124,7 +127,7 @@ class Case:
 @pytest.fixture
 def runs(monkeypatch) -> Runs:
     fake = Runs()
-    for name in ("insert_run", "claim_run", "latest_run_state", "write_trace", "finish_run"):
+    for name in ("insert_run", "claim_run", "latest_run_state", "count_runs_since", "write_trace", "finish_run"):
         monkeypatch.setattr(f"app.case_pipeline.repository.{name}", getattr(fake, name))
     # A trace is saved on a background thread; here at once, so a test reads it as soon as the run has saved it.
     monkeypatch.setattr(run_trace.RunTrace, "save", lambda trace: fake.write_trace(trace.run_id, list(trace.events)))

@@ -2,7 +2,7 @@
 
 Where detection logic lives and how it's wired. Updated 2026-11-13. Behaviour in plain words: `HOW_IT_WORKS.md`; case-analysis design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 
-## 0. Summary
+## 1. Summary
 
 Detection runs in the background after an officer approves a document (approval locks it).
 
@@ -16,7 +16,7 @@ Detection runs in the background after an officer approves a document (approval 
 
 **"Other" documents** are scanned too: type-specific checks report "nothing to check", layout runs in generic mode.
 
-## 1. Check modules (`backend/app/fraud_detection/`)
+## 2. Check modules (`backend/app/fraud_detection/`)
 
 | Folder / file | Checks |
 |---|---|
@@ -50,7 +50,7 @@ Addresses compare after `address_matching.normalize_address` ("Blk 50 … #01-30
 
 **`case_match.py`** is the upload check (is this document from this case?), not fraud. Both it and the cross-document code build keys through `identifiers.py`.
 
-## 1B. Case pipeline (`backend/app/case_pipeline/`)
+## 3. Case pipeline (`backend/app/case_pipeline/`)
 
 Runs on its own once every document is decided and every approved one scanned (`service.start_if_due`), or on request.
 
@@ -75,7 +75,7 @@ API: `POST /cases/{id}/analysis/run` (409 unless ready or if already running), `
 
 `app/identifiers.py` is a leaf module (key functions `alnum`, `id_key`, `uen_key`, `name_key`, `company_key`, name matchers, person extraction). `llm_io.py` reads and `llm_contracts.py` checks every model reply.
 
-## 2. Detection agent files (`backend/app/langgraph/detection/`)
+## 4. Detection agent files (`backend/app/langgraph/detection/`)
 
 - **`tools.py`:** 13 tools (hidden text, font, layout, spelling, page consistency, date, metadata, prompt injection, image manipulation, image tampering, AI generation, plus `numerical_checks_tool` and `external_validation_tool` in `field_checks/`). Each returns `{tool, unable_to_assess, reason, findings, truncated}`; up to 15 findings, ids `<tool>-<n>`, the tool's `severity_hint` kept apart from the specialist's rating. The field tools take `bindings` the specialist fills; the document type comes from run state and decides which checks run. Per-run fetch cache: the document, fields and file are fetched once and shared.
 - **`specialists.py`:**
@@ -105,22 +105,22 @@ load_context ─► lead_plan ─(×3)─► specialist ─► lead_review ─�
 - **Trace events:** `detection_start`, `detection_plan`, `detection_specialist`, `detection_second_look`, `detection_done`, `detection_error`, `findings_error`, `run_audit`. Spans: `detection.run`, `.lead_plan`, `.lead_review`, `.review.<name>`, `.specialist.<name>`, `tool.<name>`.
 - Specialist prompts are too short for Haiku's cache minimum, so they don't cache.
 
-## 3. API (`backend/app/routers/detection.py`)
+## 5. API (`backend/app/routers/detection.py`)
 
 - `GET /documents/{id}/detection/<check>`: single checks, 409 until a report exists. Numerical and external use one Haiku call to bind inputs.
 - `GET …/detection/report` (200 report; 502 if the last run failed with none; 404 if never run), `POST …/detection/cancel`, `POST …/detection/retry` (409 while running or queued), `GET …/detection/case-match`, `GET /cases/{id}/detection/reports`.
 - No "run detection" route: approval starts it.
 
-## 4. Frontend
+## 6. Frontend
 
 - **`DetectionPanel.tsx`:** verdict, each specialist's brief, tools and dismissals, the second look, findings, what couldn't be assessed. Cancel while scanning; "Run detection again" after a failed/cancelled run or over a report (confirmed first).
 - **`CaseAnalysisCard.tsx`:** progress, "Run again" for a failed or missing run, summary, findings, "Checked and consistent", what-if list, "Out of date" notice.
 
-## 5. Tests
+## 7. Tests
 
 One test file per check module; `test_detection.py` (endpoints), `test_detection_tools.py` (tool contract), `test_detection_verdict.py` (merge), `test_output_validation.py` (`_collect_node`). Not tested: `_normalise_plan`, `_validated_second_look`.
 
-## 6. Known detection bugs
+## 8. Known detection bugs
 
 Found by reading the code; none reproduced. Delete a row once fixed.
 
@@ -134,6 +134,6 @@ Found by reading the code; none reproduced. Delete a row once fixed.
 
 **Design questions:** "call each tool at most once" is asked in the prompt, not enforced. A wrongly dismissed finding disappears from the lead's view and the report (the panel still lists it with the reason); check how often real documents get dismissals.
 
-## 7. Synthetic fraud data (`backend/app/injection/`)
+## 9. Synthetic fraud data (`backend/app/injection/`)
 
 Builds the test data: `injectors.py` (layout, font, text, metadata defects), `page_defects.py`, `schemas.py`, `service.py`, `store.py`. Exposed through `routers/injection.py`, mounted only in local uvicorn mode.

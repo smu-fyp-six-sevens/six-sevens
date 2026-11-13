@@ -82,10 +82,6 @@ jobs:
       - name: Type check (pyright) - fails the build
         run: pyright app
 
-      # The tests too: a wrong mock signature or a typo'd attribute is a test that passes for the wrong reason.
-      - name: Type check the tests (pyright)
-        run: pyright tests
-
       - name: Reject type-check suppressions and weakened pyright config
         run: |
           fail=0

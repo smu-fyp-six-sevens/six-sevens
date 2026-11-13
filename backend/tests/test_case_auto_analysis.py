@@ -21,7 +21,8 @@ def _case(status: str = "fraud_detection") -> CaseRecord:
 
 
 def _document(status: DocumentStatus, doc_id: str = "doc-1") -> DocumentRecord:
-    return DocumentRecord(id=doc_id, case_id="case-1", filename=f"{doc_id}.pdf", status=status, uploaded_at=NOW)
+    # Typed: a document with no type is never scanned, so it isn't waited on.
+    return DocumentRecord(id=doc_id, case_id="case-1", filename=f"{doc_id}.pdf", document_type="payslip", status=status, uploaded_at=NOW)
 
 
 def _due(

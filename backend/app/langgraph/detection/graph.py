@@ -485,9 +485,9 @@ def merge_reports(state: DetectionState) -> dict:
                     "via_second_look": was_second_look,
                 }
             else:
-                merged["severity"] = _max_severity(merged["severity"], finding["severity"])
                 if "agent_severity" in merged or "agent_severity" in finding:
                     combine_floor_notes(merged, finding)
+                merged["severity"] = _max_severity(merged["severity"], finding["severity"])
                 merged.setdefault("agent_confidences", []).append({
                     "specialist": name, "confidence": finding.get("confidence", 0.0),
                 })

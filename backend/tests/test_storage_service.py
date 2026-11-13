@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -84,6 +85,16 @@ def test_a_file_with_no_case_goes_to_the_unassigned_folder() -> None:
         path = storage_service.upload_file(None, "statement.pdf", b"%PDF-1.4", "application/pdf")
 
     assert path.startswith("unassigned/")
+
+
+def test_the_officers_file_name_never_shapes_the_path() -> None:
+    _, patched = _storage()
+    with patched:
+        traversal = storage_service.upload_file("c", "../a b.PDF", b"x", "application/pdf")
+        odd = storage_service.upload_file("c", "x.weird-ext!", b"x", "application/pdf")
+
+    assert re.fullmatch(r"c/[0-9a-f-]{36}\.pdf", traversal)
+    assert re.fullmatch(r"c/[0-9a-f-]{36}", odd)
 
 
 def test_a_deleted_file_is_gone_and_the_others_stay() -> None:

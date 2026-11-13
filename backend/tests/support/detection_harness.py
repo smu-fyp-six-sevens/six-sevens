@@ -21,6 +21,7 @@ from app.fraud_detection.font_consistency import ExtractedField
 from app.langgraph import trace
 from app.langgraph.detection import tools as detection_tools
 from app.langgraph.detection.specialists import SPECIALISTS
+from app.llm_io import parse_json_object
 from app.models import DocumentRecord, DocumentStatus, RoutingStatus
 
 LAYOUT, CONTENT, DIGITAL = "layout_rendering", "content_validation", "digital_authenticity"
@@ -91,7 +92,9 @@ def _assess(script: Specialist, messages: list[BaseMessage]) -> dict:
     for message in messages:
         if not isinstance(message, ToolMessage):
             continue
-        result = json.loads(_text(message.content))
+        # The tool's own output is the first block, inside a fence; officer feedback may follow it.
+        first = message.content[:1] if isinstance(message.content, list) else message.content
+        result = parse_json_object(_text(first)) or {}
         for finding in result.get("findings") or []:
             keys = (finding["id"], result["tool"])
             if any(key in script.dismiss for key in keys):

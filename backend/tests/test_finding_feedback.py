@@ -169,7 +169,7 @@ async def test_a_failed_lookup_gives_no_feedback_instead_of_failing_the_review()
 def test_feedback_on_one_check_code_is_never_shown_with_another() -> None:
     loaded = {"PAY.NET": [_group("PAY.NET", "false_alarm")]}
     [message], shown = specialists._with_feedback([_result("numerical_checks_tool", "STAT.ROUND_NUMBERS")], loaded, {})
-    assert shown == {} and isinstance(message.content, str)
+    assert shown == {} and len(message.content) == 1  # the fenced result alone: no feedback block
 
     [message], shown = specialists._with_feedback([_result("numerical_checks_tool", "PAY.NET")], loaded, {})
     assert "Check PAY.NET:" in _feedback_text(message) and 'source="officer_feedback"' in _feedback_text(message)
@@ -195,7 +195,7 @@ def test_each_finding_records_only_its_own_codes_feedback() -> None:
 def test_a_code_is_shown_once_a_run() -> None:
     loaded = {"PAY.NET": [_group("PAY.NET")]}
     [message], shown = specialists._with_feedback([_result("numerical_checks_tool", "PAY.NET")], loaded, {"PAY.NET": ["x"]})
-    assert shown == {} and isinstance(message.content, str)
+    assert shown == {} and len(message.content) == 1  # the fenced result alone: no feedback block
 
 
 def test_a_result_with_feedback_still_reads_as_the_tools_result() -> None:

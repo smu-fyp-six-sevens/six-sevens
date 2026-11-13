@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from app.fraud_detection.shared.field_catalogue import array_rows
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation.runner import Binding, ROW_ROLES, benford_summary, run_numerical_checks
+from app.fraud_detection.numerical_validation.common import _as_number
 from app.fraud_detection.numerical_validation.identity_company import _mrz_check_digit, _nric_expected_letter
 from app.fraud_detection.numerical_validation.statements import BENFORD_MIN_SAMPLE, _benford
 
@@ -292,7 +293,8 @@ def test_open_close_reconciles() -> None:
         {"amount": 5000.00, "balance": 15000.00},
         {"amount": -2000.00, "balance": 13000.00},
     ]
-    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    result = _run([_field("transactions", transactions), _field("opening_balance", "10,000.00")],
+                  document_type="bank_statement")
     assert _codes(result, "BS.OPEN_CLOSE") == []
 
 
@@ -301,7 +303,8 @@ def test_open_close_flags_a_break() -> None:
         {"amount": 5000.00, "balance": 15000.00},
         {"amount": -2000.00, "balance": 20000.00},
     ]
-    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    result = _run([_field("transactions", transactions), _field("opening_balance", "10,000.00")],
+                  document_type="bank_statement")
     assert len(_codes(result, "BS.OPEN_CLOSE")) == 1
 
 
@@ -1473,3 +1476,49 @@ def test_a_genuine_fee_heavy_statement_is_not_flagged_for_its_cents() -> None:
     result = _statement_of(amounts, description=lambda index, amount: "SERVICE CHARGE" if amount == 2.50 else f"Payment {index}")
 
     assert _codes(result, "STAT.LAST_TWO_DIGITS") == []
+
+
+# --- Amounts as statements print them --------------------------------------------------------
+
+
+@pytest.mark.parametrize(("text", "expected"), [
+    ("1,234.56 DR", -1234.56), ("1,234.56 CR", 1234.56), ("-20 DR", -20.0), ("-20 CR", 20.0), ("500.00dr.", -500.0),
+])
+def test_dr_and_cr_amounts_are_read_with_their_sign(text: str, expected: float) -> None:
+    assert _as_number(text) == expected
+
+
+@pytest.mark.parametrize(("text", "expected"), [
+    ("1.234,56", 1234.56), ("1234,56", 1234.56), ("1,234", 1234.0), ("1,234,567.89", 1234567.89), ("12.345.678,9", 12345678.9),
+])
+def test_decimal_commas_are_read_as_decimals_and_thousands_commas_are_not(text: str, expected: float) -> None:
+    assert _as_number(text) == expected
+
+
+def test_a_dr_row_reconciles_its_running_balance() -> None:
+    transactions = [
+        {"amount": 0, "balance": "1,000.00"},
+        {"amount": "500.00 DR", "balance": "500.00"},
+        {"amount": "200.00 CR", "balance": "700.00"},
+    ]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert _codes(result, "BS.RUNNING_BALANCE") == []
+
+
+def _no_opening_signals(result) -> list:
+    return [f for f in _codes(result, "BS.OPEN_CLOSE") if f.severity == "signal"]
+
+
+def test_a_statement_with_no_opening_balance_says_so() -> None:
+    transactions = [{"amount": 100.00, "balance": 1100.00}, {"amount": -50.00, "balance": 1050.00}]
+    result = _run([_field("transactions", transactions)], document_type="bank_statement")
+    assert len(_no_opening_signals(result)) == 1
+
+
+def test_a_stated_or_brought_forward_opening_balance_needs_no_signal() -> None:
+    transactions = [{"amount": 100.00, "balance": 1100.00}, {"amount": -50.00, "balance": 1050.00}]
+    stated = _run([_field("transactions", transactions), _field("opening_balance", "1,000.00")],
+                  document_type="bank_statement")
+    assert _no_opening_signals(stated) == []
+    brought = [{"description": "Balance B/F", "balance": 1000.00}, *transactions]
+    assert _no_opening_signals(_run([_field("transactions", brought)], document_type="bank_statement")) == []

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from app import sg_time
 from app.fraud_detection.authenticity.metadata_analysis import (
     SUPPORTED_METADATA_FIELDS,
     check_metadata_anomalies,
@@ -521,6 +522,15 @@ def test_subject_and_title_are_read_but_are_not_among_the_six_supported_fields()
 
     assert extracted["subject"] == "modified copy" and extracted["title"] == "Constitution"
     assert "subject" not in SUPPORTED_METADATA_FIELDS and "title" not in SUPPORTED_METADATA_FIELDS
+
+
+def test_a_file_made_today_in_singapore_is_not_future_dated(monkeypatch) -> None:
+    # 01:00 in Singapore is still yesterday in UTC.
+    monkeypatch.setattr(sg_time, "now_sg", lambda: datetime(2026, 11, 13, 1, 0, tzinfo=sg_time.SINGAPORE))
+    today = check_metadata_anomalies("doc-1", {"CreateDate": "2026:11:13 23:30:00"})
+    assert not any("in the future" in a.reason for a in today.anomalies)
+    later = check_metadata_anomalies("doc-1", {"CreateDate": "2026:11:15 09:00:00"})
+    assert any("in the future" in a.reason for a in later.anomalies)
 
 
 def test_a_document_with_only_a_subject_or_title_is_still_unable_to_assess() -> None:

@@ -277,7 +277,7 @@ async def ingest_node(state: DocumentGraphState) -> dict:
 
     text_hash = text_cache.put(document_id, raw_text)
     trace.record(document_id, "ingest", case_id=document.case_id, filename=document.filename, text_available=bool(raw_text.strip()))
-    state: dict = {
+    update: dict = {
         "case_id": document.case_id,
         "filename": document.filename,
         "storage_path": document.storage_path,
@@ -287,14 +287,14 @@ async def ingest_node(state: DocumentGraphState) -> dict:
     }
     if is_officer_set_type(document):
         # A recovery or retry of a document the officer typed: classifying again would overwrite their decision.
-        state["officer_type"] = True
-        state["classification"] = {
+        update["officer_type"] = True
+        update["classification"] = {
             "document_type": document.document_type, "confidence": 1.0, "evidence": document.evidence or [],
             "reasoning": "Set by the loan officer.", "needs_manual_review": False,
             "fulfilled_requirements": document.fulfilled_requirements or [],
         }
         trace.record(document_id, "classification_skipped", document_type=document.document_type)
-    return state
+    return update
 
 
 def is_officer_set_type(document) -> bool:

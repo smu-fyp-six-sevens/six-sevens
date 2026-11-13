@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 
+from app import sg_time
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.dates.date_anomalies import check_date_anomalies
 
@@ -384,3 +387,10 @@ def test_two_digit_year_statement_rows_are_checked() -> None:
     result = _statement(["16-Dec-25", "20-Feb-26"])
     [finding] = _codes(result, "BS.PERIOD_BOUNDS")
     assert "2026-02-20" in finding.summary
+
+
+def test_a_document_dated_today_is_not_future_dated_before_8am_singapore_time(monkeypatch) -> None:
+    # 01:00 in Singapore is still yesterday in UTC, where Cloud Run's clock runs.
+    monkeypatch.setattr(sg_time, "now_sg", lambda: datetime(2026, 11, 13, 1, 0, tzinfo=sg_time.SINGAPORE))
+    assert _codes(_run([_field("declaration_date", "2026-11-13")]), "GEN.DATE_VALID") == []
+    assert len(_codes(_run([_field("declaration_date", "2026-11-14")]), "GEN.DATE_VALID")) == 1

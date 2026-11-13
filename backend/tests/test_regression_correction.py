@@ -53,10 +53,12 @@ def test_a_below_threshold_document_cannot_be_approved_until_its_type_is_confirm
     with (
         patch("app.routers._dependencies.document_repository") as lookup,
         patch("app.document_service.document_repository") as documents,
+        patch("app.document_service.extracted_fields_repository") as fields,
         patch("app.events.publish", new_callable=AsyncMock) as launch,
     ):
         lookup.get_document.return_value = document
         documents.get_document.return_value = document
+        fields.get_extracted_fields.return_value = []
         response = client.post(f"/documents/{document.id}/approve")
 
     assert response.status_code == 400

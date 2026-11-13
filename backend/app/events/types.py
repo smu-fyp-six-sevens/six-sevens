@@ -50,7 +50,7 @@ MISSED_ISSUE_REPORTED = "finding_review.missed_reported"
 MISSED_ISSUE_EDITED = "finding_review.missed_edited"
 FINDING_REVIEW_REMOVED = "finding_review.removed"
 
-# Stuck work (CLOUD_ARCHITECTURE_PLAN.md section 16). Cloud Scheduler publishes sweep.requested; the sweeper
+# Stuck work (CLOUD_ARCHITECTURE_PLAN.md section 5). Cloud Scheduler publishes sweep.requested; the sweeper
 # publishes recovery.requested with detail.owner, delivered only to that worker; the owner reports the outcome.
 SWEEP_REQUESTED = "sweep.requested"
 RECOVERY_REQUESTED = "recovery.requested"
