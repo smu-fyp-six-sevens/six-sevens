@@ -380,7 +380,20 @@ def test_findings_the_specialist_never_assessed_are_marked_unreviewed() -> None:
     risk = compute_case_risk([_document("doc")], {"doc": report}, set())
 
     assert risk.contributing_findings[0].unreviewed is True
-    assert risk.points == 3
+    assert risk.points == 2
+    assert risk.level == "Low"
+
+
+def test_two_findings_the_specialist_never_assessed_reach_medium() -> None:
+    report = _report(
+        _finding("medium", rationale="Not assessed by the specialist.", tool="a_tool"),
+        _finding("medium", rationale="Not assessed by the specialist.", tool="b_tool"),
+    )
+
+    risk = compute_case_risk([_document("doc")], {"doc": report}, set())
+
+    assert risk.points == 4
+    assert risk.level == "Medium"
 
 
 def test_checks_that_could_not_run_are_listed_but_not_scored() -> None:

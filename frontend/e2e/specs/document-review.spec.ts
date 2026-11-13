@@ -109,17 +109,17 @@ test.describe('Extract text from documents @sprint2 @SCRUM-9', () => {
     await page.goto(fixture.documentUrl(payslip));
     await expect(page.locator('.content-guard-warning')).toContainText('this document was blocked');
 
-    await page.getByRole('button', { name: 'Process Anyway' }).click();
-    const dialog = page.getByRole('dialog');
+    await page.getByRole('button', { name: 'Process Anyway', exact: true }).click();
+    const dialog = page.getByRole('alertdialog');
     await expect(dialog).toContainText('recorded in the audit trail');
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     expect(backend.requestsTo('POST', `/documents/${payslip.id}/process-anyway`)).toHaveLength(0);
 
-    await page.getByRole('button', { name: 'Process Anyway' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Process anyway' }).click();
+    await page.getByRole('button', { name: 'Process Anyway', exact: true }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Process anyway', exact: true }).click();
 
     await expect.poll(() => backend.requestsTo('POST', `/documents/${payslip.id}/process-anyway`).length).toBe(1);
-    await expect(page.getByRole('button', { name: 'Process Anyway' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Process Anyway', exact: true })).toHaveCount(0);
     expect(payslip.status).toBe('queued');
   });
 
@@ -132,7 +132,7 @@ test.describe('Extract text from documents @sprint2 @SCRUM-9', () => {
     await page.goto(fixture.documentUrl(payslip));
 
     await expect(page.getByRole('button', { name: 'Retry Document' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Process Anyway' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Process Anyway', exact: true })).toHaveCount(0);
   });
 
   test("a file that can't be read only says so: no type picker, fields or manual review", async ({ page, backend }) => {

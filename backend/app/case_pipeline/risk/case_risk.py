@@ -57,6 +57,8 @@ from ...models import (
 )
 
 SEVERITY_POINTS: dict[str, float] = {"info": 0, "low": 1, "medium": 3, "high": 8}
+# A finding the specialist never assessed counts for at most this, so one alone stays under the Medium threshold.
+UNASSESSED_POINTS = 2.0
 REPEAT_WEIGHT = 0.25
 NOISE_CAP_PER_DOCUMENT = 6.0
 # (minimum total, level), checked highest first.
@@ -168,7 +170,10 @@ def _score_document(
             continue
         weight = REPEAT_WEIGHT if finding.get("tool") in checks_seen else 1.0
         checks_seen.add(finding.get("tool"))
-        base_points.append(SEVERITY_POINTS[finding["severity"]] * weight)
+        points = SEVERITY_POINTS[finding["severity"]] * weight
+        if finding.get("rationale") == UNASSESSED_RATIONALE:
+            points = min(points, UNASSESSED_POINTS)
+        base_points.append(points)
 
     noise_total = sum(points for finding, points in zip(findings, base_points) if finding["severity"] != "high")
     # Scales every low/medium finding down evenly once the document hits the

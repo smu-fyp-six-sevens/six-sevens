@@ -82,7 +82,7 @@ API: `POST /cases/{id}/analysis/run` (409 unless ready or if already running), `
   - Layout & Rendering: hidden text (run first), font, layout, image manipulation, image tampering.
   - Content Validation: spelling, dates, pages, numerical, external (its prompt lists the fields and check menus).
   - Digital Authenticity: prompt injection (run first), metadata, AI generation.
-  - Floors: a tool with a floor (`_MIN_SEVERITY_BY_TOOL`, or `severity_floor` on the finding) can't be dismissed or rated below it. A **hard breach** (`severity_hint` impossible, extraction confident) can't be dismissed or rated below `high`. An unassessed finding stays at `medium`, `ai_accepted: false`.
+  - Floors: a tool with a floor (`_MIN_SEVERITY_BY_TOOL`, or `severity_floor` on the finding) can't be dismissed or rated below it. A **hard breach** (`severity_hint` impossible, extraction confident) can't be dismissed or rated below `high`. An unassessed finding stays at `medium`, `ai_accepted: false`, and scores 2 points in the case risk (not 3), so one alone doesn't make a case Medium.
 - **`graph.py`:** the lead, the merge, `run_detection()`. **`feedback.py`:** officer feedback appended to tool results.
 
 ### How a run goes

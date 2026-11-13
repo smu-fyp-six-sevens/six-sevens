@@ -4,15 +4,11 @@ Open items only: delete a row once it's fixed. Bugs, performance, structure and 
 
 ## 1. Most important
 
-| Items | In plain words |
-|---|---|
-| 6.3 | The audit log keeps personal data forever, even after a case is deleted (needs a decision, §8) |
+Nothing open is urgent. The biggest costs are 3.1 and 3.2.
 
 ## 2. Bugs
 
-| # | Sev | In plain words | Fix | Where | Size |
-|---|---|---|---|---|---|
-| 2.1 | Low | One unassessed finding alone makes a case Medium (3 points = the Medium threshold) | Decide (§8): lower its points or raise the threshold | `case_pipeline/risk/case_risk.py:58`, `:62` | S |
+None open.
 
 ## 3. Performance
 
@@ -52,9 +48,6 @@ Measured 2026-11-07 (24 hours, 8 cases, 80 documents): 2,343 requests, 745 s of 
 |---|---|---|---|---|---|
 | 6.1 | Low | Any service can publish any event type, including ones that look like an officer's | Handlers check which role may send each type | `deploy/terraform/iam.tf:37-42` | M |
 | 6.2 | Medium | The public `api` holds the database key that bypasses every rule | Later: a database role per service. Sooner: restrict the key to the services' network | `deploy/terraform/main.tf:12` | L |
-| 6.3 | High | The audit log keeps old/new field values, file and company names forever, even after a case is deleted | Decide (§8): store "changed" only, or a retention period | `document_service.py`, `routers/upload.py`, `routers/cases.py` | M |
-| 6.4 | Low | The stored trace has file names and quoted values, and any officer can read it | Decide (§8): accept, or strip values unless debugging | `langgraph/nodes.py:259` | S |
-| 6.5 | Low | Grafana's admin password is made by Terraform, so its value also sits in the Terraform state file (the Secret Manager copy is the one Grafana reads) | Decide (§8): accept, or create the password outside Terraform | `deploy/terraform/observability.tf:7-22` | S |
 | 6.6 | Low | Actions and the base image are pinned by tag, not hash; pip doesn't check hashes | Pin by digest; `--require-hashes` (needs the digests looked up and a hashed lock) | `.github/workflows/ci-cd.yml:63`; `backend/Dockerfile` | S |
 
 Password hashing and the login token's place in `localStorage` are in `PENDING_WORK.md` ("Security").
@@ -69,11 +62,7 @@ Password hashing and the login token's place in `localStorage` are in `PENDING_W
 
 ## 8. Decisions needed
 
-- **What should the audit log keep, and for how long? (6.3)** It's permanent on purpose, but it keeps the values officers corrected (names, IDs, amounts). Options: keep values forever; keep only "field X changed, by whom, when"; or delete entries after a set period. *Recommended: "changed" only, and ask GLDB how long audit records must be kept.*
-- **Should one unassessed finding make a case Medium? (2.1)** *Recommended: no; give it 2 points so it takes two to reach Medium.*
 - **How should a cancel reach a run on another instance? (3.5)** Today the detection run polls the audit trail every 5 s and the document pipeline polls its own status. Options: leave it; a `cancel_requested_at` column on `documents` that the run polls (works with audit-metrics down, still polls); or a Supabase Realtime subscription in each worker (no polling, but each worker then holds a socket and needs a reconnect path). *Recommended: the column, then Realtime only if the polling shows in the database load.*
-- **Trace values (6.4):** *Recommended: accept for now; the review screen reads the reasons.*
-- **Grafana password in state (6.5):** the state file is in a private bucket that only the team can read, so the exposure is small. *Recommended: accept.*
 - **Who approves a release to production?** Only `main` can deploy now (the Google sign-in checks the branch). Option still open: a GitHub environment with a named approver on the deploy job. *Recommended: once staging exists.*
 
 ## 9. Order

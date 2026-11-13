@@ -34,7 +34,7 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 - **No follow-up round** in plan-then-judge: add one if evals show low recall.
 - **Run trace clean-up:** it lists dropped hypotheses, which the design says are never shown.
-- **Guardrails still open:** dismissing a cross-document finding, audit retention, the three sponsor questions in the plan.
+- **Guardrails still open:** dismissing a cross-document finding, the three sponsor questions in the plan.
 - **Evidence requests need rethinking.** *Issue:* a document can only lower the score, so "ask for everything" always looks best. *Ideas:* the smallest set that reaches a target level (code); score documents that could go either way; an agent that checks existing documents first. The score stays deterministic.
 
 ## Evals and verification (all on demand: they spend tokens)
