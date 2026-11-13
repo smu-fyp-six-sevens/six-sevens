@@ -108,8 +108,8 @@
   "timing": "DETECT",
   "knob": "headlineIn",
   "file": "d1",
-  "text": "Next step, agents investigate every document, which starts from the lead agent that instructs its various specialists for dimensions across metadata, font, alignment, all across documents.",
-  "dur": 11.416
+  "text": "Next step, agents investigate every document. A lead agent directs its specialists across metadata, fonts, and alignment.",
+  "dur": 7.011
  },
  {
   "section": "detect",

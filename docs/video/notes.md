@@ -160,3 +160,6 @@
 - Owner: hook reads "Corporate loan applications need extensive documentation, which means waaaay too many documents to review." ("For one case." dropped, on screen too); stage intros "First step," / "Next step," / "Finally,"; Detect intro in the owner's words then "That way, a doctored figure or mismatched address gets caught."; "key fields read" said "red"; the CTA sub line dropped and Brian ends "Try it out today." (button too), the CTA visuals faster; softer music with gentle fades under the voice; music to the last frame.
 - Music: quiet 0.2, lifted 0.28, ducked to 60% with a 0.4 s smooth ease in and 0.67 s ease out; soundtrack extended by a 12-bar loop (129.7 s) so it is full to the film's end, with a 1.5 s fade on the last frames.
 - 118.65 s. The sigh stays as is (owner).
+
+## Wave 28 - shorter Detect intro, pause before Trace
+- Detect intro 29 -> 17 words ("Next step, agents investigate every document. A lead agent directs its specialists across metadata, fonts, and alignment."), 11.4 s -> 7.0 s; 1.2 s of quiet after "...gets caught" (TAILS in fit-vo.py). Film 115.1 s.

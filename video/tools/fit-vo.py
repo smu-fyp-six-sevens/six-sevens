@@ -8,6 +8,8 @@ run it again after replacing a clip. Edits src/timing.ts in place.
 """
 import json, re, sys
 VO_LEAD, GAP, TAIL = 0.05, 0.15, 0.35
+# seconds of quiet after a section's last line, where it needs more than TAIL
+TAILS = {"DETECT": 1.2}
 # seconds a section holds after its last event, where it needs more than the default
 HOLD = {"OVERWHELM3": 2.15, "DETECT": 1.0, "SCORE": 1.0, "TAMPER": 0.6, "PORTAL2": 0.8, "CTA": 0.6, "DASHBOARD": 0.6}
 NOT_TIMES = {"length", "ramp", "docPop", "stretchEase", "dim", "pushIn", "pulseEvery", "fidget", "pileStagger", "rowLand"}
@@ -57,7 +59,7 @@ for name in dict.fromkeys(c["timing"] for c in cues):
     # is not carried along, so a shifted section does not drag). The hook keeps room for the sigh after its ping.
     k = knobs(name)
     last_event = max(v for key, v in k.items() if key not in NOT_TIMES)
-    new_len = max(end + TAIL, last_event + HOLD.get(name, 1.0))
+    new_len = max(end + TAILS.get(name, TAIL), last_event + HOLD.get(name, 1.0))
     setk(name, "length", new_len)
     # captions that must clear before the next one rises
     if name == "OVERWHELM3": setk(name, "title1Out", knobs(name)["wayIn"] - 0.3)

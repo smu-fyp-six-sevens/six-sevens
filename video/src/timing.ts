@@ -127,14 +127,14 @@ export const CTA = {
 
 /** Section 6, "detect" (how it works, step 2). All times in seconds from the start of the section. */
 export const DETECT = {
-  length: 14.73,
+  length: 11.17,
   headlineIn: 0.2,        // "Agents investigate every document."
   planIn: 0.15,           // the lead agent's card; its plan types out...
   planEnd: 2.4,           // ...line by line
   specialistsIn: 2.7,     // the six checks branch out under it and start running...
   checksEnd: 5.6,         // ...finishing one after another by here (four turn up a finding)
-  catchAt: 11.77,           // the two catches: the doctored figure...
-  addressAt: 13.07,         // ...and the mismatched address
+  catchAt: 7.36,           // the two catches: the doctored figure...
+  addressAt: 8.66,         // ...and the mismatched address
 };
 
 /** Section 7, "trace" (how it works, step 2 continued). */
