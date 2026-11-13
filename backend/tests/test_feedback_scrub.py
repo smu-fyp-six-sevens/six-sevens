@@ -23,7 +23,7 @@ def test_scrub_removes_the_names_the_case_holds_longest_first() -> None:
 
 
 def test_scrub_keeps_what_is_not_confidential() -> None:
-    text = "Font differs on the total line; amount 1,250.00 is plausible."
+    text = "Font differs on the total line; the amount is plausible."
     assert scrub(text) == text
 
 

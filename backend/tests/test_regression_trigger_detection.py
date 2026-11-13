@@ -74,7 +74,7 @@ class Repo:
         self.document.status = DocumentStatus.APPROVED
         return self.document
 
-    def reject_document(self, document_id):
+    def reject_document(self, document_id, expected):
         self.document.status = DocumentStatus.REJECTED
         return self.document
 

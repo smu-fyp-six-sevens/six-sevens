@@ -3,9 +3,32 @@ from io import BytesIO
 from typing import Iterable, cast
 
 from PIL import Image
+from ..config import settings
 from .pdf_extractor import extract_pdf, pdf_contains_text
 from .ocr_extractor import extract_image_with_ocr
 from .metadata_extractor import extract_metadata
+
+_OCR_ZOOM = 2
+
+
+class DocumentTooLarge(ValueError):
+    """A scanned document beyond what OCR is allowed to read."""
+
+
+def _check_ocr_limits(document) -> None:
+    pages = document.page_count
+    if pages > settings.OCR_MAX_PAGES:
+        raise DocumentTooLarge(
+            f"The scanned PDF has {pages} pages; at most {settings.OCR_MAX_PAGES} can be read by OCR."
+        )
+    for index, page in enumerate(cast(Iterable, document)):
+        pixels = round(page.rect.width * _OCR_ZOOM) * round(page.rect.height * _OCR_ZOOM)
+        if pixels > settings.OCR_MAX_PAGE_PIXELS:
+            raise DocumentTooLarge(
+                f"The scanned PDF's page {index + 1} is too large to read by OCR "
+                f"({pixels:,} pixels; the limit is {settings.OCR_MAX_PAGE_PIXELS:,})."
+            )
+
 
 def content_type_from_filename(filename: str) -> str:
     guessed, _ = mimetypes.guess_type(filename)
@@ -68,6 +91,7 @@ def ingest_document(
                 stream=file_bytes,
                 filetype="pdf"
             )
+            _check_ocr_limits(document)
 
             pages = []
             all_text = []
@@ -75,7 +99,7 @@ def ingest_document(
             for index, page in enumerate(cast(Iterable, document)):
 
                 pix = page.get_pixmap(
-                    matrix=pymupdf.Matrix(2, 2)
+                    matrix=pymupdf.Matrix(_OCR_ZOOM, _OCR_ZOOM)
                 )
 
                 image = Image.open(

@@ -17,6 +17,14 @@ def _sync_case_immediately(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_correction_hint_cache(monkeypatch: pytest.MonkeyPatch):
+    """The hints are cached for minutes in production; a test that patches the corrections must see its own."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "CORRECTION_HINTS_CACHE_SECONDS", 0)
+
+
+@pytest.fixture(autouse=True)
 def _skip_case_stage_sync(monkeypatch: pytest.MonkeyPatch):
     """
     Document writes and analysis runs move the case's stage, which reads the

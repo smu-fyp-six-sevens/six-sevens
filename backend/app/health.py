@@ -38,10 +38,11 @@ def health_check_db() -> JSONResponse:
     """
     try:
         check_db_connection()
-    except Exception as exc:
+    except Exception:
+        # The error text stays in the log: the route is open, and it can name hosts or keys.
         logger.exception("Database health check failed")
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "unhealthy", "detail": str(exc)},
+            content={"status": "unhealthy", "detail": "The database could not be reached."},
         )
     return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok"})

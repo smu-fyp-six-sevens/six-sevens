@@ -12,8 +12,16 @@ from langchain_core.tools import tool
 from ....models import DocumentRecord
 from ..address_matching import find_address_mismatches
 from ..company_identity import check_company_name_consistency
-from ..evidence import DocView, mask_identifiers
+from ..evidence import CaseContext, DocView, mask_identifiers
 from .common import ToolKit, unavailable
+
+
+def _without_filenames(context: CaseContext, text: str) -> str:
+    """The text with each document's file name replaced by its key: a file name can hold a person's name."""
+    for view in sorted(context.docs.values(), key=lambda v: len(v.filename), reverse=True):
+        if view.filename:
+            text = text.replace(view.filename, view.key)
+    return text
 
 
 def build_consistency_tools(kit: ToolKit) -> list:
@@ -49,7 +57,8 @@ def build_consistency_tools(kit: ToolKit) -> list:
                                                      source="company_name_consistency_tool", breach_flag=flag))
             discrepancies.append({"stated": mask_identifiers(item.stated),
                                   "conflicting": mask_identifiers(item.conflicting),
-                                  "filenames": item.filenames, "summary": item.summary})
+                                  "documents": [v.key for i in item.document_ids if (v := context.by_id(i)) is not None],
+                                  "summary": _without_filenames(context, item.summary)})
         return kit.log("company_name_consistency_tool", args, {
             "available": True, "same": not discrepancies, "compared_documents": len(result.compared_documents),
             "discrepancies": discrepancies, "breach_flags": [flag] if flag else [], "refs": refs,
@@ -78,7 +87,7 @@ def build_consistency_tools(kit: ToolKit) -> list:
                                                  source="address_consistency_tool", breach_flag="ADDRESS_MISMATCH"))
             found.append({"field": source.field_name, "stated": mask_identifiers(str(source.value)),
                           "conflicting": mask_identifiers(str(other.value)),
-                          "filenames": [source.filename, other.filename]})
+                          "documents": [view.key, other_view.key if other_view is not None else "unknown"]})
         return kit.log("address_consistency_tool", args, {
             "available": True, "same": not found, "mismatches": found,
             "breach_flags": ["ADDRESS_MISMATCH"] if found else [], "refs": refs,

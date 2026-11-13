@@ -224,8 +224,8 @@ async def update_document_type(
 @router.post("/{document_id}/retry", response_model=DocumentRecord)
 async def retry_document(document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)) -> DocumentRecord:
     """
-    Re-enqueues a FAILED document, or one stuck in PROCESSING past the threshold (the in-memory queue
-    doesn't survive a restart). A merely queued or running one is refused: a second run would duplicate
+    Re-enqueues a FAILED document, or one stuck in PROCESSING past the threshold (its run died with the
+    instance). A merely queued or running one is refused: a second run would duplicate
     model calls and interleave writes. Cancel it first.
     """
     with _handled("Failed to re-enqueue the document.", "Failed to re-enqueue document %s", document_id):
@@ -244,7 +244,7 @@ async def cancel_document(document_id: str, document: DocumentRecord = Depends(g
 
 @router.get("/{document_id}/langgraph-trace")
 async def get_document_langgraph_trace(document_id: str) -> dict:
-    """Dev-only: the pipeline trace for a document, from `langgraph_trace`, else this process's copy."""
+    """The pipeline trace for a document (the review screen's field reasons), from `langgraph_trace`, else this process's copy."""
     result = await asyncio.to_thread(langgraph_trace.load, document_id)
     if result is None:
         raise HTTPException(

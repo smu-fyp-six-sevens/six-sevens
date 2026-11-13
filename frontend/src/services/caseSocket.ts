@@ -24,8 +24,9 @@ function reconnectDelay(attempt: number): number {
 // connection attempt. Instead, mint a short-lived, single-use ticket via
 // the normal (header-authenticated) POST /ws/tickets first, and only put
 // that in the WS URL. See backend/app/auth.py's WS_TICKET_TTL_SECONDS.
-async function fetchWsTicket(): Promise<string> {
-  const response = await authFetch('/ws/tickets', { method: 'POST' });
+// The ticket opens only this case.
+async function fetchWsTicket(caseId: string): Promise<string> {
+  const response = await authFetch(`/ws/tickets?${new URLSearchParams({ case_id: caseId })}`, { method: 'POST' });
   if (!response.ok) {
     throw new Error('Failed to obtain a WebSocket ticket');
   }
@@ -80,7 +81,7 @@ export function subscribeToCaseStatus(
   }
 
   function connect() {
-    fetchWsTicket()
+    fetchWsTicket(caseId)
       .then((ticket) => {
         if (closed) return;
 

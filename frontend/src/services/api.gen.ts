@@ -153,7 +153,7 @@ export interface paths {
         };
         /**
          * List Audit Events
-         * @description The audit trail, newest first, optionally for one case or document.
+         * @description The audit trail, newest first, optionally for one case or document. `before`: only events older than this (the next page).
          */
         get: operations["list_audit_events_audit_events_get"];
         put?: never;
@@ -1289,7 +1289,7 @@ export interface paths {
         };
         /**
          * Get Document Langgraph Trace
-         * @description Dev-only: the pipeline trace for a document, from `langgraph_trace`, else this process's copy.
+         * @description The pipeline trace for a document (the review screen's field reasons), from `langgraph_trace`, else this process's copy.
          */
         get: operations["get_document_langgraph_trace_documents__document_id__langgraph_trace_get"];
         put?: never;
@@ -1370,8 +1370,8 @@ export interface paths {
         put?: never;
         /**
          * Retry Document
-         * @description Re-enqueues a FAILED document, or one stuck in PROCESSING past the threshold (the in-memory queue
-         *     doesn't survive a restart). A merely queued or running one is refused: a second run would duplicate
+         * @description Re-enqueues a FAILED document, or one stuck in PROCESSING past the threshold (its run died with the
+         *     instance). A merely queued or running one is refused: a second run would duplicate
          *     model calls and interleave writes. Cancel it first.
          */
         post: operations["retry_document_documents__document_id__retry_post"];
@@ -1482,7 +1482,7 @@ export interface paths {
          *     because the WebSocket route itself can't use header-based auth — this
          *     plain HTTP route has no such restriction). See auth.py's
          *     WS_TICKET_TTL_SECONDS docstring for why this exists instead of just
-         *     putting the normal bearer token in the WS URL.
+         *     putting the normal bearer token in the WS URL. The ticket opens only `case_id`.
          */
         post: operations["issue_ws_ticket_ws_tickets_post"];
         delete?: never;
@@ -4966,6 +4966,7 @@ export interface operations {
                 case_id?: string | null;
                 document_id?: string | null;
                 limit?: number;
+                before?: string | null;
             };
             header?: {
                 authorization?: string | null;
@@ -7343,7 +7344,9 @@ export interface operations {
     };
     issue_ws_ticket_ws_tickets_post: {
         parameters: {
-            query?: never;
+            query: {
+                case_id: string;
+            };
             header?: {
                 authorization?: string | null;
             };

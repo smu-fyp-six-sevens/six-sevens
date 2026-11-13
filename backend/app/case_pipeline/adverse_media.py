@@ -108,10 +108,14 @@ def _one_line(text: str) -> str:
     return " ".join(text.split())
 
 
-async def run_adverse_media_check(company_name: str | None, former_names: list[str] | None = None) -> AdverseMediaCheck:
+async def run_adverse_media_check(
+    company_name: str | None, former_names: list[str] | None = None, *, case_id: str | None = None,
+) -> AdverseMediaCheck:
     """
     Never raises: a search that can't run, or a result that can't be trusted, comes back as "skipped" or "failed", so
     the analysis carries on. "Clean" only when every search ran and the reply says so in the expected shape.
+    The logs name the case, not the company. The company's names do go to Claude's web search (PENDING_WORK.md's
+    data residency note).
     """
     now = datetime.now(timezone.utc)
     company = (company_name or "").strip()
@@ -137,16 +141,16 @@ async def run_adverse_media_check(company_name: str | None, former_names: list[s
             response = await asyncio.wait_for(model.ainvoke([HumanMessage(content=prompt)]), _TIMEOUT_SECONDS)
             telemetry.record_usage(span, response)
     except Exception as exc:  # TimeoutError included
-        logger.warning("Adverse-media check failed for %r: %s", company, exc or type(exc).__name__)
+        logger.warning("Adverse-media check failed for case %s: %s", case_id, exc or type(exc).__name__)
         return _failed(company, now, former_names=former)
 
     found, searched, errors, queries = _search_results(response.content)
-    logger.info("Adverse-media check for %r searched %s", company, queries)
+    logger.info("Adverse-media check for case %s searched %d time(s)", case_id, len(queries))
     if not searched and not errors:
         return _failed(company, now, NO_SEARCH, former)
     if not searched:
         # Every search failed (rate limit, outage): the model's "nothing found" would rest on no results at all.
-        logger.warning("Adverse-media check for %r: every search failed (%s)", company, ", ".join(errors))
+        logger.warning("Adverse-media check for case %s: every search failed (%s)", case_id, ", ".join(errors))
         return _failed(company, now, SEARCH_ERRORS, former)
 
     text = message_text(response.content)
@@ -154,14 +158,14 @@ async def run_adverse_media_check(company_name: str | None, former_names: list[s
     status = reply.status.strip().lower() if reply else ""
     if reply is None or status not in ("clean", "concerns"):
         # Unreadable, or a status the check doesn't know: never read as "clean".
-        logger.warning("Adverse-media check for %r returned no readable result (status %r)", company, status)
+        logger.warning("Adverse-media check for case %s returned no readable result (status %r)", case_id, status)
         return _failed(company, now, UNREADABLE, former)
 
     summary = _one_line(reply.summary)
     if status == "clean":
         if errors:
             # Nothing found, but part of the search never ran: that isn't "nothing there".
-            logger.warning("Adverse-media check for %r: clean, but searches failed (%s)", company, ", ".join(errors))
+            logger.warning("Adverse-media check for case %s: clean, but searches failed (%s)", case_id, ", ".join(errors))
             return _failed(company, now, SEARCH_ERRORS, former)
         return AdverseMediaCheck(
             status="clean", query=company, former_names=former, checked_at=now,
@@ -177,7 +181,7 @@ async def run_adverse_media_check(company_name: str | None, former_names: list[s
             sources.append(AdverseMediaSource(title=found[url][1] or found[url][0], url=found[url][0]))
     dropped = len(reply.sources) - len(sources)
     if dropped:
-        logger.warning("Adverse-media check for %r cited %d page(s) its searches never returned", company, dropped)
+        logger.warning("Adverse-media check for case %s cited %d page(s) its searches never returned", case_id, dropped)
     if not sources:
         # A concern with nothing behind it can't be shown as one, and can't be called clean either.
         return _failed(company, now, UNVERIFIED, former)

@@ -1,64 +1,62 @@
 # Pending work
 
-Open product and platform work only: remove an item once it's done. Elsewhere: stability findings, code smells, optimisations and database load in `STABILITY_AND_REFACTORING_AUDIT.md`; test work in `backend_tests.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; the cloud to-do list (failure tests, shared Anthropic rate budget, Kong config test, staging) in `CLOUD_ARCHITECTURE_PLAN.md` section 9, and the revised Stage 2 in section 10; backwards-compatibility fallbacks in `STABILITY_AND_REFACTORING_AUDIT.md` §7. Updated 2026-11-11.
+Open product and platform work only: delete an item once done. Updated 2026-11-13. Elsewhere: bugs and security in `CODEBASE_AUDIT.md`; stability and debt in `STABILITY_AND_REFACTORING_AUDIT.md`; tests in `backend_tests.md`, `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §6; cloud to-dos in `CLOUD_ARCHITECTURE_PLAN.md` §9–10.
 
 ## Product
 
-- **Skip repeated runs** (decided 2026-11-01): "Run again" on a case whose fingerprint matches the last complete run shows that run instead of starting another (each spends about 12k tokens).
-- **Agent-raised findings.** A specialist can only assess findings a tool returns; something it notices itself (a "modified copy" subject) appears in its summary but never scores. Needs a way to raise a finding that cites the field it read.
+- **Skip repeated runs** (decided 2026-11-01). *Issue:* "Run again" on an unchanged case spends ~12k tokens for the same answer. *Do:* show the last complete run when the fingerprint matches.
+- **Agent-raised findings.** *Issue:* a specialist can only judge what a tool found; anything it notices itself appears in its summary but never scores. *Do:* let it raise a finding that cites the field it read.
 
-## Claude models
+## Claude
 
-- **Billed cost per role.** Per-call cost is exact (token counts × list price, `pricing.py`). To reconcile with the bill, give each worker role its own Claude workspace and API key; the Cost API (`/v1/organizations/cost_report`, Admin API key, daily) then reports billed USD per workspace. Per-request tags don't exist.
-- **On-demand live check** (not built): one tiny call per model, run by hand after an SDK or model change. It catches API-side breaks a stubbed staging can't, like the `temperature` 400.
+- **Billed cost per role.** *Issue:* per-call cost is estimated from list prices, not the bill. *Do:* one Claude workspace and key per worker role; the Cost API then reports billed USD per workspace.
+- **On-demand live check.** *Issue:* staging stubs Claude, so an API-side break (like the `temperature` 400) isn't caught. *Do:* one tiny call per model, run by hand after an SDK or model change.
 
-## Deployment note (report and commercialisation document)
+## Report wording
 
-- **Data residency asterisk.** Put this wherever the report describes the model calls, and carry it into the commercialisation document the supervisor asked for (server, model, RAM, storage requirements): *"This prototype calls the public Claude API. In production, GLDB would reach Claude through an enterprise agreement or its cloud provider (for example Vertex AI), with regional processing and zero data retention, subject to its outsourcing and MAS requirements."* Google's data-residency page lists Singapore (`asia-southeast1`) for some Claude models, but which ones varies, so the sentence names no model or region; the Claude API's own residency option is global or US only. Don't name banks that have signed such contracts without a source.
+- **Data residency note.** Put this wherever the report or the commercialisation document describes the model calls: *"This prototype calls the public Claude API. In production, GLDB would reach Claude through an enterprise agreement or its cloud provider (for example Vertex AI), with regional processing and zero data retention, subject to its outsourcing and MAS requirements."* Add that the adverse-media check sends the company's name (and former names) to Claude's web search. Don't name a model, region or bank without a source.
 
 ## Detection and the document pipeline
 
-- **Watch the new CPU process pool** on the first deployed runs (`CPU_WORKER_PROCESSES=2` on doc-worker and detection-worker): memory per instance (each process loads PyMuPDF and the OCR model), and the "CPU worker process died" log line.
-- **A cross-document finding's category:** a share-capital conflict is labelled `unsupported_claim`; a `cross_document_variance` label for verdicts needs a schema change.
-- **Vertical text:** `text_overlay.py` skips it by an aspect-ratio guess; reading the direction from PyMuPDF would replace the guess.
-- **Detection specialist prompts don't cache** (Haiku's minimum cacheable prefix is longer than their prompts). Accept it unless the cost logs show a large Haiku input bill.
-- **Postgres checkpointing** isn't built (`checkpointer=False`): a crashed run restarts from scratch, with no replay. Now only a debugging aid. If built: `langgraph-checkpoint-postgres` on the transaction pooler, its own schema, parent graph only, delete a document's thread when it finishes, no PII or text in state.
-- **Learning from officers, not built:** feedback for the code-decided finding categories (nothing a model could change), and any automatic judgement of whether a lesson helped.
-- **Model-output gaps:** nothing checks that an extracted value has its schema's type (text in a number field), and the binder (`field_checks/binder.py`) and the second-opinion classifier (`llm_classify.py`) don't go through `validate`, so a repaired reply isn't in the trace.
+- **Watch the CPU process pool** on the first deployed runs (`CPU_WORKER_PROCESSES=2`): memory per instance and the "CPU worker process died" log line.
+- **Cross-document category.** *Issue:* a share-capital conflict is labelled `unsupported_claim`. *Do:* a `cross_document_variance` label (schema change).
+- **Vertical text.** *Issue:* `text_overlay.py` guesses it from the aspect ratio. *Do:* read the direction from PyMuPDF.
+- **Specialist prompts don't cache** (too short for Haiku's minimum). Accept unless the cost logs show a large Haiku bill.
+- **No checkpointing.** *Issue:* a crashed run restarts from scratch. Only a debugging aid now; if built, use `langgraph-checkpoint-postgres`, its own schema, no personal data in state.
+- **Learning from officers, not built:** feedback on code-decided findings; judging whether a lesson helped.
+- **Model output gaps.** *Issue:* nothing checks an extracted value's type (text in a number field), and the binder (`field_checks/binder.py`) and `llm_classify.py` skip `validate`, so repairs aren't traced.
 
-## Case analysis
+## Case analysis (design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`)
 
-Design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
-- **Plan-then-judge has no follow-up round;** add one optional round if the evals show low recall.
-- **Clean up the run trace** (later). It lists dropped hypotheses, which the design says are never shown; that goes with the clean-up.
-- **Guardrails still open:** a dismissal flow for cross-document findings, audit retention, the three sponsor questions in the plan.
-- **The evidence requests (`risk/outlook.py`) are one Haiku call, not an agent, and need more ideation.** A document can only lower the score, so "ask for all of them" always looks best. Ideas so far: the smallest set that reaches a target level (code, not a model); scoring a document that goes against the client too, since one that can swing either way tells the officer more; an agent that checks the case's existing documents before asking, and tries sets with a re-scoring tool. The score stays deterministic either way.
+- **No follow-up round** in plan-then-judge: add one if evals show low recall.
+- **Run trace clean-up:** it lists dropped hypotheses, which the design says are never shown.
+- **Guardrails still open:** dismissing a cross-document finding, audit retention, the three sponsor questions in the plan.
+- **Evidence requests need rethinking.** *Issue:* a document can only lower the score, so "ask for everything" always looks best. *Ideas:* the smallest set that reaches a target level (code); score documents that could go either way; an agent that checks existing documents first. The score stays deterministic.
 
-## Evals and verification
+## Evals and verification (all on demand: they spend tokens)
 
-- **Evals aren't built:** an evaluation framework run on demand when a prompt or model changes, not nightly, as the reference for quality. Golden-set runs from `documents_generated/` (classification accuracy, per-field extraction, escalation rate, cost per document, cache hit rate); detection precision and recall per defect type from `injection_manifest.json` (a case may upload the clean, non-`_F` file; check names first); for case analysis, false positives on clean cases, recall on planted contradictions, parity across subgroups. Synthetic companies always fail the ACRA check (8 points once per case). Keep the synthetic-to-real caveat. Two offline helpers exist: `backend/scripts/generate_scrum327_test_pack.py` builds a small labelled pack, and `evaluate_scrum327.py` scores exported detection reports against the mastersheet with no model calls.
-- **Extraction accuracy.** Compare text-only and selective second-look results against labelled bank statements and payslips, and code-read bank-statement transactions (`statement_table.py`) with the model's. Track field accuracy and text/image disagreements. On demand, because it uses model calls.
-- **Whether officer feedback helps.** The same cases with `finding_feedback` empty and with a fixed seed, comparing precision and recall. On demand.
-- **A real run of the extraction and adverse-media work.** Nothing has run with real Claude calls or from upload to detection. Worth one bank statement and one payslip through the local app: the second look, a disagreement reaching Manual Review, and the code-read transactions with their counterparties.
-- **The screens, by eye.** The reason under each low-confidence field, the second-look tables in the agent trace, and the adverse-media label.
-- **Real bank statements.** `statement_table.py` is only tested on the synthetic statements. It works out columns from each document's own header and sends anything unclear to the usual model read, but a real layout could still pass its checks with a column misread.
-- **How often `confidence_missing` fires** (needs the user's OK: it means reading `field_provenance` and the second-look fields from stored `langgraph_trace` rows). From the code, it fires only when the model skips the confidence wrapper.
-- **Checks that exist only as scratch scripts,** worth turning into tests: the bias screens (`bias.py`), year-less statement dates (`tools/common.row_date`), the single-flight detection cache and snapshot builder, the finding fingerprints and the kept/dismissed split (`finding_keys.py`)
+- **Evals aren't built.** Golden-set runs from `documents_generated/` (classification, per-field extraction, cost, cache hits); detection precision/recall per defect from `injection_manifest.json`; case analysis false positives, recall and subgroup parity. Synthetic companies always fail ACRA (8 points per case). Helpers exist: `backend/scripts/generate_scrum327_test_pack.py`, `evaluate_scrum327.py` (no model calls).
+- **Extraction accuracy:** text-only vs second look, and code-read vs model-read statement transactions, on labelled statements and payslips.
+- **Does officer feedback help?** Same cases with and without `finding_feedback`.
+- **One real end-to-end run** (never done with real Claude): a bank statement and a payslip through the local app, including a second-look disagreement reaching Manual Review.
+- **Check screens by eye:** low-confidence reasons, second-look tables in the trace, the adverse-media label.
+- **Real bank statement layouts:** `statement_table.py` is tested on synthetic ones only.
+- **How often `confidence_missing` fires** (needs your OK to read stored traces).
+- **Scratch scripts worth turning into tests:** bias screens, year-less statement dates (`row_date`), the detection cache and snapshot builder, finding fingerprints (`finding_keys.py`).
 
 ## Performance
 
-Budgets are in `HOW_IT_WORKS.md` §8; database load is in `STABILITY_AND_REFACTORING_AUDIT.md` §2.
-- A burst of changes can chain snapshot builds, and the first requester waits for the follow-up.
-- **Opening a case still waits in sequence on a direct link or refresh:** the case lookup, then the WebSocket ticket, connection and first snapshot. (From the queue the case is handed over and the page code is prefetched.) Not done yet: fetching the first snapshot over a plain request alongside the socket, and putting the case's own details in the snapshot so a direct load needs one request.
+- A burst of changes can chain snapshot builds; the first requester waits for the next.
+- **Opening a case by direct link waits in sequence** (case lookup, ticket, socket, first snapshot). *Do:* fetch the first snapshot over HTTP alongside the socket, and put the case's details in the snapshot.
 
 ## Cloud operations
 
-- **Drop the unused publishable Supabase key.** The backend no longer reads `SUPABASE_PUBLISHABLE_KEY` and the database grants `anon` nothing. Remove it from `local.supabase` in `deploy/terraform/main.tf`, `terraform apply`, then delete the secret in Secret Manager; disabling the legacy keys in the Supabase dashboard is the last step. Not urgent: the logs show no call with it after 08:10 UTC on 2026-11-07, when the new revision took over.
-- **Make Snyk blocking again once its monthly quota resets** (made non-blocking 2026-11-04): delete the two `continue-on-error: true` lines under the Snyk steps in `.github/workflows/ci-cd.yml`, and drop "temporarily non-blocking" from CLAUDE.md, README and CLOUD_ARCHITECTURE_PLAN §6.
-- **Frontend fully non-root:** nginx's workers already run as `nginx`; going all the way means `nginx-unprivileged` on 8080 (change `nginx.conf`, the frontend's `container_port` in `run.tf` and the compose port together, apply before deploying).
-- **Dead-lettered messages** stay in `domain-events-dead-letter-pull` until someone reads them (the sweeper rescues the document behind them).
-- **WebSocket ticket replay** within 10 s on a different api instance would be accepted; not worth a shared store.
+- **Remove the unused publishable Supabase key:** drop it from `local.supabase` in `deploy/terraform/main.tf`, `terraform apply`, delete the secret, then disable the legacy keys in Supabase.
+- **Make Snyk blocking again** when its quota resets: delete the two `continue-on-error: true` lines in `.github/workflows/ci-cd.yml`, and "temporarily non-blocking" from CLAUDE.md, README and CLOUD_ARCHITECTURE_PLAN §6.
+- **Frontend fully non-root:** `nginx-unprivileged` on 8080 (change `nginx.conf`, `run.tf`'s `container_port` and compose together; apply first).
+- **Dead letters** sit in `domain-events-dead-letter-pull` until someone reads them.
+- **Socket ticket replay** within 10 s on another instance is accepted; not worth fixing.
 
 ## Frontend
 
-- **Dev StrictMode** fires some document-page requests twice.
+- Dev StrictMode sends some document-page requests twice.

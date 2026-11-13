@@ -235,11 +235,16 @@
 
 .document-meta {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 6px 20px;
   margin-top: 10px;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.document-meta strong {
+  color: var(--slate-20);
+  font-weight: 600;
 }
 
 .document-status {
@@ -293,6 +298,13 @@
 
 .details-info > div {
   min-width: 0;
+}
+
+/* Only the type editor, while the type needs correcting. */
+.details-info--single {
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 16px;
+  padding-top: 16px;
 }
 
 .details-type-editor {

@@ -51,11 +51,20 @@ async def process_document(document_id: str) -> None:
                         )
                     finally:
                         _record_run_audit(document_id, run)
+            except nodes.RunStopped as exc:
+                _stopped(document_id, exc)
             except Exception as exc:
                 await _fail_after_error(document_id, exc)
     finally:
         # The end of the run: its steps, the root span's included, are saved once, here.
         await asyncio.to_thread(trace.flush, document_id)
+
+
+def _stopped(document_id: str, exc: nodes.RunStopped) -> None:
+    """Someone else moved the document on (a cancel, a recovery): its status is theirs, so nothing is written."""
+    logger.info("Document %s: run stopped: %s", document_id, exc)
+    text_cache.discard(document_id)
+    trace.record(document_id, "done", final_status="stopped", reason=str(exc))
 
 
 async def _fail_after_error(document_id: str, exc: Exception) -> None:
@@ -76,10 +85,8 @@ async def _fail_after_error(document_id: str, exc: Exception) -> None:
 async def rerun_extraction(document_id: str) -> None:
     """
     Re-runs Extraction only, against the document's already-stored
-    document_type — called from routers/documents.py's PATCH
-    .../document-type handler, only when the officer actually changed the
-    type (a confirmed-unchanged type has nothing new for Extraction to
-    re-read; see that handler).
+    document_type, after an officer changed it. The doc-worker calls it
+    once it has claimed the rerun (workers/documents.on_retyped).
     """
     # The doc-worker's scope counts this run's calls (workers/documents.py).
     # A rerun starts with no trace in memory, and recording into a fresh one would overwrite the saved row.
@@ -94,6 +101,8 @@ async def rerun_extraction(document_id: str) -> None:
                         await _rerun_extraction(document_id)
                     finally:
                         _record_run_audit(document_id, run)
+            except nodes.RunStopped as exc:
+                _stopped(document_id, exc)
             except Exception as exc:
                 await _fail_after_error(document_id, exc)
     finally:
@@ -169,10 +178,7 @@ async def _rerun_extraction(document_id: str) -> None:
         )
         return
 
-    await asyncio.to_thread(
-        document_repository.update_status,
-        document_id,
-        DocumentStatus.ANALYZED,
-        document_type=document_type,
+    await nodes.set_status(
+        document_id, DocumentStatus.ANALYZED, expected=[DocumentStatus.EXTRACTING], document_type=document_type,
     )
     logger.info("Document %s: langgraph extraction rerun complete as %s", document_id, document_type)

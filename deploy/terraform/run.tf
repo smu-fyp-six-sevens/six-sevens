@@ -33,7 +33,13 @@ resource "google_cloud_run_v2_service" "role" {
       }
 
       dynamic "env" {
-        for_each = merge(local.common_env, each.value.env)
+        # A role that takes pushes checks Pub/Sub's token itself, and won't start without these (events/push.py).
+        for_each = merge(local.common_env, each.value.env, {
+          for key, value in {
+            PUSH_AUDIENCE        = local.url[each.key]
+            PUSH_SERVICE_ACCOUNT = google_service_account.pubsub_push.email
+          } : key => value if contains(keys(local.subscriptions), each.key)
+        })
         content {
           name  = env.key
           value = env.value

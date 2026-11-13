@@ -36,7 +36,7 @@ def test_health_check_db_unhealthy() -> None:
     assert response.status_code == 503
     body = response.json()
     assert body["status"] == "unhealthy"
-    assert "connection refused" in body["detail"]
+    assert "connection refused" not in body["detail"]
 
 
 class _RecordingQuery:

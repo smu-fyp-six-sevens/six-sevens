@@ -29,6 +29,11 @@ FROM nginx:1.30.6-alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+# The CSP may call only the API the bundle was built for (and its WebSocket): fill its origin in.
+ARG VITE_API_URL=http://localhost:8000
+RUN API_WS_URL=$(printf '%s' "$VITE_API_URL" | sed 's|^http|ws|') \
+    && sed -i -e "s|__API_ORIGIN__|$VITE_API_URL|g" -e "s|__API_WS_ORIGIN__|$API_WS_URL|g" /etc/nginx/conf.d/default.conf \
+    && nginx -t
 EXPOSE 80
 # Cloud Run ignores this and uses its own probes; compose and docker ps show it.
 HEALTHCHECK --interval=30s --timeout=5s CMD ["curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1/"]

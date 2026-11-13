@@ -1,6 +1,6 @@
 """
-doc-worker: OCR, classify and extract one document per event. Replaces the in-memory queue: the event
-is the queue entry, Pub/Sub (or this process, in-process) is the queue.
+doc-worker: OCR, classify and extract one document per event. The event is the queue entry; Pub/Sub (or this
+process, in-process) is the queue.
 """
 
 from __future__ import annotations
@@ -36,17 +36,18 @@ def _record_error(document_id: str, error: str) -> None:
     _recent_errors.append(ProcessingErrorEntry(document_id=document_id, error=error, occurred_at=datetime.now(timezone.utc)))
 
 
-async def _process(document_id: str, queued_at: datetime) -> None:
+async def _process(document_id: str, queued_at: datetime) -> bool:
+    """Whether it ran: a repeat or a cancelled document is skipped."""
     document = await asyncio.to_thread(document_repository.get_document, document_id, include_fields=False)
     if document is None:
         message = f"Document {document_id} not found when its event arrived (row may have been deleted)"
         logger.error(message)
         _record_error(document_id, message)
-        return
+        return False
     if document.status != DocumentStatus.QUEUED:
         # Cancelled, or a repeat delivery of an event already handled.
         logger.info("Document %s no longer queued (status=%s); skipping", document_id, document.status.value)
-        return
+        return False
 
     started_at = datetime.now(timezone.utc)
     claimed = await asyncio.to_thread(
@@ -55,12 +56,13 @@ async def _process(document_id: str, queued_at: datetime) -> None:
     )
     if not claimed:
         logger.info("Document %s left queued before it could start; skipping", document_id)
-        return
+        return False
     waited = (started_at - queued_at).total_seconds()
     if waited > settings.DEQUEUE_TO_INVOKE_TARGET_SECONDS:
         logger.info("Document %s: processing started %.1fs after it was queued", document_id, waited)
     # Owns classify -> extract -> ANALYZED/FAILED from here, and never raises.
     await langgraph_pipeline.process_document(document_id)
+    return True
 
 
 async def _cancelled_elsewhere(document_id: str) -> bool:
@@ -69,22 +71,24 @@ async def _cancelled_elsewhere(document_id: str) -> bool:
 
 
 async def _run(
-    document_id: str, work: Callable[[], Awaitable[None]], label: str, kind: str = "document",
+    document_id: str, work: Callable[[], Awaitable[bool]], label: str, kind: str = "document",
     requested_by: str | None = None,
 ) -> None:
     """
+    `work` says whether it ran; one that skipped (a repeat) announces nothing, as its first delivery did.
     `label` names the unit in the perf log; `kind` is its work label in the cost metrics. `requested_by` is the
     officer whose upload, retry or retype started the run, for the audit trail.
     """
     timer = Stopwatch()
     usage: dict[str, float | int] = {}
+    ran = True
     try:
         # The cancel route writes CANCELLED; a run in another instance notices it here.
         with _runs.track(document_id, lambda: _cancelled_elsewhere(document_id)):
             async with _slots:
                 with query_stats.scope(f"{label} doc={document_id[:8]}", work=kind) as unit:
                     try:
-                        await work()
+                        ran = await work()
                     finally:
                         usage = unit.llm_detail()
     except asyncio.CancelledError:
@@ -101,10 +105,12 @@ async def _run(
             await asyncio.to_thread(
                 document_repository.update_status, document_id, DocumentStatus.FAILED,
                 failure_reason=f"Unhandled processing error: {exc}",
+                expected_current_statuses=[DocumentStatus.QUEUED, DocumentStatus.PROCESSING, DocumentStatus.EXTRACTING],
             )
         except Exception:
             logger.exception("Failed to mark document %s FAILED after an unhandled error", document_id)
-    await _announce(document_id, timer, {"run": kind, **usage}, requested_by)
+    if ran:
+        await _announce(document_id, timer, {"run": kind, **usage}, requested_by)
 
 
 async def _record_stopped(document_id: str, timer: Stopwatch, usage: dict, requested_by: str | None) -> None:
@@ -150,18 +156,27 @@ async def on_queued(event: Event) -> None:
 
 
 async def on_retyped(event: Event) -> None:
-    """The officer changed the type: extraction only, against the stored type."""
+    """The officer changed the type: extraction only, against the stored type, once per retype."""
     if event.document_id is None:
         return
     document_id = event.document_id
-    await _run(
-        document_id, lambda: langgraph_pipeline.rerun_extraction(document_id), "rerun extraction", "extraction_rerun",
-        requested_by=officer_of(event),
-    )
+    stamp = event.detail.get("requested_at")
+    requested_at = datetime.fromisoformat(stamp) if isinstance(stamp, str) else None
+
+    async def claimed_rerun() -> bool:
+        # A repeated delivery, or one after the rerun finished, must not spend the calls again or overwrite
+        # fields the officer saved since.
+        if not await asyncio.to_thread(document_repository.claim_extraction_rerun, document_id, requested_at):
+            logger.info("Extraction rerun for document %s was already taken or is over; skipping", document_id)
+            return False
+        await langgraph_pipeline.rerun_extraction(document_id)
+        return True
+
+    await _run(document_id, claimed_rerun, "rerun extraction", "extraction_rerun", requested_by=officer_of(event))
 
 
 async def on_cancelled(event: Event) -> None:
-    """Interrupts the run if it is in this process. Elsewhere, its compare-and-swap writes no longer match."""
+    """Interrupts the run if it is in this process. Elsewhere, its status writes no longer match and it stops."""
     _runs.cancel(event.document_id)
 
 

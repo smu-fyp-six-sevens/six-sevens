@@ -26,6 +26,8 @@ import calendar
 import re
 from dataclasses import dataclass
 from datetime import date
+
+from ...sg_time import today_sg
 from typing import Any
 
 _MONTHS = {
@@ -72,7 +74,7 @@ def _full_year(text: str) -> int:
     year = int(text)
     if len(text) > 2:
         return year
-    pivot = (date.today().year + _TWO_DIGIT_YEAR_WINDOW) % 100
+    pivot = (today_sg().year + _TWO_DIGIT_YEAR_WINDOW) % 100
     return 2000 + year if year <= pivot else 1900 + year
 
 

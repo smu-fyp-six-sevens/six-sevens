@@ -437,8 +437,9 @@ def test_a_document_status_change_updates_its_cases_stage() -> None:
         patch("app.document_repository.supabase_client") as mock_client,
         patch("app.case_stage.sync_case_stage") as sync,
     ):
-        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
-            data=[{"id": "doc-1", "case_id": "case-1"}]
+        # id, then the status it must still be in.
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = (
+            MagicMock(data=[{"id": "doc-1", "case_id": "case-1"}])
         )
 
         document_repository.mark_detected("doc-1")

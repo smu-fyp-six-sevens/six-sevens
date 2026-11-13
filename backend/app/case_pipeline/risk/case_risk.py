@@ -43,6 +43,7 @@ from typing import Any
 from ..categories import category_for_finding
 from ..models import CrossDocFinding
 from ...finding_keys import UNASSESSED_RATIONALE, report_findings
+from ...identifiers import uen_key
 from ...models import (
     APPROVED_STATUSES,
     CaseRisk,
@@ -114,7 +115,9 @@ def _repeat_key(finding: dict[str, Any]) -> tuple | None:
     A finding without both is evidence about its own document (a font, a metadata field) and is never merged:
     the same wording on three documents is three pieces of evidence.
     """
-    stated = str(finding.get("stated") or "").strip().lower()
+    raw = str(finding.get("stated") or "")
+    # "2019-12345A" and "201912345A" are one UEN.
+    stated = uen_key(raw) or raw.strip().lower()
     if finding.get("check_code") and stated:
         return (finding.get("tool"), finding["check_code"], stated)
     return None
@@ -229,8 +232,9 @@ _CORROBORATION_CAP = 1.5
 def contributing_from_cross_document(
     finding: CrossDocFinding, documents_by_id: dict[str, DocumentRecord]
 ) -> ContributingFinding:
-    anchor = next((documents_by_id[d] for d in finding.document_ids if d in documents_by_id), None)
-    multiple = min(_CORROBORATION_CAP, 1 + _CORROBORATION_STEP * (len(finding.document_ids) - 1))
+    document_ids = [d for d in finding.document_ids if d]
+    anchor = next((documents_by_id[d] for d in document_ids if d in documents_by_id), None)
+    multiple = min(_CORROBORATION_CAP, 1 + _CORROBORATION_STEP * max(0, len(document_ids) - 1))
     return ContributingFinding(
         document_id=anchor.id if anchor else "",
         filename=anchor.filename if anchor else "Case",
@@ -240,12 +244,12 @@ def contributing_from_cross_document(
         severity=finding.severity,
         summary=finding.summary,
         rationale=finding.rationale,
-        points=round(SEVERITY_POINTS[finding.severity] * max(1.0, multiple), 2),
+        points=round(SEVERITY_POINTS[finding.severity] * multiple, 2),
         category=finding.category.value,
         source="cross_document",
         fingerprint=finding.fingerprint,
         feedback_ids=finding.feedback_ids,
-        document_ids=list(finding.document_ids),
+        document_ids=document_ids,
         cited_values=list(finding.cited_values),
     )
 
@@ -259,7 +263,8 @@ def rate_findings(findings: list[ContributingFinding]) -> tuple[RiskLevel, int, 
         if findings
         else "Rated Low: detection found nothing worth flagging."
     )
-    high_documents = {f.document_id for f in findings if f.severity == "high" and f.points > 0}
+    # A cross-document finding with no document isn't a document.
+    high_documents = {f.document_id for f in findings if f.severity == "high" and f.points > 0 and f.document_id}
     if len(high_documents) >= CRITICAL_MIN_HIGH_DOCUMENTS:
         level = "Critical"
         reason = f"Rated Critical: high-severity findings on {len(high_documents)} documents."

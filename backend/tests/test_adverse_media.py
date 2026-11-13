@@ -385,7 +385,7 @@ async def test_the_case_name_is_searched_only_when_no_document_names_the_company
 
     searched: list[str | None] = []
 
-    async def check(company, former):
+    async def check(company, former, **_):
         searched.append(company)
         return adverse_media.AdverseMediaCheck(status="clean", query=company or "")
 

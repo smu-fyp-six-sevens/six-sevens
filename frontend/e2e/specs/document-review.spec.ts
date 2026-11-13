@@ -16,8 +16,6 @@ import type { MockBackend } from '../support/mockBackend';
  * LangGraph pipeline is in place (DI-018, DI-019, DI-022, DI-027 – DI-029).
  */
 
-const routingOutcome = (page: Page) =>
-  page.locator('.details-label', { hasText: 'Routing Outcome' }).locator('xpath=following-sibling::strong');
 const fieldRow = (page: Page, label: string) =>
   page.locator('.extracted-table-row').filter({ has: page.locator('.field-name', { hasText: new RegExp(`^${label}$`) }) });
 // With the review form open, the read-only table of the same fields starts folded.
@@ -139,7 +137,6 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
 
     await page.goto(fixture.documentUrl(cert));
 
-    await expect(routingOutcome(page)).toHaveText('Manual Review');
     await expect(reviewSection(page)).toBeVisible();
     const uen = reviewRow(page, 'UEN');
     await expect(uen).toHaveClass(/extracted-table-row--editing/);
@@ -156,14 +153,13 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     const { fixture, cert } = certWithMissingUen(backend);
     cert.routing_status = 'manual_review';
     await page.goto(fixture.documentUrl(cert));
-    await expect(routingOutcome(page)).toHaveText('Manual Review');
+    await expect(reviewSection(page)).toBeVisible();
 
     await reviewRow(page, 'UEN').locator('input').fill('201634564N');
     await page.getByRole('button', { name: 'Save fields' }).click();
 
     // Saved and human-verified: the field is no longer flagged, so the whole manual-review section closes.
     await expect(reviewSection(page)).toHaveCount(0);
-    await expect(routingOutcome(page)).toHaveText('Accepted');
     await showExtracted(page);
     await expect(fieldRow(page, 'UEN').locator('.field-value')).toHaveText('201634564N');
     const saved = backend.requestsTo('PATCH', `/documents/${cert.id}/extracted-fields`);
@@ -176,11 +172,10 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await page.reload();
     await expect(fieldRow(page, 'UEN').locator('.field-value')).toHaveText('201634564N');
     await expect(fieldRow(page, 'UEN').locator('.confidence-badge')).toHaveText('1.00');
-    await expect(routingOutcome(page)).toHaveText('Accepted');
     await expect(reviewSection(page)).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Approve Document' }).click();
-    await expect(routingOutcome(page)).toHaveText('Approved');
+    await expect(page.getByRole('button', { name: 'Approve Document' })).toHaveCount(0);
     expect(backend.requestsTo('POST', `/documents/${cert.id}/approve`)).toHaveLength(1);
     await page.goto(`${fixture.caseUrl}?section=documents`);
     await page.getByTestId('document-group').filter({ hasText: 'Approved' }).click();
@@ -206,7 +201,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     const saved = backend.requestsTo('PATCH', `/documents/${doc.id}/document-type`);
     expect(saved).toHaveLength(1);
     expect((saved[0].body as { document_type: string }).document_type).toBe('unrecognised');
-    await expect(page.locator('.details-label', { hasText: 'Document Type' }).locator('xpath=following-sibling::strong')).toHaveText('Other');
+    await expect(page.locator('.document-meta strong')).toHaveText('Other');
   });
 
   test('DI-026 fields cannot be saved while a required field is still empty @DI-026', async ({ page, backend }) => {
@@ -217,7 +212,7 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
 
     await expect(page.locator('.manual-review-message .error-message')).toHaveText('Please complete all fields before saving.');
     expect(backend.requestsTo('PATCH', `/documents/${cert.id}/extracted-fields`)).toHaveLength(0);
-    await expect(routingOutcome(page)).toHaveText('Manual Review');
+    await expect(reviewSection(page)).toBeVisible();
   });
 
   test('DI-026 a document with a missing required field cannot be approved @DI-026', async ({ page, backend }) => {
@@ -239,12 +234,11 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await page.goto(fixture.documentUrl(report));
 
     // Every field is complete and confident: nothing is flagged, so it goes straight to approval.
-    await expect(routingOutcome(page)).toHaveText('Accepted');
     await expect(reviewSection(page)).toHaveCount(0);
     await expect(page.locator('.approval-warning')).toHaveCount(0);
     await page.getByRole('button', { name: 'Approve Document' }).click();
 
-    await expect(routingOutcome(page)).toHaveText('Approved');
+    await expect(page.getByRole('button', { name: 'Approve Document' })).toHaveCount(0);
     expect(backend.requestsTo('POST', `/documents/${report.id}/approve`)).toHaveLength(1);
     expect(report.status).toBe('approved');
   });

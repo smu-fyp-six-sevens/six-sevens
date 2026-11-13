@@ -235,6 +235,21 @@ def test_extract_metadata_records_failures_instead_of_returning_empty(monkeypatc
     assert "couldn't be parsed" in error_for(lambda *a, **k: SimpleNamespace(stdout="not-json"))
 
 
+def test_extract_metadata_bounds_exiftool_and_records_a_timeout_as_a_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeouts: list = []
+
+    def hangs(*a, **k):
+        timeouts.append(k.get("timeout"))
+        raise subprocess.TimeoutExpired("exiftool", k.get("timeout") or 0)
+
+    monkeypatch.setattr(metadata_extractor.subprocess, "run", hangs)
+
+    result = extract_metadata(b"x", "a.pdf")
+
+    assert "timed out" in result[metadata_extractor.EXTRACTION_ERROR_KEY]
+    assert timeouts == [30]
+
+
 # ---------------------------------------------------------------------------
 # ocr_extractor
 # ---------------------------------------------------------------------------
@@ -291,6 +306,52 @@ def test_ingest_scanned_pdf_uses_ocr(_stub_metadata, _stub_ocr) -> None:
     assert "OCBC" in result["raw_text"]
     assert result["pages"][0]["page_number"] == 1
     assert result["needs_review"] is False
+
+
+def _scanned_pdf_bytes(pages: int, size: float = 200) -> bytes:
+    doc = pymupdf.open()
+    for _ in range(pages):
+        page = doc.new_page(width=size, height=size)
+        page.draw_rect(page.rect, fill=(1, 1, 1))
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _count_ocr_calls(monkeypatch: pytest.MonkeyPatch) -> list:
+    calls: list = []
+    monkeypatch.setattr(ocr_extractor, "reader", lambda image: calls.append(image) or _ocr_result(("x", 0.9)))
+    return calls
+
+
+def test_scanned_pdf_over_the_page_cap_is_refused_before_any_ocr(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "OCR_MAX_PAGES", 2)
+    calls = _count_ocr_calls(monkeypatch)
+
+    with pytest.raises(ingestion_service.DocumentTooLarge, match="3 pages"):
+        ingest_document(_scanned_pdf_bytes(3), "scan.pdf", "application/pdf", with_metadata=False)
+    assert calls == []
+
+
+def test_scanned_pdf_page_over_the_pixel_cap_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "OCR_MAX_PAGE_PIXELS", 1_000_000)
+    calls = _count_ocr_calls(monkeypatch)
+
+    with pytest.raises(ingestion_service.DocumentTooLarge, match="page 1"):
+        ingest_document(_scanned_pdf_bytes(1, size=1000), "scan.pdf", "application/pdf", with_metadata=False)
+    assert calls == []
+
+
+def test_scanned_pdf_within_the_caps_is_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _count_ocr_calls(monkeypatch)
+
+    result = ingest_document(_scanned_pdf_bytes(3), "scan.pdf", "application/pdf", with_metadata=False)
+
+    assert result["extraction_method"] == "ocr" and len(calls) == 3
 
 
 def test_ingest_image(_stub_metadata, _stub_ocr) -> None:

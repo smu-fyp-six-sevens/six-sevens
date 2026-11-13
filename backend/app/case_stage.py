@@ -31,6 +31,7 @@ from .models import (
     DocumentRecord,
     DocumentStatus,
     FindingReview,
+    skips_detection,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,7 +101,8 @@ def document_stage(
     approved = [d for d in active if d.status in APPROVED_STATUSES]
     if not approved or requirements_missing():
         return StageResult(CaseStage.DOCUMENTS_INCOMPLETE)
-    if any(d.status != DocumentStatus.DETECTED for d in approved):
+    # A document with no type is never scanned, so it can't be waited on.
+    if any(d.status != DocumentStatus.DETECTED and not skips_detection(d) for d in approved):
         return StageResult(CaseStage.FRAUD_DETECTION)
     return None
 

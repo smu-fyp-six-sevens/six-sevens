@@ -8814,7 +8814,7 @@
     },
     "/audit/events": {
       "get": {
-        "description": "The audit trail, newest first, optionally for one case or document.",
+        "description": "The audit trail, newest first, optionally for one case or document. `before`: only events older than this (the next page).",
         "operationId": "list_audit_events_audit_events_get",
         "parameters": [
           {
@@ -8859,6 +8859,23 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
             }
           },
           {
@@ -12769,7 +12786,7 @@
     },
     "/documents/{document_id}/langgraph-trace": {
       "get": {
-        "description": "Dev-only: the pipeline trace for a document, from `langgraph_trace`, else this process's copy.",
+        "description": "The pipeline trace for a document (the review screen's field reasons), from `langgraph_trace`, else this process's copy.",
         "operationId": "get_document_langgraph_trace_documents__document_id__langgraph_trace_get",
         "parameters": [
           {
@@ -13026,7 +13043,7 @@
     },
     "/documents/{document_id}/retry": {
       "post": {
-        "description": "Re-enqueues a FAILED document, or one stuck in PROCESSING past the threshold (the in-memory queue\ndoesn't survive a restart). A merely queued or running one is refused: a second run would duplicate\nmodel calls and interleave writes. Cancel it first.",
+        "description": "Re-enqueues a FAILED document, or one stuck in PROCESSING past the threshold (its run died with the\ninstance). A merely queued or running one is refused: a second run would duplicate\nmodel calls and interleave writes. Cancel it first.",
         "operationId": "retry_document_documents__document_id__retry_post",
         "parameters": [
           {
@@ -13226,9 +13243,18 @@
     },
     "/ws/tickets": {
       "post": {
-        "description": "Mints a short-lived, single-use ticket for the case status WebSocket\nbelow. Sits behind require_auth like every other protected endpoint\n(this router is registered outside main.py's `_protected` group only\nbecause the WebSocket route itself can't use header-based auth \u2014 this\nplain HTTP route has no such restriction). See auth.py's\nWS_TICKET_TTL_SECONDS docstring for why this exists instead of just\nputting the normal bearer token in the WS URL.",
+        "description": "Mints a short-lived, single-use ticket for the case status WebSocket\nbelow. Sits behind require_auth like every other protected endpoint\n(this router is registered outside main.py's `_protected` group only\nbecause the WebSocket route itself can't use header-based auth \u2014 this\nplain HTTP route has no such restriction). See auth.py's\nWS_TICKET_TTL_SECONDS docstring for why this exists instead of just\nputting the normal bearer token in the WS URL. The ticket opens only `case_id`.",
         "operationId": "issue_ws_ticket_ws_tickets_post",
         "parameters": [
+          {
+            "in": "query",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

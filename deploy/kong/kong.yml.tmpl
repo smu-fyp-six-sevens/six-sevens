@@ -1,4 +1,6 @@
-# Kong DB-less routes (CLOUD_ARCHITECTURE_PLAN.md section 7), rendered by render.sh at start.
+# Kong DB-less routes (CLOUD_ARCHITECTURE_PLAN.md section 4), rendered by render.sh at start.
+# Rate limits count per Kong instance (policy: local): login and upload per client address (render.sh sets the
+# real-IP header), the token-spending routes per officer (their bearer token).
 # ${API_URL}, ${AUDIT_URL}: upstreams (http://api:8000 locally, https://<service>.run.app on Cloud Run).
 # ${PRESERVE_HOST}: false on Cloud Run, which routes by Host. ${CORS_ORIGINS}: the frontend origins, quoted.
 _format_version: "3.0"
@@ -28,6 +30,30 @@ services:
         plugins:
           - name: rate-limiting
             config: { minute: 60, policy: local }
+      # Routes that spend Claude tokens: limited per officer (their token), so a stolen token can't loop them.
+      - name: token-spending
+        paths:
+          - "~/documents/[^/]+/retry$"
+          - "~/documents/[^/]+/detection/retry$"
+          - "~/documents/[^/]+/document-type$"
+          - "~/cases/[^/]+/analysis/run$"
+        methods: [POST, PATCH]
+        regex_priority: 10
+        strip_path: false
+        preserve_host: ${PRESERVE_HOST}
+        plugins:
+          - name: rate-limiting
+            config: { minute: 10, hour: 60, policy: local, limit_by: header, header_name: Authorization }
+      # The on-demand checks (routers/detection.py); some run vision.
+      - name: on-demand-checks
+        paths: ["~/documents/[^/]+/detection/[a-z-]+$"]
+        methods: [GET]
+        regex_priority: 5
+        strip_path: false
+        preserve_host: ${PRESERVE_HOST}
+        plugins:
+          - name: rate-limiting
+            config: { minute: 30, hour: 300, policy: local, limit_by: header, header_name: Authorization }
       # Workers' push endpoints and every service's metrics are never reachable through the gateway.
       - name: internal-only
         paths: ["/push", "/metrics"]

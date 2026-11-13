@@ -62,7 +62,7 @@ def test_an_uploaded_file_lands_under_its_case_folder_and_can_be_read_back() -> 
         path = storage_service.upload_file("case-1", "statement.pdf", b"%PDF-1.4", "application/pdf")
         content = storage_service.download_file(path)
 
-    assert path.startswith("case-1/") and path.endswith("_statement.pdf")
+    assert path.startswith("case-1/") and path.endswith(".pdf") and "statement" not in path
     assert content == b"%PDF-1.4"
     assert client.bucket.content_types[path] == "application/pdf"
     assert set(client.buckets_used) == {settings.SUPABASE_STORAGE_BUCKET}

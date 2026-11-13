@@ -34,13 +34,14 @@ async def _cancel_requested_since(document_id: str, since: datetime) -> bool:
 
 async def run(
     document_id: str, case_id: str | None, requested_by: str | None = None,
-    start_from: Sequence[DocumentStatus] | None = None,
+    start_from: Sequence[DocumentStatus] | None = None, trigger_event_id: str | None = None,
 ) -> None:
     """
     One detection run, its end event, and a live refresh. An interrupted run goes back to approved, retryable.
     `requested_by` is the officer whose approval or retry started it, for the audit trail.
     With `start_from`, the run starts only if it can move the document from one of those statuses to detecting;
-    a redelivered event finds it already moved, and does nothing.
+    a redelivered event finds it already moved, and does nothing. `trigger_event_id` (the event that started it)
+    goes on the end event, so a redelivery after the run ended is recognised too (on_requested).
     """
     if start_from is not None and _runs.is_running(document_id):
         logger.info("Detection for document %s is already running here; ignoring the repeat", document_id)
@@ -80,7 +81,7 @@ async def run(
         outcome, detail = "cancelled", {"error": reason}
         if not by_officer:
             # Shutting down: what the run spent still goes on the record before the cancel carries on.
-            await _record_end(document_id, case_id, requested_by, timer, outcome, detail, usage)
+            await _record_end(document_id, case_id, requested_by, timer, outcome, detail, usage, trigger_event_id)
             raise
     except Exception as exc:
         logger.exception("Fraud detection failed for approved document %s", document_id)
@@ -89,22 +90,36 @@ async def run(
         if case_id and started:
             # Every ending writes the document's status last, which Realtime reports.
             await push_case_snapshot(case_id, realtime_covers=True)
-    await _record_end(document_id, case_id, requested_by, timer, outcome, detail, usage)
+    await _record_end(document_id, case_id, requested_by, timer, outcome, detail, usage, trigger_event_id)
     # The last approved document scanned starts the case analysis.
     await analysis_service.start_if_due(case_id)
 
 
 async def _record_end(
     document_id: str, case_id: str | None, requested_by: str | None, timer: Stopwatch, outcome: Outcome,
-    detail: dict[str, Any], usage: dict[str, float | int],
+    detail: dict[str, Any], usage: dict[str, float | int], trigger_event_id: str | None = None,
 ) -> None:
     if requested_by is not None:
         detail = {**detail, "requested_by": requested_by}
+    if trigger_event_id is not None:
+        detail = {**detail, "trigger_event_id": trigger_event_id}
     await events.record(Event(
         type=types.DOCUMENT_DETECTED if outcome == "success" else types.DETECTION_FAILED,
         actor_type="agent", actor=_ACTOR, case_id=case_id, document_id=document_id,
         outcome=outcome, detail={**detail, "run": "detection", **usage}, **timer.fields(),
     ))
+
+
+async def _already_ran(event: Event, document_id: str) -> bool:
+    try:
+        return await asyncio.to_thread(
+            audit.ran_for, event.event_id, [types.DOCUMENT_DETECTED, types.DETECTION_FAILED], document_id,
+            event.occurred_at,
+        )
+    except Exception:
+        # Unreadable trail: run it (the status claim still stops a run already under way).
+        logger.warning("Could not check whether event %s already ran; running it", event.event_id, exc_info=True)
+        return False
 
 
 async def on_requested(event: Event) -> None:
@@ -115,7 +130,11 @@ async def on_requested(event: Event) -> None:
     start_from = [DocumentStatus.APPROVED]
     if event.type == types.DETECTION_RETRY_REQUESTED:
         start_from.append(DocumentStatus.DETECTED)
-    await run(event.document_id, event.case_id, officer_of(event), start_from)
+    # A redelivery after the run ended finds the document back in a start status: the end event says it ran.
+    if await _already_ran(event, event.document_id):
+        logger.info("Detection for event %s already ran on document %s; ignoring the repeat", event.event_id, event.document_id)
+        return
+    await run(event.document_id, event.case_id, officer_of(event), start_from, trigger_event_id=event.event_id)
 
 
 async def on_cancel_requested(event: Event) -> None:
@@ -126,11 +145,15 @@ async def on_cancel_requested(event: Event) -> None:
 async def on_recovery_requested(event: Event) -> None:
     """
     The sweeper found this document stuck detecting (its run died without reverting): back to approved and run
-    again, or, past the attempt limit, back to approved with the error, as a failed run leaves it.
+    again, or, past the attempt limit, back to approved with the error, as a failed run leaves it. Or stuck
+    approved (its approval event was lost): see _recover_unstarted.
     """
     if not recovery.is_for(event, _ACTOR) or event.document_id is None:
         return
     document_id = event.document_id
+    if event.detail.get("stage") == DocumentStatus.APPROVED.value:
+        await _recover_unstarted(event, document_id)
+        return
     reverted = await asyncio.to_thread(
         document_repository.update_status, document_id, DocumentStatus.APPROVED,
         expected_current_statuses=[DocumentStatus.DETECTING],
@@ -150,6 +173,26 @@ async def on_recovery_requested(event: Event) -> None:
             await push_case_snapshot(event.case_id, realtime_covers=True)
         return
     await run(document_id, event.case_id)
+    await _report_recovery(event, document_id)
+
+
+async def _recover_unstarted(event: Event, document_id: str) -> None:
+    """Approved, but its approval event was lost: start the run now (claimed, so a late original does nothing)."""
+    if recovery.exhausted(event):
+        if await asyncio.to_thread(detection_results.has_report, document_id):
+            return
+        error = f"Detection never started; automatic recovery gave up after {settings.RECOVERY_MAX_ATTEMPTS} attempts."
+        # The error lets the officer's "Run detection again" through (routers/detection.py).
+        await asyncio.to_thread(detection_results.save_error, document_id, error)
+        await recovery.report(event, _ACTOR, types.RECOVERY_EXHAUSTED, "failed")
+        if event.case_id:
+            await push_case_snapshot(event.case_id, realtime_covers=False)
+        return
+    await run(document_id, event.case_id, start_from=[DocumentStatus.APPROVED])
+    await _report_recovery(event, document_id)
+
+
+async def _report_recovery(event: Event, document_id: str) -> None:
     document = await asyncio.to_thread(document_repository.get_document, document_id, include_fields=False)
     status = document.status.value if document else "deleted"
     await recovery.report(

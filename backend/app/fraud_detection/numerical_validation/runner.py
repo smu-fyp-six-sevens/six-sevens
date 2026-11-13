@@ -11,10 +11,10 @@ Which checks apply to a document type comes from each check's `applies`.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
 from typing import Any
 
 from ...config import settings
+from ...sg_time import today_sg
 from ..shared.field_catalogue import array_rows, row_label
 from .casts import CastLine, identity_finding, profit_cast_finding, section_total_finding
 from .common import _apply_needs_review, _as_number
@@ -83,7 +83,7 @@ def _resolve_plain(
 def _run_checks(document_type: str | None, values: dict[str, Any], confidences: dict[str, float],
                 plain: dict[str, str], rows: dict[str, tuple[str, int]], outcome: RunOutcome,
                 group: str = "numerical") -> None:
-    today = date.today()
+    today = today_sg()
     row_dicts = {name: array_rows(values[name]) or [] for name in {f for f, _ in rows.values()}}
     for entry in _applicable(document_type, group):
         kwargs: dict[str, Any] = {}

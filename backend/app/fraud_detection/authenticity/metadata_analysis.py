@@ -22,6 +22,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from ...sg_time import now_sg
 from ..shared.check_result import CheckResult
 from ...ingestion.metadata_extractor import EXTRACTION_ERROR_KEY
 
@@ -497,7 +498,7 @@ def _check_impossible_dates(extracted: dict[str, str | None]) -> list[MetadataAn
     reading. A small future tolerance absorbs clock skew and timezone
     offsets that _parse_exif_datetime deliberately ignores.
     """
-    horizon = datetime.now() + timedelta(days=1)
+    horizon = now_sg().replace(tzinfo=None) + timedelta(days=1)
     anomalies: list[MetadataAnomaly] = []
 
     for field in ("creation_date", "modification_date"):

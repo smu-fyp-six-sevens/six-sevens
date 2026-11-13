@@ -98,7 +98,8 @@ export function useDetection(documentId: string, status: string | undefined, onR
     if (status !== 'detecting') setIsCancelPending(false);
     // A new run started: the last one's error no longer describes it.
     if (status === 'detecting') setDetectionError(null);
-    if (before === 'detecting' && (status === 'approved' || status === 'detected')) {
+    // From approved too: a quick run can go from approved to detected between two updates, never showing detecting.
+    if ((before === 'detecting' && (status === 'approved' || status === 'detected')) || (before === 'approved' && status === 'detected')) {
       void refreshDetectionReport();
     }
     // refreshDetectionReport only reads the document id.

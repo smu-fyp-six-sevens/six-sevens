@@ -64,13 +64,49 @@ def find(
     return [Event.from_audit_row(_row(row)) for row in query.limit(50).execute().data or []]
 
 
-def latest_time(actions: list[str], document_id: str) -> datetime | None:
-    """When the newest of these event types happened for a document."""
+def latest_times(actions: list[str], document_ids: list[str]) -> dict[str, datetime]:
+    """When the newest of these event types happened, per document, a query per 100: one with none is absent."""
+    latest: dict[str, datetime] = {}
+    for start in range(0, len(document_ids), _CASE_CHUNK):
+        chunk = document_ids[start : start + _CASE_CHUNK]
+        for row in fetch_all(
+            lambda chunk=chunk: service_supabase_client().table(_TABLE).select("id, document_id, occurred_at")
+            .in_("document_id", chunk).in_("action", actions),
+            "id",
+        ):
+            when = datetime.fromisoformat(str(row["occurred_at"]))
+            if row["document_id"] not in latest or when > latest[row["document_id"]]:
+                latest[row["document_id"]] = when
+    return latest
+
+
+def find_many(
+    action: str, *, document_ids: list[str] | None = None, case_ids: list[str] | None = None,
+    since: datetime | None = None,
+) -> list[Event]:
+    """find for many documents (or many cases), a query per 100, newest first. Sync: run on a worker thread."""
+    column, ids = ("document_id", document_ids) if document_ids is not None else ("case_id", case_ids or [])
+    events: list[Event] = []
+    for start in range(0, len(ids), _CASE_CHUNK):
+        chunk = ids[start : start + _CASE_CHUNK]
+
+        def build(chunk: list[str] = chunk):
+            query = service_supabase_client().table(_TABLE).select("*").eq("action", action).in_(column, chunk)
+            return query.gt("occurred_at", since.isoformat()) if since is not None else query
+
+        events += _events(build)
+    return sorted(events, key=lambda e: e.occurred_at, reverse=True)
+
+
+def ran_for(trigger_event_id: str, actions: list[str], document_id: str, since: datetime) -> bool:
+    """Whether a run's end event (one of `actions`) names this event as what started it (detail.trigger_event_id)."""
     rows = (
-        service_supabase_client().table(_TABLE).select("occurred_at").eq("document_id", document_id)
-        .in_("action", actions).order("occurred_at", desc=True).limit(1).execute().data
+        service_supabase_client().table(_TABLE).select("id").eq("document_id", document_id).in_("action", actions)
+        .gte("occurred_at", since.isoformat()).eq("detail->>trigger_event_id", trigger_event_id).limit(1).execute().data
     )
-    return datetime.fromisoformat(str(_row(rows[0])["occurred_at"])) if rows else None
+    return bool(rows)
+
+
 
 
 # The stages a case's processing time adds up, each as the case page shows it (pages/upload/processingTimes.ts).
@@ -300,10 +336,13 @@ def case_cost(case_id: str, document_ids: list[str]) -> CaseCost:
 
 
 def list_events(
-    *, case_id: str | None = None, document_id: str | None = None, event_type: str | None = None, limit: int = 200
+    *, case_id: str | None = None, document_id: str | None = None, event_type: str | None = None, limit: int = 200,
+    before: datetime | None = None,
 ) -> list[Event]:
-    """Newest first. Sync: run on a worker thread."""
+    """Newest first; `before` pages back by occurred_at. Sync: run on a worker thread."""
     query = service_supabase_client().table(_TABLE).select("*").order("occurred_at", desc=True).limit(limit)
+    if before is not None:
+        query = query.lt("occurred_at", before.isoformat())
     if case_id is not None:
         query = query.eq("case_id", case_id)
     if document_id is not None:

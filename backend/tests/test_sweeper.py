@@ -44,7 +44,7 @@ def test_find_stuck_uses_each_stage_limit_and_the_detection_start():
     detection_started = {"detecting-old": NOW - timedelta(minutes=20), "detecting-new": NOW - timedelta(minutes=3)}
     with (
         patch("app.document_repository.get_documents_in_status", return_value=documents),
-        patch("app.audit.latest_time", side_effect=lambda actions, doc_id: detection_started[doc_id]),
+        patch("app.audit.latest_times", side_effect=lambda actions, doc_ids: {d: detection_started[d] for d in doc_ids}),
         patch("app.case_pipeline.repository.running_started_before",
               return_value=[("run-1", "case-1", NOW - timedelta(minutes=30))]),
     ):
@@ -71,7 +71,7 @@ def test_sweep_counts_attempts_and_waits_a_full_period_between_them():
     publish = AsyncMock()
     with (
         patch("app.sweeper.find_stuck", return_value=[item, recent]),
-        patch("app.sweeper._earlier_attempts", side_effect=lambda s, now: earlier[s.document_id]),
+        patch("app.sweeper._earlier_attempts", side_effect=lambda items, now: {s: earlier[s.document_id] for s in items}),
         patch("app.sweeper.events.publish", publish),
     ):
         count = asyncio.run(sweeper.sweep())

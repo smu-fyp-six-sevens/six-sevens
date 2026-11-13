@@ -6,7 +6,7 @@ every required document approved. See CROSS_DOCUMENT_AND_RISK_PLAN.md.
 from __future__ import annotations
 
 from ..mapper import compute_requirement_coverage
-from ..models import APPROVED_STATUSES, CaseRecord, DocumentRecord, DocumentStatus
+from ..models import APPROVED_STATUSES, CaseRecord, DocumentRecord, DocumentStatus, skips_detection
 
 
 def is_ready_for_analysis(documents: list[DocumentRecord]) -> bool:
@@ -17,7 +17,8 @@ def is_ready_for_analysis(documents: list[DocumentRecord]) -> bool:
     until it's retried, so it blocks.
     """
     approved = [d for d in documents if d.status in APPROVED_STATUSES]
-    return bool(approved) and all(d.status == DocumentStatus.DETECTED for d in approved)
+    # A document with no type is never scanned (models.skips_detection).
+    return bool(approved) and all(d.status == DocumentStatus.DETECTED or skips_detection(d) for d in approved)
 
 
 def unapproved_requirements(case: CaseRecord, documents: list[DocumentRecord]) -> list[str]:

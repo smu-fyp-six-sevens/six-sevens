@@ -67,6 +67,8 @@ class DocumentGraphState(TypedDict, total=False):
     type_hints_shown: list[str]
 
     classification: ClassificationResult | None
+    # The officer set the type (stored confidence 1.0): classification is skipped and never overrules it.
+    officer_type: bool
     extraction: ExtractionSummary | None
 
     # Bounded classify<->extract reclassification loop — mirrors

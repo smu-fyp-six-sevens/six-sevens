@@ -70,7 +70,7 @@ class Settings:
     # A case analysis still "running" after this long was interrupted; the sweeper then marks it failed.
     CASE_ANALYSIS_TIMEOUT_SECONDS: int = int(os.environ.get("CASE_ANALYSIS_TIMEOUT_SECONDS", "900"))
 
-    # --- Stuck work and recovery (sweeper.py, CLOUD_ARCHITECTURE_PLAN.md section 16) ---
+    # --- Stuck work and recovery (sweeper.py, CLOUD_ARCHITECTURE_PLAN.md section 5) ---
     # Off by default: the database is shared, so a local process must never sweep cloud work. Terraform turns it on.
     SWEEPER_ENABLED: bool = os.environ.get("SWEEPER_ENABLED", "false").lower() == "true"
     # uploaded/queued past this means its event was lost; processing/extracting/detecting past the other means
@@ -101,14 +101,9 @@ class Settings:
 
     # AC2: invocation should be attempted within this window of being dequeued
     DEQUEUE_TO_INVOKE_TARGET_SECONDS: float = 1.0
-    # A document idle in queued/processing longer than this is "stuck"
-    # (drives the monitoring dashboard's stuck-document listing).
+    # A document idle in an in-flight status longer than this is "stuck": the monitoring listing shows it, and one
+    # stuck in processing can be retried without waiting for it to fail (routers/documents.py's retry_document).
     STUCK_THRESHOLD_SECONDS: int = 600
-    # Separate, longer threshold specifically for retry eligibility: a
-    # document sitting in PROCESSING (not any other in-flight status) past
-    # this long is considered stuck and can be retried without waiting for
-    # it to reach FAILED. See routers/documents.py's retry_document.
-    STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS: int = 600
 
     # Bounded classify<->extract escalation loop (langgraph/graph.py) — one
     # re-classification attempt before routing to manual review.
@@ -161,6 +156,11 @@ class Settings:
     }
     MAX_FILE_SIZE_BYTES: int = 25 * 1024 * 1024  # 25 MB
     MAX_BULK_FILES: int = 20
+    # How long the classifier's and extractor's correction hints are reused before audit_events is read again.
+    CORRECTION_HINTS_CACHE_SECONDS: int = 300
+    # A scanned PDF is rendered at 2x and OCR'd page by page: bound the work one upload can cause.
+    OCR_MAX_PAGES: int = 50
+    OCR_MAX_PAGE_PIXELS: int = 25_000_000
 
     # Signed URLs need to outlive a slow run, not just one request.
     SIGNED_URL_EXPIRY_SECONDS: int = 1800
@@ -211,6 +211,8 @@ class Settings:
     CASE_ANALYSIS_ENABLED: bool = os.environ.get("CASE_ANALYSIS_ENABLED", "true").lower() == "true"
     # Runs started automatically per case per hour (each spends about 12k tokens); past it, the officer starts one.
     CASE_ANALYSIS_AUTO_RUNS_PER_HOUR: int = int(os.environ.get("CASE_ANALYSIS_AUTO_RUNS_PER_HOUR", "4"))
+    # Runs of any kind per case per hour past which an officer's "Run again" is refused (a stolen token can't loop it).
+    CASE_ANALYSIS_RUNS_PER_HOUR: int = int(os.environ.get("CASE_ANALYSIS_RUNS_PER_HOUR", "10"))
     # Whether cases created here need every required checklist document approved before they can be analysed.
     # Stored on each case when it's created (cases.checklist_enforced). On only in prod (Terraform).
     REQUIRE_COMPLETE_CHECKLIST: bool = os.environ.get("REQUIRE_COMPLETE_CHECKLIST", "false").lower() == "true"

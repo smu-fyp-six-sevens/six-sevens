@@ -49,6 +49,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel
 
+from ...sg_time import today_sg
 from ..shared.check_result import CheckResult
 from .date_parsing import date_in_period, parse_date_parts
 from ..font_consistency import ExtractedField
@@ -1073,7 +1074,7 @@ def check_date_anomalies(
     """
     fields = _fields_by_name(extracted_fields)
     confidences = _confidence_by_name(extracted_fields)
-    ctx = _Ctx(fields=fields, document_type=document_type, today=date.today())
+    ctx = _Ctx(fields=fields, document_type=document_type, today=today_sg())
 
     dates_extracted = extract_labeled_dates(ctx, confidences)
 

@@ -1,33 +1,32 @@
 # six-sevens
 
-Agentic fraud detection for corporate loan documentation. Final Year Project (IS484, SMU) with Green Link Digital Bank (GLDB).
+Agentic fraud detection for corporate loan documents. SMU IS484 Final Year Project with Green Link Digital Bank (GLDB).
 
-The system automates the forgery-check stage of GLDB's loan origination workflow. Loan officers upload a case's documents, and the system classifies and extracts each one, then runs a detection agent on documents the officer has approved. Credit scoring and offer generation are out of scope.
+It automates the forgery-check stage of GLDB's loan workflow: officers upload a case's documents; the system classifies and extracts each one, runs a detection agent on the ones the officer approves, then analyses and scores the whole case. Credit scoring and offers are out of scope.
 
-## Structure
+## Layout
 
-- `backend/` FastAPI app. Document pipeline and detection agent run on LangGraph (`app/langgraph/`), the per-case cross-document analysis and risk scoring live in `app/case_pipeline/` (a case's risk score exists only as the output of an analysis run), with Supabase for data and file storage, and the Claude API for LLM calls.
-- `frontend/` React + TypeScript (Vite) app for officers: case upload, document review, and detection results. Live case status comes over a WebSocket.
-- `docs/regression/` regression test report.
-- `compose.yaml` (with `deploy/compose/`) the optional local container setup of the services split.
+- `backend/`: FastAPI. Document pipeline and detection on LangGraph (`app/langgraph/`); case analysis and risk scoring in `app/case_pipeline/`; Supabase for data and files; Claude for the models.
+- `frontend/`: React + TypeScript (Vite) for officers. Live updates over a WebSocket.
+- `deploy/`: Terraform, Kong, Grafana, compose files. `docs/`: adding a service, architecture diagram and presentation guide, sprint regression reports.
 
-Documents at the root:
+**Docs at the root:**
 
-- `HOW_IT_WORKS.md` the whole system end to end in plain language: pipeline, detection, flags, case analysis, live updates, configuration and cost logs.
-- `FRAUD_DETECTION_MAP.md` how the fraud checks and the detection agent are wired, plus known detection bugs.
-- `CROSS_DOCUMENT_AND_RISK_PLAN.md` design of the per-case analysis: deterministic checks, hypotheses, verification, risk outlook and guardrails.
-- `STABILITY_AND_REFACTORING_AUDIT.md` stability findings, code smells, optimisations and technical debt, with effort estimates.
-- `backend_tests.md` state of the test suites and what to add.
-- `CLOUD_ARCHITECTURE_PLAN.md` the cloud as built, its to-do list and Stage 2.
-- `PENDING_WORK.md` open product and platform work.
-- `CLAUDE.md` project context and planned architecture (kept locally; git-ignored).
-
-## Prerequisites
-
-- Python 3.11 or newer (CI uses 3.13)
-- Node.js 22
+| File | What it's for |
+|---|---|
+| `HOW_IT_WORKS.md` | How the system behaves today, settings, cost logs |
+| `FRAUD_DETECTION_MAP.md` | How the fraud checks and agents are wired; known detection bugs |
+| `CROSS_DOCUMENT_AND_RISK_PLAN.md` | Design of the case analysis and risk score |
+| `CLOUD_ARCHITECTURE_PLAN.md` | The cloud as built, its to-dos and Stage 2 |
+| `KUBERNETES_DEPLOYMENT_PLAN.md` | If and how to move to Kubernetes (planned only) |
+| `CODEBASE_AUDIT.md` | Open bugs, performance and security findings |
+| `STABILITY_AND_REFACTORING_AUDIT.md` | Fragile code, database load, technical debt |
+| `TEST_SUITE_AUDIT.md`, `backend_tests.md`, `PENDING_TESTS.md` | Test gaps, and tests owed for recent fixes |
+| `PENDING_WORK.md` | Open product and platform work |
 
 ## Run locally
+
+Needs Python 3.11+ (CI uses 3.13), Node.js 22, and `exiftool` on the `PATH` (without it the metadata checks say they couldn't run).
 
 Backend (from `backend/`):
 
@@ -37,99 +36,49 @@ pip install --no-deps -e .
 uvicorn app.main:app --reload --reload-dir app
 ```
 
-`--reload-dir app` restarts the server only for changes under `app/`, not for tests, scripts or generated documents elsewhere in `backend/`.
+API on `http://localhost:8000`, interactive docs at `/docs` (local runs only). Frontend (from `frontend/`): `npm ci`, then `npm run dev`.
 
-**Dependencies:** `requirements.txt` holds the allowed ranges and is the file to edit. `requirements.lock` (the image) and `requirements-dev.lock` (CI and local, adding the dev tools) pin every version, so a build never picks up a release nobody tested. After changing `requirements.txt` or `pyproject.toml`'s dev list, or to take newer releases, regenerate both (from `backend/`, with `pip install uv`), then run the tests:
+That's all a developer needs: one process runs every role and passes events in memory. Settings are in `HOW_IT_WORKS.md` §7. `python -m scripts.build_land_use_index` pre-builds the URA zoning index.
+
+**Dependencies:** edit `requirements.txt`. The lock files pin every version; regenerate both after a change (from `backend/`, with `pip install uv`), then run the tests:
 
 ```bash
 uv pip compile requirements.txt --universal --python-version 3.12 -o requirements.lock
 uv pip compile pyproject.toml --extra dev -c requirements.lock --universal --python-version 3.12 -o requirements-dev.lock
 ```
 
-Add `--upgrade` to the first command to move every package to its newest allowed release, or `--upgrade-package <name>` for one.
+`--upgrade` (all) or `--upgrade-package <name>` (one) takes newer releases.
 
-The database is Supabase, and its schema is changed directly there. `backend/sql/schema.sql` mirrors it by hand (it isn't a migration), and a change the live database needs comes as a dated SQL file in `backend/sql/`. The backend expects these to exist:
+## Database
 
-| Object | Used for |
-|---|---|
-| `cases`, `documents`, `extracted_fields`, `langgraph_trace` | the document pipeline, fields and per-document traces |
-| `case_analysis_runs` | each case analysis run (its result, risk, supporting documents and trace) |
-| `risk_scores` and the `latest_risk_scores` view (newest row per case) | saved scores and the case list |
-| `detection_results` | each document's latest detection report, or its last error |
-| `findings` | every finding, the agents' decision and the officer's verdict, and missed issues (written through the `sync_findings` function) |
-| `review_sign_offs` | a group of findings an officer saved as reviewed |
-| `finding_feedback` | scrubbed officer verdicts and missed issues that teach the agents (read counted through the `feedback_counts` function) |
-| `case_notes` | loan officers' notes on a case or one of its documents (a reply is a row with `parent_id`); only a note's author can edit (sets `edited_at`) or delete it, and a deleted note with replies stays as a placeholder (`deleted_at`, text erased) |
-| sequence `greenlink_case_id_seq` and trigger `set_greenlink_case_id` on `cases` | readable case ids (`GLDB-<n>`); the trigger skips any id already taken |
-| `audit_events` | the audit trail: every domain event, keyed by the event's id (the service role needs `select, insert`) |
-| the `supabase_realtime` publication with `documents`, `cases` and `case_analysis_runs` | live updates, including a case analysis finished by the case-worker |
+Supabase. `backend/sql/schema.sql` is a hand-kept copy of the live schema (tables, functions, grants, RLS), not a migration; a change the live database needs comes as a dated SQL file in `backend/sql/`.
 
-The full schema, with every grant and policy, is in `backend/sql/schema.sql`. The backend reaches the database only with `SUPABASE_SECRET_KEY` (role `service_role`, which bypasses row level security), so every table has RLS on and no policies, and `anon` and `authenticated` hold no grants: the browser never talks to Supabase. The service role holds `select, insert, update, delete` on each table, `select, insert` only on `audit_events`, and nobody holds `TRUNCATE`; it also runs the `sync_findings` and `replace_extracted_fields` functions (`grant execute ... to service_role`). A delete needs the `DELETE` privilege on the tables the backend deletes from: `documents`, `extracted_fields`, `detection_results`, `findings`, `case_notes`, `langgraph_trace`, `case_analysis_runs`, `risk_scores` and `cases` (for example `grant delete on public.case_analysis_runs to service_role;`). Without it a delete fails with Postgres error 42501 ("permission denied for table ..."). Deleting a document removes its `extracted_fields`, `findings`, `detection_results`, `case_notes` and `langgraph_trace` rows (by cascade) and its stored file; deleting a case removes its documents, then (by cascade) its `risk_scores`, `case_analysis_runs`, `findings` and `case_notes` rows. On `case_notes` the service role needs `select, insert, delete` and `update (body, edited_at, deleted_at, case_id)`: an author's edit, a deleted note kept as a placeholder above its replies, and a moved document taking its notes to the new case. Every table keyed by a document or a case cascades from it in the database; the backend removes only the stored files and the cross-document findings resting on a deleted document. `audit_events` is never deleted. Deleting one document leaves the case's analysis runs and scores in place; the run is marked out of date.
+- The backend uses only `SUPABASE_SECRET_KEY`; the browser never talks to Supabase. Every table has RLS on with no policies.
+- Deletes rely on cascades: everything keyed by a document or case goes with it. The code removes only stored files and cross-document findings on a deleted document. `audit_events` is never deleted.
+- A missing `DELETE` grant shows as Postgres error 42501 ("permission denied for table ...").
+- A case's stage is `cases.status`, recomputed from its documents and analysis at startup.
 
-A case's status lives in the existing `cases.status` column (see `CaseStage` in `backend/app/models.py`); at startup the api recomputes every case's stage (`case_stage.sync_all_cases`), so a case that changed while the backend was down catches up. The stage is derived from the case's documents and analysis, so no history is stored.
-
-`exiftool` should be on the `PATH`; without it the metadata checks report that they could not run. Every setting and its default is in `HOW_IT_WORKS.md` §7, including the public-registry keys (a registry check that can't run is skipped, never a finding) and `CASE_ANALYSIS_ENABLED`. `python -m scripts.build_land_use_index` builds the URA zoning index ahead of time. The backend logs one `perf` line per request, snapshot and background job (§8).
-
-The API runs on `http://localhost:8000`. The interactive docs are at `/docs`.
-
-Frontend (from `frontend/`):
-
-```bash
-npm ci
-npm run dev
-```
-
-The two commands above are all a developer needs: one process runs every role (`ROLE=all`) and passes events between them in memory (`EVENT_TRANSPORT=inprocess`). The split below is optional.
-
-## Docker: the services split locally (optional)
+## Services split with Docker (optional)
 
 From the repo root, with uvicorn stopped (Kong takes port 8000):
 
 ```bash
 docker compose up --build                     # Pub/Sub emulator, Kong :8000, api, workers, audit-metrics
-docker compose --profile frontend up --build  # also the nginx frontend on :5173 (otherwise use npm run dev)
+docker compose --profile frontend up --build  # also nginx on :5173
 ```
 
-Settings come from `backend/.env`, as for uvicorn. The three workers share one container to save memory (about 3 GB in total). `CLOUD_ARCHITECTURE_PLAN.md` section 12 has the walkthrough, how to debug the workers in the IDE, and the emulator's limits.
-
-The backend image has one target per role (`backend/Dockerfile`). The `detection-worker` and `all` targets download URA's land-use map and build the zoning index into the image (about a minute, needs internet, fails if it can't). To build without it, set `ALLOW_MISSING_LAND_USE=true` in the environment before `docker compose build`. Export `DATA_GOV_SG_API_KEY` first to pass it as a build secret.
+Settings come from `backend/.env`. The workers share one container (~3 GB). Walkthrough and debugging: `CLOUD_ARCHITECTURE_PLAN.md` §12. The `detection-worker` and `all` images build the URA zoning index (needs internet; set `ALLOW_MISSING_LAND_USE=true` to skip; export `DATA_GOV_SG_API_KEY` first).
 
 ## Deploying
 
-Cloud Run, from GitHub Actions: every push to `main` deploys once CI passes, and "Deploy to Cloud Run" can also be run by hand. Terraform in `deploy/terraform` creates the services, Pub/Sub, secrets and identities; its `README.md` has the one-time setup. `CLOUD_ARCHITECTURE_PLAN.md` describes the design.
-
-**Adding a service?** Follow [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md). Run Terraform first, then push.
+Cloud Run from GitHub Actions: a green push to `main` deploys, or run "Deploy to Cloud Run" by hand. Terraform (`deploy/terraform`, one-time setup in its README) creates the services, Pub/Sub, secrets and identities; run `terraform apply` before a push that needs it. Adding a service: [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md).
 
 ## Tests
 
-Backend unit and integration tests (from `backend/`):
-
-```bash
-pytest
-```
-
-Tests never call real Supabase or Claude. `tests/conftest.py` blocks both, so a test that tries to reach them fails.
-
-Regression tests are tagged by sprint: `pytest -m sprint1` (up to `sprint5`).
-
-Frontend lint, build and end-to-end tests (from `frontend/`):
-
-```bash
-npm run lint
-npm run build
-npm run test:e2e
-```
-
-The Playwright suite runs against a mocked backend (`frontend/e2e/support/mockBackend.ts`). Sprint filters: `npm run test:e2e:sprint1` (up to `:sprint5`).
+- Backend (from `backend/`): `pytest`; by sprint: `pytest -m sprint1` … `sprint5`. Tests can't reach real Supabase or Claude: `tests/conftest.py` blocks both.
+- Frontend (from `frontend/`): `npm run lint`, `npm run build`, `npm run test:e2e` (Playwright against a mocked backend; `npm run test:e2e:sprint1` … `:sprint5`).
 
 ## GitHub Actions
 
-Defined in `.github/workflows/`:
-
-- `ci-cd.yml` runs on pull requests and on pushes to `main` (not docs-only ones). Jobs:
-  - **backend:** ruff, pyright (a type error fails the build; `# type: ignore` and a weakened pyright config are rejected), `openapi.json` matching the models, the tests with coverage;
-  - **frontend:** lint, `api.gen.ts` matching `openapi.json`, type-check, build and the Playwright suite (in Microsoft's Playwright container);
-  - **security:** Checkov, pip-audit and `npm audit --audit-level=high` (every run), Snyk (only when `backend/requirements.lock` or `frontend/package*.json` change, every Monday, or by hand: the free plan has a monthly quota; non-blocking until it resets), and Terraform `fmt` and `validate`.
-
-  All three must pass. On a push to `main` it then calls `deploy.yml`.
-- `deploy.yml` builds one image per service, rolls them out to Cloud Run, checks the gateway, and rolls everything back if a check fails. It also runs by hand. It signs in through Workload Identity Federation (repository *variables* `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`); the only repository secrets are `DATA_GOV_SG_API_KEY` and `SNYK_TOKEN`. The services read their own keys from Secret Manager.
+- **`ci-cd.yml`** (PRs and pushes to `main`, not docs-only): backend (ruff, pyright, `openapi.json` up to date, tests with coverage); frontend (lint, `api.gen.ts` up to date, types, build, Playwright); security (Checkov, pip-audit, `npm audit` high, Terraform fmt/validate; Snyk only on lock-file changes, weekly or by hand, non-blocking until its quota resets). All must pass; a push to `main` then deploys.
+- **`deploy.yml`**: one image per service, rolled out to Cloud Run, gateway checked, everything rolled back on failure. Signs in by Workload Identity Federation (repo variables `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`); the only repo secrets are `DATA_GOV_SG_API_KEY` and `SNYK_TOKEN`.

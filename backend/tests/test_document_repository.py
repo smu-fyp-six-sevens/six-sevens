@@ -210,7 +210,7 @@ def test_reject_document_updates_status_resyncs_the_case_and_returns_the_row(db,
     # A rejected document no longer counts towards the checklist, so this is the one status change that resyncs.
     db.add("documents", _row(status="analyzed"))
 
-    rejected = document_repository.reject_document("doc-1")
+    rejected = document_repository.reject_document("doc-1", DocumentStatus.ANALYZED)
 
     assert _stored(db)["status"] == "rejected"
     assert rejected is not None and rejected.status == DocumentStatus.REJECTED

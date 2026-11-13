@@ -6,7 +6,6 @@ import {
   documentStatusDisplay,
   formatDocumentLabel,
   formatDocumentType,
-  formatRoutingOutcome,
   isDocumentStuckProcessing,
 } from '../../services/uploadService';
 import {
@@ -91,6 +90,13 @@ export function DocumentSummaryCard({
                 <span>
                   Document ID: {document.id}
                 </span>
+
+                {/* Once the type is settled it is just a label: the editor below only appears while it needs correcting. */}
+                {!canCorrectType && (
+                  <span>
+                    Type: <strong>{formatDocumentLabel(document)}</strong>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -108,11 +114,11 @@ export function DocumentSummaryCard({
             </div>
           </div>
 
-          <div className="details-info">
+          {canCorrectType && (
+          <div className="details-info details-info--single">
             <div>
               <span className="details-label">Document Type</span>
-              {canCorrectType ? (
-                <div className="details-type-editor">
+              <div className="details-type-editor">
                   <select
                     className="details-type-select"
                     value={chosenType}
@@ -148,32 +154,10 @@ export function DocumentSummaryCard({
                   </button>
 
                   {typeError && <ErrorMessage inline message={typeError} />}
-                </div>
-              ) : (
-                <strong>
-                  {formatDocumentLabel(document)}
-                </strong>
-              )}
-            </div>
-
-            <div>
-              <span className="details-label">
-                Classification Confidence
-              </span>
-              <strong>
-                {document.classification_confidence != null
-                  ? document.classification_confidence.toFixed(2)
-                  : '—'}
-              </strong>
-            </div>
-
-            <div>
-              <span className="details-label">Routing Outcome</span>
-              <strong>
-                {formatRoutingOutcome(document, caseMatch)}
-              </strong>
+              </div>
             </div>
           </div>
+          )}
 
           {caseMatch?.status === 'manual_review' && (
             <div className="review-message review-message--warning details-failure-reason">

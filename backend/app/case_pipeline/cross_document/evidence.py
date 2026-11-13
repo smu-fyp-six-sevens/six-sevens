@@ -192,7 +192,8 @@ def render_dossier(context: CaseContext, max_chars: int = MAX_DOSSIER_CHARS) -> 
     """
     blocks: list[str] = []
     for view in context.docs.values():
-        lines = [f"[{view.key}] {view.filename} - {view.document_type}"
+        # The key and type only: a file name can hold a person's name or a protected word.
+        lines = [f"[{view.key}] {view.document_type}"
                  + (" (fields confirmed by the officer)" if view.fields_confirmed_by_officer else "")]
         for name, value in view.fields.items():
             if is_protected_field(name):

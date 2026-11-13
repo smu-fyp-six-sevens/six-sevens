@@ -1586,7 +1586,7 @@ def test_reject_document_success() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "rejected"
-    mock_repo.reject_document.assert_called_once_with("doc-1")
+    mock_repo.reject_document.assert_called_once_with("doc-1", document.status)
 
 
 @pytest.mark.parametrize("settled", [DocumentStatus.FAILED, DocumentStatus.CANCELLED])
@@ -1606,7 +1606,7 @@ def test_a_failed_blocked_or_cancelled_document_can_be_rejected(settled) -> None
         response = client.post("/documents/doc-1/reject")
 
     assert response.status_code == 200
-    mock_repo.reject_document.assert_called_once_with("doc-1")
+    mock_repo.reject_document.assert_called_once_with("doc-1", settled)
 
 
 @pytest.mark.parametrize(

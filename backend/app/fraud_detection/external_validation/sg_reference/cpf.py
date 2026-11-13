@@ -43,6 +43,9 @@ CPF_RATE_TABLES: dict[str, tuple[CpfBand, ...]] = {
 }
 
 
+NEWEST_RATE_YEAR = max(date.fromisoformat(k).year for k in CPF_RATE_TABLES)
+
+
 def bands_in_force(on: date) -> tuple[CpfBand, ...] | None:
     applicable = [k for k in CPF_RATE_TABLES if date.fromisoformat(k) <= on]
     return CPF_RATE_TABLES[max(applicable)] if applicable else None

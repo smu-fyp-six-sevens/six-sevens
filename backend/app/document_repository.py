@@ -193,37 +193,61 @@ def undo_approval(document_id: str, routing_status: RoutingStatus | None) -> Non
         _sync_case(_row(result.data[0]).get("case_id"))
 
 
-def _set_detection_status(document_id: str, status: DocumentStatus) -> None:
+def _end_detection(document_id: str, status: DocumentStatus) -> bool:
+    """Only while the document is still DETECTING: a run a recovery replaced mustn't overwrite the new one."""
     result = supabase_client.table("documents").update(
         {"status": status.value}
+    ).eq("id", document_id).eq("status", DocumentStatus.DETECTING.value).execute()
+    if result.data:
+        _sync_case(_row(result.data[0]).get("case_id"))
+    else:
+        logger.warning("Document %s was no longer detecting; its run's %s was not written", document_id, status.value)
+    return bool(result.data)
+
+
+def mark_detecting(document_id: str) -> None:
+    """The Detection Agent has started â€” shown live as "Scanning" (see langgraph/detection/graph.py)."""
+    result = supabase_client.table("documents").update(
+        {"status": DocumentStatus.DETECTING.value}
     ).eq("id", document_id).execute()
     if result.data:
         _sync_case(_row(result.data[0]).get("case_id"))
 
 
-def mark_detecting(document_id: str) -> None:
-    """The Detection Agent has started â€” shown live as "Scanning" (see langgraph/detection/graph.py)."""
-    _set_detection_status(document_id, DocumentStatus.DETECTING)
-
-
-def mark_detected(document_id: str) -> None:
+def mark_detected(document_id: str) -> bool:
     """The Detection Agent finished and produced a report â€” terminal."""
-    _set_detection_status(document_id, DocumentStatus.DETECTED)
+    return _end_detection(document_id, DocumentStatus.DETECTED)
 
 
-def end_unfinished_detection(document_id: str, *, has_report: bool) -> None:
+def end_unfinished_detection(document_id: str, *, has_report: bool) -> bool:
     """
     A detection run crashed or was cancelled. With a report from an earlier run (a rerun that didn't finish),
     back to DETECTED: that report still stands. Otherwise back to APPROVED: still locked, and it can be run again.
     """
-    _set_detection_status(document_id, DocumentStatus.DETECTED if has_report else DocumentStatus.APPROVED)
+    return _end_detection(document_id, DocumentStatus.DETECTED if has_report else DocumentStatus.APPROVED)
 
 
-def reject_document(document_id: str) -> DocumentRecord | None:
+def claim_extraction_rerun(document_id: str, requested_at: datetime | None) -> bool:
+    """
+    Takes an officer's retype for one rerun (compare-and-swap): the document must still be EXTRACTING with the
+    stamp set_type wrote. A repeated event finds the stamp moved on, or the status changed, and gets False.
+    requested_at None (an event from before the stamp was sent) claims on the status alone.
+    """
+    query = supabase_client.table("documents").update(
+        {"processing_started_at": datetime.now(timezone.utc).isoformat()}
+    ).eq("id", document_id).eq("status", DocumentStatus.EXTRACTING.value)
+    if requested_at is not None:
+        query = query.eq("processing_started_at", requested_at.isoformat())
+    return bool(query.execute().data)
+
+
+def reject_document(document_id: str, expected: DocumentStatus) -> DocumentRecord | None:
+    """None when the document is gone or its status moved on from `expected` since the officer's request read it."""
     result = (
         supabase_client.table("documents")
         .update({"status": DocumentStatus.REJECTED.value})
         .eq("id", document_id)
+        .eq("status", expected.value)
         .execute()
     )
     if not result.data:

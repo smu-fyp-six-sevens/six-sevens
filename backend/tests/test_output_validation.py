@@ -531,11 +531,12 @@ def test_an_impossible_finding_cannot_be_dismissed_and_stays_for_the_officer() -
     assert "extraction error" in kept["rationale"]
 
 
-def test_an_impossible_finding_the_specialist_explains_is_kept_as_rated() -> None:
-    report = _assess(IMPOSSIBLE, dismiss=False, severity="medium")
+@pytest.mark.parametrize("rated", ["info", "low", "medium"])
+def test_an_impossible_finding_the_specialist_keeps_is_floored_at_high(rated) -> None:
+    report = _assess(IMPOSSIBLE, dismiss=False, severity=rated)
 
     [kept] = report["findings"]
-    assert kept["severity"] == "medium" and kept["ai_accepted"] is True
+    assert kept["severity"] == "high" and kept["ai_accepted"] is True
 
 
 def test_an_impossible_finding_that_needs_review_can_still_be_dismissed() -> None:

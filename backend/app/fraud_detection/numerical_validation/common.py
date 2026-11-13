@@ -48,6 +48,10 @@ _RATE_SUFFIX_RE = re.compile(
 # N%" clause; used as a last-resort fallback when the straightforward parse
 # fails, not tried first, so it never overrides a real, simple number.
 _CURRENTLY_RATE_RE = re.compile(r"currently\s+(-?\d+(?:\.\d+)?)\s*%", re.IGNORECASE)
+# Statements print a debit or an overdrawn balance as "1,234.56 DR", a credit as "... CR".
+_DEBIT_CREDIT_SUFFIX_RE = re.compile(r"(.*?)(DR|CR)\.?", re.IGNORECASE)
+# "1.234,56" or "1234,56": a decimal comma, with dots (if any) grouping thousands.
+_COMMA_DECIMAL_RE = re.compile(r"\(?-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{1,2}\)?")
 
 
 def _as_number(value: Any) -> float | None:
@@ -57,15 +61,22 @@ def _as_number(value: Any) -> float | None:
         return float(value)
     if isinstance(value, str):
         text = _RATE_SUFFIX_RE.sub("", value)
-        cleaned = re.sub(rf"[,\s]|{_CURRENCY_SYMBOLS}|{_CURRENCY_WORDS}", "", text, flags=re.I)
-        cleaned = cleaned.strip()
+        cleaned = re.sub(rf"\s|{_CURRENCY_SYMBOLS}|{_CURRENCY_WORDS}", "", text, flags=re.I)
+        marker = None
+        if suffixed := _DEBIT_CREDIT_SUFFIX_RE.fullmatch(cleaned):
+            cleaned, marker = suffixed.group(1), suffixed.group(2).upper()
+        if _COMMA_DECIMAL_RE.fullmatch(cleaned):
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        else:
+            cleaned = cleaned.replace(",", "")
         if cleaned.startswith("(") and cleaned.endswith(")"):
             cleaned = "-" + cleaned[1:-1]
         try:
-            return float(cleaned)
+            number = float(cleaned)
         except ValueError:
             match = _CURRENTLY_RATE_RE.search(value)
             return float(match.group(1)) if match else None
+        return -abs(number) if marker == "DR" else abs(number) if marker == "CR" else number
     return None
 
 

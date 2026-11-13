@@ -18,6 +18,7 @@ from .common import (
     _parse_field_date,
     _rows,
 )
+from ...sg_time import today_sg
 from ..shared.field_values import also_printed_in, describe_path, text_values
 from .models import NumericalFinding
 from .registry import Num, check
@@ -249,7 +250,7 @@ def _mrz_date(yymmdd: str) -> date | None:
             candidate = date(century + yy, mm, dd)
         except ValueError:
             continue
-        if abs((candidate - date.today()).days) < 366 * 60:
+        if abs((candidate - today_sg()).days) < 366 * 60:
             return candidate
     return None
 

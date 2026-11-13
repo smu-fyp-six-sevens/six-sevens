@@ -30,7 +30,8 @@ def build_reading_tools(kit: ToolKit) -> list:
     async def list_documents(is_refutation_probe: bool = False) -> str:
         """List the case's approved documents: the name to use for each, its type, and how many detection findings it has."""
         result = {"available": True, "documents": [
-            {"document": v.key, "type": v.document_type, "filename": v.filename, "detection_findings": len(v.findings)}
+            # No file name: it can hold a person's name or a protected word (bias.py).
+            {"document": v.key, "type": v.document_type, "detection_findings": len(v.findings)}
             for v in context.docs.values()
         ]}
         return kit.log("list_documents", {}, result, is_refutation_probe)

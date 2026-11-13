@@ -22,5 +22,11 @@ export KONG_ADMIN_LISTEN=off
 export KONG_STATUS_LISTEN="0.0.0.0:${KONG_STATUS_PORT:-8100}"
 export KONG_PROXY_ACCESS_LOG=/dev/stdout
 export KONG_PROXY_ERROR_LOG=/dev/stderr
+# Rate limits key on the client's address. On Cloud Run every connection comes from Google's front end, which
+# appends the real client to X-Forwarded-For: trust the peer to set it and take the last entry (recursive off),
+# since anything to its left was sent by the client and could be spoofed.
+export KONG_TRUSTED_IPS="${KONG_TRUSTED_IPS:-0.0.0.0/0,::/0}"
+export KONG_REAL_IP_HEADER="${KONG_REAL_IP_HEADER:-X-Forwarded-For}"
+export KONG_REAL_IP_RECURSIVE="${KONG_REAL_IP_RECURSIVE:-off}"
 
 exec /docker-entrypoint.sh kong docker-start

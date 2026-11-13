@@ -281,14 +281,18 @@ export default function DocumentDetailsPage({
 
   const contentGuard = useContentGuard(documentId, document?.status);
 
-  // The case-status websocket (useDocumentRecord) stays subscribed while status is 'detecting', so this
-  // fires live the moment the server moves it to 'detected' (or back to 'approved' on a failed run) —
-  // no manual refresh needed to see the finished report and trace.
+  // The case-status websocket (useDocumentRecord) stays subscribed while status is 'approved' or 'detecting', so
+  // this fires live the moment the server moves it to 'detected' (or back to 'approved' on a failed run) —
+  // no manual refresh needed to see the finished report and trace. A quick run can skip 'detecting' between two
+  // updates, so a move from 'approved' to 'detected' counts too.
   const previousDetectionStatusRef = useRef<string | null>(null);
   useEffect(() => {
     const previousStatus = previousDetectionStatusRef.current;
     previousDetectionStatusRef.current = document?.status ?? null;
-    if (previousStatus === 'detecting' && document?.status !== 'detecting') {
+    const runEnded =
+      (previousStatus === 'detecting' && document?.status !== 'detecting') ||
+      (previousStatus === 'approved' && document?.status === 'detected');
+    if (runEnded) {
       void refreshDetectionReport();
       void refreshLangGraphTrace();
     }

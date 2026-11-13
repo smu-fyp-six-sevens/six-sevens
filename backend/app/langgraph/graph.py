@@ -21,7 +21,10 @@ from ..config import settings
 
 
 def _route_after_ingest(state: DocumentGraphState) -> str:
-    return "fail" if state.get("status") == "failed" else "classify"
+    if state.get("status") == "failed":
+        return "fail"
+    # The officer set the type: straight to extraction (nodes.ingest_node filled in the classification).
+    return "check_text_available" if state.get("officer_type") else "classify"
 
 
 def _route_after_check_text(state: DocumentGraphState) -> str:
@@ -52,6 +55,9 @@ def _decide_after_extract(state: DocumentGraphState) -> str:
         return "failed"
     if not _escalation_disputes_type(state):
         return "analyzed"
+    if state.get("officer_type"):
+        # Never reclassified. On "Other" an objection is only advice (as in pipeline._rerun_extraction).
+        return "analyzed" if (state.get("classification") or {}).get("document_type") == "unrecognised" else "unresolved"
     if state.get("attempts", 0) < settings.MAX_RECLASSIFICATION_ATTEMPTS:
         return "reclassify"
     return "unresolved"
@@ -80,7 +86,10 @@ def build_document_graph():
     graph.add_node("reclassify_repair", classify_graph.repair_node)
 
     graph.set_entry_point("ingest")
-    graph.add_conditional_edges("ingest", _route_after_ingest, {"classify": "classify", "fail": "fail"})
+    graph.add_conditional_edges(
+        "ingest", _route_after_ingest,
+        {"classify": "classify", "check_text_available": "check_text_available", "fail": "fail"},
+    )
     graph.add_edge("classify", "finalise_classification")
     graph.add_edge("finalise_classification", "check_text_available")
     graph.add_conditional_edges(

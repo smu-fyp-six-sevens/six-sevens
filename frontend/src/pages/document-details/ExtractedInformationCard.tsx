@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import type { DocumentRecord } from '../../services/uploadService';
 import type { ExtractedField } from './fieldDisplay';
@@ -10,6 +10,7 @@ import {
   EXTRACTION_CONFIDENCE_THRESHOLD,
   addExtractedField,
   deleteExtractedField,
+  hasBeenApproved,
 } from '../../services/uploadService';
 import { buildFieldDraft, formatFieldDisplayValue, formatNumberWithCommas, isArrayOfLabelValueStrings, isArrayOfObjects, isArrayOfPrimitives, isPlainKeyValueObject, keyValueObjectRows, labelValueStringRows } from './fieldDisplay';
 import { humanizeFieldKey, normaliseFieldName } from '../../utils/fieldLabels';
@@ -74,7 +75,13 @@ export function ExtractedInformationCard({
     setNewFieldName,
     setNewFieldValue,
   } = editing;
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  // Approved, the fields are settled and the detection report is what matters: folded up, and again when the
+  // approval happens while the page is open. The officer can still open them.
+  const isApproved = hasBeenApproved(document.status);
+  const [isCollapsed, setIsCollapsed] = useState(isApproved);
+  useEffect(() => {
+    if (isApproved) setIsCollapsed(true);
+  }, [isApproved]);
   // The field the officer asked to delete, until they confirm or cancel in the dialog.
   const [fieldToDelete, setFieldToDelete] = useState<{ id: string; key: string } | null>(null);
 

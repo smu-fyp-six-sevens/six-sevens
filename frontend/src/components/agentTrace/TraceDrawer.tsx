@@ -53,6 +53,9 @@ function Row({
               {formatTokens(tokens)} tokens{cost > 0 ? ` · ${formatCost(cost)}` : ''}
             </span>
           )}
+          {node.group && node.confidence !== undefined && (
+            <span className="trace-chip" title="How sure the agent was">confidence {node.confidence.toFixed(2)}</span>
+          )}
           {node.kind !== 'event' && node.seconds !== 0 && <span className={`trace-duration trace-duration--${durationTone(seconds)}`}>{formatSeconds(seconds)}</span>}
           {node.elapsed !== undefined && (
             <span className={`trace-duration trace-duration--${durationTone(node.elapsed)}`} title="Since the step before">{formatSeconds(node.elapsed)}</span>

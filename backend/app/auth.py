@@ -1,6 +1,6 @@
 """
-A few named accounts (env-configured), gating every route except /health and
-/auth/login. The signed-in username travels in the bearer token and is what the
+A few named accounts (env-configured), gating every route except /health, /health/db,
+/auth/login, /metrics and /push. The signed-in username travels in the bearer token and is what the
 audit trail records as the actor. No roles, resets or lockouts by design: this is
 a small demo deployment, not a product with an account system.
 
@@ -95,38 +95,45 @@ def _verify_token(token: str) -> str | None:
     return username
 
 
-def create_ws_ticket() -> str:
+def create_ws_ticket(username: str | None = None, case_id: str | None = None) -> str:
     """
     Called from POST /ws/tickets, which sits behind require_auth — only reachable with a valid bearer
     token already. Signed like the login token but with its own purpose, so neither works as the other.
+    The route names the officer and the case: a leaked ticket opens only that case, and says whose it was.
     """
     payload = json.dumps({
         "purpose": _WS_PURPOSE, "nonce": secrets.token_urlsafe(16), "exp": time.time() + WS_TICKET_TTL_SECONDS,
+        "sub": username, "case_id": case_id,
     }).encode("utf-8")
     payload_b64 = _b64encode(payload)
     return f"{payload_b64}.{_sign(payload_b64)}"
 
 
-def consume_ws_ticket(ticket: str) -> bool:
-    """True for a genuine, unexpired ticket not yet used on this instance."""
+def consume_ws_ticket(ticket: str, case_id: str | None = None) -> str | None:
+    """
+    For a genuine, unexpired ticket not yet used on this instance, and made for this case if it names one: the
+    officer it was made for ("unknown" when it names none). Otherwise None.
+    """
     try:
         payload_b64, sig = ticket.split(".", 1)
         if not hmac.compare_digest(sig, _sign(payload_b64)):
-            return False
+            return None
         payload = json.loads(_b64decode(payload_b64))
         nonce, expires_at = str(payload["nonce"]), float(payload["exp"])
         if payload.get("purpose") != _WS_PURPOSE:
-            return False
+            return None
     except (ValueError, KeyError, TypeError):
-        return False
+        return None
+    if payload.get("case_id") is not None and payload["case_id"] != case_id:
+        return None
     now = time.time()
     for used, expiry in list(_used_ws_tickets.items()):
         if expiry <= now:
             _used_ws_tickets.pop(used, None)
     if now >= expires_at or nonce in _used_ws_tickets:
-        return False
+        return None
     _used_ws_tickets[nonce] = expires_at
-    return True
+    return str(payload.get("sub") or "unknown")
 
 
 def require_auth(authorization: str | None = Header(default=None)) -> str:

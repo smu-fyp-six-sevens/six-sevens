@@ -2,8 +2,8 @@
 The push adapter: Pub/Sub delivers each subscription's messages to POST /push/{role}. The work runs inside
 the request (Cloud Run gives no CPU outside one). 2xx acks; anything else is redelivered and, after the
 subscription's maximum attempts, dead-lettered. Not behind the app's login: Pub/Sub signs each push with an
-OIDC token, checked here when PUSH_AUDIENCE is set and by Cloud Run IAM on private workers. The local
-emulator sends none.
+OIDC token, checked here (a deployed service won't start without PUSH_AUDIENCE and PUSH_SERVICE_ACCOUNT,
+main.check_push_verification) and by Cloud Run IAM on private workers. The local emulator sends none.
 """
 
 from __future__ import annotations

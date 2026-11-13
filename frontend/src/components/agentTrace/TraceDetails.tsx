@@ -253,6 +253,7 @@ export function TraceDetails({ node, root }: { node: TraceNode; root: TraceNode 
           {node.elapsed !== undefined && <div><dt>Since the step before</dt><dd>{formatSeconds(node.elapsed)}</dd></div>}
           {tokens > 0 && <div><dt>Tokens</dt><dd>{formatTokens(node.totals.inputTokens)} in · {formatTokens(node.totals.outputTokens)} out</dd></div>}
           {node.totals.cost > 0 && <div><dt>Cost</dt><dd>{formatCost(node.totals.cost)}</dd></div>}
+          {node.confidence !== undefined && <div><dt>Confidence</dt><dd>{node.confidence.toFixed(2)}</dd></div>}
         </dl>
       </header>
       {shown.length === 0 ? (

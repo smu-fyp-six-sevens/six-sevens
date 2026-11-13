@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
@@ -11,10 +12,11 @@ from ..case_broadcaster import broadcaster
 
 router = APIRouter(tags=["ws"])
 logger = logging.getLogger(__name__)
+_REFRESH_INTERVAL_SECONDS = 1.0
 
 
-@router.post("/ws/tickets", dependencies=[Depends(require_auth)])
-async def issue_ws_ticket() -> dict:
+@router.post("/ws/tickets")
+async def issue_ws_ticket(case_id: str, user: str = Depends(require_auth)) -> dict:
     """
     Mints a short-lived, single-use ticket for the case status WebSocket
     below. Sits behind require_auth like every other protected endpoint
@@ -22,9 +24,9 @@ async def issue_ws_ticket() -> dict:
     because the WebSocket route itself can't use header-based auth — this
     plain HTTP route has no such restriction). See auth.py's
     WS_TICKET_TTL_SECONDS docstring for why this exists instead of just
-    putting the normal bearer token in the WS URL.
+    putting the normal bearer token in the WS URL. The ticket opens only `case_id`.
     """
-    return {"ticket": create_ws_ticket()}
+    return {"ticket": create_ws_ticket(user, case_id)}
 
 
 @router.websocket("/ws/cases/{case_id}")
@@ -41,9 +43,11 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
     handshake instead of the connection, the standard pattern for WS auth
     failures).
     """
-    if not consume_ws_ticket(ticket):
+    user = consume_ws_ticket(ticket, case_id)
+    if user is None:
         await websocket.close(code=1008)
         return
+    logger.info("Case socket opened for case %s by %s", case_id, user)
 
     await websocket.accept()
     query_stats.count_event("ws.connect")
@@ -68,6 +72,7 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
         else:
             await websocket.send_json(initial)
 
+            last_refresh = time.monotonic()
             while True:
                 recv_task = asyncio.create_task(websocket.receive_text())
                 queue_task = asyncio.create_task(queue.get())
@@ -93,6 +98,11 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
                     # Realtime event, useful right after an upload before
                     # the new row's insert has necessarily propagated
                     # through Realtime yet.
+                    # At most one a second per connection: each is several queries.
+                    wait = _REFRESH_INTERVAL_SECONDS - (time.monotonic() - last_refresh)
+                    if wait > 0:
+                        await asyncio.sleep(wait)
+                    last_refresh = time.monotonic()
                     with query_stats.scope("ws refresh snapshot"):
                         snapshot = await asyncio.to_thread(
                             case_service.build_case_snapshot, case_id

@@ -71,10 +71,8 @@ locals {
       publishes = true
       secrets   = concat(local.supabase, ["AUTH_SECRET_KEY"])
       env = tomap({
-        SWEEPER_ENABLED      = "true"
-        CORS_IN_APP          = "false"
-        PUSH_AUDIENCE        = "https://audit-metrics-${data.google_project.this.number}.${var.region}.run.app"
-        PUSH_SERVICE_ACCOUNT = "pubsub-push@${var.project_id}.iam.gserviceaccount.com"
+        SWEEPER_ENABLED = "true"
+        CORS_IN_APP     = "false"
       })
     }
   }

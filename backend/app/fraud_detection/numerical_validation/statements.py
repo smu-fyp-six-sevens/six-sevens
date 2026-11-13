@@ -236,6 +236,14 @@ def _check_open_close(
             f"{_money(expected_closing)}, but the closing balance is {_money(closing)}",
             field="transactions", stated=_money(closing), expected=_money(expected_closing),
         ))
+    if opening_balance is None and carried_in is None:
+        # Nothing printed to start from: the opening is worked back from the first line, which proves nothing about it.
+        findings.append(_finding(
+            "BS.OPEN_CLOSE", "signal",
+            f"The statement prints no opening balance, so its earliest transaction ({_money(amounts[0])}, "
+            f"{_description(body[0]) or 'no description'}) can't be checked",
+            field="transactions", stated="no opening balance", expected="an opening or brought-forward balance",
+        ))
     if opening_balance is not None and abs(opening_balance - derived_opening) > _MONEY_TOLERANCE:
         findings.append(_finding(
             "BS.STATED_OPENING", "inconsistent",

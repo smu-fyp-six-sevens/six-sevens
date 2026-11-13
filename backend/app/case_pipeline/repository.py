@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from postgrest.exceptions import APIError
+from postgrest import CountMethod
+
+from ..config import settings
 from ..models import CaseRisk, SupportingDocumentRecommendation
 from ..supabase_client import supabase_client
+from ..supabase_rows import fetch_all
 from ..supabase_rows import row as _row
 from .models import AdverseMediaCheck, AnalysisAudit, AnalysisSummary, CaseAnalysis, CrossDocFinding, RiskOutlook
 
@@ -50,14 +55,40 @@ def _to_analysis(row: dict) -> CaseAnalysis:
     )
 
 
+class RunAlreadyStarted(Exception):
+    """The case already has a live running run over the same inputs (another instance started it)."""
+
+
 def insert_run(run_id: str, case_id: str, fingerprint: str) -> None:
-    supabase_client.table(_TABLE).insert({
+    """Records a running run. The database allows one running run per case and fingerprint, across instances."""
+    row = {
         "run_id": run_id,
         "case_id": case_id,
         "status": "running",
         "fingerprint": fingerprint,
         "started_at": datetime.now(timezone.utc).isoformat(),
-    }).execute()
+    }
+    try:
+        supabase_client.table(_TABLE).insert(row).execute()
+        return
+    except APIError as exc:
+        if exc.code != "23505":  # unique violation
+            raise
+        # A running run past its time limit lost its worker: it shouldn't hold the slot until the sweeper comes.
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=settings.CASE_ANALYSIS_TIMEOUT_SECONDS)
+        lost = supabase_client.table(_TABLE).update({
+            "status": "failed", "finished_at": datetime.now(timezone.utc).isoformat(),
+            "error": "The analysis stopped without finishing. It was started again.",
+        }).eq("case_id", case_id).eq("fingerprint", fingerprint).eq("status", "running") \
+            .lt("started_at", cutoff.isoformat()).execute()
+        if not lost.data:
+            raise RunAlreadyStarted() from exc
+    try:
+        supabase_client.table(_TABLE).insert(row).execute()
+    except APIError as exc:
+        if exc.code == "23505":
+            raise RunAlreadyStarted() from exc
+        raise
 
 
 def claim_run(run_id: str) -> bool:
@@ -116,18 +147,19 @@ def latest_adverse_media(case_id: str) -> AdverseMediaCheck | None:
 
 
 def count_runs_since(case_id: str, since: datetime) -> int:
-    rows = (
-        supabase_client.table(_TABLE).select("run_id").eq("case_id", case_id)
-        .gte("started_at", since.isoformat()).execute().data or []
+    result = (
+        supabase_client.table(_TABLE).select("run_id", count=CountMethod.exact).eq("case_id", case_id)
+        .gte("started_at", since.isoformat()).limit(1).execute()
     )
-    return len(rows)
+    return result.count or 0
 
 
 def running_started_before(cutoff: datetime) -> list[tuple[str, str, datetime]]:
     """(run_id, case_id, started_at) of runs still marked running that started before `cutoff`."""
-    rows = (
-        supabase_client.table(_TABLE).select("run_id, case_id, started_at").eq("status", "running")
-        .lt("started_at", cutoff.isoformat()).execute().data or []
+    rows = fetch_all(
+        lambda: supabase_client.table(_TABLE).select("run_id, case_id, started_at").eq("status", "running")
+        .lt("started_at", cutoff.isoformat()),
+        "run_id",
     )
     return [
         (str(r["run_id"]), str(r["case_id"]), datetime.fromisoformat(str(r["started_at"])))
@@ -165,6 +197,8 @@ def finish_run(analysis: CaseAnalysis) -> bool:
     }
     supabase_client.table(_TABLE).update({
         "status": "superseded" if superseded else analysis.status,
+        # What the run read, which may differ from what it was asked for (service.run_requested).
+        "fingerprint": analysis.fingerprint,
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "error": analysis.error,
         "result": result,
@@ -200,11 +234,8 @@ def get_latest_summary(case_id: str) -> CaseAnalysis | None:
 
 def list_runs(case_id: str) -> list[dict[str, Any]]:
     """Every run of the case, newest first: status, times, fingerprint, score, level and findings (no trace)."""
-    rows = (
-        supabase_client.table(_TABLE).select(_RUN_LIST_COLUMNS).eq("case_id", case_id)
-        .order("started_at", desc=True).execute().data or []
-    )
-    return [_row(row) for row in rows]
+    rows = fetch_all(lambda: supabase_client.table(_TABLE).select(_RUN_LIST_COLUMNS).eq("case_id", case_id), "run_id")
+    return sorted(rows, key=lambda row: str(row["started_at"]), reverse=True)
 
 
 def get_run(case_id: str, run_id: str) -> CaseAnalysis | None:

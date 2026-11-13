@@ -7,7 +7,7 @@ resource "google_iam_workload_identity_pool" "github" {
 }
 
 resource "google_iam_workload_identity_pool_provider" "github" {
-  #checkov:skip=CKV_GCP_125:Trust is limited to this repository here and in deployer_wif; pinning sub to a branch would block deploys from main.
+  #checkov:skip=CKV_GCP_125:Trust is limited to this repository and its main branch here, and to the repository in deployer_wif.
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = "github"
   display_name                       = "GitHub OIDC"
@@ -16,7 +16,8 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.repository" = "assertion.repository"
     "attribute.ref"        = "assertion.ref"
   }
-  attribute_condition = "assertion.repository == \"${var.github_repo}\""
+  # Only workflows running on main get a token: a hand-started deploy from any other branch is refused.
+  attribute_condition = "assertion.repository == \"${var.github_repo}\" && assertion.ref == \"refs/heads/main\""
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }

@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 # {}, so the metadata check can say it couldn't run rather than reporting a
 # file with nothing in it.
 EXTRACTION_ERROR_KEY = "MetadataExtractionError"
+# A crafted file can hang exiftool; a worker thread must not wait on it for the whole push deadline.
+EXIFTOOL_TIMEOUT_SECONDS = 30
 
 
 def _failure(file_name: str, reason: str) -> dict:
@@ -44,7 +46,8 @@ def extract_metadata(
             ],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=EXIFTOOL_TIMEOUT_SECONDS,
         )
 
         data = json.loads(result.stdout)
@@ -60,6 +63,9 @@ def extract_metadata(
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip()[:200] or f"exit code {exc.returncode}"
         return _failure(file_name, f"exiftool failed ({detail})")
+
+    except subprocess.TimeoutExpired:
+        return _failure(file_name, f"exiftool timed out after {EXIFTOOL_TIMEOUT_SECONDS} seconds")
 
     except json.JSONDecodeError:
         return _failure(file_name, "exiftool returned output that couldn't be parsed")

@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import logging
 import json
+import re
 import threading
 import time
 import uuid
+from pathlib import PurePosixPath
 
 from storage3.types import URLOptions
 
@@ -25,9 +27,12 @@ _signed_lock = threading.Lock()
 def upload_file(
     case_id: str | None, filename: str, file_bytes: bytes, content_type: str
 ) -> str:
-    """Uploads the file and returns its storage path."""
+    """Uploads the file and returns its storage path. The officer's file name stays out of the path (it's on the row)."""
     storage_folder = case_id or "unassigned"
-    storage_path = f"{storage_folder}/{uuid.uuid4()}_{filename}"
+    extension = PurePosixPath(filename).suffix.lower()
+    if not re.fullmatch(r"\.[a-z0-9]{1,8}", extension):
+        extension = ""
+    storage_path = f"{storage_folder}/{uuid.uuid4()}{extension}"
     supabase_client.storage.from_(settings.SUPABASE_STORAGE_BUCKET).upload(
         storage_path, file_bytes, {"content-type": content_type}
     )

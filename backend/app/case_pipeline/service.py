@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
@@ -67,6 +66,10 @@ class AnalysisAlreadyRunning(Exception):
     pass
 
 
+class TooManyAnalyses(Exception):
+    pass
+
+
 def _check_outcomes(reports: dict[str, dict[str, Any]]) -> tuple[list[str], list[str]]:
     """
     (clean, could_not_run). A check is clean only if it examined something, raised
@@ -101,6 +104,9 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
     latest = await asyncio.to_thread(repository.latest_run_state, case_id)
     if latest is not None and state.is_live(*latest):
         raise AnalysisAlreadyRunning()
+    since = datetime.now(timezone.utc) - timedelta(hours=1)
+    if await asyncio.to_thread(repository.count_runs_since, case_id, since) >= settings.CASE_ANALYSIS_RUNS_PER_HOUR:
+        raise TooManyAnalyses()
 
     reports, _ = await asyncio.to_thread(
         detection_results.get_states, [d.id for d in documents]
@@ -108,8 +114,9 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
     return await _begin(case_id, state.compute_fingerprint(documents, reports), automatic=False)
 
 
-# Each case's automatic start, one at a time in this process.
-_auto_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+# Each case's automatic start, one at a time in this process; a lock is dropped once nothing holds or waits on it.
+_auto_locks: dict[str, asyncio.Lock] = {}
+_auto_users: dict[str, int] = {}
 
 
 async def start_if_due(case_id: str | None) -> None:
@@ -121,13 +128,22 @@ async def start_if_due(case_id: str | None) -> None:
     """
     if case_id is None or not settings.CASE_ANALYSIS_ENABLED:
         return
+    lock = _auto_locks.setdefault(case_id, asyncio.Lock())
+    _auto_users[case_id] = _auto_users.get(case_id, 0) + 1
     try:
-        async with _auto_locks[case_id]:
+        async with lock:
             fingerprint = await asyncio.to_thread(_due_fingerprint, case_id)
             if fingerprint is not None:
                 await _begin(case_id, fingerprint, automatic=True)
+    except AnalysisAlreadyRunning:
+        logger.info("Case %s: another instance already started this analysis", case_id)
     except Exception:
         logger.exception("Failed to start the case analysis of case %s automatically", case_id)
+    finally:
+        _auto_users[case_id] -= 1
+        if not _auto_users[case_id]:
+            _auto_users.pop(case_id, None)
+            _auto_locks.pop(case_id, None)
 
 
 def _due_fingerprint(case_id: str) -> str | None:
@@ -157,7 +173,10 @@ def _due_fingerprint(case_id: str) -> str | None:
 async def _begin(case_id: str, fingerprint: str, *, automatic: bool) -> CaseAnalysis:
     """Records a running run and asks the case-worker to run it."""
     run_id = str(uuid.uuid4())
-    await asyncio.to_thread(repository.insert_run, run_id, case_id, fingerprint)
+    try:
+        await asyncio.to_thread(repository.insert_run, run_id, case_id, fingerprint)
+    except repository.RunAlreadyStarted as exc:
+        raise AnalysisAlreadyRunning() from exc
     analysis = CaseAnalysis(
         run_id=run_id, case_id=case_id, status="running", fingerprint=fingerprint,
         started_at=datetime.now(timezone.utc),
@@ -179,13 +198,19 @@ async def _begin(case_id: str, fingerprint: str, *, automatic: bool) -> CaseAnal
 
 
 async def run_requested(case_id: str, run_id: str, fingerprint: str, started_at: datetime) -> CaseAnalysis:
-    """The case-worker side: runs a requested analysis over the documents as they are now."""
+    """
+    The case-worker side: runs a requested analysis over the documents as they are now. The run is labelled with
+    what it read, not what was asked for, so a change in between doesn't make it look out of date at once.
+    """
     documents = await asyncio.to_thread(document_repository.list_documents, case_id=case_id)
     reports, failed_ids = await asyncio.to_thread(
         detection_results.get_states, [d.id for d in documents]
     )
+    read = state.compute_fingerprint(documents, reports)
+    if read != fingerprint:
+        logger.info("Case %s changed between the request and the run of %s; labelling it with what it read", case_id, run_id)
     analysis = CaseAnalysis(
-        run_id=run_id, case_id=case_id, status="running", fingerprint=fingerprint, started_at=started_at,
+        run_id=run_id, case_id=case_id, status="running", fingerprint=read, started_at=started_at,
     )
     # The case-worker's scope counts this run's calls (workers/cases.py).
     await _execute(analysis, documents, reports, failed_ids)
@@ -221,6 +246,16 @@ async def _execute(
             await _store_result(analysis)
         except Exception:
             logger.exception("Failed to store the case analysis result for case %s", case_id)
+            # A run whose row never got its result isn't reported as complete; one whose row did (a later step
+            # failed) keeps its status.
+            error = "The analysis finished but its result couldn't be saved. Run it again."
+            try:
+                unsaved = await asyncio.to_thread(repository.fail_if_running, analysis.run_id, error)
+            except Exception:
+                logger.exception("Failed to mark case analysis run %s failed", analysis.run_id)
+                unsaved = True
+            if unsaved:
+                analysis.status, analysis.error = "failed", error
         await sync_stage(case_id)
         # The run row's update reaches viewers through Realtime.
         await push_case_snapshot(case_id, realtime_covers=True)
@@ -320,7 +355,9 @@ async def _media_check(case_id: str, documents: list[DocumentRecord], trace: Run
             company, source = (case.company_name if case else None), "case name"
         former = former_names_of(company, former_on_file)
         previous = await asyncio.to_thread(repository.latest_adverse_media, case_id)
-        check = reuse_recent(previous, company, former_names=former) or await run_adverse_media_check(company, former)
+        check = reuse_recent(previous, company, former_names=former) or await run_adverse_media_check(
+            company, former, case_id=case_id,
+        )
         trace.record(
             "adverse_media", status=check.status, reused=check.reused, sources=len(check.sources),
             company=check.query, company_from=source, former_names=check.former_names, summary=check.summary,

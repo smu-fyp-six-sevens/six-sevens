@@ -35,7 +35,7 @@ class Result:
 def _path(row: Row, path: str) -> Any:
     """A column, or a JSON path into one ("evidence->document_ids")."""
     value: Any = row
-    for key in path.split("->"):
+    for key in path.replace("->>", "->").split("->"):
         value = value.get(key) if isinstance(value, dict) else None
     return value
 

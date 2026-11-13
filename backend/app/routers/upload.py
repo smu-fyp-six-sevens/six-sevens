@@ -9,7 +9,7 @@ from postgrest.exceptions import APIError
 from pydantic import BaseModel
 
 from .. import case_service, document_repository, events, storage_service
-from ._dependencies import bad_gateway_on_error, ensure_case_editable, to_thread_or_502
+from ._dependencies import ensure_case_editable, to_thread_or_502
 from ..config import settings
 from ..events import officer_event, types
 from ..models import DocumentRecord, DocumentStatus
@@ -32,6 +32,17 @@ class BulkUploadResponse(BaseModel):
 
 _NO_CASE = "This case no longer exists."
 _NOT_SAVED = "This file couldn't be saved. Upload it again, and tell the team if it keeps happening."
+
+
+def _bytes_match_type(file_bytes: bytes, content_type: str) -> bool:
+    """The file's first bytes are what its declared type says (the browser's type alone isn't trusted)."""
+    if content_type == "application/pdf":
+        return b"%PDF-" in file_bytes[:1024]  # the spec allows a little junk before the header
+    if content_type == "image/png":
+        return file_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+    if content_type == "image/jpeg":
+        return file_bytes.startswith(b"\xff\xd8\xff")
+    return False
 
 async def _ingest_one(
     case_id: str | None, file: UploadFile, *, case_verified: bool = False
@@ -61,6 +72,11 @@ async def _ingest_one(
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"This file is over the {settings.MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB limit. Upload a smaller file.",
+        )
+    if not _bytes_match_type(file_bytes, file.content_type or ""):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="This file's contents don't match its type. Upload a real PDF, PNG or JPG file.",
         )
 
     if case_id is not None and not case_verified:
@@ -105,11 +121,7 @@ async def _ingest_one(
             detail="Failed to store the uploaded document record. Check Supabase table access.",
         ) from exc
 
-    with bad_gateway_on_error(
-        "Document was stored but could not be queued for processing.",
-        "Document %s stored but failed to enqueue for processing",
-        document.id,
-    ):
+    try:
         # AC1: queued, then the event hands it to the doc-worker.
         await asyncio.to_thread(
             document_repository.update_status, document.id, DocumentStatus.QUEUED, queued_at=datetime.now(timezone.utc)
@@ -118,6 +130,17 @@ async def _ingest_one(
             types.DOCUMENT_UPLOADED, document_id=document.id, case_id=case_id,
             detail={"filename": filename, "content_type": file.content_type, "size_bytes": len(file_bytes)},
         ))
+    except Exception as exc:
+        # Undo it, so uploading again doesn't leave a second copy behind.
+        logger.exception("Document %s stored but failed to enqueue for processing; removing it", document.id)
+        try:
+            await asyncio.to_thread(document_repository.remove_document, document)
+        except Exception:
+            logger.exception("Failed to remove document %s after its upload event failed", document.id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Document was stored but could not be queued for processing.",
+        ) from exc
 
     return document
 

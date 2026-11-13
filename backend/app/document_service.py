@@ -532,6 +532,9 @@ async def approve(document: DocumentRecord) -> DocumentRecord:
     except Exception:
         await asyncio.to_thread(document_repository.undo_approval, document.id, document.routing_status)
         raise
+    if skip:
+        # No detection run will end and start the analysis, so this approval may be the case's last decision.
+        await analysis_service.start_if_due(document.case_id)
     return present(approved, extracted_fields)
 
 
@@ -574,9 +577,9 @@ async def reject(document: DocumentRecord) -> DocumentRecord:
     if document.status in IN_FLIGHT_STATUSES:
         raise Refused("conflict", "This document is still being processed. Cancel it first, then reject it.")
 
-    rejected = await asyncio.to_thread(document_repository.reject_document, document.id)
+    rejected = await asyncio.to_thread(document_repository.reject_document, document.id, document.status)
     if rejected is None:
-        raise Refused("not_found", "Document not found")
+        raise Refused("conflict", "This document was just changed by someone else. Refresh to see where it stands.")
     fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document.id)
     await _audit(types.DOCUMENT_REJECTED, document, document_type=document.document_type)
     await analysis_service.start_if_due(document.case_id)
@@ -623,11 +626,12 @@ async def set_type(document: DocumentRecord, requested_type: str) -> None:
         )
         if document.fields_reviewed_at is not None:
             await asyncio.to_thread(document_repository.clear_fields_review, document.id)
+        requested_at = datetime.now(timezone.utc)
         await asyncio.to_thread(
             document_repository.update_status,
             document.id,
             DocumentStatus.EXTRACTING,
-            processing_started_at=datetime.now(timezone.utc),
+            processing_started_at=requested_at,
         )
     else:
         # Same type confirmed: the fields and evidence are still valid.
@@ -644,8 +648,10 @@ async def set_type(document: DocumentRecord, requested_type: str) -> None:
     detail = {"from_type": document.document_type, "to_type": document_type}
     if needs_extraction:
         # Starts the extraction rerun, so a failed publish fails the request like any other failure here.
+        # requested_at is the stamp the doc-worker claims the rerun with, so a repeated event runs nothing.
         await events.publish(officer_event(
-            types.DOCUMENT_RETYPED, document_id=document.id, case_id=document.case_id, detail=detail,
+            types.DOCUMENT_RETYPED, document_id=document.id, case_id=document.case_id,
+            detail={**detail, "requested_at": requested_at.isoformat()},
         ))
     else:
         await _audit(types.DOCUMENT_TYPE_CORRECTED, document, **detail)
@@ -663,8 +669,8 @@ async def _reread(document_id: str) -> DocumentRecord:
 
 async def retry(document: DocumentRecord) -> DocumentRecord:
     """
-    Re-enqueues a FAILED document, or one stuck in PROCESSING past the threshold (the in-memory queue
-    doesn't survive a restart). A merely queued or running one is refused: a second run would duplicate
+    Re-enqueues a FAILED document, or one stuck in PROCESSING past the threshold (its run died with the
+    instance). A merely queued or running one is refused: a second run would duplicate
     model calls and interleave writes. Cancel it first.
     """
     if document.status != DocumentStatus.FAILED and not monitoring.is_stuck_processing_for_retry(document):

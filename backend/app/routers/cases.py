@@ -11,6 +11,7 @@ from ..auth import current_actor
 from ..case_service import CaseRiskFilter, CaseSort
 from ..labels import requirement_label
 from ..case_stage import StageChangeNotAllowed
+from ..config import settings
 from ..events import officer_event, types
 from ._dependencies import get_case_or_404, get_editable_case_or_404, to_thread_or_502
 from ..case_match import CaseMatchResult
@@ -306,6 +307,12 @@ async def run_case_analysis(case_id: str, case: CaseRecord = Depends(get_editabl
     except analysis_service.AnalysisAlreadyRunning as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="An analysis is already running for this case."
+        ) from exc
+    except analysis_service.TooManyAnalyses as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"This case has been analysed {settings.CASE_ANALYSIS_RUNS_PER_HOUR} times in the last hour. "
+            "Try again later.",
         ) from exc
     except Exception as exc:
         logger.exception("Failed to start the analysis for case %s", case_id)

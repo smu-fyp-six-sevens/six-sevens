@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "pdfjs-dist": "6.3.289",
-    "playwright": "^1.63.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.18.3"
@@ -44,6 +43,7 @@
     "eslint-plugin-react-refresh": "^0.4.9",
     "jsdom": "26.1.0",
     "openapi-typescript": "7.4.4",
+    "playwright": "^1.63.0",
     "typescript": "^5.5.4",
     "vite": "^6.4.3",
     "vitest": "4.1.12"

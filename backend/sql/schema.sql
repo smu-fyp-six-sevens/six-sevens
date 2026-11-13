@@ -1,8 +1,10 @@
 -- The live Supabase schema (public, plus the storage bucket), as read on 2026-11-01 plus the case list columns, view
--- and indexes of the same day. The access rules (secret key only, no anon grants or policies) are the target from
--- 2026-11-07: run sql/2026-11-07_step1_run_claim.sql and sql/2026-11-07_step2_secret_key_only.sql on the live database to match.
+-- and indexes of the same day. The access rules (secret key only, no anon grants or policies) are the target set on
+-- 2026-11-07; the SQL files that applied them aren't kept in the repo.
 -- Agent learning (finding_feedback's keys and indexes, feedback_counts, type_corrections, field_edit_counts) was
 -- migrated live on 2026-11-10.
+-- The one-running-analysis index, the feedback_counts fix, the finding_feedback grants and the audit_events action
+-- index were applied live on 2026-11-13.
 -- A snapshot, not a migration: it rebuilds an empty database (staging, a fresh project). Keep it in step by hand
 -- when the schema changes.
 
@@ -289,10 +291,12 @@ create index case_analysis_runs_case_started_idx on public.case_analysis_runs (c
 create index case_notes_case_idx on public.case_notes (case_id, created_at);
 create index audit_events_case_idx on public.audit_events (case_id, occurred_at desc);
 create index audit_events_document_idx on public.audit_events (document_id, occurred_at desc);
+create index audit_events_action_idx on public.audit_events (action, occurred_at desc);
 create index cases_created_idx on public.cases (created_at desc, id);
 create index cases_status_idx on public.cases (status);
 create index documents_status_idx on public.documents (status);
 create index case_analysis_runs_running_idx on public.case_analysis_runs (started_at) where status = 'running'::text;
+create unique index case_analysis_runs_one_running_idx on public.case_analysis_runs (case_id, fingerprint) where status = 'running'::text;
 create index risk_scores_case_scored_idx on public.risk_scores (case_id, scored_at desc);
 create index case_notes_document_idx on public.case_notes (document_id);
 create index case_notes_parent_idx on public.case_notes (parent_id);
@@ -407,7 +411,7 @@ as $$
                 else 'confirmed'
             end as lesson
         from public.finding_feedback f
-        where f.scope = p_scope and f.check_name = any(p_check_names) and f.case_id <> p_exclude_case_id
+        where f.scope = p_scope and f.check_name = any(p_check_names) and f.case_id is distinct from p_exclude_case_id
             -- Only the last 6 months teach: an old lesson may describe documents and checks that have since changed.
             and f.updated_at >= now() - interval '6 months'
     ),
@@ -496,8 +500,6 @@ alter table public.detection_results enable row level security;
 alter table public.findings enable row level security;
 alter table public.review_sign_offs enable row level security;
 alter table public.finding_feedback enable row level security;
-grant select, insert, update, delete on public.review_sign_offs to service_role;
-grant select, insert, update, delete on public.finding_feedback to service_role;
 alter table public.langgraph_trace enable row level security;
 alter table public.case_analysis_runs enable row level security;
 alter table public.risk_scores enable row level security;
@@ -513,8 +515,9 @@ do $$
 declare t text;
 begin
     foreach t in array array[
-        'cases', 'documents', 'extracted_fields', 'detection_results', 'findings', 'review_sign_offs', 'langgraph_trace',
-        'case_analysis_runs', 'risk_scores', 'case_notes', 'audit_events', 'latest_risk_scores', 'case_stage_counts'
+        'cases', 'documents', 'extracted_fields', 'detection_results', 'findings', 'review_sign_offs', 'finding_feedback',
+        'langgraph_trace', 'case_analysis_runs', 'risk_scores', 'case_notes', 'audit_events', 'latest_risk_scores',
+        'case_stage_counts'
     ] loop
         execute format('revoke all on public.%I from anon, authenticated, service_role', t);
     end loop;
@@ -522,8 +525,8 @@ end $$;
 
 grant select, insert, update, delete
     on public.cases, public.documents, public.extracted_fields, public.detection_results, public.findings,
-       public.review_sign_offs, public.langgraph_trace, public.case_analysis_runs, public.risk_scores,
-       public.case_notes
+       public.review_sign_offs, public.finding_feedback, public.langgraph_trace, public.case_analysis_runs,
+       public.risk_scores, public.case_notes
     to service_role;
 grant select, insert on public.audit_events to service_role;
 grant select on public.latest_risk_scores, public.case_stage_counts to service_role;

@@ -81,7 +81,6 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await approveButton(page).click();
 
     // MA-009: approved and not yet reported on, the page says it's scanning, and offers to cancel.
-    await expect(page.locator('.details-label', { hasText: 'Routing Outcome' }).locator('xpath=following-sibling::strong')).toHaveText('Approved');
     expect(backend.requestsTo('POST', `/documents/${document.id}/approve`)).toHaveLength(1);
     await expect(documentStatus(page)).toHaveText('Scanning…', { timeout: 5000 });
     await expect(detectionPanel(page)).toContainText('Scanning…');

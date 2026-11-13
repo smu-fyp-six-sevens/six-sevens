@@ -19,7 +19,12 @@ import re
 # A field is protected when any underscore-separated part of its name is one of these.
 _PROTECTED_FIELD_PARTS = frozenset({
     "sex", "gender", "race", "ethnic", "ethnicity", "nationality", "citizenship", "religion",
-    "marital", "spouse", "dob", "birth", "birthplace", "age", "disability", "salutation", "mrz",
+    "marital", "spouse", "dob", "birth", "birthplace", "age", "disability", "salutation", "honorific", "mrz",
+    "residency",
+})
+# Protected only as a whole name: "title" is Mr/Mrs/Dr, but "job_title" is not; a pass type stands in for nationality.
+_PROTECTED_FIELD_NAMES = frozenset({
+    "title", "pass_type", "work_pass_type", "pass_category", "residential_status", "residence_status",
 })
 
 _PROTECTED_TEXT_RE = re.compile(
@@ -42,7 +47,10 @@ _PROTECTED_TEXT_RE = re.compile(
 
 
 def is_protected_field(name: str) -> bool:
-    return any(part in _PROTECTED_FIELD_PARTS for part in re.split(r"[^a-z0-9]+", str(name).lower()) if part)
+    # camelCase splits too: "dateOfBirth" is date_of_birth.
+    snake = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", str(name)).lower()
+    parts = [part for part in re.split(r"[^a-z0-9]+", snake) if part]
+    return "_".join(parts) in _PROTECTED_FIELD_NAMES or any(part in _PROTECTED_FIELD_PARTS for part in parts)
 
 
 def has_protected_text(text: str) -> bool:

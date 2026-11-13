@@ -141,11 +141,10 @@ def find_cases_starting_with(q: str, limit: int) -> list[CaseRecord]:
 
 
 def find_case_numbered(q: str) -> CaseRecord | None:
-    """The case whose number (or id) is exactly q, ignoring case."""
-    quoted = _quoted(q)
+    """The case whose number (or id) is exactly q, ignoring case. Numbers are upper case (GLDB-…), ids lower."""
     result = (
         supabase_client.table("cases").select("*")
-        .or_(f"greenlink_case_id.ilike.{quoted},id.eq.{quoted}").limit(1).execute()
+        .or_(f"greenlink_case_id.eq.{_quoted(q.upper())},id.eq.{_quoted(q.lower())}").limit(1).execute()
     )
     return CaseRecord(**_row(result.data[0])) if result.data else None
 

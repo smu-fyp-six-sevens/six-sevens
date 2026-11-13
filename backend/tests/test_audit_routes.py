@@ -27,7 +27,7 @@ def test_the_trail_is_read_for_the_case_or_document_asked_for() -> None:
 
     assert response.status_code == 200
     assert [(e["type"], e["actor"]) for e in response.json()] == [(types.DOCUMENT_APPROVED, "demo")]
-    list_events.assert_called_once_with(case_id="case-1", document_id="doc-1", limit=50)
+    list_events.assert_called_once_with(case_id="case-1", document_id="doc-1", limit=50, before=None)
 
 
 def test_the_trail_limit_is_bounded() -> None:

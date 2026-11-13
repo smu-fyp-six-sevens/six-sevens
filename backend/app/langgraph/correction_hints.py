@@ -15,12 +15,31 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Iterable
+import time
+from collections.abc import Callable, Iterable
+from typing import TypeVar, cast
 
 from .. import corrections_repository
+from ..config import settings
 from ..corrections_repository import FieldEdit, TypeCorrection
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+# Both lookups scan audit_events, and the counts move slowly: every document in a burst shares one read.
+_cache: dict[tuple, tuple[float, object]] = {}
+
+
+async def _cached(key: tuple, read: Callable[[], list[T]]) -> list[T]:
+    """A failed read raises and isn't cached, so the next document tries again."""
+    ttl = settings.CORRECTION_HINTS_CACHE_SECONDS
+    hit = _cache.get(key)
+    if ttl > 0 and hit is not None and hit[0] > time.monotonic():
+        return cast(list[T], hit[1])
+    value = await asyncio.to_thread(read)
+    if ttl > 0:
+        _cache[key] = (time.monotonic() + ttl, value)
+    return value
 
 # What tells the "to" type apart from the "from" type, for confusions the team expects. Keyed (from_type, to_type).
 SIGNALS: dict[tuple[str, str], str] = {
@@ -94,7 +113,7 @@ def _cases(n: int) -> str:
 
 async def load_type_corrections() -> list[TypeCorrection]:
     try:
-        return await asyncio.to_thread(corrections_repository.type_corrections)
+        return await _cached(("types",), corrections_repository.type_corrections)
     except Exception:
         logger.exception("Failed to read the classifier's corrections")
         return []
@@ -134,7 +153,7 @@ def top_type(result: object) -> str | None:
 
 async def load_field_edits(document_type: str) -> list[FieldEdit]:
     try:
-        return await asyncio.to_thread(corrections_repository.field_edits, document_type)
+        return await _cached(("fields", document_type), lambda: corrections_repository.field_edits(document_type))
     except Exception:
         logger.exception("Failed to read the extractor's corrections for %s", document_type)
         return []

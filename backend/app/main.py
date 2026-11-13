@@ -1,6 +1,7 @@
 import asyncio
 import importlib.util
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 
@@ -64,9 +65,18 @@ def check_signing_key() -> None:
         raise RuntimeError("AUTH_SECRET_KEY is empty; set it in Secret Manager")
 
 
+def check_push_verification() -> None:
+    """A deployed service taking pushes must check Pub/Sub's token, or anyone could post it events."""
+    if IN_PROCESS or not registry.installed_roles() or os.environ.get("PUBSUB_EMULATOR_HOST"):
+        return
+    if not (settings.PUSH_AUDIENCE and settings.PUSH_SERVICE_ACCOUNT):
+        raise RuntimeError("PUSH_AUDIENCE and PUSH_SERVICE_ACCOUNT must both be set (deploy/terraform/run.tf)")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     check_signing_key()
+    check_push_verification()
     logger.info("Starting roles %s with %s events", sorted(ROLES), settings.EVENT_TRANSPORT)
     metrics.set_info(ROLES)
     background_tasks: list[asyncio.Task[None]] = []
@@ -121,7 +131,14 @@ async def _bring_case_stages_up_to_date() -> None:
     logger.info("Case stages brought up to date at startup (%d case(s) moved)", moved)
 
 
-app = FastAPI(title="fyp API", lifespan=lifespan)
+# The interactive docs and schema are for local runs only; deployed, Kong's catch-all would serve them to anyone.
+# (scripts/export_openapi.py reads app.openapi() directly, so it doesn't need the URL.)
+app = FastAPI(
+    title="fyp API", lifespan=lifespan,
+    docs_url="/docs" if IN_PROCESS else None,
+    redoc_url="/redoc" if IN_PROCESS else None,
+    openapi_url="/openapi.json" if IN_PROCESS else None,
+)
 telemetry.setup(app)
 
 

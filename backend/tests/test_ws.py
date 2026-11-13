@@ -89,7 +89,7 @@ def test_issue_ws_ticket_returns_a_usable_ticket() -> None:
     # real require_auth enforcement test on other routes; nothing route-
     # specific to re-test here beyond "the endpoint hands back a ticket
     # that actually works".
-    response = client.post("/ws/tickets")
+    response = client.post("/ws/tickets", params={"case_id": "case-1"})
     assert response.status_code == 200
     ticket = response.json()["ticket"]
 

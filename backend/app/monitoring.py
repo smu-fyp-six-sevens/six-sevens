@@ -26,18 +26,10 @@ def is_stuck(doc: DocumentRecord) -> bool:
 
 def is_stuck_processing_for_retry(doc: DocumentRecord) -> bool:
     """
-    True if `doc` has been in PROCESSING longer than
-    settings.STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS. Narrower than
-    is_stuck (PROCESSING only, not every in-flight status) and a much
-    longer threshold — this gates whether routers/documents.py's
-    retry_document can retry a document without waiting for it to reach
-    FAILED, distinct from get_stuck_documents' early-warning dashboard.
+    True if `doc` has been in PROCESSING longer than settings.STUCK_THRESHOLD_SECONDS: whether
+    routers/documents.py's retry_document can retry it without waiting for it to reach FAILED.
     """
-    if doc.status != DocumentStatus.PROCESSING:
-        return False
-    reference_time = doc.processing_started_at or doc.queued_at or doc.uploaded_at
-    elapsed = (datetime.now(timezone.utc) - reference_time).total_seconds()
-    return elapsed > settings.STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS
+    return doc.status == DocumentStatus.PROCESSING and is_stuck(doc)
 
 
 def get_stuck_documents() -> list[StuckDocument]:

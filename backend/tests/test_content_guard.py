@@ -318,7 +318,9 @@ def test_hidden_text_with_no_instruction_wording_is_not_blocked() -> None:
 
 
 async def _ingest_node(guard: dict) -> dict:
-    document = SimpleNamespace(case_id="case-1", filename="d.pdf", storage_path="cases/c/d.pdf")
+    document = SimpleNamespace(
+        case_id="case-1", filename="d.pdf", storage_path="cases/c/d.pdf", document_type=None, classification_confidence=None,
+    )
     with (
         patch.object(nodes.document_repository, "get_document", return_value=document),
         patch.object(nodes, "ingest_document_text", AsyncMock(return_value=("Net pay SGD 5,000.00", guard))),

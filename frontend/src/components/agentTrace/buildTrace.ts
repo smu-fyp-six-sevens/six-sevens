@@ -68,6 +68,8 @@ export interface TraceNode {
   group?: boolean;
   // A group of steps' time worked, where first to last could include a wait.
   seconds?: number;
+  // How sure the agent was: the classifier's confidence in the type, or the extractor's in the fields.
+  confidence?: number;
   error?: string;
   step: TraceStep;
   calls: LlmCall[];
@@ -336,6 +338,20 @@ const GROUP_OF = new Map(Object.entries(GROUP_MEMBERS).flatMap(([group, names]) 
 
 const groupOf = (name: string) => (name.startsWith('detection.review.') ? 'Specialists' : GROUP_OF.get(name));
 
+// The confidence a step reports, for the two steps that decide something (the type, the fields).
+function confidenceOf(step: TraceStep): number | undefined {
+  const reported = step.step === 'classification_finalised' || step.step === 'extraction' ? step.confidence : undefined;
+  return typeof reported === 'number' && Number.isFinite(reported) ? reported : undefined;
+}
+
+function newestConfidence(nodes: TraceNode[]): number | undefined {
+  for (const node of [...nodes].reverse()) {
+    const found = node.confidence ?? newestConfidence(node.children);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
 function emptyTotals(): TraceTotals {
   return { calls: 0, inputTokens: 0, outputTokens: 0, cost: 0, failures: 0, errors: 0 };
 }
@@ -373,6 +389,8 @@ function withGroups(parentKey: string, nodes: TraceNode[]): TraceNode[] {
     addTotals(group.totals, node.totals);
   }
   for (const group of groups.values()) {
+    // The newest one: a reclassification decides again.
+    group.confidence = newestConfidence(group.children);
     if (group.children.every((child) => child.kind === 'event')) {
       group.seconds = group.children.reduce((sum, child) => sum + (child.elapsed ?? 0), 0);
     }
@@ -430,6 +448,7 @@ export function buildTrace(steps: TraceStep[]): BuiltTrace {
       subtitle: describeStep(step),
       start: at,
       end: at,
+      confidence: confidenceOf(step),
       error,
       step,
       calls: [],

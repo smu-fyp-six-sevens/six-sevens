@@ -279,7 +279,7 @@ const COSTED_EVENTS = new Set([
   'document.analyzed', 'document.failed', 'document.detected', 'detection.failed', 'case.analysis.completed',
 ]);
 
-// STUCK_THRESHOLD_SECONDS and STUCK_PROCESSING_RETRY_THRESHOLD_SECONDS in backend config.py (both 600).
+// STUCK_THRESHOLD_SECONDS in backend config.py (600).
 const STUCK_THRESHOLD_MS = 600_000;
 const sinceLastProgress = (document: DocumentRow) =>
   Date.now() - new Date(document.processing_started_at ?? document.queued_at ?? document.uploaded_at).getTime();

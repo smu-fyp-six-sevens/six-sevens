@@ -31,21 +31,41 @@ class IngestError(Exception):
     """Raised when a document's file can't be downloaded or its text can't be extracted at all."""
 
 
+class RunStopped(Exception):
+    """The document left the status this run expected (an officer's cancel, a recovery, a delete): stop quietly."""
+
+
+# The statuses a document pipeline run owns: anything else was set by someone else.
+_RUNNING = [DocumentStatus.PROCESSING, DocumentStatus.EXTRACTING]
+
+
 # --- repository-writing helpers ---------------------------------------------
 
 
-async def set_status(document_id: str, status: DocumentStatus) -> None:
-    await asyncio.to_thread(document_repository.update_status, document_id, status)
+async def set_status(
+    document_id: str, status: DocumentStatus, *, expected: list[DocumentStatus], document_type: str | None = None,
+) -> None:
+    """A compare-and-swap: raises RunStopped when the document is no longer in one of `expected`."""
+    moved = await asyncio.to_thread(
+        document_repository.update_status, document_id, status,
+        document_type=document_type, expected_current_statuses=expected,
+    )
+    if not moved:
+        raise RunStopped(f"Document {document_id} left {[s.value for s in expected]} before it could become {status.value}")
 
 
 async def fail_document(document_id: str, reason: str, *, document_type: str | None = None) -> None:
-    await asyncio.to_thread(
+    failed = await asyncio.to_thread(
         document_repository.update_status,
         document_id,
         DocumentStatus.FAILED,
         failure_reason=reason,
         document_type=document_type,
+        expected_current_statuses=_RUNNING,
     )
+    if not failed:
+        logger.info("Document %s left its run before it could be marked failed (%s)", document_id, reason)
+        return
     logger.warning("Document %s marked FAILED — manual review required: %s", document_id, reason)
 
 
@@ -257,7 +277,7 @@ async def ingest_node(state: DocumentGraphState) -> dict:
 
     text_hash = text_cache.put(document_id, raw_text)
     trace.record(document_id, "ingest", case_id=document.case_id, filename=document.filename, text_available=bool(raw_text.strip()))
-    return {
+    state: dict = {
         "case_id": document.case_id,
         "filename": document.filename,
         "storage_path": document.storage_path,
@@ -265,6 +285,22 @@ async def ingest_node(state: DocumentGraphState) -> dict:
         "text_available": bool(raw_text.strip()),
         "guard_risk": guard["risk"],
     }
+    if is_officer_set_type(document):
+        # A recovery or retry of a document the officer typed: classifying again would overwrite their decision.
+        state["officer_type"] = True
+        state["classification"] = {
+            "document_type": document.document_type, "confidence": 1.0, "evidence": document.evidence or [],
+            "reasoning": "Set by the loan officer.", "needs_manual_review": False,
+            "fulfilled_requirements": document.fulfilled_requirements or [],
+        }
+        trace.record(document_id, "classification_skipped", document_type=document.document_type)
+    return state
+
+
+def is_officer_set_type(document) -> bool:
+    """set_type stores the officer's choice at confidence 1.0. A classifier rarely reaches 1.0, and then its type
+    was certain, so keeping it is no loss."""
+    return bool(document.document_type) and (document.classification_confidence or 0.0) >= 1.0
 
 
 async def finalise_classification_node(state: DocumentGraphState) -> dict:
@@ -309,7 +345,7 @@ async def extract_node(state: DocumentGraphState) -> dict:
     assert document_type is not None
     raw_text = text_cache.get(document_id) or ""
 
-    await set_status(document_id, DocumentStatus.EXTRACTING)
+    await set_status(document_id, DocumentStatus.EXTRACTING, expected=_RUNNING)
     # A low-confidence or review-flagged classification is extracted with the
     # generic schema, so the document's fields aren't tied to a guess. The
     # named type is still recorded for the officer to confirm.
@@ -382,7 +418,7 @@ async def record_escalation_node(state: DocumentGraphState) -> dict:
     attempts = state.get("attempts", 0) + 1
 
     await asyncio.to_thread(document_repository.record_escalation, document_id, escalation.get("reason", ""))
-    await set_status(document_id, DocumentStatus.PROCESSING)
+    await set_status(document_id, DocumentStatus.PROCESSING, expected=[DocumentStatus.EXTRACTING])
     logger.info(
         "Document %s: Extraction escalated classification (%s) — attempt %d/%d",
         document_id, escalation.get("reason"), attempts, settings.MAX_RECLASSIFICATION_ATTEMPTS,
@@ -399,6 +435,13 @@ async def mark_unresolved_escalation_node(state: DocumentGraphState) -> dict:
     them) — only the terminal status/reason is set here.
     """
     escalation = (state.get("extraction") or {}).get("escalation") or {}
+    if state.get("officer_type"):
+        # Same rule as the officer's retype rerun (pipeline._rerun_extraction): their type isn't reclassified.
+        document_type = (state.get("classification") or {}).get("document_type")
+        return {
+            "status": "failed",
+            "failure_reason": f"Extraction could not process this as {document_type}: {escalation.get('reason')}",
+        }
     return {
         "status": "failed",
         "failure_reason": (
@@ -414,9 +457,7 @@ async def mark_analyzed_node(state: DocumentGraphState) -> dict:
     assert classification is not None
     document_type = classification["document_type"]
     assert document_type is not None
-    await asyncio.to_thread(
-        document_repository.update_status, document_id, DocumentStatus.ANALYZED, document_type=document_type
-    )
+    await set_status(document_id, DocumentStatus.ANALYZED, expected=_RUNNING, document_type=document_type)
     text_cache.discard(document_id)
     trace.record(document_id, "done", final_status="analyzed")
     logger.info("Document %s: langgraph classification+extraction complete", document_id)

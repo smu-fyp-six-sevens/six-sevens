@@ -1,5 +1,5 @@
 """
-The sweeper (CLOUD_ARCHITECTURE_PLAN.md section 16): finds work stuck past its stage's limit and asks the worker
+The sweeper (CLOUD_ARCHITECTURE_PLAN.md section 5): finds work stuck past its stage's limit and asks the worker
 that owns the stage to recover it, with a recovery.requested event. It writes no state.
 
 Pub/Sub redelivery already covers a worker that dies mid-push. This covers what redelivery can't: an event lost
@@ -18,23 +18,25 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from . import audit, document_repository, events, metrics
+from . import audit, detection_results, document_repository, events, metrics
 from .case_pipeline import repository as analysis_repository
 from .config import settings
 from .events import Event, types
-from .models import DocumentRecord, DocumentStatus
+from .models import DocumentRecord, DocumentStatus, skips_detection
 
 logger = logging.getLogger("classifier_pipeline.sweeper")
 
 _ACTOR = "sweeper"
 CASE_ANALYSIS = "case_analysis"
 
-# Document status -> (owning role, whether it waits for an event or runs).
+# Document status -> (owning role, whether it is timed with the running limit). Approved waits for an event, but
+# on the running limit: a bulk approval legitimately queues documents behind the detection slots for minutes.
 _DOCUMENT_STAGES: dict[DocumentStatus, tuple[str, bool]] = {
     DocumentStatus.UPLOADED: ("doc-worker", False),
     DocumentStatus.QUEUED: ("doc-worker", False),
     DocumentStatus.PROCESSING: ("doc-worker", True),
     DocumentStatus.EXTRACTING: ("doc-worker", True),
+    DocumentStatus.APPROVED: ("detection-worker", True),
     DocumentStatus.DETECTING: ("detection-worker", True),
 }
 STAGES = [*(s.value for s in _DOCUMENT_STAGES), CASE_ANALYSIS]
@@ -59,24 +61,32 @@ def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def _document_since(document: DocumentRecord) -> datetime:
-    if document.status == DocumentStatus.DETECTING:
-        started = audit.latest_time(_DETECTION_STARTS, document.id)
-        if started is not None:
-            return _aware(started)
+def _document_since(document: DocumentRecord, detection_started: dict[str, datetime]) -> datetime:
+    started = detection_started.get(document.id)
+    if document.status in (DocumentStatus.APPROVED, DocumentStatus.DETECTING) and started is not None:
+        return _aware(started)
     return _aware(document.processing_started_at or document.queued_at or document.uploaded_at)
 
 
 def find_stuck(now: datetime, case_id: str | None = None) -> list[Stuck]:
     """Every document and case analysis past its stage's limit. Sync: run on a worker thread."""
     stuck: list[Stuck] = []
-    documents = document_repository.get_documents_in_status(list(_DOCUMENT_STAGES), include_fields=False)
+    documents = [
+        d for d in document_repository.get_documents_in_status(list(_DOCUMENT_STAGES), include_fields=False)
+        if case_id is None or d.case_id == case_id
+    ]
+    # Approved with a type and neither a report nor an error: its approval event was lost (a failed run keeps
+    # its error, and the officer retries it).
+    waiting = [d.id for d in documents if d.status == DocumentStatus.APPROVED and not skips_detection(d)]
+    reports, failed = detection_results.get_states(waiting, slim=True) if waiting else ({}, set())
+    never_started = set(waiting) - set(reports) - failed
+    documents = [d for d in documents if d.status != DocumentStatus.APPROVED or d.id in never_started]
+    detecting = [d.id for d in documents if d.status in (DocumentStatus.APPROVED, DocumentStatus.DETECTING)]
+    detection_started = audit.latest_times(_DETECTION_STARTS, detecting) if detecting else {}
     for document in documents:
-        if case_id is not None and document.case_id != case_id:
-            continue
         owner, running = _DOCUMENT_STAGES[document.status]
         limit = settings.STUCK_RUNNING_SECONDS if running else settings.STUCK_WAITING_SECONDS
-        since = _document_since(document)
+        since = _document_since(document, detection_started)
         if (now - since).total_seconds() > limit:
             stuck.append(Stuck(document.status.value, owner, since, limit, document.case_id, document_id=document.id))
     cutoff = now - timedelta(seconds=settings.CASE_ANALYSIS_TIMEOUT_SECONDS)
@@ -89,16 +99,28 @@ def find_stuck(now: datetime, case_id: str | None = None) -> list[Stuck]:
     return stuck
 
 
-def _earlier_attempts(item: Stuck, now: datetime) -> list[Event]:
+def _earlier_attempts(items: list[Stuck], now: datetime) -> dict[Stuck, list[Event]]:
     """
-    recovery.requested events already sent for this work to the same owner in the last day, newest first.
-    By owner, not stage: a rerun moves a document from queued back through processing, and each try counts.
+    For each item, recovery.requested events already sent for this work to the same owner in the last day, newest
+    first; read in one pass for the whole sweep. By owner, not stage: a rerun moves a document from queued back
+    through processing, and each try counts.
     """
-    if item.run_id is not None:
-        found = audit.find(types.RECOVERY_REQUESTED, case_id=item.case_id)
-        return [e for e in found if e.detail.get("run_id") == item.run_id]
-    found = audit.find(types.RECOVERY_REQUESTED, document_id=item.document_id, since=now - _ATTEMPT_WINDOW)
-    return [e for e in found if e.detail.get(types.OWNER_ATTRIBUTE) == item.owner]
+    document_ids = sorted({i.document_id for i in items if i.run_id is None and i.document_id})
+    case_ids = sorted({i.case_id for i in items if i.run_id is not None and i.case_id})
+    by_document = audit.find_many(
+        types.RECOVERY_REQUESTED, document_ids=document_ids, since=now - _ATTEMPT_WINDOW,
+    ) if document_ids else []
+    by_case = audit.find_many(types.RECOVERY_REQUESTED, case_ids=case_ids) if case_ids else []
+    attempts: dict[Stuck, list[Event]] = {}
+    for item in items:
+        if item.run_id is not None:
+            attempts[item] = [e for e in by_case if e.detail.get("run_id") == item.run_id]
+        else:
+            attempts[item] = [
+                e for e in by_document
+                if e.document_id == item.document_id and e.detail.get(types.OWNER_ATTRIBUTE) == item.owner
+            ]
+    return attempts
 
 
 async def sweep(case_id: str | None = None) -> int:
@@ -109,8 +131,9 @@ async def sweep(case_id: str | None = None) -> int:
         for stage in STAGES:
             metrics.stuck_work.labels(stage).set(sum(1 for item in stuck if item.stage == stage))
     published = 0
+    attempts = await asyncio.to_thread(_earlier_attempts, stuck, now) if stuck else {}
     for item in stuck:
-        earlier = await asyncio.to_thread(_earlier_attempts, item, now)
+        earlier = attempts.get(item, [])
         # The last request is still being worked on, or waiting in the owner's queue: give it a full period.
         if earlier and (now - _aware(earlier[0].occurred_at)).total_seconds() < item.limit_seconds:
             continue
