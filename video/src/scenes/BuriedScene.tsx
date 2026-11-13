@@ -175,7 +175,6 @@ export const BuriedScene: React.FC<{ showText?: boolean }> = ({ showText = true 
                 <div style={{ position: "absolute", left: 140, top: TABS_H, bottom: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
                   {frame >= s(T.wayIn) && <StretchWay frame={frame} />}
                   <Title text={COPY2.title2} enterAt={s(T.title2In)} exit="none" style={BIG} />
-                  <Title text={COPY2.footnote} enterAt={s(T.footnoteIn)} exit="none" style={{ fontFamily: fonts.ui, fontSize: 38, fontWeight: 500, color: colors.inkSoft, marginTop: 32 }} />
                 </div>
               </>
             )}

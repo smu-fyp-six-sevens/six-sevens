@@ -37,12 +37,24 @@ export const VO = (cues as { section: SectionName; timing: string; knob: string;
   { section: "buried", src: "vo/sigh.wav", from: at("buried", OVERWHELM3.finalPingIn + SIGH_AFTER_PING), frames: Math.ceil(1.9 * FPS) },
 ]);
 
-/** Music level by frame: quieter for the problem, lifted for the product, ducked under the voice. */
-export const MUSIC = { src: "music/soundtrack.mp3", quiet: 0.25, lifted: 0.42, ducked: 0.3, fadeFrames: 12 };
+/** Music level by frame: soft for the problem, a little fuller for the product, and dipped gently under the voice,
+ * easing down over DUCK_IN before a line and back up over DUCK_OUT after it, so the music never jumps. */
+export const MUSIC = { src: "music/soundtrack.mp3", quiet: 0.2, lifted: 0.28, ducked: 0.6, fadeFrames: 45 };
+const DUCK_IN = 12; // frames
+const DUCK_OUT = 20;
+const smooth = (x: number) => x * x * (3 - 2 * x);
 export const musicLevel = (f: number, vo = true) => {
-  const lifted = f >= start("portal") ? MUSIC.lifted : MUSIC.quiet;
-  const speaking = vo && VO.some((v) => f >= v.from - 6 && f <= v.from + v.frames + 6);
-  return lifted * (speaking ? MUSIC.ducked : 1);
+  const base = f >= start("portal") ? MUSIC.lifted : MUSIC.quiet;
+  if (!vo) return base;
+  // how far into a duck this frame is (0 = full music, 1 = fully dipped)
+  let d = 0;
+  for (const v of VO) {
+    const a = v.from, e = v.from + v.frames;
+    if (f >= a && f <= e) { d = 1; break; }
+    if (f < a && a - f < DUCK_IN) d = Math.max(d, smooth(1 - (a - f) / DUCK_IN));
+    if (f > e && f - e < DUCK_OUT) d = Math.max(d, smooth(1 - (f - e) / DUCK_OUT));
+  }
+  return base * (1 - (1 - MUSIC.ducked) * d);
 };
 
 export type Cue = { at: number; src: string; lead: number; volume: number };

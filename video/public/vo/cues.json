@@ -4,24 +4,16 @@
   "timing": "OVERWHELM3",
   "knob": "title1In",
   "file": "h1",
-  "text": "Corporate loan applications need extensive documentation.",
-  "dur": 2.803
+  "text": "Corporate loan applications need extensive documentation,",
+  "dur": 2.77
  },
  {
   "section": "buried",
   "timing": "OVERWHELM3",
   "knob": "wayIn",
   "file": "h2",
-  "text": "Waaaaay too many documents to review.",
-  "dur": 2.061
- },
- {
-  "section": "buried",
-  "timing": "OVERWHELM3",
-  "knob": "footnoteIn",
-  "file": "h3",
-  "text": "For one case.",
-  "dur": 0.792
+  "text": "which means waaaaaay too many documents to review.",
+  "dur": 2.654
  },
  {
   "section": "waiting",
@@ -92,16 +84,16 @@
   "timing": "UPLOAD",
   "knob": "headlineIn",
   "file": "u1",
-  "text": "Upload the documents.",
-  "dur": 1.073
+  "text": "First step, upload the documents.",
+  "dur": 1.599
  },
  {
   "section": "upload",
   "timing": "UPLOAD",
   "knob": "line1In",
   "file": "u2",
-  "text": "Every file is classified, and its key fields read.",
-  "dur": 2.822
+  "text": "Every file is classified, and its key fields red.",
+  "dur": 2.651
  },
  {
   "section": "upload",
@@ -116,32 +108,16 @@
   "timing": "DETECT",
   "knob": "headlineIn",
   "file": "d1",
-  "text": "Agents investigate every document.",
-  "dur": 1.934
- },
- {
-  "section": "detect",
-  "timing": "DETECT",
-  "knob": "planIn",
-  "file": "d2",
-  "text": "A lead agent plans the investigation.",
-  "dur": 2.185
- },
- {
-  "section": "detect",
-  "timing": "DETECT",
-  "knob": "specialistsIn",
-  "file": "d3",
-  "text": "Specialists check metadata, fonts, alignment, totals, spelling, and across documents.",
-  "dur": 5.523
+  "text": "Next step, agents investigate every document, which starts from the lead agent that instructs its various specialists for dimensions across metadata, font, alignment, all across documents.",
+  "dur": 11.416
  },
  {
   "section": "detect",
   "timing": "DETECT",
   "knob": "catchAt",
   "file": "d4",
-  "text": "A doctored figure, or a mismatched address, gets caught.",
-  "dur": 3.291
+  "text": "That way, a doctored figure or mismatched address gets caught.",
+  "dur": 2.558
  },
  {
   "section": "trace",
@@ -172,8 +148,8 @@
   "timing": "SCORE",
   "knob": "headlineIn",
   "file": "s1",
-  "text": "Every case gets a risk rating,",
-  "dur": 1.3
+  "text": "Next step, every case gets a risk rating,",
+  "dur": 1.862
  },
  {
   "section": "score",
@@ -212,8 +188,8 @@
   "timing": "FINALISE",
   "knob": "headlineIn",
   "file": "f1",
-  "text": "Then lock the case.",
-  "dur": 0.797
+  "text": "Finally, lock the case.",
+  "dur": 1.574
  },
  {
   "section": "finalise",
@@ -306,17 +282,9 @@
  {
   "section": "cta",
   "timing": "CTA",
-  "knob": "subIn",
-  "file": "c3",
-  "text": "Upload the package, and see what the portal catches.",
-  "dur": 1.935
- },
- {
-  "section": "cta",
-  "timing": "CTA",
   "knob": "buttonIn",
   "file": "c4",
-  "text": "Try it on your next case.",
-  "dur": 1.269
+  "text": "Try it out today.",
+  "dur": 0.715
  }
 ]

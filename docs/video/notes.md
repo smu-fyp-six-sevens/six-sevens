@@ -155,3 +155,8 @@
 - One ElevenLabs clip per on-screen caption (40, public/vo/cues.json), each starting 0.05 s after its caption rises, read word for word. "Agents read" spelled "reed" for the voice.
 - tools/fit-vo.py moves a caption (and the rest of its section) later when the previous line has not finished, and ends each section shortly after its last line or event (no carried-over holds). Clips sped 6% to stay under 2 minutes: 119.8 s.
 - CTA gains a subIn knob (the line under the name).
+
+## Wave 27 - stage intros, connected hook, softer music, faster close
+- Owner: hook reads "Corporate loan applications need extensive documentation, which means waaaay too many documents to review." ("For one case." dropped, on screen too); stage intros "First step," / "Next step," / "Finally,"; Detect intro in the owner's words then "That way, a doctored figure or mismatched address gets caught."; "key fields read" said "red"; the CTA sub line dropped and Brian ends "Try it out today." (button too), the CTA visuals faster; softer music with gentle fades under the voice; music to the last frame.
+- Music: quiet 0.2, lifted 0.28, ducked to 60% with a 0.4 s smooth ease in and 0.67 s ease out; soundtrack extended by a 12-bar loop (129.7 s) so it is full to the film's end, with a 1.5 s fade on the last frames.
+- 118.65 s. The sigh stays as is (owner).

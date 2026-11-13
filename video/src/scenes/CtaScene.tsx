@@ -41,7 +41,6 @@ export const CtaScene: React.FC<{ showText?: boolean }> = () => {
       <div style={{ position: "absolute", left: 0, right: 0, top: 300, display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
         <Title text={C.lead} enterAt={s(T.leadIn)} exit="none" align="center" style={{ fontFamily: fonts.display, fontSize: 48, fontWeight: 600, color: colors.inkSoft }} />
         <Title text={C.name} enterAt={s(T.nameIn)} exit="none" align="center" style={{ fontFamily: fonts.display, fontSize: 96, fontWeight: 700, letterSpacing: "-0.03em", color: colors.ink, lineHeight: 1.05 }} />
-        <Title text={C.sub} enterAt={s(T.subIn)} exit="none" align="center" style={{ fontFamily: fonts.display, fontSize: 34, fontWeight: 500, color: colors.inkSoft }} />
       </div>
 
       {btn > 0 && (

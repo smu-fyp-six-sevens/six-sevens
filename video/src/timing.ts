@@ -79,14 +79,14 @@ export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
 /** Section 8b, "finalise": the officer locks the case. All times in seconds from the start of the section. */
 export const FINALISE = {
-  length: 4.46,
+  length: 5.23,
   headlineIn: 0.2,        // "Then lock the case."
   summaryClick: 0.6,      // on the Additional Documents page, the cursor clicks "Summary" in the sidebar
-  readyAt: 1.15,          // the case summary: "Ready to Finalise"
-  buttonClick: 2.1,       // the cursor clicks "Finalise Case"
-  confirmAt: 2.25,        // the confirmation: view-only, can't be undone
-  confirmClick: 3.3,      // it confirms
-  doneAt: 3.45,           // "Finalised": the case is locked, view-only
+  readyAt: 1.92,          // the case summary: "Ready to Finalise"
+  buttonClick: 2.87,       // the cursor clicks "Finalise Case"
+  confirmAt: 3.02,        // the confirmation: view-only, can't be undone
+  confirmClick: 4.07,      // it confirms
+  doneAt: 4.22,           // "Finalised": the case is locked, view-only
 };
 
 /** Section 9, "dashboard": a tour of the dashboard over a month of cases; the camera follows the page. */
@@ -116,25 +116,25 @@ export const DIFFERENCE = {
 
 /** Section 11, "cta". */
 export const CTA = {
-  length: 8.62,
+  length: 5.93,
   leadIn: 0.2,            // "Bring your next loan case."
   nameIn: 1.99,            // "GLDB Anomaly Detection Portal"
-  subIn: 4.03,             // "Upload the package, and see what the portal catches."
-  buttonIn: 6.12,          // the button pops in...
-  hoverAt: 7.42,           // ...the cursor arrives...
-  pressAt: 8.02,           // ...and presses it
+  subIn: 2.39,             // "Upload the package, and see what the portal catches."
+  buttonIn: 4.03,          // the button pops in...
+  hoverAt: 4.93,           // ...the cursor arrives...
+  pressAt: 5.33,           // ...and presses it
 };
 
 /** Section 6, "detect" (how it works, step 2). All times in seconds from the start of the section. */
 export const DETECT = {
-  length: 14.19,
+  length: 14.73,
   headlineIn: 0.2,        // "Agents investigate every document."
-  planIn: 2.28,           // the lead agent's card; its plan types out...
-  planEnd: 4.53,           // ...line by line
-  specialistsIn: 4.83,     // the six checks branch out under it and start running...
-  checksEnd: 7.73,         // ...finishing one after another by here (four turn up a finding)
-  catchAt: 10.5,           // the two catches: the doctored figure...
-  addressAt: 11.8,         // ...and the mismatched address
+  planIn: 0.15,           // the lead agent's card; its plan types out...
+  planEnd: 2.4,           // ...line by line
+  specialistsIn: 2.7,     // the six checks branch out under it and start running...
+  checksEnd: 5.6,         // ...finishing one after another by here (four turn up a finding)
+  catchAt: 11.77,           // the two catches: the doctored figure...
+  addressAt: 13.07,         // ...and the mismatched address
 };
 
 /** Section 7, "trace" (how it works, step 2 continued). */
@@ -153,22 +153,22 @@ export const TRACE = {
 
 /** Section 8, "score" (how it works, step 3). */
 export const SCORE = {
-  length: 14.79,
+  length: 15.35,
   headlineIn: 0.2,        // "Every case gets a risk rating."
-  line1In: 1.65,           // "With the exact evidence behind it."
-  gaugeAt: 2.05,           // the risk gauge is ringed...
-  docsAt: 3.05,            // ...then the documents to review
-  openAt: 4.35,            // the cursor opens the bank statement's review
-  reviewAt: 4.75,          // "What was flagged, where, and why." The three are tagged in turn:
-  whatAt: 5.35,
-  whereAt: 6.15,
-  whyAt: 6.95,
-  tickAt: 8.45,            // "Officers confirm or dismiss...": the cursor ticks the metadata finding as wrong...
-  noteAt: 9.15,            // ...picks a reason and types a note...
-  saveAt: 11.05,           // ...and saves the review
-  addAt: 12.25,            // swipe to Additional Documents: "And it recommends the documents that would settle it."
-  nowAt: 12.95,            // "Now 72 (High) -> Best case 20 (Low)" is ringed...
-  recsStart: 13.65,        // ...then each recommended document lights up in turn
+  line1In: 2.21,           // "With the exact evidence behind it."
+  gaugeAt: 2.61,           // the risk gauge is ringed...
+  docsAt: 3.61,            // ...then the documents to review
+  openAt: 4.91,            // the cursor opens the bank statement's review
+  reviewAt: 5.31,          // "What was flagged, where, and why." The three are tagged in turn:
+  whatAt: 5.91,
+  whereAt: 6.71,
+  whyAt: 7.51,
+  tickAt: 9.01,            // "Officers confirm or dismiss...": the cursor ticks the metadata finding as wrong...
+  noteAt: 9.71,            // ...picks a reason and types a note...
+  saveAt: 11.61,           // ...and saves the review
+  addAt: 12.81,            // swipe to Additional Documents: "And it recommends the documents that would settle it."
+  nowAt: 13.51,            // "Now 72 (High) -> Best case 20 (Low)" is ringed...
+  recsStart: 14.21,        // ...then each recommended document lights up in turn
 };
 
 /** Section 5, "upload" (how it works, step 1). All times in seconds from the start of the section. */
@@ -285,7 +285,7 @@ export const WAITING = {
 
 /** v3 hook. All times in seconds from the start of the hook. */
 export const OVERWHELM3 = {
-  length: 9.61,            // whole hook, including the hold on the final ping
+  length: 9.25,            // whole hook, including the hold on the final ping
   title1In: 0.2,          // "Corporate loan applications need extensive documentation."
   title1Out: 3.45,         // ...lifts away
   firstDocIn: 0.3,        // first PDF window opens
@@ -293,15 +293,15 @@ export const OVERWHELM3 = {
   ramp: 0.75,             // how sharply those windows speed up: 1 = steady, 0.5 = slow start
   docPop: 0.2,            // how long one window takes to pop open
   firstTabIn: 0.25,       // tabs pile up across the top between these two times
-  lastTabIn: 6.96,
+  lastTabIn: 6.6,
   wayIn: 3.75,            // "Way" appears
   stretchStart: 4.0,      // the "a"s start sliding in (documents open along the way)...
-  stretchEnd: 5.96,        // ...and the word reaches full length. Starts slow, speeds up, eases out at the end
+  stretchEnd: 5.6,        // ...and the word reaches full length. Starts slow, speeds up, eases out at the end
   stretchEase: 0.6,       // 0 = steady pace, 1 = very slow start and end
   title2In: 4.1,          // "too many documents to review."
-  footnoteIn: 5.96,        // "For one case."
-  pings: [1.6, 2.7, 4.6, 6.16, 6.76], // one time per message in PINGS3
-  finalPingIn: 7.46,       // everything stops and dims; the big ping lands. The rest is the hold for your sigh
+  footnoteIn: 5.6,        // "For one case."
+  pings: [1.6, 2.7, 4.6, 5.8, 6.4], // one time per message in PINGS3
+  finalPingIn: 7.1,       // everything stops and dims; the big ping lands. The rest is the hold for your sigh
   dim: 0.25,              // how long the dim takes
   pushIn: 1.04,           // the camera's slow push until the final ping (1 = none)
 };

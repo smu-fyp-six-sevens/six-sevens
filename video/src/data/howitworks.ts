@@ -89,7 +89,7 @@ export const ADDITIONAL_BOXES = {
 // ---- Sections 9-11: the business value and the call to action ----------------------------------
 
 export const FINALISE_COPY = {
-  headline: "Then lock the case.",
+  headline: "Finally, lock the case.",
   beats: [
     { text: "Finalised cases become view-only, with every step on record.", at: "readyAt", accent: true },
   ],
@@ -138,5 +138,5 @@ export const CTA_COPY = {
   lead: "Bring your next loan case.",
   name: "GLDB Anomaly Detection Portal",
   sub: "Upload the package, and see what the portal catches.",
-  button: "Try it on your next case",
+  button: "Try it out today",
 };
