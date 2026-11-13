@@ -76,7 +76,7 @@ Pub/Sub redelivery covers a worker dying mid-request; the sweeper covers the res
 
 ## 6. Delivery and security
 
-**CI** (`ci-cd.yml`, PRs and pushes to `main`, not docs-only): backend (ruff and pyright on `app` and `tests`, pytest with coverage), frontend (lint, build, Playwright), security (Checkov; pip-audit and `npm audit` high every run; Snyk only when lock files change, weekly or by hand, non-blocking until its quota resets; Terraform fmt/validate), infrastructure (Kong config parses, compose files valid, dashboard PromQL parses with promtool; on a PR, the images build). All blocking except Snyk for now.
+**CI** (`ci-cd.yml`, PRs and pushes to `main`, not docs-only): backend (ruff and pyright on `app` and `tests`, pytest with coverage), frontend (lint, build, Playwright), security (Checkov; pip-audit and `npm audit` high every run; Snyk only when lock files change, weekly or by hand, non-blocking until its quota resets; Terraform fmt/validate; Kong config parses, compose files valid, dashboard PromQL parses with promtool; on a PR, the images build: all in the one security job, to save a billed minute). All blocking except Snyk for now.
 
 **Deploy** (`deploy.yml`, after CI on `main` or by hand; one at a time):
 1. Build each image once (skipping any the commit already has).
