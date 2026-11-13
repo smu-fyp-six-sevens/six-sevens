@@ -163,3 +163,6 @@
 
 ## Wave 28 - shorter Detect intro, pause before Trace
 - Detect intro 29 -> 17 words ("Next step, agents investigate every document. A lead agent directs its specialists across metadata, fonts, and alignment."), 11.4 s -> 7.0 s; 1.2 s of quiet after "...gets caught" (TAILS in fit-vo.py). Film 115.1 s.
+
+## Wave 29 - faster bad-actor section
+- Owner: the "Even worse..." section at most 6.5 s, text sooner, tampering faster. Now 5.35 s: edit finishes by 2.55 s (was 3.9), second caption at 2.3 s (was 4.5), shrink at 3.55 s; t1/t2 sped 12%. Film 113.4 s; stems re-exported.

@@ -238,18 +238,18 @@ export const PORTAL = {
 
 /** Section 3, "tamper". All times in seconds from the start of the section. */
 export const TAMPER = {
-  length: 7.0,            // whole section
+  length: 5.35,            // whole section
   panelsIn: -0.25,        // the two halves land. Negative = already arriving on the first frame
-  line1In: 0.3,           // "Even worse, when bad actors are involved,"
-  cursorIn: 1.1,          // the text cursor appears on the statement...
-  cursorAt: 1.9,          // ...and reaches the closing balance
-  select: 2.1,            // the figure gets selected
-  erase: 2.6,             // and deleted
-  typeStart: 2.8,         // the new figure is typed...
-  typeEnd: 3.9,           // ...character by character
-  line2In: 4.5,           // "smaller anomalies are even harder to catch."
-  shrinkStart: 5.3,       // the statement shrinks into the pile...
-  shrinkEnd: 6.4,         // ...and lands among the case's other documents
+  line1In: 0.15,           // "Even worse, when bad actors are involved,"
+  cursorIn: 0.55,          // the text cursor appears on the statement...
+  cursorAt: 1.05,          // ...and reaches the closing balance
+  select: 1.2,            // the figure gets selected
+  erase: 1.55,             // and deleted
+  typeStart: 1.7,         // the new figure is typed...
+  typeEnd: 2.55,           // ...character by character
+  line2In: 2.3,           // "smaller anomalies are even harder to catch."
+  shrinkStart: 3.55,       // the statement shrinks into the pile...
+  shrinkEnd: 4.45,         // ...and lands among the case's other documents
   pileStagger: 0.04,      // seconds between the other documents appearing
 };
 
