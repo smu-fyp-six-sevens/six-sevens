@@ -1,0 +1,38 @@
+#,file,start (mm:ss.sss),start (seconds),length (seconds),section,line
+1,01-buried-h1.wav,00:00.250,0.25,2.77,buried,"Corporate loan applications need extensive documentation,"
+2,02-buried-h2.wav,00:03.800,3.8,2.654,buried,which means waaaaaay too many documents to review.
+3,03-buried-sigh.wav,00:07.350,7.35,1.76,buried,[sigh]
+4,04-waiting-w1.wav,00:09.600,9.6,3.345,waiting,"A loan officer may spend over an hour staring at details on the screen,"
+5,05-waiting-w2.wav,00:13.200,13.2,3.593,waiting,while the loan customer anxiously waits on the other end for any news of approval.
+6,06-tamper-t1.wav,00:18.000,18.0,1.933,tamper,"Even worse, when bad actors are involved,"
+7,07-tamper-t2.wav,00:22.200,22.2,1.948,tamper,smaller anomalies are even harder to catch.
+8,08-portal-p1.wav,00:24.800,24.8,1.401,portal,So that's why we introduce...
+9,09-portal-p2.wav,00:26.550,26.55,2.263,portal,the G-L-D-B Anomaly Detection Portal.
+10,10-portal-p3.wav,00:30.900,30.9,1.538,portal,"Agents read every document,"
+11,11-portal-p4.wav,00:33.600,33.6,1.184,portal,and flag what doesn't add up.
+12,12-upload-u1.wav,00:37.000,37.0,1.599,upload,"First step, upload the documents."
+13,13-upload-u2.wav,00:40.500,40.5,2.651,upload,"Every file is classified, and its key fields read."
+14,14-upload-u3.wav,00:44.400,44.4,0.981,upload,Even from scans.
+15,15-detect-d1.wav,00:47.800,47.8,7.011,detect,"Next step, agents investigate every document. A lead agent directs its specialists across metadata, fonts, and alignment."
+16,16-detect-d4.wav,00:54.960,54.96,2.558,detect,"That way, a doctored figure or mismatched address gets caught."
+17,17-trace-r1.wav,00:58.970,58.97,1.337,trace,And it's not a black box.
+18,18-trace-r2.wav,01:00.460,60.46,3.779,trace,"The agent trace shows every step, every tool call, and what it returned."
+19,19-trace-r3.wav,01:06.160,66.16,1.391,trace,Every finding can be audited.
+20,20-score-s1.wav,01:10.260,70.26,1.862,score,"Next step, every case gets a risk rating,"
+21,21-score-s2.wav,01:12.270,72.27,1.617,score,with the exact evidence behind it.
+22,22-score-s3.wav,01:15.370,75.37,2.671,score,"What was flagged, where, and why."
+23,23-score-s4.wav,01:19.070,79.07,3.412,score,"Officers confirm or dismiss each finding, and add notes."
+24,24-score-s5.wav,01:22.870,82.87,2.14,score,And it recommends the documents that would settle it.
+25,25-finalise-f1.wav,01:25.610,85.61,1.574,finalise,"Finally, lock the case."
+26,26-finalise-f2.wav,01:27.330,87.33,2.915,finalise,"Finalised cases become view-only, with every step on record."
+27,27-dashboard-b1.wav,01:30.840,90.84,1.135,dashboard,"Every case, at a glance."
+28,28-dashboard-b2.wav,01:32.120,92.12,2.261,dashboard,"The whole pipeline, from upload to finalised."
+29,29-dashboard-b3.wav,01:34.530,94.53,2.997,dashboard,"The most common flags, across every case."
+30,30-dashboard-b4.wav,01:37.680,97.68,1.944,dashboard,Risk across every case in view.
+31,31-dashboard-b5.wav,01:39.770,99.77,1.394,dashboard,And the riskiest cases first.
+32,32-difference-x1.wav,01:41.760,101.76,2.328,difference,What took hours of screening now takes minutes.
+33,33-difference-x2.wav,01:44.240,104.24,2.909,difference,The AI does the reading. Your loan officers make the call.
+34,34-difference-x3.wav,01:47.300,107.3,1.508,difference,And customers hear back sooner.
+35,35-cta-c1.wav,01:49.410,109.41,1.638,cta,Bring your next loan case.
+36,36-cta-c2.wav,01:51.200,111.2,1.893,cta,G-L-D-B Anomaly Detection Portal.
+37,37-cta-c4.wav,01:53.240,113.24,0.715,cta,Try it out today.
