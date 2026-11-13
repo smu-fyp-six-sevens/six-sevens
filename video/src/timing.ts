@@ -91,13 +91,13 @@ export const FINALISE = {
 
 /** Section 9, "dashboard": a tour of the dashboard over a month of cases; the camera follows the page. */
 export const DASHBOARD = {
-  length: 10.92,
+  length: 11.14,
   headlineIn: 0.2,        // "Every case, at a glance."
-  navClick: 0.6,          // on the finalised case, the cursor clicks "Dashboard" in the top bar
-  pipelineAt: 1.48,        // the case pipeline
-  flagsAt: 3.89,           // scroll: the most common flags and documents by type
-  riskAt: 7.04,            // scroll: the risk overview
-  attentionAt: 9.13,       // scroll: needs attention, riskiest first
+  navClick: 1.5,          // on the finalised case, the cursor clicks "Dashboard" in the top bar
+  pipelineAt: 1.7,        // the case pipeline
+  flagsAt: 4.11,           // scroll: the most common flags and documents by type
+  riskAt: 7.26,            // scroll: the risk overview
+  attentionAt: 9.35,       // scroll: needs attention, riskiest first
 };
 
 /** Section 10, "difference": the same two people as section 2, after the portal. */

@@ -172,3 +172,8 @@
 
 ## Wave 30 - full-screen dashboard
 - Owner: the dashboard segment should cover the whole screen, no step tracker. The window grows from the Finalise screen to the full frame over 0.5 s; no tracker or headline; the page fills the frame. Spliced into renders/picture.mp4 (frames 2668-2995).
+
+## Wave 31 - a clear Dashboard click
+- Owner: show the click to the dashboard clearly; more transition time from lock case to dashboard.
+- Dashboard starts on Finalise's last framing (badge ring and cursor carried over), eases out to the top bar, the cursor reaches "Dashboard" (ringed), clicks at 1.5 s; only then the page cross-fades and the window grows to full screen (0.6 s). Segment 11.1 s.
+- The wave-30 splice left a few stale frames before "The difference"; visuals now rendered whole again, not spliced.

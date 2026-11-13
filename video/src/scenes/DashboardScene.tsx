@@ -9,12 +9,14 @@ import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame } f
 import { cameraAt } from "../components/keys";
 import { Pointer } from "../components/Pointer";
 import { shotSwipe } from "../components/swipe";
-import { DASHBOARD_BOXES as B, DASHBOARD_COPY, SCREENS_STORY2 } from "../data/howitworks";
+import { DASHBOARD_BOXES as B, FINALISE_BOXES as F, SCREENS_STORY2 } from "../data/howitworks";
 import { colors } from "../theme";
 import { DASHBOARD as T, FPS } from "../timing";
 import { WIN } from "./PortalScene";
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
+/** The "Dashboard" link in the portal's top bar (CSS px of the capture). */
+const NAV = { x: 684, y: 18, w: 74, h: 26 };
 const VW = 1440;
 const VH = 900;
 const K0 = WIN.w / VW;
@@ -52,20 +54,26 @@ export const DashboardScene: React.FC<{ showText?: boolean }> = () => {
   // The page scrolls panel by panel; the camera frames each one.
   const [scroll] = path(t, [[0, 0, 0], [T.flagsAt - 0.3, 0, 0], [T.flagsAt + 0.3, 140, 0], [T.riskAt - 0.3, 140, 0], [T.riskAt + 0.3, 500, 0], [T.attentionAt - 0.3, 500, 0], [T.attentionAt + 0.3, 940, 0]]);
   const cam = cameraAt(t, [
+    // starts where the Finalise screen ends (on its status card), eases out to the top bar for the click
+    [0, 1.4, 900, 270],
+    [0.8, 1.25, 700, 160],
+    [T.navClick + 0.15, 1.25, 700, 160],
     // full-width panels (pipeline, flags + types, risk) are shown whole: no zoom, the page scrolls under them
-    [0, 1.0, 720, 450],
+    [T.navClick + 0.75, 1.0, 720, 450],
     [T.attentionAt - 0.2, 1.0, 720, 450],
     // "Needs attention" is half the page wide: push in on it
     [T.attentionAt + 0.5, 1.22, 470, 330],
     [T.length, 1.28, 470, 330],
   ]);
-  const [px, py] = path(t, [[0, 900, 520], [T.navClick - 0.05, 720, 36], [T.pipelineAt + 0.5, 980, 420], [T.length, 1040, 560]]);
+  const [px, py] = path(t, [[0, F.confirm.x + 260, F.confirm.y + 120], [0.25, F.confirm.x + 260, F.confirm.y + 120], [T.navClick - 0.1, NAV.x + NAV.w / 2, NAV.y + NAV.h / 2 + 2], [T.navClick + 0.6, NAV.x + NAV.w / 2 + 60, NAV.y + 200], [T.length, 1040, 560]]);
   const press = interpolate(t, [T.navClick - 0.05, T.navClick + 0.05, T.navClick + 0.2], [0, 1, 0], clamp);
+  // the Dashboard link lights up as the cursor reaches it
+  const hover = interpolate(t, [T.navClick - 0.45, T.navClick - 0.15, T.navClick + 0.15, T.navClick + 0.3], [0, 1, 1, 0], clamp);
   const ring = (at: number, until: number) => interpolate(t, [at + 0.2, at + 0.5, until - 0.3, until], [0, 1, 1, 0], clamp);
 
   // Full screen: no step tracker or headline. The window grows to the frame over GROW seconds.
-  const GROW = 0.5;
-  const g = Easing.bezier(0.37, 0, 0.63, 1)(interpolate(t, [0, GROW], [0, 1], clamp));
+  const GROW = 0.6;
+  const g = Easing.bezier(0.37, 0, 0.63, 1)(interpolate(t, [T.navClick + 0.15, T.navClick + 0.15 + GROW], [0, 1], clamp));
   const box = { x: WIN.x * (1 - g), y: WIN.y * (1 - g), w: WIN.w + (1920 - WIN.w) * g, h: WIN.h + (1080 - WIN.h) * g, r: 18 * (1 - g) };
   return (
     <AbsoluteFill style={{ background: colors.paper }}>
@@ -83,7 +91,10 @@ export const DashboardScene: React.FC<{ showText?: boolean }> = () => {
               <Ring b={B.attention} p={ring(T.attentionAt, T.length + 1)} tone={colors.red} />
             </div>
           )}
-          {t < T.pipelineAt + 1 && <Pointer x={px} y={py} size={20} press={press} />}
+          {/* the Finalised badge's ring, carried over from the Finalise screen, fading out */}
+          {t < 0.4 && <div style={{ position: "absolute", left: F.badge.x - 6, top: F.badge.y - 5, width: F.badge.w + 12, height: F.badge.h + 10, borderRadius: 999, border: `3px solid ${colors.steel}`, opacity: interpolate(t, [0, 0.4], [1, 0], clamp) }} />}
+          {hover > 0 && <div style={{ position: "absolute", left: NAV.x - 10, top: NAV.y - 6, width: NAV.w + 20, height: NAV.h + 12, borderRadius: 10, border: `3px solid ${colors.steel}`, background: "rgba(53,95,150,0.10)", opacity: hover, transform: `scale(${1.08 - 0.08 * hover})` }} />}
+          {t < T.pipelineAt + 1 && <Pointer x={px} y={py} size={22} press={press} />}
         </FrameViewport>
       </div>
     </AbsoluteFill>
