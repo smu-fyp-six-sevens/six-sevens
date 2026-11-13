@@ -160,6 +160,11 @@ async def _guard_document(
     except Exception as exc:
         logger.exception("Document %s: content guard failed", document_id)
         result, removals = content_guard.not_run(f"{type(exc).__name__}: {exc}"), []
+    # An officer's "process anyway" lives on the saved result, which this scan is about to replace: carry it over.
+    if content_guard.blocking_reason(result):
+        previous = await asyncio.to_thread(document_repository.get_guard_result, document_id)
+        if previous and previous.get(content_guard.OVERRIDE_KEY):
+            result[content_guard.OVERRIDE_KEY] = previous[content_guard.OVERRIDE_KEY]
     metrics.content_guard_results.labels(result["risk"] or "not_run").inc()
     # What was found, not just how much: each span's quote, where it was, why it counts as hidden, which check
     # caught it. Document text, like the rest of the trace. Prefixed, since record() also copies the fields to

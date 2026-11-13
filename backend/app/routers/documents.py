@@ -232,6 +232,18 @@ async def retry_document(document_id: str, document: DocumentRecord = Depends(ge
         return await document_service.retry(document)
 
 
+@router.post("/{document_id}/process-anyway", response_model=DocumentRecord)
+async def process_document_anyway(
+    document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)
+) -> DocumentRecord:
+    """
+    Lets a document the content guard stopped go through: the officer has read what the guard found and decided
+    to continue. Logged in the audit trail; the document is re-queued, and the guard's warning stays on the page.
+    """
+    with _handled("Failed to process the document.", "Failed to process document %s anyway", document_id):
+        return await document_service.process_anyway(document)
+
+
 @router.post("/{document_id}/cancel", response_model=DocumentRecord)
 async def cancel_document(document_id: str, document: DocumentRecord = Depends(get_editable_document_or_404)) -> DocumentRecord:
     """

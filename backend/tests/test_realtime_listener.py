@@ -114,8 +114,11 @@ async def _deliver(live, build, *payloads: dict) -> None:
         try:
             for payload in payloads:
                 realtime_listener._on_change(payload)
-            await asyncio.sleep(0.1)
+            # The debounce timers themselves, not a guess at how long they take.
+            await asyncio.wait_for(asyncio.gather(*realtime_listener._pending.values(), return_exceptions=True), timeout=5)
         finally:
+            for task in realtime_listener._pending.values():
+                task.cancel()
             realtime_listener._pending.clear()
 
 

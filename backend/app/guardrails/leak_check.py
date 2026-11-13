@@ -14,12 +14,14 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import Any
 
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from .. import metrics, telemetry
+from ..config import settings
 from ..run_context import record_repair
 from .envelope import TAG
 
@@ -76,13 +78,22 @@ def _reply_text(generation: Any) -> str:
 
 class _LeakCheck(AsyncCallbackHandler):
     def __init__(self) -> None:
-        self._instructions: dict[Any, str] = {}  # run_id -> the call's instruction text
+        # run_id -> (when the call started, the call's instruction text)
+        self._instructions: dict[Any, tuple[float, str]] = {}
+
+    def _forget_stale(self, now: float) -> None:
+        """A cancelled call never reports back, so its entry would stay for good: drop any older than a call can last."""
+        longest = settings.LLM_TIMEOUT_SECONDS * (settings.LLM_MAX_RETRIES + 1)
+        for run_id in [r for r, (started, _) in self._instructions.items() if now - started > longest]:
+            del self._instructions[run_id]
 
     async def on_chat_model_start(self, serialized: Any, messages: Any, *, run_id: Any, **kwargs: Any) -> None:
-        self._instructions[run_id] = "\n".join(instruction_text(batch) for batch in messages)
+        now = time.monotonic()
+        self._forget_stale(now)
+        self._instructions[run_id] = (now, "\n".join(instruction_text(batch) for batch in messages))
 
     async def on_llm_end(self, response: Any, *, run_id: Any = None, **kwargs: Any) -> None:
-        instructions = self._instructions.pop(run_id, "")
+        _, instructions = self._instructions.pop(run_id, (0.0, ""))
         if not instructions:
             return
         reply = "\n".join(_reply_text(g) for generations in response.generations for g in generations)

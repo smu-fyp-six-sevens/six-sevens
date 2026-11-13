@@ -14,7 +14,6 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 ## Product
 
 - **Skip repeated runs** (decided 2026-11-01). *Issue:* "Run again" on an unchanged case spends ~12k tokens for the same answer. *Do:* show the last complete run when the fingerprint matches.
-- **Agent-raised findings.** *Issue:* a specialist can only judge what a tool found; anything it notices itself appears in its summary but never scores. *Do:* let it raise a finding that cites the field it read.
 
 ## Claude
 
@@ -27,12 +26,8 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 ## Detection and the document pipeline
 
-- **Watch the CPU process pool** on the first deployed runs (`CPU_WORKER_PROCESSES=2`): memory per instance and the "CPU worker process died" log line.
 - **Cross-document category.** *Issue:* a share-capital conflict is labelled `unsupported_claim`. *Do:* a `cross_document_variance` label (schema change).
-- **Vertical text.** *Issue:* `text_overlay.py` guesses it from the aspect ratio. *Do:* read the direction from PyMuPDF.
-- **Specialist prompts don't cache** (too short for Haiku's minimum). Accept unless the cost logs show a large Haiku bill.
-- **No checkpointing.** *Issue:* a crashed run restarts from scratch. Only a debugging aid now; if built, use `langgraph-checkpoint-postgres`, its own schema, no personal data in state.
-- **Learning from officers, not built:** feedback on code-decided findings; judging whether a lesson helped.
+- **No checkpointing, by choice.** A crashed run is rerun from the start (the sweeper recovers it, `CLOUD_ARCHITECTURE_PLAN.md` §5); a checkpointer would only keep the model calls already made. If it is ever wanted: `langgraph-checkpoint-postgres`, its own schema, no personal data in state.
 - **Model output gaps.** *Issue:* nothing checks an extracted value's type (text in a number field), and the binder (`field_checks/binder.py`) and `llm_classify.py` skip `validate`, so repairs aren't traced.
 
 ## Case analysis (design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`)
@@ -50,8 +45,6 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 - **One real end-to-end run** (never done with real Claude): a bank statement and a payslip through the local app, including a second-look disagreement reaching Manual Review.
 - **Check screens by eye:** low-confidence reasons, second-look tables in the trace, the adverse-media label.
 - **Real bank statement layouts:** `statement_table.py` is tested on synthetic ones only.
-- **How often `confidence_missing` fires** (needs your OK to read stored traces).
-- **Scratch scripts worth turning into tests:** bias screens, year-less statement dates (`row_date`), the detection cache and snapshot builder, finding fingerprints (`finding_keys.py`).
 
 ## Performance
 

@@ -1,6 +1,6 @@
 import pytest
 
-from app.feedback_scrub import scrub
+from app.feedback_scrub import names_in, scrub
 
 
 @pytest.mark.parametrize(("text", "expected"), [
@@ -30,3 +30,29 @@ def test_scrub_keeps_what_is_not_confidential() -> None:
 def test_scrub_of_nothing_is_nothing() -> None:
     assert scrub(None) is None
     assert scrub("   ") is None
+
+
+def test_names_come_from_any_field_that_names_a_person_or_company() -> None:
+    fields = {
+        "employer_name": {"value": "Acme Holdings Pte Ltd"},
+        "account_holder": "Tan Wei Ming",
+        "directors": '[{"name": "Lakshmi Devi", "id_number": "S1234567D"}, {"name": "Raj Kumar"}]',
+        "net_pay": {"value": "1000"},
+    }
+
+    names = names_in(fields, extra=["Acme", None])
+
+    assert sorted(names) == ["Acme", "Acme Holdings Pte Ltd", "Lakshmi Devi", "Raj Kumar", "Tan Wei Ming"]
+
+
+def test_one_word_of_a_name_is_scrubbed_on_its_own() -> None:
+    assert scrub("Wei signed the form", ["Tan Wei Ming"]) == "[name] signed the form"
+
+
+def test_amounts_are_scrubbed_with_or_without_a_currency() -> None:
+    assert scrub("paid S$ 5,000 and 1,250.00 in total") == "paid [amount] and [amount] in total"
+
+
+def test_the_words_every_company_has_are_never_scrubbed_alone() -> None:
+    text = "A Pte Ltd must file its accounts"
+    assert scrub(text, ["Acme Holdings Pte Ltd"]) == text

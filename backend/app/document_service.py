@@ -12,6 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Literal
 
+from .auth import current_actor
 from . import case_service, case_stage, document_repository, events, extracted_fields_repository, monitoring
 from .case_pipeline import service as analysis_service
 from .config import settings
@@ -104,6 +105,21 @@ def guard_result(document_id: str) -> dict | None:
 
 def is_guard_blocked(document: DocumentRecord) -> bool:
     return document.status == DocumentStatus.FAILED and content_guard.is_blocking_reason(document.failure_reason)
+
+
+async def process_anyway(document: DocumentRecord) -> DocumentRecord:
+    """
+    An officer's decision to let a document the content guard stopped go through: the override is saved on its guard
+    result (so every later scan of the file honours it), logged in the audit trail, and the document is re-queued
+    as a retry. The warning stays on the page, and detection still reports what the guard found.
+    """
+    if not is_guard_blocked(document):
+        raise Refused("conflict", "Only a document the content guard stopped can be processed anyway.")
+    saved = await asyncio.to_thread(document_repository.get_guard_result, document.id) or {}
+    saved[content_guard.OVERRIDE_KEY] = {"by": current_actor() or "unknown", "at": datetime.now(timezone.utc).isoformat()}
+    await asyncio.to_thread(document_repository.update_ingest_results, document.id, guard_result=saved, metadata=None)
+    await _audit(types.DOCUMENT_GUARD_OVERRIDDEN, document, reason=document.failure_reason)
+    return await retry(document)
 
 
 # --- The audit trail's record of a field edit -------------------------------------------------------------------

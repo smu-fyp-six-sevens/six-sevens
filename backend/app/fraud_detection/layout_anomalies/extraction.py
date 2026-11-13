@@ -130,6 +130,16 @@ def _ocr_blocks(doc: pymupdf.Document) -> list[_Block]:
     return blocks
 
 
+def _runs_vertically(direction: object) -> bool | None:
+    """Whether a text-layer line runs up or down the page, from PyMuPDF's (cos, sin) line direction; None if absent."""
+    if not isinstance(direction, (tuple, list)) or len(direction) != 2:
+        return None
+    try:
+        return abs(float(direction[1])) > abs(float(direction[0]))
+    except (TypeError, ValueError):
+        return None
+
+
 def _extract_blocks(doc: pymupdf.Document) -> list[_Block]:
     blocks: list[_Block] = []
     table_rects_by_page: dict[int, list[pymupdf.Rect]] = {}
@@ -161,6 +171,7 @@ def _extract_blocks(doc: pymupdf.Document) -> list[_Block]:
                         font=font,
                         size=size,
                         baseline=baseline,
+                        vertical=_runs_vertically(raw_line.get("dir")),
                     )
                 )
             if not lines:

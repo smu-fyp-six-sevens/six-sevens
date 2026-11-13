@@ -184,8 +184,8 @@ def _block_real_supabase_network(monkeypatch: pytest.MonkeyPatch) -> None:
     # self._storage once set — patch that plain backing attribute instead
     # of the property itself, which monkeypatch can't assign to.
     monkeypatch.setattr(supabase_client, "_storage", _BlockedSupabaseAccess("storage"))
-    # Secret-key client: every DELETE goes through it, and it bypasses RLS.
-    monkeypatch.setattr(supabase_module, "_service_client", _BlockedSupabaseAccess("service_supabase_client"))
+    # service_supabase_client() is this same client: its stored procedures (.rpc) are blocked here too.
+    monkeypatch.setattr(supabase_client, "rpc", _BlockedSupabaseAccess("rpc"))
     monkeypatch.setattr(supabase_module, "acreate_client", _refuse_real_realtime)
 
 

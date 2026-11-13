@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import re
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -51,6 +53,18 @@ def test_detail_is_made_json_safe() -> None:
 def test_officer_event_without_a_request_is_the_system() -> None:
     event = officer_event(types.CASE_CREATED, case_id="c")
     assert (event.actor_type, event.actor) == ("system", "system")
+
+
+def test_only_an_officers_own_action_is_recorded_as_a_user() -> None:
+    # Workers and agents build their events with the default (system) or "agent"; the one place an event is marked
+    # as an officer's is officer_event (from the request's token) and the login, which is the officer signing in.
+    root = Path(__file__).resolve().parents[1] / "app"
+    marked = {
+        path.relative_to(root).as_posix() for path in root.rglob("*.py")
+        if re.search(r"""actor_type\s*=\s*["']user["']""", path.read_text(encoding="utf-8"))
+    }
+    assert marked == {"events/envelope.py", "main.py"}
+    assert Event(type="x").actor_type == "system"
 
 
 def test_a_role_cannot_handle_a_type_it_does_not_subscribe_to(clean_registry) -> None:

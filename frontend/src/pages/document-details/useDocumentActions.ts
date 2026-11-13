@@ -4,6 +4,7 @@ import {
   approveDocument,
   cancelDocument,
   deleteDocument,
+  processDocumentAnyway,
   rejectDocument,
   retryDocument,
 } from '../../services/uploadService';
@@ -15,7 +16,7 @@ interface DocumentActionsParams {
   onDocumentDeleted: () => void;
 }
 
-// Approve, reject, cancel, retry and delete for the open document.
+// Approve, reject, cancel, retry, process anyway and delete for the open document.
 export function useDocumentActions({ document, setDocument, onDocumentDeleted }: DocumentActionsParams) {
   const [isApproving, setIsApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
@@ -28,6 +29,9 @@ export function useDocumentActions({ document, setDocument, onDocumentDeleted }:
 
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+
+  const [isProcessingAnyway, setIsProcessingAnyway] = useState(false);
+  const [processAnywayError, setProcessAnywayError] = useState<string | null>(null);
 
   const [isDeletingDocument, setIsDeletingDocument] = useState(false);
   const [deleteDocumentError, setDeleteDocumentError] = useState<string | null>(null);
@@ -64,6 +68,10 @@ export function useDocumentActions({ document, setDocument, onDocumentDeleted }:
     runDocumentAction(cancelDocument, setIsCancelling, setCancelError, 'Failed to cancel document.');
   const handleRetryDocument = () =>
     runDocumentAction(retryDocument, setIsRetrying, setRetryError, 'Failed to retry document.');
+  const handleProcessAnyway = () =>
+    runDocumentAction(
+      processDocumentAnyway, setIsProcessingAnyway, setProcessAnywayError, 'Failed to process document.',
+    );
 
   async function confirmDeleteDocument() {
     if (!document) return;
@@ -96,6 +104,9 @@ export function useDocumentActions({ document, setDocument, onDocumentDeleted }:
     isRetrying,
     retryError,
     handleRetryDocument,
+    isProcessingAnyway,
+    processAnywayError,
+    handleProcessAnyway,
     isDeletingDocument,
     deleteDocumentError,
     deleteConfirmOpen,

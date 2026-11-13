@@ -80,7 +80,11 @@ async def _ingest_one(
         )
 
     if case_id is not None and not case_verified:
-        case = await asyncio.to_thread(case_service.get_case, case_id)
+        case = await to_thread_or_502(
+            case_service.get_case, case_id,
+            detail="Failed to look up the case. Check Supabase table access.",
+            log=("Failed to look up case %s for an upload", case_id),
+        )
         if case is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -186,7 +190,11 @@ async def upload_documents_batch(
     # way it did before, each with its own result.
     case_exists = True
     if case_id is not None:
-        case_exists = await asyncio.to_thread(case_service.get_case, case_id) is not None
+        case_exists = await to_thread_or_502(
+            case_service.get_case, case_id,
+            detail="Failed to look up the case. Check Supabase table access.",
+            log=("Failed to look up case %s for a bulk upload", case_id),
+        ) is not None
 
     async def _handle(file: UploadFile) -> BulkUploadItemResult:
         filename = file.filename or ""

@@ -1,4 +1,5 @@
 
+import re
 import time
 
 import pytest
@@ -131,6 +132,37 @@ def test_a_malformed_auth_users_entry_is_refused_at_start_up(bad: str):
 
     with pytest.raises(ValueError):
         _users(bad)
+
+
+# The only routes that answer without a login: probes and the login itself. Pub/Sub's /push and /metrics are not in
+# the API schema; the socket takes a ticket.
+_PUBLIC_ROUTES = {("GET", "/health"), ("GET", "/healthz"), ("GET", "/health/db"), ("POST", "/auth/login")}
+_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
+
+
+def _protected_operations() -> list[tuple[str, str]]:
+    return sorted(
+        (method.upper(), path)
+        for path, methods in app.openapi()["paths"].items()
+        for method in methods
+        if method.upper() in _METHODS and (method.upper(), path) not in _PUBLIC_ROUTES
+    )
+
+
+def test_the_public_routes_are_the_only_ones_left_out():
+    operations = {(m.upper(), p) for p, methods in app.openapi()["paths"].items() for m in methods}
+    assert _PUBLIC_ROUTES <= operations
+    assert len(_protected_operations()) > 60
+
+
+@pytest.mark.parametrize(("method", "path"), _protected_operations())
+def test_every_route_but_the_public_ones_needs_a_login(method: str, path: str):
+    url = re.sub(r"\{[^}]+\}", "x", path)
+    body = {"json": {}} if method in ("POST", "PUT", "PATCH") else {}
+
+    response = client.request(method, url, **body)
+
+    assert response.status_code == 401, f"{method} {path} answered {response.status_code} without a token"
 
 
 def test_a_websocket_ticket_is_not_a_login_token():

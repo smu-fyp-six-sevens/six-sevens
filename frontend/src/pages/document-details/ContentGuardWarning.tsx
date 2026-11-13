@@ -53,7 +53,7 @@ export function ContentGuardWarning({ contentGuard }: { contentGuard: ContentGua
       ? 'Warning: text aimed at the AI was detected in this document'
       : 'Warning: hidden text was detected in this document';
   const detail = contentGuard.blocked
-    ? "Processing stopped before any AI model read this document, so it has no type or fields. Retrying scans the same file and will be blocked again. Reject it, or ask the applicant for a clean copy."
+    ? "Processing stopped before any AI model read this document, so it has no type or fields. Retrying scans the same file and will be blocked again. Reject it, ask the applicant for a clean copy, or, if you have read what was found and it is harmless, process it anyway."
     : aimedAtAi
       ? 'Someone may be trying to steer the AI checks on this document. Check it carefully against the original and be aware of this if you continue to approve it.'
       : "This text can't be seen when the document is read normally. It may be harmless, but it can also mean the document was altered. Check it carefully and be aware of this if you continue to approve it.";

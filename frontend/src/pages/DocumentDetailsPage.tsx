@@ -311,6 +311,9 @@ export default function DocumentDetailsPage({
     isRetrying,
     retryError,
     handleRetryDocument,
+    isProcessingAnyway,
+    processAnywayError,
+    handleProcessAnyway,
     isDeletingDocument,
     deleteDocumentError,
     deleteConfirmOpen,
@@ -319,6 +322,7 @@ export default function DocumentDetailsPage({
   } = useDocumentActions({ document, setDocument, onDocumentDeleted });
   // Rejecting is final (the document is locked), so it is confirmed first.
   const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
+  const [processAnywayConfirmOpen, setProcessAnywayConfirmOpen] = useState(false);
 
   const hasDetectionReport = detectionReport !== null;
   const detectionStage = document
@@ -359,7 +363,7 @@ export default function DocumentDetailsPage({
   // Approve or reject, with what stands in the way: the decision on the fields, so it belongs to their card.
   const decisionBar = document && (
     <>
-          {[approveError, cancelError, rejectError, retryError].map(
+          {[approveError, cancelError, rejectError, retryError, processAnywayError].map(
             (actionError, index) => actionError && <ErrorMessage key={index} className="action-error" message={actionError} />,
           )}
 
@@ -450,6 +454,17 @@ export default function DocumentDetailsPage({
                     onClick={() => void handleRetryDocument()}
                   >
                     {isRetrying ? 'Retrying…' : <><Icon name="retry" size={14} /> Retry Document</>}
+                  </button>
+                )}
+
+                {isBlocked && (
+                  <button
+                    type="button"
+                    className="document-action--retry"
+                    disabled={isProcessingAnyway}
+                    onClick={() => setProcessAnywayConfirmOpen(true)}
+                  >
+                    {isProcessingAnyway ? 'Processing…' : <><Icon name="retry" size={14} /> Process Anyway</>}
                   </button>
                 )}
 
@@ -690,6 +705,23 @@ export default function DocumentDetailsPage({
             if (!isDeletingDocument) setDeleteConfirmOpen(false);
           }}
           onConfirm={() => void confirmDeleteDocument()}
+        />
+      )}
+
+      {processAnywayConfirmOpen && document && (
+        <ConfirmDialog
+          title="Process this document anyway?"
+          message={`The content guard found text in ${document.filename} worded as an instruction to the AI, so no model has read it. If you continue, the AI checks will read it with the guard's warning still on the page. Only do this if you have read what the guard found and it is harmless. This is recorded in the audit trail.`}
+          confirmLabel="Process anyway"
+          busyLabel="Processing…"
+          tone="primary"
+          isConfirming={isProcessingAnyway}
+          onCancel={() => {
+            if (!isProcessingAnyway) setProcessAnywayConfirmOpen(false);
+          }}
+          onConfirm={() => {
+            void handleProcessAnyway().finally(() => setProcessAnywayConfirmOpen(false));
+          }}
         />
       )}
 

@@ -265,3 +265,42 @@ def test_stamp_on_one_page_over_text_is_reported() -> None:
     overlays = _overlays(result)
     assert [a.page for a in overlays] == [1]
     assert "CONFIDENTIAL" in overlays[0].text
+
+
+# --- vertical text: the direction comes from the text layer, not the box's shape --------------------------------
+
+
+def test_a_text_layer_line_is_vertical_when_its_direction_says_so_whatever_its_shape() -> None:
+    # Wide and short, yet running up the page (one short stamp line): the old aspect-ratio guess would miss it.
+    assert to._is_vertical(_line((72, 100, 300, 114), text="CONFIDENTIAL COPY", vertical=True))
+    # Tall and narrow, yet running across the page (a narrow column): the old guess would call it vertical.
+    assert not to._is_vertical(_line((72, 100, 90, 400), text="A narrow column of text", vertical=False))
+
+
+def test_an_ocr_line_has_no_direction_so_its_shape_decides() -> None:
+    assert to._is_vertical(_line((72, 100, 90, 400), text="Margin stamp", ocr=True))
+    assert not to._is_vertical(_line((72, 100, 300, 114), text="Total amount payable", ocr=True))
+
+
+def test_a_rotated_line_in_a_real_pdf_is_read_as_vertical() -> None:
+    from app.fraud_detection.layout_anomalies.extraction import _extract_blocks
+
+    def build(doc: pymupdf.Document) -> None:
+        page = doc.new_page()
+        page.insert_text((72, 100), "A normal line of text across the page", fontsize=11)
+        page.insert_text((540, 700), "RECEIVED STAMP", fontsize=11, rotate=90)
+
+    doc = pymupdf.open(stream=_pdf_bytes(build), filetype="pdf")
+    lines = [line for block in _extract_blocks(doc) for line in block.lines]
+    doc.close()
+
+    assert {line.text: line.vertical for line in lines} == {
+        "A normal line of text across the page": False, "RECEIVED STAMP": True,
+    }
+
+
+def test_a_pdf_direction_is_read_defensively() -> None:
+    from app.fraud_detection.layout_anomalies.extraction import _runs_vertically
+
+    assert _runs_vertically((1.0, 0.0)) is False and _runs_vertically([0.0, -1.0]) is True
+    assert _runs_vertically(None) is None and _runs_vertically("up") is None and _runs_vertically((1.0,)) is None

@@ -1254,8 +1254,10 @@ test.describe('Case page: document actions, live updates and cost', () => {
     await openGroupWith(page, document.filename);
     await expect(page.getByRole('button', { name: `View ${document.filename}` })).not.toContainText('Extracting');
     await expect(page.getByRole('button', { name: `Cancel ${document.filename}` })).toHaveCount(0);
-    // Every connection asks for a new single-use ticket.
-    expect(backend.requestsTo('POST', '/ws/tickets')).toHaveLength(2);
+    // Every connection asks for a new single-use ticket, for this case only.
+    const tickets = backend.requestsTo('POST', /^\/ws\/tickets\?/);
+    expect(tickets).toHaveLength(2);
+    expect(tickets.every((request) => request.path.includes(`case_id=${harbor.id}`))).toBe(true);
   });
 
   test('the Claude Cost tab totals the cost each run recorded, per document and for the case analysis', async ({ page, backend }) => {

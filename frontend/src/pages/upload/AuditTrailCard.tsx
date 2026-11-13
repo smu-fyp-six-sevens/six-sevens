@@ -34,6 +34,7 @@ const ACTION_LABELS: Record<string, string> = {
   'document.run_stopped': 'Document processing run stopped',
   'document.retyped': 'Changed document type',
   'document.type_corrected': 'Confirmed document type',
+  'document.guard_overridden': 'Processed a document the content guard stopped',
   'document.field_edited': 'Edited extracted fields',
   'document.approved': 'Approved document',
   'document.rejected': 'Rejected document',

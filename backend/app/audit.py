@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel
 
@@ -112,6 +112,8 @@ def ran_for(trigger_event_id: str, actions: list[str], document_id: str, since: 
 # The stages a case's processing time adds up, each as the case page shows it (pages/upload/processingTimes.ts).
 _TIMED = [types.DOCUMENT_ANALYZED, types.DOCUMENT_DETECTED, types.CASE_ANALYSIS_COMPLETED]
 _CASE_CHUNK = 100
+# Ids per case_cost_totals call: it returns one row per case, and a response holds at most 1,000 rows.
+_COST_CHUNK = 500
 
 
 def processing_ms_many(case_ids: list[str]) -> dict[str, int]:
@@ -239,24 +241,20 @@ class CaseCost(BaseModel):
 def cost_usd_many(case_ids: list[str]) -> dict[str, float]:
     """
     Each case's Claude spend at list price, for the dashboard: every costed run filed under the case (finished,
-    failed, cancelled, retried and rerun alike). Unlike case_cost, a document's runs from before it was moved into
-    the case stay with its old case: close enough for totals across many cases, in one query per 100 cases rather
-    than several per case. Cases with no costed run are absent. Sync: run on a worker thread.
+    failed, cancelled, retried and rerun alike), added up by the database (case_cost_totals). Unlike case_cost, a
+    document's runs from before it was moved into the case stay with its old case: close enough for totals across
+    many cases. Cases with no costed run are absent. Sync: run on a worker thread.
     """
-    rows: list[dict] = []
-    for start in range(0, len(case_ids), _CASE_CHUNK):
-        chunk = case_ids[start : start + _CASE_CHUNK]
-        rows += fetch_all(
-            lambda chunk=chunk: service_supabase_client().table(_TABLE)
-            .select("id, case_id, detail").in_("case_id", chunk).in_("action", _COSTED),
-            "id",
-        )
     totals: dict[str, float] = {}
-    for row in rows:
-        cost = (row.get("detail") or {}).get("llm_cost_usd")
-        if cost is not None:
-            totals[row["case_id"]] = totals.get(row["case_id"], 0.0) + float(cost)
-    return {case_id: round(total, 6) for case_id, total in totals.items()}
+    for start in range(0, len(case_ids), _COST_CHUNK):
+        chunk = case_ids[start : start + _COST_CHUNK]
+        rows = cast(list[dict[str, Any]], service_supabase_client().rpc(
+            "case_cost_totals", {"p_case_ids": chunk, "p_actions": _COSTED},
+        ).execute().data or [])
+        for row in rows:
+            if row.get("cost_usd") is not None:
+                totals[str(row["case_id"])] = round(float(row["cost_usd"]), 6)
+    return totals
 
 
 def _events(build) -> list[Event]:

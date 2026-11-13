@@ -301,6 +301,9 @@ class _Line(BaseModel):
     baseline: float | None = None
     # Read by OCR from a picture: edges are only as exact as the detector's boxes.
     ocr: bool = False
+    # Whether the text runs up or down the page, from the direction the PDF's text layer gives (PyMuPDF's line "dir");
+    # None when no direction is known (an OCR line).
+    vertical: bool | None = None
 
 
 # Font sizes this far apart (as a share of the smaller) are a heading or field label and

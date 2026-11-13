@@ -14,6 +14,8 @@ DOCUMENT_FAILED = "document.failed"
 DOCUMENT_APPROVED = "document.approved"
 DOCUMENT_REJECTED = "document.rejected"
 DOCUMENT_TYPE_CORRECTED = "document.type_corrected"
+# An officer let a document the content guard stopped go through (document_service.process_anyway): audit only.
+DOCUMENT_GUARD_OVERRIDDEN = "document.guard_overridden"
 DOCUMENT_FIELD_EDITED = "document.field_edited"
 DOCUMENT_MOVED = "document.moved"
 DOCUMENT_DELETED = "document.deleted"

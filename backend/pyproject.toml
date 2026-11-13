@@ -79,6 +79,8 @@ omit = [
 ]
 
 [tool.coverage.report]
+# CI fails below this (93% when it was set); a drop is a decision, not an accident.
+fail_under = 85
 exclude_lines = [
   "pragma: no cover",
   "if __name__ == .__main__.:",

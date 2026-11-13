@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pytest
 
 from app import sg_time
+from app.fraud_detection.authenticity import metadata_analysis
 from app.fraud_detection.authenticity.metadata_analysis import (
     SUPPORTED_METADATA_FIELDS,
     check_metadata_anomalies,
@@ -139,7 +140,7 @@ _NOT_FLAGGED = [
     ),
     # Clock skew and ignored timezone offsets shouldn't read as fabrication.
     pytest.param(
-        {"CreateDate": (datetime.now() + timedelta(hours=6)).strftime("%Y:%m:%d %H:%M:%S")}, None,
+        {"CreateDate": "2026:11:13 18:00:00"}, None,  # six hours after the frozen clock (frozen_now)
         id="a date a few hours ahead",
     ),
     pytest.param(
@@ -185,8 +186,16 @@ _NOT_FLAGGED = [
 ]
 
 
+@pytest.fixture
+def frozen_now(monkeypatch):
+    """Noon on 13 Nov 2026 in Singapore, as the metadata check reads it, so no test depends on when it runs."""
+    monkeypatch.setattr(
+        metadata_analysis, "now_sg", lambda: datetime(2026, 11, 13, 12, 0, tzinfo=sg_time.SINGAPORE)
+    )
+
+
 @pytest.mark.parametrize(("metadata", "document_type"), _NOT_FLAGGED)
-def test_ordinary_metadata_is_not_flagged(metadata, document_type) -> None:
+def test_ordinary_metadata_is_not_flagged(frozen_now, metadata, document_type) -> None:
     result = check_metadata_anomalies("doc-1", metadata, document_type)
 
     assert result.anomalies == []
@@ -435,11 +444,8 @@ def test_flags_creation_date_before_the_pdf_format_existed() -> None:
     assert "predates the PDF format" in result.anomalies[0].reason
 
 
-def test_flags_future_date() -> None:
-    future = datetime.now() + timedelta(days=400)
-    result = check_metadata_anomalies(
-        "doc-1", {"CreateDate": future.strftime("%Y:%m:%d %H:%M:%S")}
-    )
+def test_flags_future_date(frozen_now) -> None:
+    result = check_metadata_anomalies("doc-1", {"CreateDate": "2028:01:01 00:00:00"})
     assert len(result.anomalies) == 1
     assert "in the future" in result.anomalies[0].reason
 
@@ -526,7 +532,7 @@ def test_subject_and_title_are_read_but_are_not_among_the_six_supported_fields()
 
 def test_a_file_made_today_in_singapore_is_not_future_dated(monkeypatch) -> None:
     # 01:00 in Singapore is still yesterday in UTC.
-    monkeypatch.setattr(sg_time, "now_sg", lambda: datetime(2026, 11, 13, 1, 0, tzinfo=sg_time.SINGAPORE))
+    monkeypatch.setattr(metadata_analysis, "now_sg", lambda: datetime(2026, 11, 13, 1, 0, tzinfo=sg_time.SINGAPORE))
     today = check_metadata_anomalies("doc-1", {"CreateDate": "2026:11:13 23:30:00"})
     assert not any("in the future" in a.reason for a in today.anomalies)
     later = check_metadata_anomalies("doc-1", {"CreateDate": "2026:11:15 09:00:00"})

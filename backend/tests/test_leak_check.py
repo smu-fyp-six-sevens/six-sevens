@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
 from app import run_context
+from app.config import settings
 from app.guardrails.envelope import fence
 from app.guardrails.leak_check import instruction_text, leak_callback, leaked_words
 from app.langgraph.extraction_prompts import build_extraction_prompt
@@ -83,3 +84,18 @@ def test_the_document_data_is_left_out_of_the_instructions() -> None:
         {"type": "text", "text": "Read the document."}, {"type": "text", "text": fence("SECRET DOCUMENT TEXT", "document_text")},
     ])])
     assert "Rules here." in text and "Read the document." in text and "SECRET DOCUMENT TEXT" not in text
+
+
+async def test_a_call_that_never_reported_back_is_forgotten(monkeypatch) -> None:
+    # A cancelled call never reaches on_llm_end or on_llm_error: its entry would stay for good.
+    leak_callback._instructions.clear()
+    clock = [1000.0]
+    monkeypatch.setattr("app.guardrails.leak_check.time.monotonic", lambda: clock[0])
+    await leak_callback.on_chat_model_start({}, [[SystemMessage(content=INSTRUCTIONS)]], run_id=uuid4())
+    assert len(leak_callback._instructions) == 1
+
+    clock[0] += settings.LLM_TIMEOUT_SECONDS * (settings.LLM_MAX_RETRIES + 1) + 1
+    await leak_callback.on_chat_model_start({}, [[SystemMessage(content=INSTRUCTIONS)]], run_id=uuid4())
+
+    assert len(leak_callback._instructions) == 1  # the new call only
+    leak_callback._instructions.clear()

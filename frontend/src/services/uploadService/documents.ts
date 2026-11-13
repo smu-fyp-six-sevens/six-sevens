@@ -178,6 +178,16 @@ export async function retryDocument(documentId: string): Promise<DocumentRecord>
   return (await response.json()) as DocumentRecord;
 }
 
+// Lets a document the content guard stopped go through (routers/documents.py's process_document_anyway): logged in
+// the audit trail, and the document is re-queued like a retry.
+export async function processDocumentAnyway(documentId: string): Promise<DocumentRecord> {
+  const response = await authFetch(`/documents/${documentId}/process-anyway`, { method: 'POST' });
+
+  await assertOk(response, 'Failed to process document');
+
+  return (await response.json()) as DocumentRecord;
+}
+
 // Mirrors UpdateDocumentTypeRequest in backend/app/models.py.
 export async function updateDocumentType(
   documentId: string,

@@ -1342,6 +1342,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{document_id}/process-anyway": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Process Document Anyway
+         * @description Lets a document the content guard stopped go through: the officer has read what the guard found and decided
+         *     to continue. Logged in the audit trail; the document is re-queued, and the guard's warning stays on the page.
+         */
+        post: operations["process_document_anyway_documents__document_id__process_anyway_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{document_id}/reject": {
         parameters: {
             query?: never;
@@ -7158,6 +7179,39 @@ export interface operations {
                 "application/json": components["schemas"]["MoveDocumentRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    process_document_anyway_documents__document_id__process_anyway_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

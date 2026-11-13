@@ -36,8 +36,8 @@ _DESCENT = 0.18
 # separator), not text, so a signature written on it is not an overlay.
 _RULE_TEXT_RE = re.compile(r"^[\s_\-–—.·•=~]+$")
 # Text set sideways (a vertical stamp or margin note) has no usable axis-aligned
-# letters band: its box would "overlap" everything beside it. The line records no
-# direction, so a long, tall-and-narrow box is taken as vertical.
+# letters band: its box would "overlap" everything beside it. A text-layer line says which way it runs; an OCR line
+# does not, so there a long, tall-and-narrow box is taken as vertical.
 _VERTICAL_ASPECT = 2.0
 _VERTICAL_MIN_CHARS = 4
 # Share of an OCR box's height the detector adds above and below the letters.
@@ -68,6 +68,8 @@ def _normalized(line: _Line) -> str:
 
 
 def _is_vertical(line: _Line) -> bool:
+    if line.vertical is not None:
+        return line.vertical
     width, height = line.bbox[2] - line.bbox[0], line.bbox[3] - line.bbox[1]
     return len(line.text.strip()) >= _VERTICAL_MIN_CHARS and height > _VERTICAL_ASPECT * width
 

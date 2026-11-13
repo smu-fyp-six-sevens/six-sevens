@@ -4,7 +4,7 @@
 -- Agent learning (finding_feedback's keys and indexes, feedback_counts, type_corrections, field_edit_counts) was
 -- migrated live on 2026-11-10.
 -- The one-running-analysis index, the feedback_counts fix, the finding_feedback grants and the audit_events action
--- index were applied live on 2026-11-13.
+-- index were applied live on 2026-11-13. case_cost_totals: sql/2026-11-13_case_cost_totals.sql (run it before deploying).
 -- A snapshot, not a migration: it rebuilds an empty database (staging, a fresh project). Keep it in step by hand
 -- when the schema changes.
 
@@ -487,6 +487,24 @@ revoke all on function public.type_corrections(timestamptz) from public, anon, a
 grant execute on function public.type_corrections(timestamptz) to service_role;
 revoke all on function public.field_edit_counts(timestamptz, text) from public, anon, authenticated;
 grant execute on function public.field_edit_counts(timestamptz, text) to service_role;
+
+-- Each case's Claude spend at list price (audit.cost_usd_many): the costed runs' detail.llm_cost_usd added up in the
+-- database. p_actions are the end-of-run event types that carry a run's cost (audit.py _COSTED).
+create function public.case_cost_totals(p_case_ids uuid[], p_actions text[])
+returns table (case_id uuid, cost_usd numeric)
+language sql
+stable
+set search_path = ''
+as $$
+    select e.case_id, sum((e.detail->>'llm_cost_usd')::numeric)
+    from public.audit_events e
+    where e.case_id = any(p_case_ids) and e.action = any(p_actions)
+        and jsonb_typeof(e.detail->'llm_cost_usd') = 'number'
+    group by e.case_id;
+$$;
+
+revoke all on function public.case_cost_totals(uuid[], text[]) from public, anon, authenticated;
+grant execute on function public.case_cost_totals(uuid[], text[]) to service_role;
 
 -- Row-level security ------------------------------------------------------------------------------------------------
 

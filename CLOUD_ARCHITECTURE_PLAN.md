@@ -266,9 +266,9 @@ Actions builds, signs (cosign) and attaches an SBOM, then opens a PR bumping the
 
 | Security item (`CODEBASE_AUDIT.md`) | On GKE |
 |---|---|
-| 7.2 every role holds the database key | Still true; the NAT allow-list limits where it works |
-| 7.6 pinning by tag | Closed by §18 (digests, Binary Authorization) |
-| 7.1 any service can publish any event | Unchanged |
+| 6.2 every role holds the database key | Still true; the NAT allow-list limits where it works |
+| 6.6 pinning by tag | Closed by §18 (digests, Binary Authorization) |
+| 6.1 any service can publish any event | Unchanged |
 | Cross-instance detection cancel: a cancel that lands on another instance is seen only through the audit trail, so not while audit-metrics is down | Do it with the move: a `cancel_requested_at` column on `documents` that the detection run polls (`workers/detection.py`, `_cancel_requested_since`), so a cancel needs only the database. More pods make a cross-instance cancel likelier. M |
 
 Kong's real-IP settings (`deploy/kong/render.sh`) need the load balancer's ranges as trusted IPs on GKE, and the gateway key (backend `gateway.py`) can go once the services are internal.

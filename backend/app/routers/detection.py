@@ -83,9 +83,13 @@ async def _fetch_extracted_fields(document_id: str) -> list[ExtractedField]:
 async def _trace_check(document_id: str, step: str, **fields: object) -> None:
     """Records an on-demand check on the document's langgraph trace — same
     table classify/extract/detection-run steps land on (see langgraph/trace.py)."""
-    await asyncio.to_thread(langgraph_trace.resume, document_id)
+    detail = "Failed to save the check to the document's trace. Check Supabase table access."
+    log = ("Failed to resume the trace of document %s", document_id)
+    await to_thread_or_502(langgraph_trace.resume, document_id, detail=detail, log=log)
     langgraph_trace.record(document_id, step, **fields)
-    await asyncio.to_thread(langgraph_trace.flush, document_id)
+    await to_thread_or_502(
+        langgraph_trace.flush, document_id, detail=detail, log=("Failed to save the trace of document %s", document_id),
+    )
 
 
 async def _require_detection_has_run(
@@ -186,7 +190,11 @@ async def _external(document: DocumentRecord, _: bytes, fields: list[ExtractedFi
 
 async def _company_name(document: DocumentRecord, _: bytes, __: list[ExtractedField]) -> CompanyNameConsistencyResult:
     case_documents = (
-        await asyncio.to_thread(document_repository.list_documents, case_id=document.case_id)
+        await to_thread_or_502(
+            document_repository.list_documents, case_id=document.case_id,
+            detail="Failed to load the case's documents. Check Supabase table access.",
+            log=("Failed to list the documents of case %s", document.case_id),
+        )
         if document.case_id is not None
         else []
     )

@@ -6,6 +6,7 @@ from datetime import date
 
 import pytest
 
+from app.fraud_detection.dates import date_parsing
 from app.fraud_detection.dates.date_parsing import DateParts, date_in_period, parse_date, parse_date_parts
 
 
@@ -39,12 +40,13 @@ def test_numeric_dates_are_day_first_unless_that_is_impossible() -> None:
     assert parse_date("08/23/2026") == date(2026, 8, 23)  # no month 23, so month first
 
 
-def test_two_digit_years_are_read_around_the_current_year() -> None:
-    this_year = date.today().year
+def test_two_digit_years_are_read_around_the_current_year(monkeypatch) -> None:
+    # With today in 2026: up to ten years ahead is this century, anything later is the last one.
+    monkeypatch.setattr(date_parsing, "today_sg", lambda: date(2026, 11, 13))
     assert parse_date("01-Jun-26") == date(2026, 6, 1)
     assert parse_date("12-Mar-85") == date(1985, 3, 12)
-    assert parse_date(f"01/01/{(this_year + 10) % 100:02d}").year == this_year + 10
-    assert parse_date(f"01/01/{(this_year + 11) % 100:02d}").year == this_year + 11 - 100
+    assert parse_date("01/01/36") == date(2036, 1, 1)
+    assert parse_date("01/01/37") == date(1937, 1, 1)
 
 
 @pytest.mark.parametrize(("text", "parts"), [

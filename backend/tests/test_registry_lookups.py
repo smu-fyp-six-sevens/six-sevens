@@ -6,12 +6,14 @@ from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.external_validation.registry_lookups import verify_against_registries
 from app.fraud_detection.external_validation.registry_lookups.datagov import Collection
 from app.fraud_detection.external_validation.registry_lookups.hdb import same_street
+from app.fraud_detection.external_validation.registry_lookups import http as registry_http
 from app.fraud_detection.external_validation.registry_lookups.http import LookupUnavailable
 
 # Real records as data.gov.sg returned them for OCBC.
@@ -629,3 +631,61 @@ async def test_a_company_at_an_approved_home_is_a_signal_in_any_zone(ura_key) ->
     for zone in (None, "RESIDENTIAL", "WHITE", "COMMERCIAL"):
         result = await _company(zone, approved=True)
         assert [f.severity for f in _codes(result, "REG.COMPANY_ADDRESS_RESIDENTIAL")] == ["signal"], zone
+
+
+# --- The HTTP layer: a registry that can't answer is "unavailable", never "clean" -----------------------------------
+
+_REAL_ASYNC_CLIENT = httpx.AsyncClient  # bound before the autouse fixture swaps it out
+
+
+def _registry_answers(monkeypatch, handler) -> None:
+    """Routes the registry GETs to `handler` (an httpx.MockTransport function) instead of the network."""
+    registry_http._cache.clear()
+    monkeypatch.setattr(
+        registry_http.httpx, "AsyncClient",
+        lambda **kwargs: _REAL_ASYNC_CLIENT(transport=httpx.MockTransport(handler), **kwargs),
+    )
+
+
+async def test_a_registry_error_status_is_unavailable(monkeypatch) -> None:
+    _registry_answers(monkeypatch, lambda request: httpx.Response(503))
+
+    with pytest.raises(LookupUnavailable, match="HTTP 503"):
+        await registry_http.get("https://registry.example/a")
+
+
+async def test_a_registry_that_times_out_is_unavailable(monkeypatch) -> None:
+    def times_out(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("too slow", request=request)
+
+    _registry_answers(monkeypatch, times_out)
+
+    with pytest.raises(LookupUnavailable, match="could not be reached"):
+        await registry_http.get("https://registry.example/b")
+
+
+async def test_a_registry_that_keeps_rate_limiting_is_unavailable_without_waiting_it_out(monkeypatch) -> None:
+    slept: list[float] = []
+    monkeypatch.setattr(registry_http.asyncio, "sleep", AsyncMock(side_effect=slept.append))
+    _registry_answers(monkeypatch, lambda request: httpx.Response(429, headers={"Retry-After": "30"}))
+
+    with pytest.raises(LookupUnavailable, match="rate limiting"):
+        await registry_http.get("https://registry.example/c")
+
+    assert slept == []  # the first wait alone is past the total allowed
+
+
+async def test_a_good_answer_is_cached_and_a_failure_is_not(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(200, json={"ok": True}) if len(calls) > 1 else httpx.Response(500)
+
+    _registry_answers(monkeypatch, answer)
+
+    with pytest.raises(LookupUnavailable):
+        await registry_http.get("https://registry.example/d")
+    assert await registry_http.get("https://registry.example/d") == {"ok": True}
+    assert await registry_http.get("https://registry.example/d") == {"ok": True}
+    assert len(calls) == 2  # the failure was retried later; the success was read once

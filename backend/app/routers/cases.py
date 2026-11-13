@@ -138,7 +138,11 @@ async def update_case(
         types.CASE_RENAMED, case_id=case_id, detail={"from": case.company_name, "to": request.company_name},
     ))
 
-    updated = await asyncio.to_thread(case_service.get_case_summary, case_id)
+    updated = await to_thread_or_502(
+        case_service.get_case_summary, case_id,
+        detail="Failed to load the case. Check Supabase table access.",
+        log=("Failed to reload case %s after saving it", case_id),
+    )
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
     return updated

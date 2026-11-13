@@ -12983,6 +12983,65 @@
         ]
       }
     },
+    "/documents/{document_id}/process-anyway": {
+      "post": {
+        "description": "Lets a document the content guard stopped go through: the officer has read what the guard found and decided\nto continue. Logged in the audit trail; the document is re-queued, and the guard's warning stays on the page.",
+        "operationId": "process_document_anyway_documents__document_id__process_anyway_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Process Document Anyway",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
     "/documents/{document_id}/reject": {
       "post": {
         "operationId": "reject_document_documents__document_id__reject_post",

@@ -227,7 +227,7 @@ Required: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, `AUTH_USER
 | `CASE_ANALYSIS_ENABLED` | true | kill switch for the case analysis |
 | `CASE_ANALYSIS_AUTO_RUNS_PER_HOUR` | 4 | runs per case per hour that start on their own; past it, the officer starts one |
 | `REQUIRE_COMPLETE_CHECKLIST` | false | whether new cases need every required checklist document approved before analysis (stored on the case at creation; on only in production) |
-| `GUARD_BLOCK_INJECTION` | true | a document worded as an instruction to the AI fails at ingest; false lets it through, flagged |
+| `GUARD_BLOCK_INJECTION` | true | a document worded as an instruction to the AI fails at ingest; false lets it through, flagged. An officer can still let one blocked document through with "Process Anyway" (`POST /documents/{id}/process-anyway`): saved on its guard result, logged as `document.guard_overridden`, re-queued like a retry, warning kept |
 | `SWEEPER_ENABLED` | false | runs the stuck-work sweeper (Terraform sets it on audit-metrics) |
 | `STUCK_WAITING_SECONDS`, `STUCK_RUNNING_SECONDS`, `RECOVERY_MAX_ATTEMPTS` | 300, 900, 3 | when the sweeper counts work as stuck, and how often it retries |
 | `LOG_HTTP_REQUESTS` | false | httpx's one line per Supabase call |

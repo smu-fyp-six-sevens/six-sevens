@@ -1084,6 +1084,18 @@ export class MockBackend {
         document.retry_count += 1;
         return json(document);
       }
+      // Same rule as document_service.process_anyway: only a document the content guard stopped; it is re-queued.
+      if (method === 'POST' && rest === '/process-anyway') {
+        if (document.status !== 'failed' || !(document.failure_reason ?? '').startsWith('Blocked by the content guard')) {
+          return json({ detail: 'Only a document the content guard stopped can be processed anyway.' }, 409);
+        }
+        const guard = this.contentGuards[documentId] as { blocked?: boolean } | undefined;
+        if (guard) guard.blocked = false; // the findings stay on the page; the document is no longer stopped
+        document.status = 'queued';
+        document.failure_reason = null;
+        document.retry_count += 1;
+        return json(document);
+      }
       if (method === 'POST' && rest === '/cancel') {
         if (!['queued', 'processing', 'extracting'].includes(document.status)) {
           return json({ detail: 'Document can only be cancelled while queued, processing, or extracting.' }, 409);

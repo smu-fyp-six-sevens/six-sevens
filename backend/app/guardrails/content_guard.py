@@ -531,8 +531,11 @@ def blocking_reason(result: dict[str, Any]) -> str | None:
     """
     Why the document is stopped at ingest, before any model reads it, or None. Instruction wording the officer
     can't see stops it; visible wording only at the top score. Anything else the guard found goes on, to manual
-    review with the warning on the document page (nodes._GUARD_REVIEW_RISKS).
+    review with the warning on the document page (nodes._GUARD_REVIEW_RISKS). An officer's "process anyway"
+    (OVERRIDE_KEY on the result) lets it through; the warning stays on the page.
     """
+    if result.get(OVERRIDE_KEY):
+        return None
     span = next((s for s in result.get("spans") or [] if _blocks(s)), None)
     if span is None:
         return None
@@ -546,6 +549,9 @@ def blocking_reason(result: dict[str, Any]) -> str | None:
     quote = " ".join(str(span.get("quote") or "").split())[:120]
     return f'{BLOCKED_PREFIX}: {where} is worded as an instruction to the AI ("{quote}"). No AI model read this document.'
 
+
+# Set on a saved result by an officer's "process anyway": who, and when. Carried over every later scan of the file.
+OVERRIDE_KEY = "override"
 
 # Starts every blocking_reason. The frontend's isBlockedByContentGuard matches on it too.
 BLOCKED_PREFIX = "Blocked by the content guard"

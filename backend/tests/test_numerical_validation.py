@@ -1522,3 +1522,24 @@ def test_a_stated_or_brought_forward_opening_balance_needs_no_signal() -> None:
     assert _no_opening_signals(stated) == []
     brought = [{"description": "Balance B/F", "balance": 1000.00}, *transactions]
     assert _no_opening_signals(_run([_field("transactions", brought)], document_type="bank_statement")) == []
+
+
+def _statement_with_forward_lines(carried: float) -> list[dict]:
+    return [
+        {"description": "Balance brought forward", "balance": 1000.00},
+        {"description": "Salary", "amount": 500.00, "balance": 1500.00},
+        {"description": "Rent", "amount": -300.00, "balance": 1200.00},
+        {"description": "Balance carried forward", "balance": carried},
+    ]
+
+
+def test_brought_and_carried_forward_lines_are_not_transactions() -> None:
+    result = _run([_field("transactions", _statement_with_forward_lines(1200.00))], document_type="bank_statement")
+    assert _codes(result, "BS.RUNNING_BALANCE") == []
+    assert _codes(result, "BS.OPEN_CLOSE") == []
+
+
+def test_a_carried_forward_balance_that_does_not_follow_is_flagged() -> None:
+    result = _run([_field("transactions", _statement_with_forward_lines(1300.00))], document_type="bank_statement")
+    [finding] = _codes(result, "BS.OPEN_CLOSE")
+    assert finding.severity == "impossible" and finding.expected == "1,200.00"

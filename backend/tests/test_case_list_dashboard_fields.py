@@ -164,16 +164,23 @@ def test_the_accuracy_window_is_the_officers_days_not_utcs() -> None:
 
 
 
-def test_a_case_cost_adds_up_every_costed_run_filed_under_it() -> None:
-    rows = [
-        {"id": "e1", "case_id": "case-1", "detail": {"llm_cost_usd": 0.12}},
-        # A failed run still cost something.
-        {"id": "e2", "case_id": "case-1", "detail": {"llm_cost_usd": 0.03}},
-        {"id": "e3", "case_id": "case-2", "detail": {"llm_cost_usd": 0.5}},
-        # A run recorded before costs were: not counted, and no case is listed for it alone.
-        {"id": "e4", "case_id": "case-3", "detail": {}},
-    ]
-    with patch("app.audit.fetch_all", return_value=rows), patch("app.audit.service_supabase_client"):
+def test_a_case_cost_is_added_up_by_the_database_over_every_costed_run_type() -> None:
+    # The sums come from case_cost_totals; a case with no costed run is absent from its answer.
+    answer = [{"case_id": "case-1", "cost_usd": 0.15}, {"case_id": "case-2", "cost_usd": 0.5}]
+    with patch("app.audit.service_supabase_client") as client:
+        client.return_value.rpc.return_value.execute.return_value.data = answer
         totals = audit.cost_usd_many(["case-1", "case-2", "case-3"])
 
     assert totals == {"case-1": 0.15, "case-2": 0.5}
+    name, params = client.return_value.rpc.call_args.args
+    assert name == "case_cost_totals"
+    assert params["p_case_ids"] == ["case-1", "case-2", "case-3"] and set(params["p_actions"]) == set(audit._COSTED)
+
+
+def test_a_long_list_of_cases_is_asked_in_pieces() -> None:
+    ids = [f"case-{n}" for n in range(1200)]
+    with patch("app.audit.service_supabase_client") as client:
+        client.return_value.rpc.return_value.execute.return_value.data = []
+        assert audit.cost_usd_many(ids) == {}
+
+    assert [len(call.args[1]["p_case_ids"]) for call in client.return_value.rpc.call_args_list] == [500, 500, 200]

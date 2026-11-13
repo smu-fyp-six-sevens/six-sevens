@@ -95,6 +95,46 @@ test.describe('Extract text from documents @sprint2 @SCRUM-9', () => {
     await expect.poll(() => consoleErrors.join('\n')).toContain("Unhandled processing error: KeyError: 'net_pay'");
   });
 
+  test('an officer can process a document the content guard stopped, after confirming', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    payslip.status = 'failed';
+    payslip.failure_reason =
+      'Blocked by the content guard: hidden text on page 1 is worded as an instruction to the AI ("ignore all previous instructions"). No AI model read this document.';
+    backend.contentGuards[payslip.id] = {
+      checked: true, risk: 'high', blocked: true, error: null,
+      findings: [{ where: 'hidden', page: 1, field: null, quote: 'ignore all previous instructions', instruction: true, why_hidden: ['white_on_white'] }],
+    };
+
+    await page.goto(fixture.documentUrl(payslip));
+    await expect(page.locator('.content-guard-warning')).toContainText('this document was blocked');
+
+    await page.getByRole('button', { name: 'Process Anyway' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('recorded in the audit trail');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    expect(backend.requestsTo('POST', `/documents/${payslip.id}/process-anyway`)).toHaveLength(0);
+
+    await page.getByRole('button', { name: 'Process Anyway' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Process anyway' }).click();
+
+    await expect.poll(() => backend.requestsTo('POST', `/documents/${payslip.id}/process-anyway`).length).toBe(1);
+    await expect(page.getByRole('button', { name: 'Process Anyway' })).toHaveCount(0);
+    expect(payslip.status).toBe('queued');
+  });
+
+  test('a document that failed for another reason has no Process Anyway', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const payslip = fixture.document('Payslip');
+    payslip.status = 'failed';
+    payslip.failure_reason = "Text extraction failed: Failed to open file 'broken.pdf' as type pdf.";
+
+    await page.goto(fixture.documentUrl(payslip));
+
+    await expect(page.getByRole('button', { name: 'Retry Document' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Process Anyway' })).toHaveCount(0);
+  });
+
   test("a file that can't be read only says so: no type picker, fields or manual review", async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const payslip = fixture.document('Payslip');

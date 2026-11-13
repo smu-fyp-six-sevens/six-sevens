@@ -38,30 +38,12 @@ def _build_client() -> Client:
 
 supabase_client: Client = _build_client()
 
-_service_client: Client | None = None
-
-
 def service_supabase_client() -> Client:
     """
-    Backend-only client, a second instance on the same secret key as supabase_client above (which bypasses
-    row-level security, so no grant on the anon role is needed).
+    The same client as supabase_client above, kept under this name for the code that used to have its own: one
+    connection pool, on the secret key (which bypasses row-level security, so no grant on the anon role is needed).
     """
-    global _service_client
-    if _service_client is not None:
-        return _service_client
-
-    if not settings.SUPABASE_URL:
-        raise RuntimeError("SUPABASE_URL is not set")
-    if not settings.SUPABASE_SECRET_KEY:
-        raise RuntimeError("SUPABASE_SECRET_KEY is not set")
-
-    http_client = httpx.Client(http2=False, timeout=30.0, event_hooks=HTTPX_EVENT_HOOKS)
-    _service_client = create_client(
-        settings.SUPABASE_URL,
-        settings.SUPABASE_SECRET_KEY,
-        options=ClientOptions(httpx_client=http_client),
-    )
-    return _service_client
+    return supabase_client
 
 
 async def build_async_supabase_client() -> AsyncClient:
