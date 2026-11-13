@@ -159,7 +159,7 @@ export const ScoreScene: React.FC<{ showText?: boolean }> = ({ showText = true }
       {swipeAdd !== null && (
         <Window enter={1} swipe={swipeAdd}>
           <Screen {...SCREENS_STORY2.additional} zoom={addCam.zoom} focus={{ x: addCam.x, y: addCam.y }}>
-            <Tag {...ADDITIONAL_BOXES.now} label="Risk if the documents support the client" p={nowP} tone={colors.steel} />
+            <Tag {...ADDITIONAL_BOXES.now} label="Potential Risk Score" p={nowP} tone={colors.steel} />
             {ADDITIONAL_BOXES.items.map((b, i) => {
               const p = land(interpolate(t, [T.recsStart + 0.45 * i, T.recsStart + 0.45 * i + 0.3], [0, 1], clamp));
               return p > 0 ? <div key={i} style={{ position: "absolute", left: b.x, top: b.y, width: b.w, height: b.h, background: `rgba(53,95,150,${0.06 * p})`, borderLeft: `4px solid rgba(53,95,150,${p})` }} /> : null;

@@ -177,3 +177,6 @@
 - Owner: show the click to the dashboard clearly; more transition time from lock case to dashboard.
 - Dashboard starts on Finalise's last framing (badge ring and cursor carried over), eases out to the top bar, the cursor reaches "Dashboard" (ringed), clicks at 1.5 s; only then the page cross-fades and the window grows to full screen (0.6 s). Segment 11.1 s.
 - The wave-30 splice left a few stale frames before "The difference"; visuals now rendered whole again, not spliced.
+
+## Wave 32 - "Potential Risk Score"
+- The tag on the Additional Documents score line reads "Potential Risk Score" (was "Risk if the documents support the client"). Only that shot re-rendered (renders/additional-documents.mp4, frames 2436-2512) and spliced into renders/picture.mp4. Use out/timing-dump.json (node tools/dump-timing.mjs) for splice ranges: section starts round from cumulative time.
