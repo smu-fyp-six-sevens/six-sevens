@@ -266,31 +266,39 @@ jobs:
         with:
           version: v3.17.3
 
-      # Every push builds new images (each carries its commit), so each is signed afresh; the images are signed in
-      # parallel, which takes about as long as the largest one.
+      # The images are signed in parallel, which takes about as long as the largest one; an image a push didn't change
+      # keeps its digest and its earlier signatures.
       - name: Sign and attest every image
         run: |
           sign() {  # sign <image>: its SBOM, cosign signature and attestation, and the Binary Authorization attestation
             image=$1
             digest=$(gcloud artifacts docker images describe "$REGISTRY/$image:$GITHUB_SHA" --format='value(image_summary.digest)')
             ref="$REGISTRY/$image@$digest"
-            # An image this push didn't change keeps its digest, already attested by an earlier run (a second
-            # attestation is refused as a conflict). The attestation is the last step, so it means all of them ran.
-            if [ -n "$(gcloud container binauthz attestations list --attestor=built-by-ci \
-                --attestor-project="$PROJECT_ID" --artifact-url="$ref" --format='value(name)' --limit=1)" ]; then
-              echo "$image already signed and attested"
-              echo "$image $ref" > "image-$image.txt"
-              return 0
+            # An image this push didn't change keeps its digest, so an earlier run may have signed it already.
+            if cosign verify-attestation --insecure-ignore-tlog=true --key "gcpkms://$KMS_KEY" --type spdxjson \
+                "$ref" > /dev/null 2>&1; then
+              echo "$image already has its signature and SBOM"
+            else
+              sbom_and_sign "$image" "$ref"
             fi
+            # Binary Authorization refuses a second attestation of a digest as a conflict: it's already attested.
+            if ! out=$(gcloud beta container binauthz attestations sign-and-create --quiet --artifact-url="$ref" \
+                --attestor=built-by-ci --attestor-project="$PROJECT_ID" --keyversion-project="$PROJECT_ID" \
+                --keyversion-location="$REGION" --keyversion-keyring=six-sevens --keyversion-key=image-signing \
+                --keyversion=1 2>&1); then
+              echo "$out"
+              echo "$out" | grep -q "subject of a conflict" || return 1
+              echo "$image already attested"
+            fi
+            echo "$image $ref" > "image-$image.txt"
+          }
+          sbom_and_sign() {  # sbom_and_sign <image> <ref>
+            image=$1; ref=$2
             # Straight from the registry, not through the runner's Docker (the backend images are large).
             syft scan "registry:$ref" -o spdx-json -q > "sbom-$image.json"
             # No public transparency log: the signatures stay in our registry.
             cosign sign --yes --tlog-upload=false --key "gcpkms://$KMS_KEY" "$ref"
             cosign attest --yes --tlog-upload=false --key "gcpkms://$KMS_KEY" --type spdxjson --predicate "sbom-$image.json" "$ref"
-            gcloud beta container binauthz attestations sign-and-create --quiet --artifact-url="$ref" \
-              --attestor=built-by-ci --attestor-project="$PROJECT_ID" --keyversion-project="$PROJECT_ID" \
-              --keyversion-location="$REGION" --keyversion-keyring=six-sevens --keyversion-key=image-signing --keyversion=1
-            echo "$image $ref" > "image-$image.txt"
           }
           pids=""
           for image in $BACKEND_ROLES kong frontend-gke grafana; do
