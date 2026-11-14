@@ -2,8 +2,8 @@ name: Helm chart
 
 # The GKE chart (deploy/helm). Two jobs, so most changes cost about two minutes:
 # - chart (every run): role values match roles.json, lint, render what prod would get, Checkov on it.
-# - kind (only when something it exercises changed, weekly, or by hand): the chart on kind with Calico (network
-#   policies enforced) against the Pub/Sub emulator and a stub Supabase. About 8-10 minutes with a warm image cache.
+# - kind (only when something it exercises changed, weekly, or by hand): the chart on kind (its network
+#   plugin enforces network policies) against the Pub/Sub emulator and a stub Supabase. About 8-10 minutes with a warm image cache.
 # No Claude, no Google credentials, no real data.
 on:
   push:
@@ -143,20 +143,17 @@ jobs:
           cache-from: type=gha,scope=kind-kong
           cache-to: type=gha,scope=kind-kong,mode=max
 
-      - name: kind with Calico
+      # kind's own network plugin enforces NetworkPolicy (v0.24 and later); the smoke test's must-block calls prove it.
+      - name: kind
         uses: helm/kind-action@v1
         with:
           version: v0.27.0
           cluster_name: smoke
           config: deploy/helm/smoke/kind.yaml
-          # Nodes aren't ready until Calico is in (next step).
-          wait: 0s
+          wait: 120s
 
-      - name: Install Calico and load the images
-        run: |
-          kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.3/manifests/calico.yaml
-          kubectl -n kube-system rollout status daemonset/calico-node --timeout=300s
-          kind load docker-image six-sevens/backend:kind six-sevens/kong:kind --name smoke
+      - name: Load the images
+        run: kind load docker-image six-sevens/backend:kind six-sevens/kong:kind --name smoke
 
       - name: Smoke test
         run: bash deploy/helm/smoke/smoke.sh

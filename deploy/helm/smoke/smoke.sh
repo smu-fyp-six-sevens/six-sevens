@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The chart's smoke test on a kind cluster with Calico (.github/workflows/helm.yml). Expects the images
+# The chart's smoke test on a kind cluster (kindnet enforces NetworkPolicy) (.github/workflows/helm.yml). Expects the images
 # six-sevens/backend:kind and six-sevens/kong:kind already loaded into kind. No Claude, no Google, no real data:
 # the Pub/Sub emulator and a stub Supabase stand in, and the secrets are placeholders.
 #

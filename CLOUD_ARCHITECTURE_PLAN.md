@@ -144,7 +144,7 @@ The measured figures stay in the write-up, so the move reads as a deliberate des
 - **Labels:** chosen once. Deployment selectors are immutable, so a changed label means deleting the Deployment.
 - **KEDA** is installed once per cluster (a pinned `helm install`, in `deploy/terraform/README.md`), not by this chart.
 - **Pods:** non-root (uid 10001), read-only root, no privilege escalation, CPU and memory limits; a disruption budget for Kong and api once they run 2 or more (with one, it would block every node drain).
-- **CI on kind:** Pub/Sub emulator, stub Supabase, Calico; smoke test (health, one event per worker, one call the policies must block); Checkov on the rendered chart. Values, render and Checkov run on any chart-input change (about 2 minutes); the kind run only when the templates, smoke files, Kong, event code or Dockerfile change, and weekly (about 8–10 minutes, images cached).
+- **CI on kind:** Pub/Sub emulator, stub Supabase, kind's own network plugin (it enforces network policies); smoke test (health, one event per worker, one call the policies must block); Checkov on the rendered chart. Values, render and Checkov run on any chart-input change (about 2 minutes); the kind run only when the templates, smoke files, Kong, event code or Dockerfile change, and weekly (about 8–10 minutes, images cached).
 
 ## 17. Migration
 
