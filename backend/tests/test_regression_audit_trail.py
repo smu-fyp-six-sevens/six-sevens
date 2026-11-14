@@ -257,7 +257,15 @@ def test_edits_take_their_place_in_time_order(trail):
     assert max(i for i, t in enumerate(order) if t == types.DOCUMENT_FIELD_EDITED) < order.index(types.DOCUMENT_APPROVED)
 
 
+def _without_fingerprints(row: dict) -> dict:
+    """Agent fingerprints change with every prompt edit; the fixture keeps which agents ran, not their hashes."""
+    versions = row.get("detail", {}).get("agent_versions")
+    if not isinstance(versions, dict):
+        return row
+    return {**row, "detail": {**row["detail"], "agent_versions": {agent: "<fingerprint>" for agent in versions}}}
+
+
 def test_the_playwright_suites_audit_trail_matches_the_backend(trail):
-    rows = [e.model_dump(mode="json") for e in trail]
+    rows = [_without_fingerprints(e.model_dump(mode="json")) for e in trail]
 
     check_fixture(TRAIL_FIXTURE, rows)

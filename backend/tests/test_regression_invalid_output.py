@@ -101,10 +101,10 @@ async def test_a_retry_that_is_also_invalid_fails_the_document_and_nothing_runs_
     assert ai.steps().count("extract") == 2  # one retry, no more
     assert store.documents[document_id].status == DocumentStatus.FAILED
     # Nothing downstream: no fields saved, and extraction is the last step the pipeline ran (then only its
-    # closing bookkeeping).
+    # closing bookkeeping: the run's audit and its sensibility checks).
     assert document_id not in store.fields
     order = steps(document_id)
-    assert order[order.index("extraction") + 1:] == ["done", "run_audit"]
+    assert order[order.index("extraction") + 1:] == ["done", "run_audit", "evals"]
     assert not any(s.startswith("detection") for s in order)
 
 

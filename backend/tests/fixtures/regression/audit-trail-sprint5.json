@@ -38,6 +38,10 @@
     "actor_type": "agent",
     "case_id": "b688b259-8d1e-4edc-a3c3-92d28b8ef1c5",
     "detail": {
+      "agent_versions": {
+        "document_classifier": "<fingerprint>",
+        "field_extractor": "<fingerprint>"
+      },
       "classification_confidence": 0.83,
       "document_type": "proof_of_address",
       "llm_cache_read_tokens": 0,

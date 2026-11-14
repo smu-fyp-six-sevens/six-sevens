@@ -395,7 +395,8 @@ async def test_scoring_starts_after_the_cross_document_check_finishes(runs, case
     assert cross_document, order
     assert all(scoring["at"] >= e["at"] for e in cross_document)
     assert order.index("scoring") > max(order.index(e["step"]) for e in cross_document)
-    assert order[-2:] == ["done", "run_audit"]
+    # The run's sensibility checks come after its last step, then the run's audit.
+    assert order[-3:] == ["done", "evals", "run_audit"]
 
 
 @pytest.mark.sprint4

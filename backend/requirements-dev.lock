@@ -86,7 +86,7 @@ distro==1.9.0
     # via
     #   -c requirements.lock
     #   langsmith
-dnspython==2.9.0
+dnspython==2.9.2
     # via
     #   -c requirements.lock
     #   email-validator
@@ -339,7 +339,7 @@ openpyxl==3.1.5
     # via
     #   -c requirements.lock
     #   fyp-backend (pyproject.toml)
-opentelemetry-api==1.45.1
+opentelemetry-api==1.45.2
     # via
     #   -c requirements.lock
     #   fyp-backend (pyproject.toml)
@@ -360,37 +360,37 @@ opentelemetry-exporter-gcp-trace==1.15.0
     # via
     #   -c requirements.lock
     #   fyp-backend (pyproject.toml)
-opentelemetry-exporter-http-transport==0.66b1
+opentelemetry-exporter-http-transport==0.66b2
     # via
     #   -c requirements.lock
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-exporter-otlp-common==0.66b1
+opentelemetry-exporter-otlp-common==0.66b2
     # via
     #   -c requirements.lock
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-exporter-otlp-proto-common==1.45.1
+opentelemetry-exporter-otlp-proto-common==1.45.2
     # via
     #   -c requirements.lock
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-exporter-otlp-proto-http==1.45.1
+opentelemetry-exporter-otlp-proto-http==1.45.2
     # via
     #   -c requirements.lock
     #   fyp-backend (pyproject.toml)
     #   fastapi
-opentelemetry-instrumentation==0.66b1
+opentelemetry-instrumentation==0.66b2
     # via
     #   -c requirements.lock
     #   opentelemetry-instrumentation-asgi
     #   opentelemetry-instrumentation-fastapi
-opentelemetry-instrumentation-asgi==0.66b1
+opentelemetry-instrumentation-asgi==0.66b2
     # via
     #   -c requirements.lock
     #   opentelemetry-instrumentation-fastapi
-opentelemetry-instrumentation-fastapi==0.66b1
+opentelemetry-instrumentation-fastapi==0.66b2
     # via
     #   -c requirements.lock
     #   fyp-backend (pyproject.toml)
-opentelemetry-proto==1.45.1
+opentelemetry-proto==1.45.2
     # via
     #   -c requirements.lock
     #   opentelemetry-exporter-otlp-proto-common
@@ -399,7 +399,7 @@ opentelemetry-resourcedetector-gcp==1.14.0
     # via
     #   -c requirements.lock
     #   opentelemetry-exporter-gcp-trace
-opentelemetry-sdk==1.45.1
+opentelemetry-sdk==1.45.2
     # via
     #   -c requirements.lock
     #   fyp-backend (pyproject.toml)
@@ -409,14 +409,14 @@ opentelemetry-sdk==1.45.1
     #   opentelemetry-exporter-otlp-common
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-resourcedetector-gcp
-opentelemetry-semantic-conventions==0.66b1
+opentelemetry-semantic-conventions==0.66b2
     # via
     #   -c requirements.lock
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-asgi
     #   opentelemetry-instrumentation-fastapi
     #   opentelemetry-sdk
-opentelemetry-util-http==0.66b1
+opentelemetry-util-http==0.66b2
     # via
     #   -c requirements.lock
     #   opentelemetry-instrumentation-asgi
