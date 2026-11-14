@@ -14,7 +14,7 @@ web
 
 ## Product Purpose
 
-GLDB Fraud Review automates the forgery-check stage of GLDB's loan origination workflow. It is a Final Year Project built with GLDB. Officers upload a case's documents. The system reads, classifies and extracts each one, scans approved documents for tampering and inconsistencies, then compares documents across the case and scores its risk.
+GLDB Anomaly Detection Portal automates the forgery-check stage of GLDB's loan origination workflow. It is a Final Year Project built with GLDB. Officers upload a case's documents. The system reads, classifies and extracts each one, scans approved documents for tampering and inconsistencies, then compares documents across the case and scores its risk.
 
 Success means officers catch forged or inconsistent documents with less manual checking, and trust the findings enough to act on them. Detection precision and recall are measured from officers' own verdicts.
 
@@ -26,7 +26,7 @@ An agentic forgery check that shows its working. A lead agent and three speciali
 
 ## Operating Context
 
-- **Flow:** a case moves through stages derived from its documents and analysis: Awaiting Documents, Processing Documents, Pending Review, Missing Documents, Detecting Fraud, Ready to Analyse, Pending Evaluation, Ready to Finalise, Finalised, with Failed possible at any point. Only Finalised is permanent, and a finalised case is view-only.
+- **Flow:** a case moves through stages derived from its documents and analysis: Awaiting Documents, Processing Documents, Pending Review, Missing Documents, Detecting Anomalies, Ready to Analyse, Pending Evaluation, Ready to Finalise, Finalised, with Failed possible at any point. Only Finalised is permanent, and a finalised case is view-only.
 - **Documents:** PDF, PNG or JPEG, up to 25 MB each and 20 per batch. They include bank statements, NRICs, certificates of incumbency, payslips, notices of assessment and balance sheets.
 - **Officer actions:** edit extracted fields, correct a document's type, approve or reject documents, retry failures, mark findings correct or wrong, report missed issues, leave notes on a case or document, run the case analysis, and download a case report.
 - **Live updates:** case status arrives live over a WebSocket while background work runs.
@@ -44,7 +44,7 @@ An agentic forgery check that shows its working. A lead agent and three speciali
 
 ## Brand Commitments
 
-- **Name:** the product is "GLDB Fraud Review".
+- **Name:** the product is "GLDB Anomaly Detection Portal".
 - **Brand assets:** no GLDB brand guidelines or assets are required. The app's own look is its identity.
 
 ## Evidence on Hand

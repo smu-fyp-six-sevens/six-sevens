@@ -117,7 +117,7 @@ export function humanize(text: string): string {
 const SPAN_LABELS: Record<string, string> = {
   'langgraph.process_document': 'Classification and extraction',
   'langgraph.rerun_extraction': 'Extraction rerun',
-  'detection.run': 'Fraud detection',
+  'detection.run': 'Anomaly detection',
   'case_pipeline.run': 'Case analysis',
   'classify.agent_call': 'Deciding the type',
   'extract.run_extraction': 'Reading the fields',

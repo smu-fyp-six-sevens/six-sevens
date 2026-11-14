@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AgentRecord } from '../services/agents';
+import { agentGroupLabel } from '../utils/agentGroups';
 
 /* Design-space size of the graph. Nodes are laid out in these units, then the stage is scaled to fit the canvas. */
 const STAGE_W = 1000;
@@ -274,7 +275,7 @@ export default function AgentGraph({ agents, selectedId, onSelect }: AgentGraphP
               className={classes}
               style={{ left: node.x, top: node.y, ['--i' as string]: node.order }}
               aria-haspopup="dialog"
-              aria-label={`${agent.name}, ${agent.group}${gap ? ', prompt not versioned' : ''}`}
+              aria-label={`${agent.name}, ${agentGroupLabel(agent.group)}${gap ? ', prompt not versioned' : ''}`}
               onClick={() => onSelect(agent.id)}
               onMouseEnter={() => setHoveredId(agent.id)}
               onMouseLeave={() => setHoveredId((current) => (current === agent.id ? null : current))}

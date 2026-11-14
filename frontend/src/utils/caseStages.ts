@@ -22,7 +22,7 @@ const CASE_STAGE_LABELS: Record<CaseStage, string> = {
   processing_documents: 'Processing Documents',
   pending_review: 'Pending Review',
   documents_incomplete: 'Missing Documents',
-  fraud_detection: 'Detecting Fraud',
+  fraud_detection: 'Detecting Anomalies',
   pending_evaluation: 'Pending Evaluation',
   case_analysed: 'Ready to Finalise',
   finalised: 'Finalised',
@@ -51,7 +51,7 @@ const CASE_STAGE_TONES: Record<CaseStage, StatusTone> = {
 // What a failed case needs fixed, and how (see CaseFailure in backend/app/models.py).
 const FAILURE_MESSAGES: Record<CaseFailure, string> = {
   document_processing: 'Document processing failed. Retry or remove the failed document.',
-  fraud_detection: 'Fraud detection failed on a document. Retry it from the document page.',
+  fraud_detection: 'Anomaly detection failed on a document. Retry it from the document page.',
   case_analysis: 'The case analysis failed. Run it again.',
 };
 

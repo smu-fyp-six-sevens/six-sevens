@@ -65,7 +65,7 @@ function nextStep({ stage, failure, analysisRunning, analysisReady, findingsToRe
       }
       return analysisReady
         ? { text: 'Every document is scanned. The case analysis starts on its own; if it hasn\'t, start it here.', link: { label: 'Go to case analysis', section: 'analysis' } }
-        : { text: 'Approved documents are being scanned for fraud. The case analysis starts once they are done.', link: { label: 'View approved documents', section: 'documents' } };
+        : { text: 'Approved documents are being scanned for anomalies. The case analysis starts once they are done.', link: { label: 'View approved documents', section: 'documents' } };
     case 'pending_evaluation':
       return {
         text: findingsToReview
@@ -118,7 +118,7 @@ export function CaseStageCard({
   failure: CaseFailure | null;
   onChanged: (summary: CaseRequirementCoverage) => void;
   onSelectSection: (section: CaseSection) => void;
-  // Whether a case analysis is running, which keeps the case at Fraud Detection.
+  // Whether a case analysis is running, which keeps the case at Detecting Anomalies.
   analysisRunning?: boolean;
   // Every approved document is scanned, so the case analysis is next.
   analysisReady?: boolean;

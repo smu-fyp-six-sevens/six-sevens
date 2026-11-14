@@ -141,7 +141,7 @@ test.describe('Trace agent runs @SCRUM-59', () => {
 
     await expect(row(page, 'Plan')).toContainText('4.0k tokens · $0.0061');
     // The run adds up what happened in it.
-    await expect(row(page, 'Fraud detection')).toContainText('4.7k tokens · $0.0073');
+    await expect(row(page, 'Anomaly detection')).toContainText('4.7k tokens · $0.0073');
     await expect(panel(page).locator('.trace-row-main', { hasText: 'Investigation plan' })).toContainText('briefs for 2 specialists');
 
     // A step shows its time since the step before; the run's duration is the run's, not the trace's.
@@ -170,7 +170,7 @@ test.describe('Trace agent runs @SCRUM-59', () => {
     // A heading has no kind label, and the run it's in has no start offset.
     await expect(details(page).getByRole('heading', { name: 'Lead agent' })).toBeVisible();
     await expect(details(page).locator('.trace-kind-name')).toHaveCount(0);
-    await row(page, 'Fraud detection').click();
+    await row(page, 'Anomaly detection').click();
     await expect(details(page)).not.toContainText('Starts');
     await row(page, 'Plan').click();
     await expect(details(page)).toContainText('Starts');
@@ -239,7 +239,7 @@ test.describe('Trace agent runs @SCRUM-59', () => {
     await page.getByRole('button', { name: 'Document actions' }).click();
     await page.getByRole('menuitem', { name: 'Agent trace' }).click();
     await expect(panel(page)).toBeVisible();
-    await expect(panel(page).locator('.trace-row-main', { hasText: 'Fraud detection' })).toBeVisible();
+    await expect(panel(page).locator('.trace-row-main', { hasText: 'Anomaly detection' })).toBeVisible();
   });
 
   test('a document with no trace says so', async ({ page, backend }) => {

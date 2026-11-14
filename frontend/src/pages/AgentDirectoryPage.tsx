@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AgentGraph, { AgentGlyph } from '../components/AgentGraph';
+import { agentGroupLabel } from '../utils/agentGroups';
 import AppHeader from '../components/AppHeader';
 import { getAgentPrompt, getAgentRegistry, type AgentPrompt, type AgentRecord } from '../services/agents';
 
@@ -139,7 +140,7 @@ function AgentDialog({ agent, onClose }: { agent: AgentRecord; onClose: () => vo
         <header className="agent-dialog-header">
           <span className="agent-dialog-icon" aria-hidden="true"><AgentGlyph agent={agent} /></span>
           <div>
-            <p className="agent-directory-role">{agent.group}</p>
+            <p className="agent-directory-role">{agentGroupLabel(agent.group)}</p>
             <h2 id="agent-dialog-title">{agent.name}</h2>
           </div>
           <button ref={closeRef} type="button" className="agent-dialog-close" onClick={onClose} aria-label="Close model card">×</button>

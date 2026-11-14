@@ -47,8 +47,8 @@ Measured 2026-11-07 (24 hours, 8 cases, 80 documents): 2,343 requests, 745 s of 
 | # | Sev | In plain words | Fix | Where | Size |
 |---|---|---|---|---|---|
 | 6.1 | Low | Any service can publish any event type, including ones that look like an officer's | Handlers check which role may send each type | `deploy/terraform/iam.tf:37-42` | M |
-| 6.2 | Medium | The public `api` holds the database key that bypasses every rule | Later: a database role per service. Sooner: restrict the key to the services' network | `deploy/terraform/roles.json` (each role's `secrets`) | L |
-| 6.6 | Low | Actions and the base image are pinned by tag, not hash; pip doesn't check hashes | Pin by digest; `--require-hashes` (needs the digests looked up and a hashed lock) | `.github/workflows/ci-cd.yml:63`; `backend/Dockerfile` | S |
+| 6.2 | Medium | The public `api` holds the database key that bypasses every rule | A database role per service. Restricting the key to the cluster's NAT address doesn't help: Supabase's network restrictions don't cover the HTTPS APIs the backend uses | `deploy/terraform/roles.json` (each role's `secrets`) | L |
+| 6.6 | Low | Actions and the base image are pinned by tag, not hash; pip doesn't check hashes | Pin by digest; `--require-hashes` (needs the digests looked up and a hashed lock). Our own images already deploy to GKE by digest, signed and admitted by Binary Authorization | `.github/workflows/ci-cd.yml:63`; `backend/Dockerfile` | S |
 
 Password hashing and the login token's place in `localStorage` are in `PENDING_WORK.md` ("Security").
 

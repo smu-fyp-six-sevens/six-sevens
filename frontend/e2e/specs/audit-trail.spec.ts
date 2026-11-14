@@ -69,7 +69,7 @@ test.describe('Case audit trail', () => {
       'Uploaded document',
       'Classified and extracted document',
       'Approved document',
-      'Fraud detection run',
+      'Anomaly detection run',
     ]);
     await expect(entries.getByTestId('audit-officer')).toHaveText([
       'By officer',

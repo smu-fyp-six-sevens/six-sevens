@@ -32,7 +32,7 @@ test.describe('Track case status @SCRUM-80', () => {
     await page.goto('/cases');
 
     await expect(page.getByTestId('case-row').filter({ hasText: 'Acme Trading' }).getByTestId('case-row-status')).toHaveText('Ready to Finalise');
-    await expect(page.getByTestId('case-row').filter({ hasText: 'Newco' }).getByTestId('case-row-status')).toHaveText('Detecting Fraud');
+    await expect(page.getByTestId('case-row').filter({ hasText: 'Newco' }).getByTestId('case-row-status')).toHaveText('Detecting Anomalies');
   });
 
   test('AC1 the case page shows the current stage @SCRUM-80 @sprint5 @CM-086', async ({ page, backend }) => {
@@ -120,7 +120,7 @@ test.describe('Track case status @SCRUM-80', () => {
     await page.goto('/cases/GLDB-1200');
 
     await expect(progressCard(page).locator('.case-status-step-label')).toHaveText([
-      'Awaiting Documents', 'Processing Documents', 'Pending Review', 'Detecting Fraud', 'Pending Evaluation',
+      'Awaiting Documents', 'Processing Documents', 'Pending Review', 'Detecting Anomalies', 'Pending Evaluation',
       'Ready to Finalise', 'Finalised',
     ]);
   });
@@ -171,9 +171,9 @@ test.describe('Track case status @SCRUM-80', () => {
     await page.goto('/cases/GLDB-1200');
 
     await expect(stageBadge(page)).toHaveText('Failed');
-    await expect(progressCard(page).locator('.case-status-next')).toContainText('Fraud detection failed');
+    await expect(progressCard(page).locator('.case-status-next')).toContainText('Anomaly detection failed');
     // The failure sits on the step where it happened, and the link goes where it can be fixed.
-    await expect(progressCard(page).locator('[aria-current="step"]')).toHaveText(/Detecting Fraud/);
+    await expect(progressCard(page).locator('[aria-current="step"]')).toHaveText(/Detecting Anomalies/);
     await progressCard(page).getByRole('button', { name: /View approved documents/ }).click();
     await expect(page).toHaveURL(/section=documents/);
   });

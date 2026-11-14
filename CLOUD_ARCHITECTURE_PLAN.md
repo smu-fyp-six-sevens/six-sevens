@@ -2,7 +2,7 @@
 
 Planned and open cloud work only. Delete an item once it's done. Updated 2026-11-14.
 
-**Where it stands:** production runs on Cloud Run today. The cloud as built is summarised in `HOW_IT_WORKS.md` §9; operations and every problem met are in `deploy/terraform/README.md`; running the split locally is in `README.md`. Sections 1–7 and 12 moved there, so the numbers from 8 on are unchanged. Adding a service: `docs/ADDING_A_SERVICE.md`.
+**Where it stands:** production runs on GKE Autopilot since 2026-11-14: `sixsevens.me` is its front door, and every consumer pulls its events there (phases 1–4). Cloud Run still serves its `run.app` URLs and takes no events, until phase 6. The cloud as built is summarised in `HOW_IT_WORKS.md` §9; operations and every problem met are in `deploy/terraform/README.md`; running the split locally is in `README.md`. Sections 1–7 and 12 moved there, so the numbers from 8 on are unchanged. Adding a service: `docs/ADDING_A_SERVICE.md`.
 
 **Decided 2026-11-14:**
 - **Production moves to GKE Autopilot**, and the Cloud Run deployment is removed once GKE is stable (§13–24). This is a Cloud Native award, so Kubernetes is the platform, not an afterthought. Load doesn't require it: detection's p95 is 92 s against a 600 s limit.
@@ -11,7 +11,7 @@ Planned and open cloud work only. Delete an item once it's done. Updated 2026-11
 - **No release approval in Cloud Deploy, ever:** a green push to `main` deploys, as today. The human checkpoint is the merge to `main`; every release is still recorded and one step to roll back.
 - **Claude through Vertex AI** is kept but comes after phase 6 (§17). Vertex appears not to serve the Claude 5 models in `asia-southeast1` (only `global` and the US and EU multi-regions; confirm in Model Garden), so its case rests on no Anthropic key, Google IAM, billing and audit logs, not on processing in Singapore.
 
-**What's left of the move:** the code, chart, Terraform and release pipeline are built (`HOW_IT_WORKS.md` §9); none of it is applied. Open: the phases (§17), run with `deploy/terraform/README.md` ("GKE"); after the first run on GKE, the Cloud Run panels' GKE versions in `build_dashboards.py` and the budget's new amount; then Vertex.
+**What's left of the move:** watch phases 2–4 (§17); Cloud Armor out of preview after a day of normal use (`cloud_armor_preview = false`; Binary Authorization already enforces); phase 6 after a stable week; the Cloud Run panels' GKE versions in `build_dashboards.py` and the budget's new amount; then Vertex. Runbook: `deploy/terraform/README.md` ("GKE").
 
 ## 8. Open decisions
 
@@ -31,7 +31,7 @@ Planned and open cloud work only. Delete an item once it's done. Updated 2026-11
 **Feedback in short:** the architecture is fine. A handful of users doesn't justify heavier infrastructure without a measured need. Let load testing drive decisions; spend the time on testing, productionisation, usability and business value. `docker compose up` liked; on-prem accepted as hard; a deployment document (server, model, RAM, storage) requested. The GKE move goes beyond that advice deliberately, for the award; the measured load figures stay in the write-up.
 
 **Steps, in order:**
-1. **GKE production** (§13–24).
+1. **GKE production:** live; phase 6 open (§17).
 2. **Claude through Vertex AI** (Google identity and billing, regional processing); check which Claude models Vertex offers in `asia-southeast1` first. Can be done with the move.
 3. **Load tests as code** (k6 or Locust) against the local compose stack, written up as a capacity report. **No Claude calls** (stubbed) and **no Supabase writes** (writes go to an in-memory store).
 4. **Tune autoscaling** (KEDA, pod sizes) from the results, recording before and after.
@@ -49,13 +49,12 @@ Planned and open cloud work only. Delete an item once it's done. Updated 2026-11
 - **Kong** is a single entry point: a wrong `Host` or CORS rule breaks the frontend; test with compose first.
 - **One environment:** with no staging, the post-deploy check, the phased move (§17) and rollback are the safety net.
 - **Shared Supabase:** local and cloud see each other's data; whole-database scans (the sweeper) run only in the cloud.
-- **Time:** the GKE move competes with testing and the write-up before the deadline. If it runs out, production stays on Cloud Run and the chart is shown running on GKE for the demo only (with its own topic, its sweeper off).
 
 ---
 
-# Kubernetes deployment (decided, not built)
+# Kubernetes deployment (live; phase 6 open)
 
-How Six Sevens moves from Cloud Run to GKE. Decided 2026-11-14; nothing here is built yet. Sections 13–24.
+How Six Sevens moved from Cloud Run to GKE. Decided and built 2026-11-14; phases 1–4 are done (§17). Sections 13–24; what's built is summarised in `HOW_IT_WORKS.md` §9.
 
 **The rule:** every phase is watched on the agents' sensibility checks (built, §13) and, once built, the officer-verdict accuracy trend.
 
@@ -148,22 +147,18 @@ The measured figures stay in the write-up, so the move reads as a deliberate des
 
 ## 17. Migration
 
-Each worker's subscription switches from push to pull in place, so only one platform gets a role's messages at a time; rollback is switching back. Each phase is watched on the sensibility checks: a jump in warnings or failures holds the next phase.
+Each consumer's subscription switched from push to pull in place (`migration.json`), so only one platform gets a role's messages; rollback is switching back. Phase 1 (the cluster and front door, which also covered the planned phase 5) went live on 2026-11-14; phases 2–4 (audit-metrics, case-worker, detection-worker, doc-worker) were applied together the same day, at the team's call, rather than one at a time.
 
-| Phase | Moves | Check before next | Rollback |
+| Phase | Moves | Check | Rollback |
 |---|---|---|---|
-| 1 | Cluster, NAT, load balancer, Cloud Armor (preview) and the chart, every worker at 0; subscriber rights granted, no subscription changed | Pods healthy; the smoke test's health and must-block calls against the cluster (it publishes nothing: the topic is shared, and Cloud Run's workers would take the events) | `gke_enabled = false`, apply |
-| 2 | audit-metrics' events (the sweeper moves with them: only the pull subscriber gets sweeps). Cloud Run audit-metrics keeps serving `/audit` to Cloud Run's Kong until phase 5 | Every event stored; sweeps run | Push back |
-| 3 | case-worker | p95 and failures within 10% of Cloud Run | Push back |
-| 4 | detection-worker, then doc-worker | Same; no more recoveries or dead letters | Push back per role |
-| 5 | api, Kong, frontend, Grafana at `sixsevens.me`. Both front doors run side by side (api only publishes, so two are safe); CORS gains the new origin | The gateway checks pass through the new load balancer | Officers use the `run.app` URL again |
+| 2–4 (being watched) | Every consumer's events, the sweeper with audit-metrics. Cloud Run's audit-metrics still serves `/audit` to Cloud Run's Kong | Every event stored; sweeps run; p95 and failures within 10% of Cloud Run; no more recoveries or dead letters (`PENDING_TESTS.md`, manual checks) | Remove the role from `migration.json`, apply, push |
 | 6 | Remove the Cloud Run services, the push identity and its grants after a stable week (Terraform) | — | Re-apply them from git history |
 
-A phase's Terraform change must plan the subscription as "update in-place", never "replace". Then the failure tests (§9), then Vertex AI.
+Then the failure tests (§9), then Vertex AI.
 
 ## 18. CI/CD on GKE
 
-Actions builds and pushes to Artifact Registry, signs each digest with cosign and attaches its SBOM (syft), creates the Binary Authorization attestation with the same KMS key, then creates a Cloud Deploy release that renders the chart with the image digests. Cloud Deploy rolls it out without approval and records it; its verify step runs the gateway checks; rollback is its previous release. Terraform owns the cloud pieces; the chart owns everything inside the cluster. Binary Authorization starts in dry-run, then enforces. The checks that block today (Checkov, pip-audit, npm audit) keep blocking. Until phase 6 the same images also roll out to Cloud Run (`deploy.yml`), with the GKE job behind a repository variable.
+Actions builds and pushes to Artifact Registry, signs each digest with cosign and attaches its SBOM (syft), creates the Binary Authorization attestation with the same KMS key, then creates a Cloud Deploy release that renders the chart with the image digests. Cloud Deploy rolls it out without approval and records it; its verify step runs the gateway checks; rollback is its previous release. Terraform owns the cloud pieces; the chart owns everything inside the cluster. Binary Authorization enforces (since 2026-11-14, after a clean dry run). The checks that block today (Checkov, pip-audit, npm audit) keep blocking. Until phase 6 the same images also roll out to Cloud Run (`deploy.yml`), with the GKE job behind a repository variable.
 
 ## 19. Tools: in and out
 
@@ -183,10 +178,10 @@ Actions builds and pushes to Artifact Registry, signs each digest with cosign an
 | Security item (`CODEBASE_AUDIT.md`) | On GKE |
 |---|---|
 | 6.2 every role holds the database key | Still true, and the NAT allow-list doesn't help: Supabase's network restrictions don't cover the HTTPS APIs the backend uses |
-| 6.6 pinning by tag | Closed by §18 (digests, Binary Authorization) |
+| 6.6 pinning by tag | Our images: closed (deployed by digest, signed, Binary Authorization enforces). Actions, base images and pip hashes: still open |
 | 6.1 any service can publish any event | Unchanged |
 
-Kong's real-IP settings (`deploy/kong/render.sh`) need the load balancer's ranges as trusted IPs. The gateway key (backend `gateway.py`) stays until phase 6, as a second guard beside the network policies; drop it then or keep it.
+The gateway key (backend `gateway.py`) stays until phase 6, as a second guard beside the network policies; drop it then or keep it.
 
 ## 21. Cost (rough; check Google's calculator before quoting)
 
@@ -210,7 +205,6 @@ The cluster costs money while idle, unlike Cloud Run. The budget alert stays; de
 | A slow start from zero trips the sweeper | Watch recoveries in phase 4; keep doc-worker at 1 for demos |
 | Nobody to run it after handover | Autopilot, Cloud Deploy, a short runbook |
 | Data leaves Singapore | Regional cluster and registry; Claude calls leave Singapore either way (Anthropic API, or Vertex's `global`), a stated limitation |
-| The move doesn't finish before the deadline | Stop at the last stable phase; the remaining roles stay on Cloud Run (§11) |
 | Too few officer verdicts to read accuracy | Show the count with each figure; a person decides below 30 cases |
 
 ## 23. Why each piece (in the bank's terms)

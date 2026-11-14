@@ -169,4 +169,4 @@ The order is audit-metrics, then case-worker, then detection-worker, then doc-wo
 - **A changed secret:** `kubectl -n <role> rollout restart deploy/<role>`. The add-on mounts secrets as files, which are read at start.
 - **Costs per push:** Artifact Analysis scans each pushed image, about $0.26 per image, so roughly $2–3 a deploy.
 - **Turning it all off:** set `GKE_ENABLED` to false, then `gke_enabled = false` and apply. First empty `migration.json` (and apply), so Cloud Run takes the events again. The KMS key ring stays, since key rings can't be deleted.
-- **Not built yet:** phase 6 (removing Cloud Run after a stable week), and the GKE versions of Grafana's Cloud Run panels.
+- **Still to do:** Cloud Armor out of preview, phase 6 (removing Cloud Run after a stable week), and the GKE versions of Grafana's Cloud Run panels.

@@ -24,7 +24,7 @@ const average = (values: number[]) => values.reduce((sum, value) => sum + value,
 
 const STAGES: { label: string; type: string; plural: string }[] = [
   { label: 'Classify + extract', type: 'document.analyzed', plural: 'documents' },
-  { label: 'Fraud detection', type: 'document.detected', plural: 'documents' },
+  { label: 'Anomaly detection', type: 'document.detected', plural: 'documents' },
   { label: 'Case analysis', type: 'case.analysis.completed', plural: 'runs' },
 ];
 

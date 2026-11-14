@@ -13,7 +13,7 @@ import { CharacterCount } from '../components/CharacterCount';
 const NEXT_STEPS = [
   { title: 'Upload documents', detail: 'Each file is classified and its fields extracted.' },
   { title: 'Approve documents', detail: 'Check the extracted fields, then approve each document.' },
-  { title: 'Fraud detection', detail: 'Approved documents are scanned for signs of tampering.' },
+  { title: 'Anomaly detection', detail: 'Approved documents are scanned for signs of tampering.' },
   { title: 'Case analysis', detail: 'Documents are cross-checked and the case is given a risk score.' },
 ];
 

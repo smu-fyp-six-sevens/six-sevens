@@ -48,7 +48,7 @@
       "consumer": true,
       "cpu": "250m",
       "drainSeconds": 20,
-      "enabled": false,
+      "enabled": true,
       "env": {
         "CORS_IN_APP": "false",
         "SWEEPER_ENABLED": "true"
@@ -81,7 +81,7 @@
       "consumer": true,
       "cpu": "500m",
       "drainSeconds": 240,
-      "enabled": false,
+      "enabled": true,
       "env": {
         "CASE_ANALYSIS_TIMEOUT_SECONDS": "900"
       },
@@ -109,13 +109,13 @@
       "consumer": true,
       "cpu": "1",
       "drainSeconds": 240,
-      "enabled": false,
+      "enabled": true,
       "env": {
         "CPU_WORKER_PROCESSES": "2",
         "DETECTION_CONCURRENCY": "2"
       },
       "max": 1,
-      "memory": "3Gi",
+      "memory": "4Gi",
       "min": 0,
       "secrets": [
         {
@@ -146,13 +146,13 @@
       "consumer": true,
       "cpu": "1",
       "drainSeconds": 240,
-      "enabled": false,
+      "enabled": true,
       "env": {
         "CPU_WORKER_PROCESSES": "2",
         "QUEUE_WORKER_CONCURRENCY": "2"
       },
       "max": 1,
-      "memory": "3Gi",
+      "memory": "4Gi",
       "min": 0,
       "secrets": [
         {

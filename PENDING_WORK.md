@@ -1,6 +1,6 @@
 # Pending work
 
-Open product and platform work only: delete an item once done. Updated 2026-11-13. Elsewhere: bugs, stability, performance and security in `CODEBASE_AUDIT.md`; tests in `TEST_SUITE_AUDIT.md` and `PENDING_TESTS.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §8; cloud to-dos in `CLOUD_ARCHITECTURE_PLAN.md` §9–10 and Kubernetes in §13–24.
+Open product and platform work only: delete an item once done. Updated 2026-11-14. Elsewhere: bugs, stability, performance and security in `CODEBASE_AUDIT.md`; tests in `TEST_SUITE_AUDIT.md` and `PENDING_TESTS.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §8; cloud to-dos in `CLOUD_ARCHITECTURE_PLAN.md` §9–10 and Kubernetes in §13–24.
 
 ## Handover documentation
 
@@ -62,3 +62,4 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 ## Frontend
 
 - Dev StrictMode sends some document-page requests twice.
+- **Browser tab title** is still "fyp" (`frontend/index.html`); the product is "GLDB Anomaly Detection Portal". The screens say "anomaly" where they said "fraud"; the backend's names (stage `fraud_detection`, the agent groups, `fraud_detection/`) stay, by choice.

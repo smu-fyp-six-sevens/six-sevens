@@ -493,7 +493,7 @@ test.describe('Case page layout @SCRUM-299', () => {
     await expect(stage('Classify + extract')).toContainText('average of 2 documents');
     await expect(stage('Case analysis')).toContainText('2m 05s');
     // Nothing recorded for detection yet.
-    await expect(stage('Fraud detection')).toContainText('—');
+    await expect(stage('Anomaly detection')).toContainText('—');
     // The mock reports no spend, and the summary shows that rather than leaving the card blank.
     await expect(page.locator('.case-overview-cost')).toContainText('$0.0000');
   });

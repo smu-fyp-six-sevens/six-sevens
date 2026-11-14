@@ -1,5 +1,5 @@
 ---
-name: GLDB Fraud Review
+name: GLDB Anomaly Detection Portal
 description: A calm case file for checking corporate loan documents for forgery.
 colors:
   ink: "#12203d"
@@ -112,7 +112,7 @@ components:
     textColor: "{colors.white}"
 ---
 
-# Design System: GLDB Fraud Review
+# Design System: GLDB Anomaly Detection Portal
 
 ## Overview
 
@@ -137,7 +137,7 @@ The system is light only. There is no dark theme.
 A quiet paper-and-ink base with one steel accent, plus two reserved colour sets that carry meaning: stage and severity.
 
 ### Primary
-- **Steel** (#355f96): the only accent. Primary buttons, text links, the active nav underline, selected rows, focus rings (at 20–30% alpha) and the brand's "Fraud Review" half. Hover deepens to **Steel Dark** (#284a78).
+- **Steel** (#355f96): the only accent. Primary buttons, text links, the active nav underline, selected rows, focus rings (at 20–30% alpha) and the brand's "Anomaly Detection Portal" half. Hover deepens to **Steel Dark** (#284a78).
 
 ### Neutral
 - **Ink** (#12203d): body text, headings and the strongest button (sign in, new case).
@@ -156,7 +156,7 @@ A quiet paper-and-ink base with one steel accent, plus two reserved colour sets 
 ### Stage tones
 A case's stage is coloured by **who acts next**, and each group also has its own **shape** (components/StageMark), so a stage never rests on colour alone. Each tone is four tokens: a fill for marks (listed in the frontmatter, 3:1 or more on white), an ink for text, a tint for backgrounds and a border.
 - **Idle**, an empty ring: Awaiting Documents.
-- **System**, a half-filled ring: Processing Documents and Detecting Fraud. The system is working.
+- **System**, a half-filled ring: Processing Documents and Detecting Anomalies. The system is working.
 - **Officer**, a solid dot: Pending Review, Ready to Analyse and Pending Evaluation. The officer's turn.
 - **Blocked**, an amber warning triangle: Missing Documents. Still the officer's turn, but the case can't go on.
 - **Done**, a tick: Ready to Finalise.

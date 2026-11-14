@@ -47,7 +47,7 @@ export default function LoginPage({ onLoggedIn }: LoginPageProps) {
       <section className="login-panel" aria-hidden="true">
         <div className="brand login-panel-brand">
           <span className="brand-text">
-            GLDB <span>Fraud Review</span>
+            GLDB <span>Anomaly Detection Portal</span>
           </span>
         </div>
 
@@ -78,7 +78,7 @@ export default function LoginPage({ onLoggedIn }: LoginPageProps) {
         <div className="login-card">
           <div className="brand login-card-brand">
             <span className="brand-text">
-              GLDB <span>Fraud Review</span>
+              GLDB <span>Anomaly Detection Portal</span>
             </span>
           </div>
 

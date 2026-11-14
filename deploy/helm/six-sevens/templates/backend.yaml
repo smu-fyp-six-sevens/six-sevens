@@ -9,7 +9,8 @@ subscription (EVENT_DELIVERY=pull) and scale on undelivered messages (KEDA); api
 {{- /* A consumer behind Kong (audit-metrics) serves its HTTP routes before its events move, taking none. */}}
 {{- $httpOnly := and $role.consumer $role.behindGateway (not $enabled) }}
 {{- $running := or $enabled $httpOnly }}
-{{- $autoscaled := and $enabled $.Values.autoscaling.enabled (not $.Values.singleReplica) }}
+{{- /* min = max (audit-metrics) has nothing to scale: a fixed count, no ScaledObject or HPA. */}}
+{{- $autoscaled := and $enabled $.Values.autoscaling.enabled (not $.Values.singleReplica) (gt (int $role.max) (int $role.min)) }}
 {{- $env := merge (deepCopy $.Values.envOverrides) (deepCopy $role.env) (deepCopy $.Values.commonEnv) }}
 ---
 {{ include "six.serviceAccount" $ctx }}
