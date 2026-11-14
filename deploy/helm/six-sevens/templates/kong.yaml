@@ -13,9 +13,6 @@ metadata:
   namespace: gateway
   labels:
     {{- include "six.labels" $ctx | nindent 4 }}
-  annotations:
-    checkov.io/skip1: CKV_K8S_22=Kong writes its runtime prefix (/usr/local/kong) at start
-    checkov.io/skip2: CKV_K8S_40=the kong image's own user (1000)
 spec:
   {{- if or (not .Values.autoscaling.enabled) .Values.singleReplica }}
   replicas: {{ if .Values.singleReplica }}1{{ else }}{{ .Values.kong.replicas }}{{ end }}
@@ -31,10 +28,11 @@ spec:
     spec:
       serviceAccountName: kong
       automountServiceAccountToken: false
+      # Any non-root user works: Kong's runtime files go to /tmp (KONG_PREFIX), not the image's own folder.
       securityContext:
         runAsNonRoot: true
-        runAsUser: {{ .Values.kong.uid }}
-        runAsGroup: {{ .Values.kong.uid }}
+        runAsUser: 10001
+        runAsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       {{- include "six.spread" $ctx | nindent 6 }}
@@ -55,6 +53,9 @@ spec:
               value: "8000"
             - name: KONG_STATUS_PORT
               value: "8100"
+            # Kong's runtime files (sockets, nginx config) on the writable /tmp, so the root filesystem is read-only.
+            - name: KONG_PREFIX
+              value: /tmp/kong
             - name: API_URL
               value: http://api.api.svc.cluster.local
             - name: AUDIT_URL
@@ -82,14 +83,18 @@ spec:
             periodSeconds: 20
             failureThreshold: 6
           securityContext:
-            # Kong writes its runtime prefix (/usr/local/kong) at start.
-            {{- include "six.containerSecurity" (dict "readOnly" false) | nindent 12 }}
+            {{- include "six.containerSecurity" (dict "readOnly" true) | nindent 12 }}
           volumeMounts:
             - name: secrets
               mountPath: {{ .Values.secrets.mountPath }}
               readOnly: true
+            # render.sh's kong.yml and Kong's prefix.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         {{- include "six.secretVolume" $ctx | nindent 8 }}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

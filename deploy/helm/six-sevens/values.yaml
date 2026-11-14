@@ -83,8 +83,6 @@ kong:
   memory: 512Mi
   # Comma-separated frontend origins for Kong's CORS plugin.
   corsOrigins: "https://sixsevens.me"
-  # Kong's image user (kong:3.9.1).
-  uid: 1000
 
 frontend:
   enabled: true
