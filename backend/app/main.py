@@ -253,7 +253,8 @@ if "api" in ROLES:
 
     @app.post("/auth/login", response_model=LoginResponse)
     async def login(body: LoginRequest) -> LoginResponse:
-        username = auth.verify_credentials(body.username, body.password)
+        # The password hash is deliberately slow, so it runs off the event loop.
+        username = await asyncio.to_thread(auth.verify_credentials, body.username, body.password)
         if username is None:
             # The attempted name is recorded; never the password.
             await events.record(events.Event(

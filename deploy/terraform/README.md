@@ -88,3 +88,16 @@ Fixed in the code unless the fix says otherwise.
 | Registry cleanup dry run logs nothing | Results don't reach Logging | Compare `gcloud artifacts docker images list --include-tags` with serving digests |
 | `'terraform' is not recognized` | Terminal opened before install | New terminal, or restart VS Code |
 | A plan replaces heredoc secrets | `.tf` file saved with LF endings | Keep `.tf` files CRLF |
+| Every request through Kong gets Google's 404 | Kong forwards the original `Host` (Cloud Run routes by it) | `preserve_host: false`; Kong uses HTTPS upstream |
+| A worker gets no messages; Pub/Sub shows 403 | Push account lacks `roles/run.invoker` on that worker | Grant it in `iam.tf` |
+| The same message is processed again and again | Handler ran past 600 s, or returned non-2xx | Make it faster or return 2xx after recording the failure |
+| CORS error in the browser | Frontend origin missing from Kong's CORS plugin | Add it in `deploy/kong`; CORS lives only in Kong (`CORS_IN_APP=false`), never `*` |
+| Live updates stop after an hour | Cloud Run's 60-minute WebSocket limit | Expected; the client reconnects |
+| A document stays "Processing stuck" | Should recover within a sweep plus its stage limit | Check worker logs and dead letters, then Retry |
+| Events never reach a worker in compose | `pubsub-init` failed | `docker compose logs pubsub-init`, then `docker compose up pubsub-init` |
+
+## Testing the split and rolling back
+
+- **Debug workers in the IDE:** `PUSH_HOST=host.docker.internal PUSH_PORT=8001 docker compose up --build --scale workers=0`, then uvicorn on :8001 from `backend/` with `ROLE=doc-worker,detection-worker,case-worker EVENT_TRANSPORT=pubsub PUBSUB_EMULATOR_HOST=localhost:8085 GOOGLE_CLOUD_PROJECT=local`. The emulator has no auth, so `/push` takes unsigned requests locally.
+- **Before a risky change** (real Supabase and Claude): upload → `analyzed`; approve → `detected`; wait for the analysis; read `GET /audit/events?case_id=<id>`. Then `docker compose restart workers` mid-detection (it should still reach `detected`); stop and start audit-metrics (missed events appear); `docker compose run --rm pubsub-init python -m app.events.emulator_setup --poison` (retried, then dead-lettered).
+- **Manual rollback:** `gcloud run services update-traffic <service> --to-revisions=<revision>=100 --region asia-southeast1`. Config changes go in Terraform.

@@ -17,7 +17,7 @@ It automates the forgery-check stage of GLDB's loan workflow: officers upload a 
 | `HOW_IT_WORKS.md` | How the system behaves today, settings, cost logs |
 | `FRAUD_DETECTION_MAP.md` | How the fraud checks and agents are wired; known detection bugs |
 | `CROSS_DOCUMENT_AND_RISK_PLAN.md` | Design of the case analysis and risk score |
-| `CLOUD_ARCHITECTURE_PLAN.md` | The cloud as built, its to-dos and Stage 2 (§1–12); if and how to move to Kubernetes, planned only (§13–24) |
+| `CLOUD_ARCHITECTURE_PLAN.md` | What's left in the cloud: to-dos, staging, Stage 2, open decisions (§8–11); if and how to move to Kubernetes, planned only (§13–24). The cloud as built: `HOW_IT_WORKS.md` §9 and `deploy/terraform/README.md` |
 | `CODEBASE_AUDIT.md` | Open bugs, stability, performance, code structure and security findings |
 | `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md` | Test gaps, and tests owed for recent fixes |
 | `PENDING_WORK.md` | Open product and platform work |
@@ -65,7 +65,7 @@ docker compose up --build                     # Pub/Sub emulator, Kong :8000, ap
 docker compose --profile frontend up --build  # also nginx on :5173
 ```
 
-Settings come from `backend/.env`. The workers share one container (~3 GB). Walkthrough and debugging: `CLOUD_ARCHITECTURE_PLAN.md` §12. The `detection-worker` and `all` images build the URA zoning index (needs internet; set `ALLOW_MISSING_LAND_USE=true` to skip; export `DATA_GOV_SG_API_KEY` first).
+Settings come from `backend/.env`. The workers share one container (~3 GB). Walkthrough and debugging: `deploy/terraform/README.md`. The `detection-worker` and `all` images build the URA zoning index (needs internet; set `ALLOW_MISSING_LAND_USE=true` to skip; export `DATA_GOV_SG_API_KEY` first).
 
 ## Deploying
 

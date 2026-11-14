@@ -295,7 +295,16 @@ L.add(bars("Tool results by outcome (range)", [("sum by (tool, outcome) (increas
 L.add(bars("Unable to assess or failed, share per tool (range)", [("sum by (tool) (increase(detection_tool_calls_total{outcome=~\"unable|error\"}[$__range])) / sum by (tool) (increase(detection_tool_calls_total[$__range]))", "{{tool}}")], "percentunit",
            "A tool that often can't assess leaves gaps in the report."), 12, 10)
 L.add(series("Call errors by agent", [("sum by (agent) (increase(llm_calls_total{result=\"error\"}[15m]))", "{{agent}}")], "short"), 24, 7)
-agents = dashboard("six-agents", "Six Sevens · Agentic workflows", L, desc="Claude calls, tokens, latency, prompt cache and detection tools per agent.")
+
+L.row("Sensibility checks")
+EVALS_MARKED = 'result=~"pass|warn|fail"'
+L.add(series("Warnings and failures per check (share of runs marked)", [
+    (f"sum by (agent, check) (increase(agent_eval_results_total{{result=~\"warn|fail\"}}[1h])) / sum by (agent, check) (increase(agent_eval_results_total{{{EVALS_MARKED}}}[1h]))", "{{agent}} · {{check}}"),
+], "percentunit", "Code checks of each agent run: did it take the expected path, is its answer sensible. Not accuracy."), 12, 9)
+L.add(bars("Failures by check (range)", [("sum by (agent, check) (increase(agent_eval_results_total{result=\"fail\"}[$__range]))", "{{agent}} · {{check}}")], "short",
+           "A failure means a design rule was broken; open the run's agent trace to see why.", decimals=0), 12, 9)
+agents = dashboard("six-agents", "Six Sevens · Agentic workflows", L,
+                   desc="Claude calls, tokens, latency, prompt cache, detection tools and sensibility checks per agent.")
 
 # ---------------------------------------------------------------- Cost
 CPU = f"run_googleapis_com:container_cpu_allocation_time{{{RUN}}}"

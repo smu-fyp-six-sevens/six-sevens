@@ -43,6 +43,22 @@ export interface ValidationFailure {
   used?: string | null;
 }
 
+// One sensibility check on an agent's run (backend evals/): did it take the expected path, is its answer sensible.
+export interface EvalResult {
+  agent: string;
+  check: string;
+  kind: 'output' | 'trajectory';
+  result: 'pass' | 'warn' | 'fail' | 'n/a';
+  reason?: string;
+  span?: string;
+}
+
+export interface EvalTotals {
+  passed: number;
+  warnings: number;
+  failures: number;
+}
+
 export interface TraceTotals {
   calls: number;
   inputTokens: number;
@@ -76,11 +92,14 @@ export interface TraceNode {
   failures: ValidationFailure[];
   children: TraceNode[];
   totals: TraceTotals;
+  // The sensibility checks on this agent's work (or, on a run, on work no row of its own stands for).
+  evals?: EvalResult[];
 }
 
 export interface BuiltTrace {
   roots: TraceNode[];
   totals: TraceTotals;
+  evals: EvalTotals;
   // Time spent working: a document's runs can be hours apart, waiting for an officer.
   seconds: number;
   hasSpans: boolean;
@@ -128,6 +147,7 @@ const STEP_LABELS: Record<string, string> = {
   llm_classify_tool: 'Claude read the text',
   vision_llm: 'Claude read the page images',
   validate: 'Classification checked',
+  classify_tool_refused: 'Tool call refused',
   reclassify: 'Type checked again',
   record_escalation: 'Sent for officer review',
   classification_finalised: 'Document type decided',
@@ -135,8 +155,10 @@ const STEP_LABELS: Record<string, string> = {
   extraction_layout_lookup: 'Page layout read',
   extraction_vision_read: 'Page images read',
   extraction_second_look: 'Second look finished',
+  extraction_tool_refused: 'Second look: tool call refused',
   detection_start: 'Detection started',
   detection_plan: 'Investigation plan',
+  detection_review: 'Reports read',
   detection_second_look: 'Second look requested',
   detection_specialist: 'Specialist finished',
   detection_done: 'Detection finished',
@@ -270,6 +292,12 @@ export function describeStep(step: TraceStep): string | undefined {
       return `${list(step.fields).length} field(s) · page(s) ${step.step === 'extraction_vision_read' ? list(step.pages).join(', ') || '—' : String(step.pages ?? '—')}`;
     case 'extraction_second_look':
       return `${list(step.fields).length} field(s) reviewed in ${num(step.turn_count)} turn(s)`;
+    case 'classify_tool_refused':
+    case 'extraction_tool_refused':
+      return list(step.tools).map((tool) => toolLabel(String(tool))).join(', ');
+    case 'detection_review':
+      if (!step.second_look_requested) return 'no second look asked for';
+      return step.second_look_accepted ? 'second look asked for' : 'second look asked for, not run';
     case 'detection_plan':
       return `briefs for ${Object.keys((step.detection_briefs as object | undefined) ?? {}).length} specialists`;
     case 'detection_specialist': {
@@ -322,10 +350,10 @@ const GROUP_MEMBERS: Record<string, string[]> = {
   'Document intake': ['ingest', 'content_guard'],
   Classifier: [
     'rule_classify', 'classify.agent_call', 'agent_call', 'llm_classify_tool', 'vision_llm', 'tool.llm_classify_tool',
-    'tool.vision_llm', 'validate', 'reclassify', 'record_escalation', 'classification_finalised',
+    'tool.vision_llm', 'validate', 'classify_tool_refused', 'reclassify', 'record_escalation', 'classification_finalised',
   ],
-  Extractor: ['extract.run_extraction', 'extraction'],
-  'Lead agent': ['detection.lead_plan', 'detection_plan', 'detection_second_look', 'detection.lead_review'],
+  Extractor: ['extract.run_extraction', 'extraction', 'extraction_tool_refused'],
+  'Lead agent': ['detection.lead_plan', 'detection_plan', 'detection_review', 'detection_second_look', 'detection.lead_review'],
   Specialists: ['detection_specialist'],
   'Case file': ['dossier', 'deterministic'],
   'Hypothesis planner': ['case_pipeline.hypothesise', 'hypotheses'],
@@ -436,8 +464,13 @@ export function buildTrace(steps: TraceStep[]): BuiltTrace {
     (owner ? owner.children : top).push(node);
   }
 
+  const evalSteps: TraceStep[] = [];
   steps.forEach((step, index) => {
     if (step.step === 'span') return;
+    if (step.step === 'evals') {
+      evalSteps.push(step);
+      return;
+    }
     const at = num(step.at);
     const error = step.step.endsWith('error') ? str(step.error) ?? str(step.findings_error) : undefined;
     const node: TraceNode = {
@@ -488,9 +521,58 @@ export function buildTrace(steps: TraceStep[]): BuiltTrace {
   return {
     roots,
     totals,
+    evals: attachEvals(roots, evalSteps),
     seconds,
     hasSpans: spans.size > 0,
   };
+}
+
+// The trace heading each agent's checks belong under; an agent with a row of its own (a specialist) names it by span.
+const EVAL_GROUPS: Record<string, string> = {
+  classifier: 'Classifier',
+  extractor: 'Extractor',
+  lead: 'Lead agent',
+  hypothesis_planner: 'Hypothesis planner',
+  hypothesis_judge: 'Hypothesis judge',
+  summary_writer: 'Summary writer',
+  evidence_requests: 'Risk and outlook',
+};
+
+function findNode(nodes: TraceNode[], match: (node: TraceNode) => boolean): TraceNode | undefined {
+  for (const node of nodes) {
+    if (match(node)) return node;
+    const found = findNode(node.children, match);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+// Puts each run's check results on the row of the agent they mark, and counts them for the header.
+function attachEvals(roots: TraceNode[], evalSteps: TraceStep[]): EvalTotals {
+  const counts: EvalTotals = { passed: 0, warnings: 0, failures: 0 };
+  for (const step of evalSteps) {
+    counts.passed += num(step.passed);
+    counts.warnings += num(step.warnings);
+    counts.failures += num(step.failures);
+    const run = findNode(roots, (node) => node.key === str(step.in_span)) ?? roots.find((node) => node.kind === 'run');
+    for (const result of list(step.results) as EvalResult[]) {
+      if (result.result === 'n/a') continue;
+      const group = EVAL_GROUPS[result.agent] ?? (result.agent.startsWith('specialist:') ? 'Specialists' : undefined);
+      const target = (result.span && run && findNode([run], (node) => node.key === result.span))
+        ?? (group && run && findNode([run], (node) => node.group === true && node.label === group))
+        ?? run;
+      if (target) target.evals = [...(target.evals ?? []), result];
+    }
+  }
+  return counts;
+}
+
+export function evalSummary(results: EvalResult[]): { tone: 'ok' | 'warn' | 'error'; text: string } {
+  const failures = results.filter((r) => r.result === 'fail').length;
+  const warnings = results.filter((r) => r.result === 'warn').length;
+  if (failures) return { tone: 'error', text: `✕ ${failures} check${failures === 1 ? '' : 's'}` };
+  if (warnings) return { tone: 'warn', text: `⚠ ${warnings} check${warnings === 1 ? '' : 's'}` };
+  return { tone: 'ok', text: `✓ ${results.length} check${results.length === 1 ? '' : 's'}` };
 }
 
 export interface TraceRow {

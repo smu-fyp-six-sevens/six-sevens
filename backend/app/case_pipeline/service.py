@@ -20,6 +20,7 @@ from .. import (
     findings_repository, identifiers, read_pool, telemetry,
 )
 from ..config import settings
+from ..evals import runner as evals
 from ..fraud_detection.shared.field_values import decode_field_value
 from ..snapshots import push_case_snapshot
 from ..llm_io import ModelRefused
@@ -232,7 +233,10 @@ async def _execute(
         # The root span closes before the trace's last save, in the finally below.
         with telemetry.steps_into(trace.record), telemetry.get_tracer().start_as_current_span("case_pipeline.run"):
             telemetry.annotate(kind="run", run="Case analysis")
-            await _analyse(analysis, documents, reports, failed_ids, trace)
+            try:
+                await _analyse(analysis, documents, reports, failed_ids, trace)
+            finally:
+                evals.record_case_run(trace)
     except Exception as exc:
         logger.exception("Case analysis failed for case %s", case_id)
         analysis.status = "failed"

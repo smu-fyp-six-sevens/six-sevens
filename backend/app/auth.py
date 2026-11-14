@@ -22,6 +22,7 @@ from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
 
+from . import passwords
 from .config import settings
 
 TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
@@ -83,14 +84,13 @@ def create_token(username: str) -> str:
 
 
 def verify_credentials(username: str, password: str) -> str | None:
-    """The matching account's username, or None. Checks every account so timing doesn't reveal which names exist."""
-    matched = None
-    for name, expected in settings.AUTH_USERS.items():
-        user_ok = hmac.compare_digest(username.encode("utf-8"), name.encode("utf-8"))
-        password_ok = hmac.compare_digest(password.encode("utf-8"), expected.encode("utf-8"))
-        if user_ok and password_ok:
-            matched = name
-    return matched
+    """
+    The matching account's username, or None. Exactly one slow hash runs either way (a dummy one for an unknown
+    name), so timing doesn't reveal which names exist. Blocking (~tens of ms): call via asyncio.to_thread.
+    """
+    stored = settings.AUTH_USERS.get(username)
+    matched = passwords.verify(password, stored if stored is not None else passwords.DUMMY_HASH)
+    return username if matched and stored is not None else None
 
 
 def _verify_token(token: str) -> str | None:

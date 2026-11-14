@@ -117,6 +117,7 @@ def combine_floor_notes(kept: dict, other: dict) -> None:
 _SPECIALIST_RECURSION_LIMIT = 16
 # Tool rounds (one round = one agent turn that calls tools) before the specialist must wrap up.
 _MAX_TOOL_ROUNDS = 3
+_WRAP_UP = "Tool budget used up. Reply with the JSON report now, with no more tool calls."
 
 
 @dataclass(frozen=True)
@@ -362,7 +363,7 @@ def _make_agent_node(spec: Specialist):
                 tool_rounds = sum(1 for m in existing if isinstance(m, AIMessage) and m.tool_calls)
                 if tool_rounds >= _MAX_TOOL_ROUNDS:
                     # Out of tool budget: one final turn that can't call a tool, so the report still comes back.
-                    wrap_up = HumanMessage(content="Tool budget used up. Reply with the JSON report now, with no more tool calls.")
+                    wrap_up = HumanMessage(content=_WRAP_UP)
                     response = await _invoke(lambda: no_more_tools.ainvoke([*existing, wrap_up]))
                     telemetry.record_usage(span, response)
                     return {"messages": [wrap_up, response]}
@@ -655,6 +656,10 @@ def _collect_node(state: SpecialistState) -> dict:
             "Specialist output was incomplete or no tool was run."
         ),
         "output_status": assessment_status,
+        # For the run's sensibility checks (evals/detection.py).
+        "tool_rounds": sum(1 for m in messages if isinstance(m, AIMessage) and m.tool_calls),
+        "wrapped_up": any(isinstance(m, HumanMessage) and m.content == _WRAP_UP for m in messages),
+        "unassessed": sum(1 for finding_id in findings if finding_id not in by_id),
     }
     return {"report": report}
 

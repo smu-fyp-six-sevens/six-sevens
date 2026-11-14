@@ -17,6 +17,7 @@ from . import extract, text_cache, trace
 from .state import DocumentGraphState
 from .. import document_repository, extracted_fields_repository, metrics, storage_service
 from ..config import settings
+from ..evals.extraction import field_shape
 from ..guardrails import content_guard
 from .extraction_prompts import schema_field_names
 from ..ingestion.ingestion_service import ingest_document, content_type_from_filename
@@ -396,6 +397,8 @@ async def extract_node(state: DocumentGraphState) -> dict:
         "extraction_disagreements": extraction.get("extraction_disagreements") or [],
         "second_look_rejected_fields": extraction.get("second_look_rejected_fields") or [],
         "second_look_error": extraction.get("second_look_error"),
+        # Field names only, for the run's sensibility checks (evals/extraction.py).
+        "field_shape": field_shape(schema_type, extraction.get("extracted_fields")),
     }
     trace.record(document_id, "extraction", document_type=document_type, schema=schema_type, **summary)
     if extraction.get("output_error"):

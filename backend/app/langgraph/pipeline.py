@@ -14,6 +14,7 @@ import logging
 from . import extract, nodes, text_cache, trace
 from .graph import get_document_graph
 from ..config import settings
+from ..evals import runner as evals
 from ..llm_io import ModelRefused
 from ..run_context import RunContext, run_context
 from .. import document_repository, telemetry
@@ -51,6 +52,7 @@ async def process_document(document_id: str) -> None:
                         )
                     finally:
                         _record_run_audit(document_id, run)
+                        evals.record_document_run(document_id)
             except nodes.RunStopped as exc:
                 _stopped(document_id, exc)
             except Exception as exc:
@@ -101,6 +103,7 @@ async def rerun_extraction(document_id: str) -> None:
                         await _rerun_extraction(document_id)
                     finally:
                         _record_run_audit(document_id, run)
+                        evals.record_document_run(document_id)
             except nodes.RunStopped as exc:
                 _stopped(document_id, exc)
             except Exception as exc:

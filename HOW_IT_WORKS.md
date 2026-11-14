@@ -25,14 +25,14 @@ A loan officer creates a **case** for a company applying for a loan and uploads 
 | **Live updates** | Supabase Realtime tells the backend a row changed; the backend pushes a case snapshot over a WebSocket | `realtime_listener.py`, `case_broadcaster.py`, `routers/ws.py` |
 | **Cost logging** | One `perf` log line per unit of work | `query_stats.py` |
 
-`ROLE` decides what a process runs. `uvicorn app.main:app` keeps the default `ROLE=all` and `EVENT_TRANSPORT=inprocess`: every role in one process, each event handled by a background task, as before the split (work in flight is lost on restart). In compose and on Cloud Run each role is its own container, events go through Pub/Sub (`EVENT_TRANSPORT=pubsub`), and each worker receives them on `POST /push/<role>`. The layout, the deployment and how to run it are in `CLOUD_ARCHITECTURE_PLAN.md`.
+`ROLE` decides what a process runs. `uvicorn app.main:app` keeps the default `ROLE=all` and `EVENT_TRANSPORT=inprocess`: every role in one process, each event handled by a background task, as before the split (work in flight is lost on restart). In compose and on Cloud Run each role is its own container, events go through Pub/Sub (`EVENT_TRANSPORT=pubsub`), and each worker receives them on `POST /push/<role>`. The layout and how to run it are in §9 below and `deploy/terraform/README.md`.
 
 ---
 
 ## 3. End to end: following one case
 
 ### Step 0: Login
-A few named accounts, all in one setting: `AUTH_USERS=alice:password1;bob:password2` (no roles; a password can't contain `;`, `,`, `$` or `#`). `POST /auth/login` returns a signed token carrying the username, which every other call sends; a handler that declares `user: CurrentUser` learns who is acting. A browser WebSocket can't send headers, so the frontend first asks for a one-time ticket (`POST /ws/tickets`) and puts it in the WebSocket URL.
+A few named accounts, all in one setting: `AUTH_USERS=alice:<hash>;bob:<hash>` (no roles). Each password is stored only as a salted scrypt hash (`passwords.py`; about 0.4 s to check, run off the event loop); `python -m scripts.hash_password alice` in `backend/` prompts for one and prints the entry. A plain-text password stops the app at start-up. A login runs one hash whether or not the name exists, so timing doesn't reveal accounts. `POST /auth/login` returns a signed token carrying the username, which every other call sends; a handler that declares `user: CurrentUser` learns who is acting. A browser WebSocket can't send headers, so the frontend first asks for a one-time ticket (`POST /ws/tickets`) and puts it in the WebSocket URL.
 
 ### Step 1: Creating a case
 A row in `cases`. A database trigger assigns the readable ID (`GLDB-<n>`), skipping any already taken. Local runs and the cloud share one Supabase project and one case list.
@@ -156,6 +156,20 @@ Every model reply and tool result is checked against an expected shape before an
 
 **Bounds:** a run may make at most `DOCUMENT_MAX_MODEL_CALLS` (24) or `DETECTION_MAX_MODEL_CALLS` (30) calls, and a case analysis 7 (`run_context.py`). Past the detection limit the verdict can't be clean. Every tool has a time limit (`TOOL_TIMEOUT_SECONDS` 60, `SLOW_TOOL_TIMEOUT_SECONDS` 120 for model and registry tools); a timeout is `unable_to_assess`. Transient API errors are retried by the client (`LLM_MAX_RETRIES`, 1). Every repaired reply is written to the trace (`run_audit`), with the raw reply capped at 4,000 characters.
 
+### Sensibility checks on each agent run (`app/evals/`)
+At the end of each run (classification and extraction, an extraction rerun, detection, case analysis), code checks every agent's work on two things: did it take the expected path (**trajectory**), and is its answer sensible (**output**). No model call and no table: the results are one `evals` step on the run's own trace (`evals_version` on it). The trace view puts a chip on each agent's row (`✓ 5 checks`, `⚠ 1 check`, `✕ 1 check`), lists them under "Sensibility checks", and adds a "Checks" figure to the header. A **failure** means a design rule was broken; a **warning** is worth a look. The checks never change what the run decided, and an error in them is logged, never fails the run. Counter `agent_eval_results_total{agent, check, result}`; the Agents dashboard shows warning and failure rates per check. They don't measure accuracy: a run can pass every check and still miss fraud.
+
+- **Classifier:** read before deciding; looked at the pages when there was no text (fail); vision only when needed; tool order; agrees with a certain rule match (fail); not overconfident (claimed over 0.3 above the computed confidence); answered an extraction objection.
+- **Extractor:** required fields present; values fit their field (dates, amounts, pay not negative; judged by field name, names only on the trace). Second look: tool order, turns used up, changes the code rejected, failed (fail). An extraction rerun has no `extraction` step, so only its second look is checked.
+- **Lead:** a specific brief for each specialist; second-look requests that name a real finding and specialist; a summary of its own.
+- **Each specialist:** the checks expected for the type (Content Validation runs the numerical checks on payslips, notices of assessment and bank statements; Digital Authenticity runs the metadata check) (fail); a check of its own beyond the one the code runs for it; no repeated calls; within its tool rounds; every finding assessed; floors respected; dismissals explained.
+- **Hypothesis planner:** answered through its tool; planned its own refutation probes; real tools only; nothing resting on a protected attribute (fail).
+- **Hypothesis judge:** answered through its tool; conclusive verdicts the code could verify (fail when none could); kept findings span two documents (fail).
+- **Summary writer** (only when the model wrote it): kept its limits; no advice to approve or decline (fail); no protected attribute (fail).
+- **Evidence requests:** say what they would show; cite findings that exist. **Adverse media:** a result backed by sources.
+
+What they read that the trace didn't hold before: refused tool calls (`classify_tool_refused`, `extraction_tool_refused`), the lead's `detection_review` and `fallback_briefs`, each specialist's `tool_rounds`, `wrapped_up`, `unassessed` and `floor_overruled`, the planner's `unknown_tools` and `probes_added_by_code`, and the extraction's `field_shape`.
+
 ---
 
 ## 4. How live updates work
@@ -255,7 +269,7 @@ The same counts are also on `GET /metrics` for Prometheus (`metrics.py`), togeth
 - Claude calls, tokens, cost and latency per agent and model, with list prices from `pricing.py`;
 - cost and calls per unit of work, and detection tool outcomes.
 
-Labels are routes, event types, stages, agents and models, never ids. Kong blocks `/metrics` from outside. Grafana's four dashboards (services, pipeline, agents, cost) read these metrics (`deploy/grafana`, `CLOUD_ARCHITECTURE_PLAN.md` section 7).
+Labels are routes, event types, stages, agents and models, never ids. Kong blocks `/metrics` from outside. Grafana's four dashboards (services, pipeline, agents, cost) read these metrics (`deploy/grafana`).
 
 **Traces.** OpenTelemetry (`telemetry.py`) is off unless `OTEL_ENABLED=true`, which Terraform sets in the cloud. Spans go to:
 1. OTLP, when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (Jaeger locally);
@@ -269,7 +283,7 @@ Each event's Pub/Sub message carries `traceparent`, so one upload is one trace a
 - **Saving:** a run saves its trace after its root span closes, so the root's own step is kept.
 - **The view:** `components/agentTrace/` draws the tree beside the selected step's details, with a run's steps under folded headings (Classifier, Extractor, Lead agent and so on, in `buildTrace.ts`) and each step's time since the step before it in the same span. The document's own trace opens from the document page's actions menu ("Agent trace"), while the case analysis trace opens from the case actions menu when the case is on `section=analysis` ("Case analysis trace", with its earlier runs). A trace from before spans were recorded shows as a flat list of steps.
 
-**Stuck work** (`sweeper.py`, `CLOUD_ARCHITECTURE_PLAN.md` section 5). In the cloud, Cloud Scheduler publishes `sweep.requested` every 5 minutes and audit-metrics runs the sweeper (`SWEEPER_ENABLED`; off locally, because the database is shared).
+**Stuck work** (`sweeper.py`, summarised in §9 above). In the cloud, Cloud Scheduler publishes `sweep.requested` every 5 minutes and audit-metrics runs the sweeper (`SWEEPER_ENABLED`; off locally, because the database is shared).
 - **What counts as stuck:** a document uploaded or queued for over 5 minutes (its event was lost), or processing, extracting or detecting for over 15 minutes (its run died); or a case analysis still running past `CASE_ANALYSIS_TIMEOUT_SECONDS`.
 - **What happens:** the sweeper publishes `recovery.requested` to the worker that owns the stage. That worker resets the status (compare-and-swap) and reruns it. After 3 attempts it fails the document (detection: back to approved with an error) and publishes `recovery.exhausted`. A stuck case analysis is marked failed, not rerun.
 - **Locally:** `python -m app.sweeper --once --case <id>` runs one pass for one case and does the recovery in the same process.
@@ -282,9 +296,24 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 ## 9. What is built and what isn't
 
-**Built:** upload and queue; the content guard; classify and extract with the reclassify loop and the second look; officer review tools; requirements checklist; case-match; the Detection Agent with 13 checks and on-demand single checks, cancel and rerun; every finding stored with the agents' decision and the officer's verdict (dismissed ones included); learning from officers; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, adverse media, summary); live WebSocket updates; case notes; cost logging and per-case Claude cost (every run: retries, reruns, cancelled and failed runs, earlier analyses, deleted documents); the service split on Cloud Run (roles, domain events, Pub/Sub push, audit trail, stuck-work recovery, `/metrics`, Grafana, traces, alerts), Kong, the compose stack, Terraform, and CI/CD that deploys every green push to `main` (`CLOUD_ARCHITECTURE_PLAN.md`).
+**Built:** upload and queue; the content guard; classify and extract with the reclassify loop and the second look; officer review tools; requirements checklist; case-match; the Detection Agent with 13 checks and on-demand single checks, cancel and rerun; every finding stored with the agents' decision and the officer's verdict (dismissed ones included); learning from officers; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, adverse media, summary); live WebSocket updates; case notes; cost logging and per-case Claude cost (every run: retries, reruns, cancelled and failed runs, earlier analyses, deleted documents); the service split on Cloud Run, Kong, the compose stack, Terraform, and CI/CD that deploys every green push to `main` (summary below).
 
 **Not built:** open items are in `PENDING_WORK.md` and the cloud plan's section 9.
+
+### The cloud, as built
+
+Live on Cloud Run in GCP project `fyp-six-sevens` (`asia-southeast1`) since 2026-10-22. One GCP project and one Supabase project, shared by local runs and the cloud. Operations and every problem met: `deploy/terraform/README.md`.
+
+- **Roles:** one image per role, `ROLE` picks what runs. api (HTTP, uploads, WebSocket), doc-worker (OCR, classify, extract), detection-worker (lead and specialists, checks), case-worker (case analysis, score, summary, adverse media), audit-metrics (stores every event, serves the audit trail and costs, runs the sweeper). Plus Kong, the frontend and Grafana. Everything scales to zero by default. Sizes are in `deploy/terraform/main.tf`.
+- **Services talk only through events and Supabase.** One topic, `domain-events`, with a dead-letter topic; each role has a filtered push subscription (filters from `backend/app/events/types.py`). Messages carry ids; Supabase holds the state. Delivery is at least once, so handlers are idempotent, and each state change has one writer. An officer action that starts work fails with a 502 if its publish fails. Kong's request id and a W3C `traceparent` travel with each message, so one upload is one trace.
+- **Kong** is the only entry point (`deploy/kong/`). It rate-limits login, uploads and officer actions, and adds a gateway key that api and audit-metrics require. Workers accept calls only from Pub/Sub's push identity.
+- **Stuck work:** Cloud Scheduler sends a sweep every 5 minutes (`backend/app/sweeper.py`). Limits: 5 min for uploads, 15 min for processing, detection and analysis. At most 3 recovery attempts in 24 h. Case analysis is never rerun automatically, because its Claude calls are the officer's call.
+- **Delivery:** CI runs ruff, pyright, pytest, Playwright, Checkov, pip-audit, npm audit and Terraform checks. The deploy rolls out the workers first, then api, Kong, the frontend and Grafana, then checks through Kong; any failure rolls every service back. Snyk runs weekly or when lock files change, and is non-blocking until its quota resets.
+- **Security:** one service account per service, each secret readable only by the services that need it, keyless GitHub sign-in, non-root containers.
+- **Observability:** `/metrics` on every service with no document or case ids in labels; Managed Prometheus; Grafana (Services, Pipeline, Agents, Cost); Cloud Trace; alerts for dead letters, API 5xx over 5%, daily Claude spend and recovery given up.
+- **Fixed design** (changing one touches every service): the event envelope and names, one topic with filtered subscriptions, the ownership rules, a Dockerfile target per role, Kong as the only entry, handler plus adapter.
+- **Assessment criteria it addresses:** loose coupling, independent scaling, resilience, observability, secure delivery, least privilege, cost control.
+- **Running locally:** one `uvicorn` process with in-memory events (`README.md`), or the compose split. Debugging workers in the IDE and the checks before a risky change: `deploy/terraform/README.md`.
 
 ## 10. Known rough edges
 

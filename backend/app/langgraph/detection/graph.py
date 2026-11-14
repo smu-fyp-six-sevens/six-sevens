@@ -53,6 +53,7 @@ from ... import (
     telemetry,
 )
 from ...config import settings
+from ...evals import runner as evals
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -235,6 +236,7 @@ def _normalise_plan(raw: LeadPlan | None) -> dict:
     return {
         "briefs": {name: given.get(name) or _DEFAULT_BRIEF for name in SPECIALISTS},
         "confidence": raw.confidence if raw is not None else 0.0,
+        "fallback_briefs": [name for name in SPECIALISTS if not given.get(name)],
     }
 
 
@@ -246,7 +248,7 @@ async def lead_plan_node(state: DetectionState) -> dict:
     logger.info("Document %s: lead plan — briefs written for all specialists", state["document_id"])
     trace.record(
         state["document_id"], "detection_plan",
-        detection_briefs=plan["briefs"], confidence=plan["confidence"],
+        detection_briefs=plan["briefs"], confidence=plan["confidence"], fallback_briefs=plan["fallback_briefs"],
     )
     return {
         "plan": plan,
@@ -291,6 +293,10 @@ async def specialist_node(state: SpecialistInput) -> dict:
             finding_count=len(report["findings"]), dismissed=report["dismissed"], uncertain=report["uncertain"],
             output_status=report.get("output_status"),
             tool_calls=report["tool_calls"],
+            # For the run's sensibility checks (evals/detection.py).
+            second_look=bool(state.get("second_look")), tool_rounds=report.get("tool_rounds"),
+            wrapped_up=report.get("wrapped_up", False), unassessed=report.get("unassessed", 0),
+            floor_overruled=sum(1 for f in report["findings"] if "agent_severity" in f),
         )
         telemetry.annotate(
             tool_calls=report["tool_calls"], summary=report.get("summary"), output_status=report.get("output_status"),
@@ -357,6 +363,11 @@ async def lead_review_node(state: DetectionState) -> dict:
     }, LeadReview, span_name="detection.lead_review", cache_key="detection_lead_review")
     summary = review.summary if review is not None else ""
     request = None if used or review is None else _validated_second_look(review.second_look, state["reports"])
+    asked = review is not None and bool(review.second_look)
+    trace.record(
+        state["document_id"], "detection_review",
+        second_look_requested=asked, second_look_accepted=request is not None, second_look_already_used=used,
+    )
     logger.info(
         "Document %s: lead review done%s",
         state["document_id"],
@@ -565,6 +576,9 @@ async def synthesize_node(state: DetectionState) -> dict:
         state["document_id"], result["verdict"], len(result["findings"]),
     )
     trace.record(state["document_id"], "detection_done", detection_verdict=result["verdict"])
+    evals.record_detection_run(
+        state["document_id"], document_type=result.get("document_type"), lead_summary=state.get("lead_summary"),
+    )
     return {"result": result}
 
 

@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react';
-import { KIND_LABELS, humanize, secondLookOf, toolLabel, type LlmCall, type TraceNode, type TraceStep, type ValidationFailure } from './buildTrace';
+import {
+  KIND_LABELS, humanize, secondLookOf, toolLabel, type EvalResult, type LlmCall, type TraceNode, type TraceStep, type ValidationFailure,
+} from './buildTrace';
 import { Chevron } from './Chevron';
 import { KindIcon } from './KindIcon';
 import { formatCost, formatSeconds, formatTokens, prettyJson } from './format';
@@ -10,7 +12,36 @@ const SHOWN_FIELDS = new Set([
   'validation_failures', 'output_repairs', 'input', 'output', 'brief', 'summary', 'tool_calls', 'tool',
 ]);
 
-type SectionId = 'overview' | 'reasoning' | 'calls' | 'validation' | 'attributes';
+type SectionId = 'overview' | 'checks' | 'reasoning' | 'calls' | 'validation' | 'attributes';
+
+const RESULT_TONES: Record<EvalResult['result'], string> = { pass: 'ok', warn: 'warn', fail: 'error', 'n/a': '' };
+const RESULT_LABELS: Record<EvalResult['result'], string> = { pass: 'passed', warn: 'warning', fail: 'failed', 'n/a': 'n/a' };
+const RESULT_ORDER: Record<EvalResult['result'], number> = { fail: 0, warn: 1, pass: 2, 'n/a': 3 };
+
+// The sensibility checks on this agent's run: problems first, each with why.
+function Checks({ results }: { results: EvalResult[] }) {
+  const sorted = [...results].sort((a, b) => RESULT_ORDER[a.result] - RESULT_ORDER[b.result]);
+  return (
+    <>
+      <p className="trace-muted">
+        Code checks of whether the agent took the expected path and gave a sensible answer. They don't measure accuracy.
+      </p>
+      <table className="trace-table">
+        <thead><tr><th>Result</th><th>Check</th><th>Kind</th><th>Why</th></tr></thead>
+        <tbody>
+          {sorted.map((result, index) => (
+            <tr key={`${result.agent}-${result.check}-${index}`}>
+              <td><span className={`trace-chip trace-chip--${RESULT_TONES[result.result]}`}>{RESULT_LABELS[result.result]}</span></td>
+              <td>{humanize(result.check)}</td>
+              <td>{result.kind === 'trajectory' ? 'Path' : 'Answer'}</td>
+              <td>{result.reason ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
 
 function Code({ value }: { value: unknown }) {
   return <pre className="trace-code">{prettyJson(value)}</pre>;
@@ -210,11 +241,16 @@ function Section({
 }
 
 export function TraceDetails({ node, root }: { node: TraceNode; root: TraceNode }) {
-  const [open, setOpen] = useState<Set<SectionId>>(new Set(['overview']));
+  const [open, setOpen] = useState<Set<SectionId>>(new Set(['overview', 'checks']));
   const thinking = node.calls.flatMap((call) => call.thinking ?? []);
+  const checks = node.evals ?? [];
   const attributes = Object.fromEntries(Object.entries(node.step).filter(([key]) => !SHOWN_FIELDS.has(key)));
   const sections: Array<{ id: SectionId; title: string; count?: number; show: boolean; body: () => ReactNode }> = [
     { id: 'overview', title: 'Overview', show: hasOverview(node), body: () => <Overview node={node} /> },
+    {
+      id: 'checks', title: 'Sensibility checks', count: checks.length, show: checks.length > 0,
+      body: () => <Checks results={checks} />,
+    },
     {
       id: 'reasoning', title: 'Reasoning', count: thinking.length, show: thinking.length > 0,
       body: () => thinking.map((text, index) => <p key={index} className="trace-reasoning">{text}</p>),

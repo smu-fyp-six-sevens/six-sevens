@@ -1,110 +1,11 @@
-# Cloud architecture
+# Cloud architecture: what's left
 
-How the backend is split into services on Google Cloud, why, and what's left. Updated 2026-11-13.
+Planned and open cloud work only. Delete an item once it's done. Updated 2026-11-14.
 
-**Where it stands:** live on Cloud Run in project `fyp-six-sevens` (`asia-southeast1`) since 2026-10-22; every green push to `main` deploys. One GCP project and one Supabase project, shared by local runs and the cloud; staging is planned (§9). Operations and every problem met: `deploy/terraform/README.md`. Adding a service: `docs/ADDING_A_SERVICE.md`. Diagrams: `docs/architecture/`. Kubernetes (planned): §13–24.
+**Where it stands:** the cloud as built is summarised in `HOW_IT_WORKS.md` §9. Operations and every problem met are in `deploy/terraform/README.md`; running the split locally is in `README.md`. Sections 1–7 and 12 moved there, so the numbers from 8 on are unchanged. Adding a service: `docs/ADDING_A_SERVICE.md`. Kubernetes (planned): §13–24.
 
-## 1. Rules
+## 8. Open decisions
 
-The award asks for a genuinely decoupled architecture, not a monolith.
-
-- Services talk **only** through Pub/Sub events and Supabase. No service calls another.
-- One repo, one Dockerfile with a build target per role; `ROLE` picks what runs. Locally one `uvicorn` runs every role with in-memory events.
-- Split only where scaling, failure or permissions differ.
-- Stateless, configured from the environment; each worker is a `handle(event)` function behind a push adapter (a pull adapter later).
-
-| Cloud-native criterion | Shown by |
-|---|---|
-| Loose coupling | Events only (§2–3) |
-| Independent scaling | Each role scales alone (§2) |
-| Resilience | Redelivery, dead letters, idempotent handlers, the sweeper, automatic rollback (§3, 5, 6) |
-| Observability | Metrics, Grafana, Cloud Trace, audit trail, alerts (§7) |
-| Secure delivery | CI/CD with Checkov and Snyk, Terraform, keyless GitHub sign-in (§6) |
-| Least privilege | One account and secret set per service; private workers (§6) |
-| Cost control | Scale to zero, budget and Claude-spend alerts, cost per document and case (§7) |
-
-## 2. Services
-
-| Service | Public | Receives | Does | Size |
-|---|---|---|---|---|
-| **api** | via Kong | HTTP | Reads, login, officer commands, uploads (ingestion), WebSocket, case match, notes | 1 CPU, 1 GiB, max 3 |
-| **doc-worker** | no | `document.uploaded`, `retyped`, `retry_requested`, `cancelled`, recoveries | OCR, classify, extract | 2 CPU, 4 GiB, 2 at once, max 3 |
-| **detection-worker** | no | `document.approved`, detection retry/cancel, recoveries | Lead + 3 specialists, 13 checks, findings | 2 CPU, 4 GiB, 2 at once, max 3; zoning index |
-| **case-worker** | no | `case.analysis.requested`, recoveries | Case analysis, risk score, summary, adverse-media search | 1 CPU, 2 GiB, max 2 |
-| **audit-metrics** | via Kong (`/audit`) | every event | Stores events in `audit_events`; serves the audit trail and costs; runs the sweeper | 1 CPU, 1 GiB, max 2 |
-| **kong** | yes | HTTP | The single entry point (§4) | |
-| **frontend** | yes | HTTP | React build in nginx | |
-| **grafana** | yes (login) | HTTP | Dashboards | max 1 |
-
-Workers accept calls only from Pub/Sub's push identity; audit-metrics checks the push token itself. Everything scales to zero by default (`min_instances` in `terraform.tfvars`).
-
-## 3. Events and state
-
-One topic, `domain-events`, plus `domain-events-dead-letter`. Each role has a filtered push subscription; filters come from `backend/app/events/types.py` (export with `python -m app.events.types`; max 256 bytes, immutable, so a change replaces the subscription). Messages carry ids only; Supabase holds the state. The envelope is also the `audit_events` row.
-
-- **At-least-once:** handlers tolerate repeats; status changes are compare-and-swap; a repeated event id isn't stored twice.
-- **An officer action that starts work** (approve, retype, analyse) fails with a 502 if the publish fails (a failed approval is undone). Audit-only actions use `events.record`, which never fails the request.
-- Kong's request id and a W3C `traceparent` travel with each message, so one upload is one trace.
-
-**One writer per transition:** api (documents up to `queued`, officer actions); doc-worker (`queued` → `analyzed`/`failed`/`cancelled`, fields); detection-worker (`approved` → `detected`, reports, findings); case-worker (case findings, `case_analysis_runs`, `risk_scores`); audit-metrics (`audit_events`). Recovery is done by the stage's owner; the sweeper only publishes. The case stage refresh is debounced in api and flushed before each response (Cloud Run throttles CPU after it).
-
-## 4. Gateway (Kong)
-
-DB-less Kong (`deploy/kong/`), routes rendered from `kong.yml.tmpl` at start.
-
-| Path | Goes to |
-|---|---|
-| `/audit*` | audit-metrics |
-| `/auth/login` (20/min), `/documents/upload-batch` (60/min) | api, rate-limited per client address |
-| retries, retype, analysis run (10/min, 60/h); on-demand checks (30/min, 300/h) | api, rate-limited per officer (their token) |
-| `/push*`, `/metrics` | blocked (404) |
-| everything else, including the WebSocket | api |
-
-**Only through Kong:** api and audit-metrics are public on their own URLs, so Kong adds `X-Gateway-Key` (secret `gateway-secret`) to every request, and both refuse any request without it (403), except `/health`, Pub/Sub's `/push` and `/metrics` from the container's own sidecar (`backend/app/gateway.py`). Not checked locally.
-
-Gotchas: Cloud Run routes by `Host`, so Kong mustn't preserve it and must use HTTPS upstream; CORS only in Kong (`CORS_IN_APP=false`), never `*`; auth stays in each service.
-
-## 5. Stuck work and recovery
-
-Pub/Sub redelivery covers a worker dying mid-request; the sweeper covers the rest (a lost publish, a dead letter, a run that never finished).
-
-- Cloud Scheduler sends `sweep.requested` every 5 minutes; audit-metrics runs the sweeper (`backend/app/sweeper.py`). Off locally; `python -m app.sweeper --once --case <id>` runs it for one case.
-- **Limits:** uploaded/queued 5 min; processing/extracting/detecting 15 min; approved with a type but never started (no report, no error) 15 min; a running case analysis 15 min.
-- It publishes `recovery.requested` to the stage's owner; at most 3 attempts in 24 h. doc-worker reruns (gives up as `failed`); detection-worker reruns (gives up as approved with an error); case-worker marks the run failed (no automatic rerun: Claude calls are the officer's call).
-- **Cancel across instances:** detection polls the audit trail every 5 s; the document pipeline polls its own status.
-- **Socket tickets** are HMAC-signed, valid 10 s, accepted by any api instance.
-
-## 6. Delivery and security
-
-**CI** (`ci-cd.yml`, PRs and pushes to `main`, not docs-only): backend (ruff and pyright on `app` and `tests`, pytest with coverage), frontend (lint, build, Playwright), security (Checkov; pip-audit and `npm audit` high every run; Snyk only when lock files change, weekly or by hand, non-blocking until its quota resets; Terraform fmt/validate; Kong config parses, compose files valid, dashboard PromQL parses with promtool; on a PR, the images build: all in the one security job, to save a billed minute). All blocking except Snyk for now.
-
-**Deploy** (`deploy.yml`, after CI on `main` or by hand; one at a time):
-1. Build each image once (skipping any the commit already has).
-2. Record what each service is serving.
-3. Roll out the workers and audit-metrics, then api, Kong, frontend, Grafana.
-4. Check through Kong (no LLM, no writes): `/health` answers, a protected route gives 401, `/push` and `/metrics` blocked, workers refuse unsigned POSTs, api and audit-metrics refuse a direct call (403), CORS, frontend and Grafana up.
-5. Any failure rolls every service back.
-
-**Security:** one account per service; each secret readable only by the services that need it (Anthropic key: the three workers; token key and gateway key: the public services; the gateway key also Kong); keyless GitHub sign-in; non-root containers with health checks.
-
-**Cost:** scale to zero; budget alert; Claude spend per agent, document and case; registry cleanup keeps the 5 newest images and nothing older than 7 days.
-
-## 7. Observability
-
-- **Metrics** at `/metrics` (`backend/app/metrics.py`): HTTP, events, stage times, Claude calls, tokens, cost, cache, detection outcomes, Supabase calls, stuck work. Never labelled with document or case ids.
-- **Scraping:** Managed Prometheus sidecar per service, every 30 s; the service is the `namespace` label (Cloud Run's own metrics use `service_name`).
-- **Grafana** (12.4.10 with BigQuery plugin 3.4.6; bump together): Services, Pipeline, Agents, Cost dashboards, generated by `deploy/grafana/build_dashboards.py` (edit that, not the JSON). The Cost dashboard reads Google's billed cost once the billing export is set.
-- **Alerts:** dead letters, API 5xx over 5%, daily Claude spend, recovery given up.
-- **Cost per case:** `GET /audit/cases/{id}/cost` and the case's Claude Cost tab (including what prompt caching saved).
-- **Locally:** `docker compose --profile observability up prometheus grafana jaeger` (Grafana admin/admin on :3000, Jaeger on :16686).
-
-## 8. Decisions
-
-**Locked** (changing one touches every service): the event envelope and names, one topic with filtered subscriptions, the ownership rules, a Dockerfile target per role, Kong as the only entry, handler plus adapters.
-
-**Settled:** push delivery (detection takes 1–2 min, well inside 600 s); ingestion in api; Grafana on Cloud Run; uvicorn + `npm run dev` by default, compose optional; tests stub Claude and Supabase; injection tool only in uvicorn mode; no Redis until needed.
-
-**Open:**
 1. **Award check:** confirm the Cloud Native assessment accepts Kubernetes as a tested Helm chart rather than a running cluster.
 2. **Login:** keep `AUTH_USERS` as a stated limit, or move to Supabase Auth.
 3. **Staging:** promote automatically or after approval; Grafana in staging; who approves; smoke test per merge or nightly.
@@ -155,49 +56,50 @@ Cost: ~$0 idle, cents per run.
 - **Shared Supabase:** local and cloud see each other's data; whole-database scans (the sweeper) run only in the cloud.
 - **Time:** staging, load and failure tests compete with the Helm chart before the deadline.
 
-## 12. Running it
-
-**Daily:** `cd backend && uvicorn app.main:app --reload --reload-dir app` and `cd frontend && npm run dev`. No Docker needed.
-
-**The split locally:** `docker compose up --build` (stop uvicorn; Kong takes :8000), then `npm run dev`. Containers: Pub/Sub emulator plus `pubsub-init`, Kong, api, one `workers` container, audit-metrics (~3.5 GB). `--profile frontend` adds nginx on :5173. **Debug workers in the IDE:** `PUSH_HOST=host.docker.internal PUSH_PORT=8001 docker compose up --build --scale workers=0`, then uvicorn on :8001 from `backend/` with `ROLE=doc-worker,detection-worker,case-worker EVENT_TRANSPORT=pubsub PUBSUB_EMULATOR_HOST=localhost:8085 GOOGLE_CLOUD_PROJECT=local`. The emulator has no auth, so `/push` takes unsigned requests locally.
-
-**Before a risky change** (real Supabase and Claude): upload → `analyzed`; approve → `detected`; wait for the analysis; read `GET /audit/events?case_id=<id>`. Then `docker compose restart workers` mid-detection (it should still reach `detected`); stop and start audit-metrics (missed events appear); `docker compose run --rm pubsub-init python -m app.events.emulator_setup --poison` (retried, then dead-lettered).
-
-**Manual rollback:** `gcloud run services update-traffic <service> --to-revisions=<revision>=100 --region asia-southeast1`. Config changes go in Terraform.
-
-| Symptom | Likely cause |
-|---|---|
-| Every request through Kong gets Google's 404 | Kong forwards the original `Host`; `preserve_host: false` |
-| A worker gets no messages; Pub/Sub shows 403 | Push account lacks `roles/run.invoker` on it |
-| The same message is processed again and again | Handler takes over 600 s or returns non-2xx |
-| CORS error in the browser | Frontend origin missing from Kong's CORS plugin |
-| Live updates stop after an hour | Cloud Run's 60-minute WebSocket limit; the client reconnects |
-| A document stays "Processing stuck" | Should recover within a sweep plus the limit; else check worker logs and dead letters, then Retry |
-| Events never reach a worker in compose | `pubsub-init` failed: `docker compose logs pubsub-init`, then `docker compose up pubsub-init` |
-
----
-
 # Kubernetes deployment (planned only)
 
 How Six Sevens would move from Cloud Run to Kubernetes, and when. Nothing here is built. Written 2026-11-13; builds on §10 (the Helm handover kit). Sections 13–24.
 
-**The rule:** build the evaluation harness first, so every later step can show detection didn't get worse. Production stays on Cloud Run until a measured trigger fires. The Helm chart is built anyway, as the kit GLDB's platform team would take.
+**The rule:** every later step is watched on the agents' sensibility checks (built, §13) and, once built, the officer-verdict accuracy trend. Production stays on Cloud Run until a measured trigger fires. The Helm chart is built anyway, as the kit GLDB's platform team would take.
 
 ## 13. First: the evaluation harness
 
-*In plain words:* a scorecard of how well the agents did on each finished case, marked against the officer's verdicts. No model calls.
+*In plain words:* the agents are officer-facing, and the officer decides every case. So the harness has one job: catch an agent going off track before the officer relies on it. The sensibility checks on every agent run are built (`backend/app/evals/`, the trace view and the Agents dashboard; how they work: `HOW_IT_WORKS.md` §3). Accuracy comes from the officers' own verdicts (§13.3), not from a golden set. No golden set, no nightly evals, no tokens spent on evals.
+
+### 13.1 Open on the sensibility checks
+
+- **Tests:** `PENDING_TESTS.md` rows 34–39, then one real run per run kind (a payslip, a bank statement, a case) to see the checks on a live trace.
+- **Tune from real runs:** the overconfidence gap (0.3); the expected-checks table (`evals/detection.py`: today only Content Validation's numerical checks on income documents and bank statements, and Digital Authenticity's metadata check); the field-name rules for dates and amounts (`evals/extraction.py`). A check that warns on most runs is noise: change or drop it.
+- **Extraction rerun:** records no `extraction` step, so its field checks don't run (only its second look is checked).
+
+### 13.2 What the checks cannot tell you
+
+- A run can follow the expected path, give a sensible answer, and still miss fraud. The checks don't measure accuracy.
+- Officers mostly confirm or dismiss what the system flagged. They rarely see what it missed, so misses are under-measured. This is a stated limitation, along with the fact that all test data is synthetic.
+- With no golden set, a prompt change can't be rerun on fixed cases and compared. Changes are watched through the checks and the officer-verdict trend instead.
+
+### 13.3 Accuracy from officer verdicts (not built)
+
+*In plain words:* when a case is finalised, the officers' verdicts on each agent's findings are counted against what the agent said. This is the accuracy figure. It's human-labelled and comes from real use, so no answer key is needed.
 
 | Part | Design |
 |---|---|
 | Which cases | Every case created with reviews on (`cases.reviews_required`) |
 | When | When the case is finalised (`case.finalised`): every verdict is in |
 | Who writes it | audit-metrics: one handler, idempotent on the case id |
-| What it stores | One `evaluation_results` row per case: per check and document type, true positives, false alarms, wrong dismissals, missed issues; prompt version, models, cost, time. Counts only, no personal data. Cascades from the case |
-| Figures | Precision and recall per check and document type (weighted to income documents and bank statements), dismissal accuracy, cost and time, by prompt version and model |
+| What it stores | One `evaluation_results` row per case: per check and document type, true positives, false alarms, wrong dismissals, missed issues where an officer adds one; prompt version, models, cost, time. Counts only, no personal data. Cascades from the case |
+| Figures | Precision and recall per check and document type (weighted to income documents and bank statements), dismissal accuracy, cost and time, by prompt version and model. Recall is only as good as what officers add, so it is labelled as such |
 | Where it shows | The dashboard's accuracy panel reads stored rows (also removes the `list_reviews` load); one Grafana panel per prompt version |
-| The gate | Baseline = last 30 evaluated cases. A change passes if precision and recall on income documents and bank statements each stay within 5 points. Under 30 cases, a person decides |
+| Use | A trend to watch, not a gate. A drop after a prompt or model change prompts a person to look; nothing blocks automatically |
 | Never | Changes a score, severity or verdict, or reaches a prompt |
 | Size | M: one table (dated SQL file), one handler, one route, one panel |
+
+### 13.4 Rules
+
+- **Evals only watch.** They never change a score, severity, verdict, status or finding, never reach a prompt, and never block a run.
+- **No model marks another model** (cost, and "code verifies" is the design rule).
+- **No golden set, no nightly evals, no scheduled token spend.** Evals run inside normal use and cost nothing extra per run.
+- **No personal data** in metrics or the trace's check results (field names, never values).
 
 ## 14. When to move
 
@@ -222,6 +124,7 @@ How Six Sevens would move from Cloud Run to Kubernetes, and when. Nothing here i
 | Database | Supabase outside; egress via Cloud NAT on a static IP, allow-listed | A leaked key is useless elsewhere |
 | Secrets | Secret Manager add-on | No secrets in Helm values |
 | Identity | Workload Identity, one account per role (as today) | No keys |
+| Claude | Through Vertex AI, in `asia-southeast1` if the models are offered there (else the nearest region that has them), with each worker's own Google identity; the public Claude API as the fallback. Same move on Cloud Run first (§10 step 6) | No Anthropic key to hold or leak; Google billing; regional processing |
 | Monitoring | Managed Prometheus, same Grafana, Cloud Trace | Nothing new |
 | Backups | Cluster holds no state; Supabase point-in-time recovery matters | No cluster backup tool |
 | Environments | dev (laptop), staging (Claude stubbed, no Anthropic key), prod | The chart refuses staging with a key |
@@ -235,7 +138,7 @@ How Six Sevens would move from Cloud Run to Kubernetes, and when. Nothing here i
 
 ## 17. Migration (Stages B and C)
 
-Each worker's subscription switches push → pull in place, so only one platform gets a role's messages; rollback is switching back. Each phase must also pass the evaluation gate.
+Each worker's subscription switches push → pull in place, so only one platform gets a role's messages; rollback is switching back. Each phase is also watched on the sensibility checks and the accuracy trend (§13): a jump in warnings or failures after a move holds the next phase.
 
 | Phase | Moves | Check before next | Rollback |
 |---|---|---|---|
@@ -296,13 +199,13 @@ Below the triggers, Cloud Run is cheaper.
 | Supabase can't allow-list the NAT IP on our plan | Confirm before Stage B |
 | Nobody to run it after handover | Autopilot, Argo CD, a short runbook |
 | Data leaves Singapore | Regional cluster and registry; Claude via Vertex AI in-region |
-| Too few cases to judge a change | Under 30, a person decides; golden set fills the gap |
+| Too few officer verdicts to read accuracy | Show the count with each figure; a person decides below 30 cases |
 
 ## 23. Why each piece (in the bank's terms)
 
 | Feature | Problem it solves | Expectation it meets |
 |---|---|---|
-| Evaluation harness | Proves a change didn't make detection worse | MAS FEAT (monitoring); TRM change management |
+| Evaluation harness | Catches agents going off track on every run; accuracy from officer verdicts | MAS FEAT (monitoring); TRM change management |
 | Helm kit | GLDB can run it on its own platform | MAS outsourcing (exit, portability) |
 | Staging without Claude | Changes tested without spend or real data | TRM; PDPA |
 | Pull workers + KEDA | No 10-minute ceiling; free when idle | TRM capacity |
@@ -314,10 +217,13 @@ Below the triggers, Cloud Run is cheaper.
 | Argo CD | Every change reviewed and reversible | TRM change management |
 | Signing and Binary Authorization | Only our software runs | TRM supply chain; OWASP A08 |
 | Regional, Singapore only | Survives a zone outage; data stays in Singapore | TRM; PDPA; MAS outsourcing |
+| Claude through Vertex AI | No model key to leak; calls billed and audited in Google Cloud; processing in-region where offered | TRM least privilege; PDPA; MAS outsourcing |
 
-## 24. Decisions needed
+## 24. Assumptions (decided 2026-11-14)
 
-- **How much worse may a change get before it's held back?** Options: any drop; more than 5 points on the highest-risk documents; or a person always decides. *Recommended: 5 points, with a person deciding under 30 reviewed cases.*
-- **Does GLDB's IT run Kubernetes?** If yes, the kit is what they'd install and staging on GKE is worth it; if not, Cloud Run stays. *Recommended: ask now; it decides everything past Stage A.*
-- **Pay for a test cluster before anyone needs it?** ~$100–130 a month idle. *Recommended: only if the bank or the assessment asks.*
-- **Who looks after the cluster after handover?** *Recommended: agree an owner before any production move; without one, stay on Cloud Run.*
+We have little access to GLDB's technical side, so these stand until the bank says otherwise.
+
+- **GLDB's platform:** assumed unknown. The Helm kit (Stage A) is built and tested on kind as the handover; Stages B and C wait for a trigger in §14.
+- **No paid test cluster** (~$100–130 a month idle) unless the bank or the assessment asks for a live one.
+- **Ownership after handover:** GLDB's platform team, if it adopts the kit. Until someone owns a cluster, production stays on Cloud Run.
+- **Claude through Vertex AI** (§10 step 6, §15) is in scope, after checking which Claude models Vertex offers in `asia-southeast1`.

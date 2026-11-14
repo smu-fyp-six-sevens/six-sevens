@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { RefreshButton } from '../RefreshButton';
 import {
+  evalSummary,
   groupKeys,
   rootOf,
   visibleRows,
@@ -28,6 +29,7 @@ function Row({
   const tokens = node.totals.inputTokens + node.totals.outputTokens;
   // A run counts its audit's failed validations; any other span, the ones that happened in it.
   const failures = node.kind === 'run' || node.group ? node.totals.failures : node.kind === 'event' ? 0 : node.failures.length;
+  const checks = node.evals?.length ? evalSummary(node.evals) : null;
   return (
     <div
       role="treeitem"
@@ -47,6 +49,7 @@ function Row({
           {node.subtitle && <span className="trace-row-subtitle">{node.subtitle}</span>}
         </span>
         <span className="trace-row-figures">
+          {checks && <span className={`trace-chip trace-chip--${checks.tone}`} title="Sensibility checks on this agent's run">{checks.text}</span>}
           {failures > 0 && <span className="trace-chip trace-chip--warn" title="Failed validations">⚠ {failures}</span>}
           {tokens > 0 && (
             <span className="trace-chip" title={`${node.totals.inputTokens} in, ${node.totals.outputTokens} out`}>
@@ -157,6 +160,16 @@ export function TraceDrawer({
               <dt>Failed validations</dt>
               <dd className={totals.failures ? 'trace-warn-text' : undefined}>{totals.failures}</dd>
             </div>
+            {trace.evals.passed + trace.evals.warnings + trace.evals.failures > 0 && (
+              <div>
+                <dt>Checks</dt>
+                <dd className={trace.evals.failures ? 'trace-error-text' : trace.evals.warnings ? 'trace-warn-text' : 'trace-ok-text'}>
+                  {trace.evals.passed} passed
+                  {trace.evals.warnings > 0 && ` · ${trace.evals.warnings} warning${trace.evals.warnings === 1 ? '' : 's'}`}
+                  {trace.evals.failures > 0 && ` · ${trace.evals.failures} failed`}
+                </dd>
+              </div>
+            )}
           </dl>
           <button ref={closeRef} type="button" className="trace-close" aria-label="Close trace" onClick={onClose}>✕</button>
         </header>

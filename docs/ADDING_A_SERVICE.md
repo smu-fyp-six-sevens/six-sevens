@@ -26,5 +26,5 @@ E.g. a tool like Grafana or Kong.
 
 ## Afterwards
 
-- Add it to the services tables in `CLOUD_ARCHITECTURE_PLAN.md` §2 and `docs/architecture/PRESENTATION_GUIDE.md` §3, and to `docs/architecture/build_diagrams.py` (rerun it; don't edit the `.drawio`).
+- Add it to the role table in `deploy/terraform/main.tf`, the services summary in `HOW_IT_WORKS.md` §9, and `docs/architecture/PRESENTATION_GUIDE.md` §3, and to `docs/architecture/build_diagrams.py` (rerun it; don't edit the `.drawio`).
 - Watch the first deploy in the Actions tab.

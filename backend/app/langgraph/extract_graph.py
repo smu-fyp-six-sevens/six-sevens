@@ -145,6 +145,10 @@ async def tools_node(state: SecondLookState) -> dict:
             refused.append(ToolMessage(
                 content=f"{NOT_RUN}{reason}", tool_call_id=call["id"], name=call["name"], status="error",
             ))
+    if refused and state.get("document_id"):
+        # A refused call never runs, so without this it leaves no mark on the trace (evals/extraction.py).
+        trace.record(state["document_id"], "extraction_tool_refused", tools=[m.name for m in refused],
+                     reasons=[str(m.content) for m in refused])
     results: list[Any] = []
     if allowed:
         response = await _tool_node.ainvoke({

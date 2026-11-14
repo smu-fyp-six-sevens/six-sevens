@@ -50,6 +50,7 @@
 .trace-chip--ok { color: var(--green-30); border-color: var(--green-77); background: var(--green-94); }
 .trace-chip--warn { color: var(--orange-27); border-color: var(--orange-76); background: var(--amber-bg); }
 .trace-chip--error { color: var(--red); border-color: var(--red-83); background: var(--red-bg); }
+.trace-chip--ok { color: var(--green-30); }
 
 .trace-duration { font-family: var(--mono); font-size: 0.8rem; white-space: nowrap; }
 .trace-duration--fast { color: var(--green-30); }

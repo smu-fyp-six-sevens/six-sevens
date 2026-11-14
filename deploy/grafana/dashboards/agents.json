@@ -1,7 +1,7 @@
 {
   "uid": "six-agents",
   "title": "Six Sevens \u00b7 Agentic workflows",
-  "description": "Claude calls, tokens, latency, prompt cache and detection tools per agent.",
+  "description": "Claude calls, tokens, latency, prompt cache, detection tools and sensibility checks per agent.",
   "tags": [
     "six-sevens"
   ],
@@ -1124,6 +1124,132 @@
         "y": 50,
         "w": 24,
         "h": 7
+      }
+    },
+    {
+      "type": "row",
+      "title": "Sensibility checks",
+      "collapsed": false,
+      "panels": [],
+      "id": 22,
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Warnings and failures per check (share of runs marked)",
+      "description": "Code checks of each agent run: did it take the expected path, is its answer sensible. Not accuracy.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (agent, check) (increase(agent_eval_results_total{result=~\"warn|fail\"}[1h])) / sum by (agent, check) (increase(agent_eval_results_total{result=~\"pass|warn|fail\"}[1h]))",
+          "legendFormat": "{{agent}} \u00b7 {{check}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 23,
+      "gridPos": {
+        "x": 0,
+        "y": 58,
+        "w": 12,
+        "h": 9
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Failures by check (range)",
+      "description": "A failure means a design rule was broken; open the run's agent trace to see why.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (agent, check) (increase(agent_eval_results_total{result=\"fail\"}[$__range]))",
+          "legendFormat": "{{agent}} \u00b7 {{check}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        }
+      },
+      "id": 24,
+      "gridPos": {
+        "x": 12,
+        "y": 58,
+        "w": 12,
+        "h": 9
       }
     }
   ]

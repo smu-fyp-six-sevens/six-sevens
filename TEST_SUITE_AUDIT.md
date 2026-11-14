@@ -44,7 +44,7 @@ None open. The regression fixtures are regenerated from the code, so they catch 
 | 6.1 | Feedback counts only other cases | No test, including a document with no case (SQL: needs a real database, so a manual check) | S |
 | 6.2 | Low coverage | `cross_document/tools/consistency.py` 68% (lines 61–82); `routers/agents.py` 53% and `agent_prompts.py` 48% (the prompt view) | M |
 | 6.3 | The important frontend logic has no unit tests | Vitest for `caseValidation`, `fileValidation`, `request.ts` and `caseSocket.ts` only (the rest is covered by Playwright) | S |
-| 6.4 | Evals and load tests are described but not in the repo | See `PENDING_WORK.md` "Evals and verification" | — |
+| 6.4 | Load tests are described but not in the repo; the agent sensibility checks have no tests yet | Load tests: `CLOUD_ARCHITECTURE_PLAN.md` §10; checks: `PENDING_TESTS.md` 34–39 | — |
 
 ## 7. Suggested order
 

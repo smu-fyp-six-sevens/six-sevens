@@ -295,9 +295,14 @@ async def hypothesise(context: CaseContext) -> tuple[list[Hypothesis], float]:
     hypotheses: list[Hypothesis] = []
     dropped_for_bias: list[dict[str, str]] = []
     dropped_for_scope: list[dict[str, str]] = []
+    # What the code corrected in the plan, for the run's sensibility checks (evals/case_analysis.py).
+    unknown_tools: list[str] = []
+    probes_added_by_code: list[str] = []
     for index, item in enumerate(items):
         if not isinstance(item, dict) or not str(item.get("claim") or "").strip():
             continue
+        raw_checks = [c for c in item.get("checks") or [] if isinstance(c, dict)] if isinstance(item.get("checks"), list) else []
+        unknown_tools.extend(str(c.get("tool")) for c in raw_checks if c.get("tool") not in tool_names)
         # Before any check runs: a hypothesis that touches a protected attribute is never tested.
         if has_protected_text(" ".join(str(item.get(k) or "") for k in ("claim", "proof", "refutation_test"))):
             dropped_for_bias.append({"claim": str(item["claim"])[:200], "reason": "touches a protected attribute"})
@@ -318,6 +323,8 @@ async def hypothesise(context: CaseContext) -> tuple[list[Hypothesis], float]:
         ):
             dropped_for_scope.append({"claim": str(item["claim"])[:200], "reason": "one document, nothing computed"})
             continue
+        if not any(c.get("refutation_probe") for c in raw_checks if c.get("tool") in tool_names):
+            probes_added_by_code.append(f"h{index + 1}")
         hypotheses.append(Hypothesis(
             id=f"h{index + 1}",
             claim=str(item["claim"])[:300],
@@ -336,6 +343,7 @@ async def hypothesise(context: CaseContext) -> tuple[list[Hypothesis], float]:
         proposed=[h.model_dump() for h in hypotheses], dropped_for_bias=dropped_for_bias,
         confidence=planner_confidence,
         dropped_for_scope=dropped_for_scope,
+        unknown_tools=sorted(set(unknown_tools)), probes_added_by_code=probes_added_by_code,
         raw=None if hypotheses or via == "tool" else message_text(response.content)[:600],
     )
     return hypotheses, planner_confidence

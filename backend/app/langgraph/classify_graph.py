@@ -119,6 +119,10 @@ async def tools_node(state: DocumentGraphState, config: RunnableConfig) -> dict:
         )
         results = list(ran["agent_messages"])
     results, shown = _with_type_hints(results, state)
+    if refused:
+        # A refused call never runs, so without this it leaves no mark on the trace (evals/classifier.py).
+        trace.record(state["document_id"], "classify_tool_refused", tools=[m.name for m in refused],
+                     reasons=[str(m.content) for m in refused])
     return {"agent_messages": [*results, *refused], "type_hints_shown": shown}
 
 

@@ -2,6 +2,8 @@ import os
 
 from dotenv import load_dotenv
 
+from . import passwords
+
 
 load_dotenv()
 
@@ -56,16 +58,24 @@ def _roles(raw: str) -> frozenset[str]:
 
 
 def _users(raw: str) -> dict[str, str]:
-    """AUTH_USERS: "alice:password1;bob:password2". A malformed entry stops the app at start-up."""
+    """
+    AUTH_USERS: "alice:<hash>;bob:<hash>", each hash made by `python -m scripts.hash_password` (passwords.py). A
+    malformed entry, or a password stored in plain text, stops the app at start-up.
+    """
     users: dict[str, str] = {}
     for entry in raw.split(";"):
         if not entry.strip():
             continue
-        name, separator, password = entry.partition(":")
-        name, password = name.strip(), password.strip()
-        if not separator or not name or not password:
-            raise ValueError('AUTH_USERS must look like "alice:password1;bob:password2"')
-        users[name] = password
+        name, separator, stored = entry.partition(":")
+        name, stored = name.strip(), stored.strip()
+        if not separator or not name or not stored:
+            raise ValueError('AUTH_USERS must look like "alice:<hash>;bob:<hash>"')
+        if not passwords.is_hash(stored):
+            raise ValueError(
+                f"AUTH_USERS entry for {name!r} isn't a password hash. Make one with "
+                "`python -m scripts.hash_password` in backend/ and paste the line it prints."
+            )
+        users[name] = stored
     return users
 
 
