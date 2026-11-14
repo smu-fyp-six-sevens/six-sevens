@@ -35,8 +35,9 @@ spec:
       labels:
         {{- include "six.labels" $ctx | nindent 8 }}
       annotations:
-        # A consumer's run in flight isn't evicted to repack nodes; it ends only on a rollout or a scale-down.
-        cluster-autoscaler.kubernetes.io/safe-to-evict: {{ if $role.consumer }}"false"{{ else }}"true"{{ end }}
+        # Evictable, consumers too: "false" makes Autopilot give each such pod a node of its own (extended-duration
+        # pods), past the free trial's vCPU quota. An evicted run is nacked and redelivered; handlers are idempotent.
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
     spec:
       serviceAccountName: {{ $name }}
       automountServiceAccountToken: false

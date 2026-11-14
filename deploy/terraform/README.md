@@ -135,6 +135,8 @@ Everything for GKE sits behind `gke_enabled` (Terraform) and the repository vari
    - `kubectl get pods -A`: one each of Kong, api, the frontend, Grafana, and audit-metrics (HTTP only) is running; the workers are at 0.
    - `https://sixsevens.me` loads and logs in.
    - No Binary Authorization dry-run violations. In Logs Explorer: `resource.type="k8s_cluster" protoPayload.response.metadata.annotations."alpha.image-policy.k8s.io/policy-dry-run"="true"` should return nothing for our images.
+   - A pod stuck `Pending` with `GCE quota exceeded` in `kubectl get events -n <namespace>`: the trial's 8-vCPU cap stopped Autopilot adding a node. Check what holds nodes (`kubectl get nodes`) before raising anything; a pod with `safe-to-evict: "false"` takes a node of its own, which is why the chart never sets it.
+   - Kong `OOMKilled`: nginx starts a worker per node CPU; the chart pins `KONG_NGINX_WORKER_PROCESSES=1`.
 10. **Then enforce:** set `binauthz_enforce = true` and apply. Once the Cloud Armor logs (Network Security → Cloud Armor → the policy's logs) show no false positives on normal use, set `cloud_armor_preview = false` and apply.
 
 Officers can use `https://sixsevens.me` from here on. Cloud Run's URLs keep working, since both front doors share the database and the topic.

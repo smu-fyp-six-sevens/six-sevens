@@ -56,6 +56,10 @@ spec:
             # Kong's runtime files (sockets, nginx config) on the writable /tmp, so the root filesystem is read-only.
             - name: KONG_PREFIX
               value: /tmp/kong
+            # nginx starts a worker per node CPU, not per CPU the pod may use: on a large node they outgrow the memory
+            # limit (exit 137). One worker suits a fraction of a vCPU.
+            - name: KONG_NGINX_WORKER_PROCESSES
+              value: "1"
             - name: API_URL
               value: http://api.api.svc.cluster.local
             - name: AUDIT_URL
