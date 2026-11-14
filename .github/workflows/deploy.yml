@@ -266,22 +266,36 @@ jobs:
         with:
           version: v3.17.3
 
+      # Every push builds new images (each carries its commit), so each is signed afresh; the images are signed in
+      # parallel, which takes about as long as the largest one.
       - name: Sign and attest every image
         run: |
-          : > images.txt
-          for image in $BACKEND_ROLES kong frontend-gke grafana; do
+          sign() {  # sign <image>: its SBOM, cosign signature and attestation, and the Binary Authorization attestation
+            image=$1
             digest=$(gcloud artifacts docker images describe "$REGISTRY/$image:$GITHUB_SHA" --format='value(image_summary.digest)')
             ref="$REGISTRY/$image@$digest"
-            echo "$image $ref" >> images.txt
             # Straight from the registry, not through the runner's Docker (the backend images are large).
-            syft scan "registry:$ref" -o spdx-json > "sbom-$image.json"
+            syft scan "registry:$ref" -o spdx-json -q > "sbom-$image.json"
             # No public transparency log: the signatures stay in our registry.
             cosign sign --yes --tlog-upload=false --key "gcpkms://$KMS_KEY" "$ref"
             cosign attest --yes --tlog-upload=false --key "gcpkms://$KMS_KEY" --type spdxjson --predicate "sbom-$image.json" "$ref"
             gcloud beta container binauthz attestations sign-and-create --quiet --artifact-url="$ref" \
               --attestor=built-by-ci --attestor-project="$PROJECT_ID" --keyversion-project="$PROJECT_ID" \
               --keyversion-location="$REGION" --keyversion-keyring=six-sevens --keyversion-key=image-signing --keyversion=1
+            echo "$image $ref" > "image-$image.txt"
+          }
+          pids=""
+          for image in $BACKEND_ROLES kong frontend-gke grafana; do
+            sign "$image" > "sign-$image.log" 2>&1 &
+            pids="$pids $!:$image"
           done
+          fail=0
+          for entry in $pids; do
+            pid=${entry%%:*}; image=${entry#*:}
+            if wait "$pid"; then echo "signed $image"; else echo "::error::signing $image failed"; cat "sign-$image.log"; fail=1; fi
+          done
+          [ "$fail" = 0 ]
+          cat image-*.txt > images.txt
           cat images.txt
 
       - name: Render the release
@@ -324,7 +338,8 @@ jobs:
           # Unique per run, so deploying the same commit twice doesn't clash.
           release="r-${GITHUB_SHA::8}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           gcloud deploy releases create "$release" --delivery-pipeline=six-sevens --region="$REGION" \
-            --source=release --skaffold-file=skaffold.yaml \n            --gcs-source-staging-dir="gs://$PROJECT_ID-clouddeploy/source" --quiet
+            --source=release --skaffold-file=skaffold.yaml \
+            --gcs-source-staging-dir="gs://$PROJECT_ID-clouddeploy/source" --quiet
           state=""
           for _ in $(seq 1 180); do
             state=$(gcloud deploy rollouts list --release="$release" --delivery-pipeline=six-sevens \
