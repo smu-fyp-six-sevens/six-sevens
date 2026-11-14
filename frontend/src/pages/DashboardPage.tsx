@@ -6,7 +6,6 @@ import AppHeader from '../components/AppHeader';
 import { ErrorMessage } from '../components/ErrorMessage';
 import HeaderFilter, { type FilterOption } from '../components/HeaderFilter';
 import PeriodMenu, { CUSTOM_RANGE } from '../components/PeriodMenu';
-import CompareMenu from '../components/CompareMenu';
 import { RefreshButton } from '../components/RefreshButton';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { InfoIcon } from '../components/InfoTip';
@@ -22,7 +21,7 @@ import { Icon } from '../components/Icon';
 import { CasePipeline } from './CasePipeline';
 import { formatDocumentType, type CaseStage, type DetectionMetricsFilters } from '../services/uploadService';
 import { formatCheck } from '../utils/checkLabels';
-import { PRESETS, formatPeriod, inPeriod, isoDay, overlap, presetPeriod, type Period } from '../utils/dateRange';
+import { PRESETS, formatPeriod, inPeriod, isoDay, presetPeriod, type Period } from '../utils/dateRange';
 
 // A case stage's label (utils/caseStages.ts), so the dashboard and the case queue name and colour cases the same way.
 type Status = string;
@@ -175,7 +174,6 @@ function deriveView(cases: DashboardCase[], costs: Record<string, number> | null
 
   return { cases, statusCounts, byDocumentType, flagRows, flagCases, attentionCases, analyticsCases };
 }
-type DashboardView = ReturnType<typeof deriveView>;
 
 type DashboardCase = MockCase;
 
@@ -210,8 +208,6 @@ export default function DashboardPage({
   // A preset's name, or "Custom range" with the custom period.
   const [rangeChoice, setRangeChoice] = useState<string>('Last 30 days');
   const [customPeriod, setCustomPeriod] = useState<Period | null>(null);
-  // The period picked on the Compare calendar; null when not comparing.
-  const [comparePeriod, setComparePeriod] = useState<Period | null>(null);
   // Empty: every status, as on the case queue.
   const [statusFilter, setStatusFilter] = useState<Set<Status>>(new Set());
   const [showAllDocTypes, setShowAllDocTypes] = useState(false);
@@ -259,18 +255,10 @@ export default function DashboardPage({
     () => casesInRange.filter((item) => !statusFilter.size || statusFilter.has(item.status)),
     [casesInRange, statusFilter],
   );
-  const compareCases = useMemo(
-    () => (comparePeriod ? dashboardCases.filter((item) => inPeriod(item.submitted, comparePeriod) && (!statusFilter.size || statusFilter.has(item.status))) : null),
-    [dashboardCases, comparePeriod, statusFilter],
-  );
 
   // The same date and status choice for the accuracy figures, which the backend filters (cases are the reviews' own).
   const statuses = useMemo(() => [...statusFilter].flatMap((status) => STAGE_BY_LABEL.get(status) ?? []), [statusFilter]);
   const accuracyFilters = useMemo<DetectionMetricsFilters>(() => ({ since: period.from, until: period.to, statuses }), [period, statuses]);
-  const compareAccuracyFilters = useMemo<DetectionMetricsFilters | null>(
-    () => (comparePeriod ? { since: comparePeriod.from, until: comparePeriod.to, statuses } : null),
-    [comparePeriod, statuses],
-  );
 
   // The filter's counts ignore the status filter itself, like the case queue's.
   const statusOptions: FilterOption[] = STATUSES.map((status) => ({
@@ -280,46 +268,27 @@ export default function DashboardPage({
     label: <><StageMark stage={statusStage(status)} />{status}</>,
   }));
 
-  // Claude spend for the live cases in view and in the comparison, for the totals and the Cases tab's charts.
+  // Claude spend for the live cases in view, for the totals and the Cases tab's charts.
   const costIds = useMemo(
-    () => [...new Set([...visibleCases, ...(compareCases ?? [])].flatMap((item) => (item.caseId ? [item.caseId] : [])))],
-    [visibleCases, compareCases],
+    () => [...new Set(visibleCases.flatMap((item) => (item.caseId ? [item.caseId] : [])))],
+    [visibleCases],
   );
   const { costs, error: costError } = useCaseCosts(costIds);
   const costState: CostState = !caseRecords.length ? 'unavailable' : costError ? 'error' : costs === null ? 'loading' : 'loaded';
 
   const view = useMemo(() => deriveView(visibleCases, costs), [visibleCases, costs]);
-  const before: DashboardView | null = useMemo(() => (compareCases ? deriveView(compareCases, costs) : null), [compareCases, costs]);
   const { statusCounts, byDocumentType, flagRows, flagCases, attentionCases, analyticsCases } = view;
   const countsByStage = (counts: Record<Status, number>) =>
     Object.fromEntries(CASE_STAGES.map((stage) => [stage, counts[caseStageLabel(stage)]])) as Record<CaseStage, number>;
   const stageCounts = countsByStage(statusCounts);
-  // The commonest flags, most cases first, for the Overview. When comparing, a flag raised only in the comparison
-  // is listed at 0 after them, so a drop to none shows rather than the row disappearing.
-  const wasFlagged = new Map(before?.flagRows.map((row) => [row.name, row]));
-  const commonFlags = [
-    ...[...flagRows].sort((a, b) => b.cases.length - a.cases.length),
-    ...[...wasFlagged.values()].filter((row) => !flagRows.some((now) => now.name === row.name))
-      .sort((a, b) => b.cases.length - a.cases.length).map((row) => ({ ...row, cases: [] })),
-  ].slice(0, INSIGHT_ROWS);
-  // Each document type in view, then any only in the comparison at 0, for the same reason.
-  const documentTypes: [string, number][] = [
-    ...byDocumentType,
-    ...(before?.byDocumentType ?? []).filter(([type]) => !byDocumentType.some(([now]) => now === type)).map(([type]): [string, number] => [type, 0]),
-  ];
+  // The commonest flags, most cases first, for the Overview.
+  const commonFlags = [...flagRows].sort((a, b) => b.cases.length - a.cases.length).slice(0, INSIGHT_ROWS);
+  const documentTypes: [string, number][] = byDocumentType;
   const openAnalyticsCase = (item: AnalyticsCase) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`);
   const stages = useMemo(() => STATUSES.map((status) => ({ label: status, tone: statusTone(status), stage: statusStage(status) })), []);
 
   return (
     <main className="shell dashboard-shell">
-      {/* White stripes laid over a comparison mark drawn in SVG (rings, dots), as CSS stripes are on the bars. */}
-      <svg className="sr-only" aria-hidden="true">
-        <defs>
-          <pattern id="compare-stripes" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)">
-            <rect width="2.2" height="5" fill="rgba(255, 255, 255, .65)" />
-          </pattern>
-        </defs>
-      </svg>
       <AppHeader />
       <div className="dashboard-app">
       <main className="dashboard-main">
@@ -348,18 +317,6 @@ export default function DashboardPage({
                   custom={customPeriod}
                   onCustom={(picked) => { setCustomPeriod(picked); setRangeChoice(CUSTOM_RANGE); }}
                 />
-                <CompareMenu
-                  period={period}
-                  compare={comparePeriod}
-                  onCompare={(first, second) => {
-                    // The later period is always "This period", so every change reads as now against before.
-                    const [later, earlier] = second.to > first.to ? [second, first] : [first, second];
-                    setCustomPeriod(later);
-                    setRangeChoice(CUSTOM_RANGE);
-                    setComparePeriod(earlier);
-                  }}
-                  onStop={() => setComparePeriod(null)}
-                />
                 <HeaderFilter name="status" title="Status" options={statusOptions} selected={statusFilter} disabled={isLoading} onChange={(next) => setStatusFilter(next as Set<Status>)} />
                 {/* The dashboard reads the cases on opening; this reads them again (no socket covers the whole list). */}
                 <span className="dashboard-refresh"><RefreshButton isRefreshing={isRefreshing} onClick={onRefresh} label="cases" /></span>
@@ -376,39 +333,8 @@ export default function DashboardPage({
         <div className="dashboard-content dashboard-body-content">
           {/* First load: placeholders in the dashboard's own layout, not the sample cases. The Accuracy tab loads its own figures. */}
           {isLoading && tab !== 'Accuracy' ? <DashboardSkeleton /> : <>
-          {comparePeriod && before && (
-            <div className="compare-banner">
-              <span className="compare-banner-period">
-                <i className="compare-swatch" aria-hidden="true" />
-                <span><small>This period</small><span><strong>{formatPeriod(period)}</strong> · {visibleCases.length} {visibleCases.length === 1 ? 'case' : 'cases'}</span></span>
-              </span>
-              <span className="compare-banner-vs">vs</span>
-              <span className="compare-banner-period">
-                <i className="compare-swatch compare-swatch--was" aria-hidden="true" />
-                <span><small>Comparison</small><span><strong>{formatPeriod(comparePeriod)}</strong> · {before.cases.length} {before.cases.length === 1 ? 'case' : 'cases'}</span></span>
-              </span>
-              <span className="compare-banner-key">
-                In the charts, solid is this period and striped is the comparison. Each period's cases are those created
-                in it, counted by their status now.
-              </span>
-              {/* How to read the figures, in the periods' own dates. The comparison is normally the earlier period; a
-                  date range changed afterwards can make it the later one, and the wording says so rather than "since". */}
-              <p className="compare-banner-note">
-                Big numbers are <strong>{formatPeriod(period)}</strong>.{' '}
-                {comparePeriod.to < (period.from ?? period.to)
-                  ? <>Pills show the change since <strong>{formatPeriod(comparePeriod)}</strong>: for example, "+1" means 1 more than in {formatPeriod(comparePeriod)}.</>
-                  : <>Pills show how it differs from <strong>{formatPeriod(comparePeriod)}</strong>: for example, "+1" means 1 more than in {formatPeriod(comparePeriod)}.</>}
-                {' '}Green is better, red is worse.
-              </p>
-              {overlap(period, comparePeriod) && (
-                <p className="compare-banner-warning compare-banner-overlap" role="alert">
-                  The periods overlap ({formatPeriod(overlap(period, comparePeriod)!)}): cases created then count in both.
-                </p>
-              )}
-            </div>
-          )}
           {error && <ErrorMessage className="dashboard-load-error" message={`${error} Use Refresh to try again.`} />}
-          {tab === 'Overview' && <CasePipeline counts={stageCounts} total={visibleCases.length} period={rangeLabel} before={before ? { counts: countsByStage(before.statusCounts), total: before.cases.length } : undefined} />}
+          {tab === 'Overview' && <CasePipeline counts={stageCounts} total={visibleCases.length} period={rangeLabel} />}
           {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
           {!isLoading && !caseRecords.length && !error && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
 
@@ -416,54 +342,54 @@ export default function DashboardPage({
           <section className="dashboard-insight-grid">
             <article className="dashboard-panel flag-insight-panel">
               <div className="panel-heading"><div><h2>Most common flags</h2><p>Issues raised across the cases in view</p></div><button className="text-button" onClick={() => setTab('Flags')}>View flags <span>→</span></button></div>
-              {commonFlags.length ? <FlagPills flags={commonFlags.map((flag) => ({ name: flag.name, severity: flag.severity, caseIds: flag.cases.map((item) => item.id), previous: before ? wasFlagged.get(flag.name)?.cases.length ?? 0 : undefined }))} caseCount={visibleCases.length} compareCaseCount={before?.cases.length} onOpen={() => setTab('Flags')} /> : <p className="empty-insight">No flags in this date and status selection.</p>}
+              {commonFlags.length ? <FlagPills flags={commonFlags.map((flag) => ({ name: flag.name, severity: flag.severity, caseIds: flag.cases.map((item) => item.id) }))} caseCount={visibleCases.length} onOpen={() => setTab('Flags')} /> : <p className="empty-insight">No flags in this date and status selection.</p>}
             </article>
             <article className="dashboard-panel">
               <div className="panel-heading"><div><h2>Documents by type</h2><p>Share of the cases in view that include each document type</p></div>{documentTypes.length > DOCUMENT_TYPE_ROWS && <button className="text-button" onClick={() => setShowAllDocTypes((value) => !value)}>{showAllDocTypes ? 'Show fewer' : `Show all ${documentTypes.length}`}</button>}</div>
-              {documentTypes.length ? <CoverageRings types={showAllDocTypes ? documentTypes : documentTypes.slice(0, DOCUMENT_TYPE_ROWS)} caseCount={visibleCases.length} compare={before ? { types: new Map(before.byDocumentType), caseCount: before.cases.length } : undefined} /> : <p className="empty-insight">No documents in this date and status selection.</p>}
+              {documentTypes.length ? <CoverageRings types={showAllDocTypes ? documentTypes : documentTypes.slice(0, DOCUMENT_TYPE_ROWS)} caseCount={visibleCases.length} /> : <p className="empty-insight">No documents in this date and status selection.</p>}
             </article>
           </section>
 
           <section className="dashboard-lower-grid">
             <article className="dashboard-panel risk-snapshot-panel">
               <div className="panel-heading"><div><h2>Risk overview</h2><p>Current cases grouped by assessed risk level</p></div></div>
-              <RiskOverview cases={visibleCases} compare={before?.cases} />
+              <RiskOverview cases={visibleCases} />
               <p className="snapshot-note"><InfoIcon /> Consider document findings, case status and review context alongside the risk score.</p>
             </article>
           </section>
           <section className="dashboard-pair-grid">
             <NeedsAttention cases={attentionCases} onOpen={(item) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`)} />
-            <MostRequestedDocuments cases={attentionCases} compare={before?.attentionCases} />
+            <MostRequestedDocuments cases={attentionCases} />
           </section>
           <section className="dashboard-pair-grid">
-            <CasesOverTime cases={visibleCases} period={period} compare={before && comparePeriod ? { cases: before.cases, period: comparePeriod } : undefined} />
-            <ProcessingAndCost cases={visibleCases} compare={before?.cases} costs={costs} costError={costError} isPreview={!caseRecords.length} />
+            <CasesOverTime cases={visibleCases} period={period} />
+            <ProcessingAndCost cases={visibleCases} costs={costs} costError={costError} isPreview={!caseRecords.length} />
           </section>
-          <DetectionAccuracySummary filters={accuracyFilters} compareFilters={compareAccuracyFilters} onViewAll={() => setTab('Accuracy')} />
+          <DetectionAccuracySummary filters={accuracyFilters} compareFilters={null} onViewAll={() => setTab('Accuracy')} />
           </>}
 
           {tab === 'Cases' && <>
-            <CaseKpis cases={analyticsCases} compare={before?.analyticsCases} costState={costState} />
+            <CaseKpis cases={analyticsCases} costState={costState} />
             <section className="dashboard-pair-grid">
-              <TimeAndCostByCase cases={analyticsCases} compare={before?.analyticsCases} costState={costState} onOpen={openAnalyticsCase} />
-              <StageBreakdown cases={analyticsCases} compare={before?.analyticsCases} stages={stages} />
+              <TimeAndCostByCase cases={analyticsCases} costState={costState} onOpen={openAnalyticsCase} />
+              <StageBreakdown cases={analyticsCases} stages={stages} />
             </section>
             <section className="dashboard-pair-grid">
-              <CostAgainstTime cases={analyticsCases} compare={before?.analyticsCases} costState={costState} onOpen={openAnalyticsCase} />
-              <RiskScoreSpread cases={analyticsCases} compare={before?.analyticsCases} />
+              <CostAgainstTime cases={analyticsCases} costState={costState} onOpen={openAnalyticsCase} />
+              <RiskScoreSpread cases={analyticsCases} />
             </section>
             {!caseRecords.length && <p className="dashboard-data-note">Sample cases: processing times are illustrative and Claude cost is recorded for live cases only.</p>}
           </>}
 
           {tab === 'Flags' && <>
-            <FlagKpis cases={flagCases} compare={before?.flagCases} />
-            <CheckBreakdown cases={flagCases} compare={before?.flagCases} onOpen={(item) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`)} />
+            <FlagKpis cases={flagCases} />
+            <CheckBreakdown cases={flagCases} onOpen={(item) => item.routeId && navigate(`/cases/${encodeURIComponent(item.routeId)}`)} />
             <section className="dashboard-pair-grid">
-              <CheckDocumentMatrix cases={flagCases} compare={before?.flagCases} />
-              <FlagsByRisk cases={flagCases} compare={before?.flagCases} />
+              <CheckDocumentMatrix cases={flagCases} />
+              <FlagsByRisk cases={flagCases} />
             </section>
           </>}
-          {tab === 'Accuracy' && <DetectionAccuracyPanel filters={accuracyFilters} compareFilters={compareAccuracyFilters} />}
+          {tab === 'Accuracy' && <DetectionAccuracyPanel filters={accuracyFilters} compareFilters={null} />}
           </>}
         </div>
       </main>

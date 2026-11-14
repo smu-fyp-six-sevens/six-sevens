@@ -1,6 +1,6 @@
 # Codebase audit
 
-Open items only: delete a row once it's fixed. Bugs, performance, structure and security in one place. Read from the code, 2026-11-13; nothing was run against live services. Sev: High, Medium, Low. Size: S (minutes), M (hours), L (a day+). Paths are under `backend/app/` unless they say otherwise. "(unconfirmed)" means read from code but not proven. Tests: `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md`. Product work: `PENDING_WORK.md`.
+Open items only: delete a row once it's fixed. Bugs, performance, structure, backwards-compatibility debt and security in one place. Read from the code, 2026-11-13; nothing was run against live services. Sev: High, Medium, Low. Size: S (minutes), M (hours), L (a day+). Paths are under `backend/app/` unless they say otherwise. "(unconfirmed)" means read from code but not proven. Tests: `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md`. Product work: `PENDING_WORK.md`.
 
 ## 1. Most important
 
@@ -18,7 +18,7 @@ None open.
 | 3.2 | Medium | The sweeper is the biggest database load: 25% of requests and 41% of database time. Its document scan is the slowest query | Check with `EXPLAIN`; a partial index on the in-flight statuses; read only the columns it needs; or sweep less often | `sweeper.py` | S |
 | 3.3 | Low | A case is re-read hundreds of times a day by live snapshot builds | Recheck once a few cases are worked in a day | `snapshots.py` | — |
 | 3.4 | Low | Precision/recall figures read every review (`list_reviews`) | Aggregate in SQL once reviews pass the thousands (or store evaluation rows: `CLOUD_ARCHITECTURE_PLAN.md` §13) | `findings_repository.py` | M |
-| 3.5 | Low | Cancel checks poll the database every 5 s per run | Push cancels over Realtime instead (needs a decision on how: below) | `workers/recovery.py` | M |
+| 3.5 | Low | Cancel checks poll the database every 5 s per run (the document's `cancel_requested_at`, then the audit trail) | Push cancels over Supabase Realtime, only if the polling shows in the database load | `workers/recovery.py`, `workers/detection.py` | M |
 
 Measured 2026-11-07 (24 hours, 8 cases, 80 documents): 2,343 requests, 745 s of database time; an idle hour is ~24 requests, all the sweeper (3.2).
 
@@ -28,12 +28,25 @@ Measured 2026-11-07 (24 hours, 8 cases, 80 documents): 2,343 requests, 745 s of 
 |---|---|---|---|---|
 | 4.1 | Raw colours outside the tokens in 8 frontend files | Move to tokens | `frontend/src/styles/*.css`, `DashboardPage.tsx` | S |
 | 4.2 | Risk colours mostly use hue tokens, not the risk tokens | Move them when the risk cards are restyled | `frontend/src/styles/` | S |
-| 4.3 | Four Cloud Run definitions repeat the same blocks | A local module, only if Cloud Run stays long-term | `deploy/terraform/` | M |
 | 4.4 | "Private" helpers (`_as_number`, `_rows`, `_parse_field_date`, …) are imported all over | Make them public in `fraud_detection/shared/field_values.py`; same for `_result`, `_with_ids` in `detection/tools.py` | `fraud_detection/` | M |
 | 4.5 | `case_service.py` (674 lines) does three jobs; required-document rules are split over three files | Split | `case_service.py` | M |
 | 4.6 | `models.py` (1,084 lines) mixes enums, rules, API schemas and risk models | Split | `models.py` | M |
 | 4.7 | `DetectionReport` and `LangGraphTrace` types are hand-written in the frontend | A response model for the report | `frontend/src/services/uploadService/types.ts` | M |
 | 4.8 | The schema is a hand-kept snapshot, not migrations | Migrations, when staging needs them | `backend/sql/schema.sql` | M |
+
+## 4b. Backwards compatibility
+
+Code kept only for old data, old links or the platform being retired. The database was wiped on 2026-10-31, so a shim for data older than that guards nothing.
+
+| # | In plain words | Remove when | Where | Size |
+|---|---|---|---|---|
+| B1 | Cloud Run's half of the app: push delivery (`EVENT_DELIVERY=push`, the `/push/<role>` routes, `PUSH_AUDIENCE` and its check), the `none` mode and the chart's HTTP-only branch for a consumer not yet moved, the second frontend image, the Cloud Run Terraform and the Cloud Run deploy in CI | Phase 6 (`CLOUD_ARCHITECTURE_PLAN.md`). The local compose stack also uses push: switch it to pull first, or keep push for local runs only. The gateway key (`gateway.py`) is a separate call: keep it as a second guard or drop it | `events/push.py`, `main.py`, `config.py`, `deploy/helm/six-sevens/templates/backend.yaml`, `deploy/terraform/run.tf`, `.github/workflows/deploy.yml` | M |
+| B2 | A branch that shows an extracted field stored as a bare value; every field since the 2026-10-31 wipe has the full shape (probably dead) | Now, after checking one `GET /documents/{id}` | `frontend/src/pages/document-details/fieldDisplay.ts:40` | S |
+| B3 | Claude cost runs recorded before 2026-11-04 have no cache saving; the case's Claude Cost view counts them apart | Once the cases worked between 2026-10-31 and 2026-11-04 are deleted or no longer looked at | `audit.py` (`llm_cache_saved_usd`, `runs_without_saving`) and the Claude Cost section | S |
+| B4 | Case analyses from before 2026-11-09 have no `cited_values`, so the side-by-side view digs quoted values out of the finding's sentence instead | Once those cases are re-analysed or deleted | `case_pipeline/models.py:70`; `frontend/src/pages/upload/CrossDocCompareModal.tsx:24-29` | S |
+| B5 | The dashboard's compare-two-periods feature was removed from the page (2026-11-15), but each panel still takes an optional `compare` input and draws the difference: now never used | After the demo: drop the `compare`/`before`/`compareFilters` inputs, `CompareDelta.tsx`, the `compare-*` styles, and `compareFilters` on the two accuracy panels (they're passed `null`) | `frontend/src/pages/Dashboard*.tsx`, `CasePipeline.tsx`, `DetectionAccuracyPanel.tsx`, `frontend/src/components/CompareDelta.tsx`, `frontend/src/styles/dashboard.css` | M |
+
+Not debt, so kept: the cancel check's audit-trail fallback (it covers a failed flag write, not old data); the case queue ignoring unknown saved filters (it also guards against junk in `localStorage`); versioned password and eval formats (made to change).
 
 ## 5. Bigger reorganisations (optional, in order)
 
@@ -57,14 +70,12 @@ Password hashing and the login token's place in `localStorage` are in `PENDING_W
 - **Not read yet (flagged by size only):** `DocumentDetailsPage.tsx` (716 lines) and `UploadPage.tsx` (530); `routers/detection.py` (33 imports); `_finding` defined in 7 files.
 - **Deletes** rely on cascades (`backend/sql/schema.sql`); `audit_events` is never deleted. Known limits: a delete's audit event is best effort, and a failed file delete leaves the file in storage (logged).
 - **Unused columns:** `risk_scores.scored_at`, `extracted_fields.field_category`, `extracted_fields.extracted_at`.
-- **Probably dead** since the 2026-10-31 wipe: the "older extracted-field data" branch in `frontend/src/pages/document-details/fieldDisplay.ts:40`. Confirm against `GET /documents/{id}`, then delete.
 - **Rule:** a new stored field gets a model default that old rows read correctly.
 
 ## 8. Decisions needed
 
-- **How should a cancel reach a run on another instance? (3.5)** Today the detection run polls the audit trail every 5 s and the document pipeline polls its own status. Options: leave it; a `cancel_requested_at` column on `documents` that the run polls (works with audit-metrics down, still polls); or a Supabase Realtime subscription in each worker (no polling, but each worker then holds a socket and needs a reconnect path). *Recommended: the column, then Realtime only if the polling shows in the database load.*
-- **Who approves a release to production?** Only `main` can deploy now (the Google sign-in checks the branch). Option still open: a GitHub environment with a named approver on the deploy job. *Recommended: once staging exists.*
+None open.
 
 ## 9. Order
 
-`FRAUD_DETECTION_MAP.md` §8 bug 4 (quick), 4.4, the `fieldDisplay` leftover, 4.2 with the risk-card restyle.
+`FRAUD_DETECTION_MAP.md` §8 bug 4 (quick), B2 (minutes), B5 after the demo, 4.4, 4.2 with the risk-card restyle; B1 with phase 6.

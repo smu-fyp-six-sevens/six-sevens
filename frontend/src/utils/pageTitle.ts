@@ -16,8 +16,7 @@ export function pageTitle(pathname: string, search: string): string {
   if (caseMatch) {
     const caseId = decodeURIComponent(caseMatch[1]);
     if (caseMatch[2]) return `${caseId} | Document`;
-    const raw = new URLSearchParams(search).get('section');
-    const id = raw === 'approved' ? 'documents' : raw;
+    const id = new URLSearchParams(search).get('section');
     const section = CASE_SECTIONS.find((item) => item.id === (isCaseSection(id) ? id : 'summary'));
     return `${caseId} | ${section?.label ?? 'Case Summary'}`;
   }

@@ -19,6 +19,8 @@ COPY frontend/tsconfig.json ./tsconfig.json
 COPY frontend/vite.config.ts ./vite.config.ts
 COPY frontend/eslint.config.js ./eslint.config.js
 COPY frontend/index.html ./index.html
+# Served as is at the site root (the tab icon).
+COPY frontend/public ./public
 COPY frontend/src ./src
 RUN npm run build
 

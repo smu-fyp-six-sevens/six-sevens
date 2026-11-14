@@ -9,8 +9,9 @@ subscription (EVENT_DELIVERY=pull) and scale on undelivered messages (KEDA); api
 {{- /* A consumer behind Kong (audit-metrics) serves its HTTP routes before its events move, taking none. */}}
 {{- $httpOnly := and $role.consumer $role.behindGateway (not $enabled) }}
 {{- $running := or $enabled $httpOnly }}
-{{- /* min = max (audit-metrics) has nothing to scale: a fixed count, no ScaledObject or HPA. */}}
-{{- $autoscaled := and $enabled $.Values.autoscaling.enabled (not $.Values.singleReplica) (gt (int $role.max) (int $role.min)) }}
+{{- /* A consumer keeps its ScaledObject even at min = max: Cloud Deploy never deletes what the chart stops rendering,
+so a dropped one would linger with its old minimum (it kept case-worker at 0). */}}
+{{- $autoscaled := and $enabled $.Values.autoscaling.enabled (not $.Values.singleReplica) (or $role.consumer (gt (int $role.max) (int $role.min))) }}
 {{- $env := merge (deepCopy $.Values.envOverrides) (deepCopy $role.env) (deepCopy $.Values.commonEnv) }}
 ---
 {{ include "six.serviceAccount" $ctx }}

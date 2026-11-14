@@ -89,9 +89,7 @@ export default function UploadPage({
 
   // Kept in the URL so a refresh or a trip to a document and back lands on the same section.
   const [searchParams, setSearchParams] = useSearchParams();
-  // Approved documents live in the Documents tab now; an old link to the Approved tab lands there.
-  const rawSection = searchParams.get('section');
-  const sectionParam = rawSection === 'approved' ? 'documents' : rawSection;
+  const sectionParam = searchParams.get('section');
   const activeSection: CaseSection = isCaseSection(sectionParam) ? sectionParam : 'summary';
   const [isAnalysisTraceOpen, setIsAnalysisTraceOpen] = useState(false);
   const selectSection = (section: CaseSection) => {
