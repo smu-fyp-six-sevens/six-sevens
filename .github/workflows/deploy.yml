@@ -225,9 +225,10 @@ jobs:
     needs: build
     if: vars.GKE_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 80
     env:
-      KMS_KEY: projects/${{ vars.GCP_PROJECT_ID }}/locations/${{ vars.GCP_REGION || 'asia-southeast1' }}/keyRings/six-sevens/cryptoKeys/image-signing/cryptoKeyVersions/1
+      # cosign's documented form for a Cloud KMS key version.
+      KMS_KEY: projects/${{ vars.GCP_PROJECT_ID }}/locations/${{ vars.GCP_REGION || 'asia-southeast1' }}/keyRings/six-sevens/cryptoKeys/image-signing/versions/1
     steps:
       - uses: actions/checkout@v5
 
@@ -242,7 +243,10 @@ jobs:
           access_token_lifetime: 3600s
           create_credentials_file: true
 
+      # The attestation command is in gcloud's beta component.
       - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: beta
 
       - name: Give gcloud the token
         run: echo "CLOUDSDK_AUTH_ACCESS_TOKEN=${{ steps.auth.outputs.access_token }}" >> "$GITHUB_ENV"
@@ -253,7 +257,10 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
+      # Pinned: a new major version could change the signing flags.
       - uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.3
       - uses: anchore/sbom-action/download-syft@v0
       - uses: azure/setup-helm@v4
         with:
@@ -266,11 +273,12 @@ jobs:
             digest=$(gcloud artifacts docker images describe "$REGISTRY/$image:$GITHUB_SHA" --format='value(image_summary.digest)')
             ref="$REGISTRY/$image@$digest"
             echo "$image $ref" >> images.txt
-            syft "$ref" -o spdx-json > "sbom-$image.json"
+            # Straight from the registry, not through the runner's Docker (the backend images are large).
+            syft scan "registry:$ref" -o spdx-json > "sbom-$image.json"
             # No public transparency log: the signatures stay in our registry.
             cosign sign --yes --tlog-upload=false --key "gcpkms://$KMS_KEY" "$ref"
             cosign attest --yes --tlog-upload=false --key "gcpkms://$KMS_KEY" --type spdxjson --predicate "sbom-$image.json" "$ref"
-            gcloud container binauthz attestations sign-and-create --quiet --artifact-url="$ref" \
+            gcloud beta container binauthz attestations sign-and-create --quiet --artifact-url="$ref" \
               --attestor=built-by-ci --attestor-project="$PROJECT_ID" --keyversion-project="$PROJECT_ID" \
               --keyversion-location="$REGION" --keyversion-keyring=six-sevens --keyversion-key=image-signing --keyversion=1
           done
@@ -298,13 +306,27 @@ jobs:
             "${args[@]}" > release/manifest.yaml
           grep -c '^kind:' release/manifest.yaml
 
+      # A fresh token: signing, the rollout (up to 15 minutes) and verify (up to 15) can outlast the first one.
+      - id: auth-release
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+          token_format: access_token
+          access_token_lifetime: 3600s
+          create_credentials_file: false
+
+      - name: Give gcloud the new token
+        run: echo "CLOUDSDK_AUTH_ACCESS_TOKEN=${{ steps.auth-release.outputs.access_token }}" >> "$GITHUB_ENV"
+
       - name: Release, and wait for the rollout
         run: |
-          release="r-${GITHUB_SHA::8}-${GITHUB_RUN_ATTEMPT}"
+          # Unique per run, so deploying the same commit twice doesn't clash.
+          release="r-${GITHUB_SHA::8}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           gcloud deploy releases create "$release" --delivery-pipeline=six-sevens --region="$REGION" \
-            --source=release --skaffold-file=skaffold.yaml --quiet
+            --source=release --skaffold-file=skaffold.yaml \n            --gcs-source-staging-dir="gs://$PROJECT_ID-clouddeploy/source" --quiet
           state=""
-          for _ in $(seq 1 140); do
+          for _ in $(seq 1 180); do
             state=$(gcloud deploy rollouts list --release="$release" --delivery-pipeline=six-sevens \
               --region="$REGION" --format='value(state)' | head -1)
             echo "rollout: ${state:-pending}"

@@ -18,7 +18,8 @@ Pub/Sub and other Google APIs, the registries), never to private ranges.
 }}
 {{- $frontEnds := list }}
 {{- range .Values.network.frontEndRanges }}{{ $frontEnds = append $frontEnds (dict "ipBlock" (dict "cidr" .)) }}{{ end }}
-{{- $scraper := list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" "gmp-system"))) }}
+{{- /* Managed Prometheus's collectors: gke-gmp-system on Autopilot, gmp-system on Standard clusters. */}}
+{{- $scraper := list (dict "namespaceSelector" (dict "matchExpressions" (list (dict "key" "kubernetes.io/metadata.name" "operator" "In" "values" (list "gke-gmp-system" "gmp-system"))))) }}
 {{- $kong := list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" "gateway")) "podSelector" (dict "matchLabels" (dict "app.kubernetes.io/name" "kong"))) }}
 
 {{- $namespaces := keys .Values.roles | sortAlpha }}

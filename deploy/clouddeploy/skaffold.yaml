@@ -10,6 +10,8 @@ manifests:
   rawYaml:
     - manifest.yaml
 deploy:
+  # Pods on a fraction of a vCPU start slowly, and Autopilot may add a node first.
+  statusCheckDeadlineSeconds: 900
   kubectl: {}
 verify:
   - name: gateway-checks
@@ -20,13 +22,20 @@ verify:
       args:
         - |
           set -eu
+          # A new or changed Gateway takes several minutes to serve: wait up to 15 for the app's own reply.
+          ready=""
+          for _ in $(seq 1 60); do
+            if curl -s -m 10 https://api.sixsevens.me/health | grep -q '"status":"ok"'; then ready=yes; break; fi
+            echo "waiting for https://api.sixsevens.me ..."
+            sleep 15
+          done
+          [ -n "$ready" ] || { echo "The load balancer didn't serve the app within 15 minutes"; exit 1; }
           expect() {
-            got=$(curl -s -o /dev/null -w '%{http_code}' -X "$2" "$3")
+            got=$(curl -s -m 20 -o /dev/null -w '%{http_code}' -X "$2" "$3")
             echo "$2 $3 -> $got (want $1)"
             [ "$got" = "$1" ]
           }
           expect 200 GET https://api.sixsevens.me/health
-          curl -s https://api.sixsevens.me/health | grep -q '"status":"ok"'
           expect 401 GET https://api.sixsevens.me/cases
           expect 401 GET https://api.sixsevens.me/audit/events
           expect 404 GET https://api.sixsevens.me/metrics
@@ -35,6 +44,6 @@ verify:
           expect 301 GET http://sixsevens.me/
           expect 200 GET https://grafana.sixsevens.me/api/health
           expect 401 GET https://grafana.sixsevens.me/api/dashboards/uid/six-services
-          curl -s -o /dev/null -D - -X OPTIONS https://api.sixsevens.me/cases -H "Origin: https://sixsevens.me" \
+          curl -s -m 20 -o /dev/null -D - -X OPTIONS https://api.sixsevens.me/cases -H "Origin: https://sixsevens.me" \
             -H "Access-Control-Request-Method: GET" | grep -qi "access-control-allow-origin: https://sixsevens.me"
           echo "Gateway checks passed."

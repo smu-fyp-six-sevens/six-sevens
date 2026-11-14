@@ -102,10 +102,11 @@ resource "google_clouddeploy_target" "prod" {
     cluster = google_container_cluster.prod[0].id
   }
   execution_configs {
-    usages          = ["RENDER", "DEPLOY", "VERIFY"]
-    service_account = google_service_account.clouddeploy[0].email
+    usages           = ["RENDER", "DEPLOY", "VERIFY"]
+    service_account  = google_service_account.clouddeploy[0].email
+    artifact_storage = "gs://${google_storage_bucket.clouddeploy[0].name}/artifacts"
   }
-  depends_on = [google_project_iam_member.clouddeploy]
+  depends_on = [google_project_iam_member.clouddeploy, google_storage_bucket_iam_member.clouddeploy]
 }
 
 resource "google_clouddeploy_delivery_pipeline" "app" {
@@ -149,6 +150,51 @@ resource "google_kms_crypto_key_iam_member" "deployer_signs" {
   crypto_key_id = google_kms_crypto_key.image_signing[0].id
   role          = "roles/cloudkms.signerVerifier"
   member        = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+# cosign reads the key itself (cloudkms.cryptoKeys.get) before it signs.
+resource "google_kms_crypto_key_iam_member" "deployer_reads_key" {
+  count         = var.gke_enabled ? 1 : 0
+  crypto_key_id = google_kms_crypto_key.image_signing[0].id
+  role          = "roles/cloudkms.viewer"
+  member        = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+# --- Cloud Deploy's own files (each release's source and rendered manifests). The app keeps using Supabase Storage;
+# this bucket only holds what the pipeline records.
+resource "google_storage_bucket" "clouddeploy" {
+  #checkov:skip=CKV_GCP_62:Access logs aren't needed for the pipeline's own release files; Cloud Deploy records each release.
+  count                       = var.gke_enabled ? 1 : 0
+  name                        = "${var.project_id}-clouddeploy"
+  location                    = var.region
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = true
+
+  versioning {
+    enabled = true
+  }
+
+  lifecycle_rule {
+    condition {
+      age = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
+}
+
+resource "google_storage_bucket_iam_member" "clouddeploy" {
+  for_each = var.gke_enabled ? {
+    "deployer-objects"  = { role = "roles/storage.objectAdmin", member = "serviceAccount:${google_service_account.deployer.email}" }
+    "deployer-bucket"   = { role = "roles/storage.legacyBucketReader", member = "serviceAccount:${google_service_account.deployer.email}" }
+    "execution-objects" = { role = "roles/storage.objectAdmin", member = "serviceAccount:${google_service_account.clouddeploy[0].email}" }
+    "execution-bucket"  = { role = "roles/storage.legacyBucketReader", member = "serviceAccount:${google_service_account.clouddeploy[0].email}" }
+  } : {}
+  bucket = google_storage_bucket.clouddeploy[0].name
+  role   = each.value.role
+  member = each.value.member
 }
 
 resource "google_container_analysis_note_iam_member" "deployer_attests" {
