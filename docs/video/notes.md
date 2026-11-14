@@ -180,3 +180,6 @@
 
 ## Wave 32 - "Potential Risk Score"
 - The tag on the Additional Documents score line reads "Potential Risk Score" (was "Risk if the documents support the client"). Only that shot re-rendered (renders/additional-documents.mp4, frames 2436-2512) and spliced into renders/picture.mp4. Use out/timing-dump.json (node tools/dump-timing.mjs) for splice ranges: section starts round from cumulative time.
+
+## Wave 33 - subheader
+- Score's last line reads "And it recommends documents that would reduce overall risk score." Re-rendered renders/additional-documents-handles.mp4 (frames 2406-2542, 1 s handles) and spliced into renders/picture.mp4.

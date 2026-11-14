@@ -54,7 +54,7 @@ export const SCORE_COPY = {
     { text: "With the exact evidence behind it.", at: "line1In" },
     { text: "What was flagged, where, and why.", at: "reviewAt" },
     { text: "Officers confirm or dismiss each finding, and add notes.", at: "tickAt", accent: true },
-    { text: "And it recommends the documents that would settle it.", at: "addAt" },
+    { text: "And it recommends documents that would reduce overall risk score.", at: "addAt" },
   ],
   what: "What",
   where: "Where",
