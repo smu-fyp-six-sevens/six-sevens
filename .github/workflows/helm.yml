@@ -1,8 +1,10 @@
 name: Helm chart
 
-# The GKE chart (deploy/helm): its role values are current, it renders, Checkov passes on what prod would get,
-# and it runs on kind with Calico (network policies enforced) against the Pub/Sub emulator and a stub Supabase.
-# No Claude, no Google credentials, no real data. On chart changes, weekly, and by hand.
+# The GKE chart (deploy/helm). Two jobs, so most changes cost about two minutes:
+# - chart (every run): role values match roles.json, lint, render what prod would get, Checkov on it.
+# - kind (only when something it exercises changed, weekly, or by hand): the chart on kind with Calico (network
+#   policies enforced) against the Pub/Sub emulator and a stub Supabase. About 8-10 minutes with a warm image cache.
+# No Claude, no Google credentials, no real data.
 on:
   push:
     branches: [main]
@@ -13,6 +15,7 @@ on:
       - 'deploy/terraform/subscriptions.json'
       - 'deploy/kong/**'
       - 'backend/app/events/**'
+      - 'backend/Dockerfile'
       - '.github/workflows/helm.yml'
   pull_request:
     paths:
@@ -22,6 +25,7 @@ on:
       - 'deploy/terraform/subscriptions.json'
       - 'deploy/kong/**'
       - 'backend/app/events/**'
+      - 'backend/Dockerfile'
       - '.github/workflows/helm.yml'
   schedule:
     - cron: '0 2 * * 1' # Monday 10:00 SGT
@@ -36,15 +40,22 @@ concurrency:
 
 jobs:
   chart:
-    name: Chart on kind
+    name: Chart (values, render, Checkov)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
+    outputs:
+      kind: ${{ steps.changes.outputs.kind }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The history, to see what this push changed.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
+          cache: pip
+          cache-dependency-path: .github/workflows/helm.yml
 
       - uses: azure/setup-helm@v4
         with:
@@ -72,11 +83,65 @@ jobs:
           # CKV_K8S_15 (pull policy Always): every image is pinned by digest, so IfNotPresent pulls the same bytes.
           checkov -f "$RUNNER_TEMP/prod.yaml" --framework kubernetes --compact --quiet --skip-check CKV_K8S_15
 
-      - name: Build the images (one backend image runs every role)
+      # Sizes and migration.json only change values, which the render above covers; the kind run is for what
+      # changes how the pods start, talk and take events.
+      - name: Does the kind run need to run?
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          docker build -q -t six-sevens/backend:kind -f backend/Dockerfile --target detection-worker \
-            --build-arg ALLOW_MISSING_LAND_USE=true .
-          docker build -q -t six-sevens/kong:kind -f deploy/kong/Dockerfile .
+          base="$PUSH_BEFORE"
+          [ "$EVENT" = "pull_request" ] && base="$PR_BASE"
+          if [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ] \
+            || ! git cat-file -e "${base:-none}^{commit}" 2>/dev/null \
+            || ! git diff --quiet "$base" HEAD -- deploy/helm/six-sevens/templates deploy/helm/six-sevens/values.yaml \
+                 deploy/helm/six-sevens/values-kind.yaml deploy/helm/smoke deploy/kong backend/app/events \
+                 backend/Dockerfile .github/workflows/helm.yml; then
+            echo "kind=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "kind=false" >> "$GITHUB_OUTPUT"
+            echo "Only values changed: the kind run is skipped (the render and Checkov above ran)."
+          fi
+
+  kind:
+    name: Chart on kind
+    needs: chart
+    if: needs.chart.outputs.kind == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Layers cached in GitHub's cache between runs: an unchanged dependency layer isn't rebuilt.
+      - name: Build the backend image (one image runs every role)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: detection-worker
+          build-args: ALLOW_MISSING_LAND_USE=true
+          tags: six-sevens/backend:kind
+          load: true
+          cache-from: type=gha,scope=kind-backend
+          cache-to: type=gha,scope=kind-backend,mode=max
+
+      - name: Build the Kong image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/kong/Dockerfile
+          tags: six-sevens/kong:kind
+          load: true
+          cache-from: type=gha,scope=kind-kong
+          cache-to: type=gha,scope=kind-kong,mode=max
 
       - name: kind with Calico
         uses: helm/kind-action@v1
@@ -96,8 +161,8 @@ jobs:
       - name: Smoke test
         run: bash deploy/helm/smoke/smoke.sh
 
-      - name: What was running (on failure)
-        if: failure()
+      - name: What was running (on failure or cancel)
+        if: failure() || cancelled()
         run: |
           kubectl get pods -A -o wide || true
           for ns in api doc-worker detection-worker case-worker audit-metrics gateway stubs; do

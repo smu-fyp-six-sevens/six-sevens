@@ -1,7 +1,7 @@
 # The GKE Autopilot cluster (CLOUD_ARCHITECTURE_PLAN.md sections 13-24). Regional (survives a zone loss), private
 # nodes, Workload Identity (always on in Autopilot), the Secret Manager add-on, Binary Authorization, Gateway API.
 # Terraform owns the cluster; the Helm chart (deploy/helm), released by Cloud Deploy, owns what runs in it.
-# Billing starts with the first apply that sets gke_enabled = true (roughly $200-260 a month, idle included).
+# Billing starts with the first apply that sets gke_enabled = true (lean profile: roughly $130-150 a month, idle included).
 
 # The nodes' own account, with only what nodes need (not the default compute account).
 resource "google_service_account" "gke_nodes" {

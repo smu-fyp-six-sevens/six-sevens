@@ -74,10 +74,12 @@ gateway:
   # A case WebSocket lives up to this long through the load balancer (its default is 30 s).
   backendTimeoutSeconds: 3600
 
+# Sizes are a lean profile: a team of 5-6, and a free trial allows 8 vCPUs at once (deploy/terraform/roles.json).
 kong:
-  replicas: 2
-  maxReplicas: 3
-  cpu: 500m
+  # One replica: no zone redundancy, a stated limitation. 2 or more also adds a disruption budget.
+  replicas: 1
+  maxReplicas: 2
+  cpu: 250m
   memory: 512Mi
   # Comma-separated frontend origins for Kong's CORS plugin.
   corsOrigins: "https://sixsevens.me"
@@ -92,8 +94,11 @@ frontend:
 
 grafana:
   enabled: true
-  cpu: 500m
+  cpu: 250m
   memory: 512Mi
+  # Google's query proxy beside it.
+  proxyCpu: 100m
+  proxyMemory: 128Mi
   billingExportLocation: US
   # The grafana image's user.
   uid: 472

@@ -10,15 +10,15 @@
       "behindGateway": true,
       "concurrency": 40,
       "consumer": false,
-      "cpu": "1",
+      "cpu": "500m",
       "drainSeconds": 0,
       "enabled": true,
       "env": {
         "CORS_IN_APP": "false"
       },
-      "max": 3,
+      "max": 2,
       "memory": "1Gi",
-      "min": 2,
+      "min": 1,
       "secrets": [
         {
           "env": "SUPABASE_PUBLISHABLE_KEY",
@@ -46,15 +46,15 @@
       "behindGateway": true,
       "concurrency": 40,
       "consumer": true,
-      "cpu": "1",
+      "cpu": "250m",
       "drainSeconds": 20,
       "enabled": false,
       "env": {
         "CORS_IN_APP": "false",
         "SWEEPER_ENABLED": "true"
       },
-      "max": 2,
-      "memory": "1Gi",
+      "max": 1,
+      "memory": "512Mi",
       "min": 1,
       "secrets": [
         {
@@ -79,13 +79,13 @@
       "behindGateway": false,
       "concurrency": 4,
       "consumer": true,
-      "cpu": "1",
+      "cpu": "500m",
       "drainSeconds": 240,
       "enabled": false,
       "env": {
         "CASE_ANALYSIS_TIMEOUT_SECONDS": "900"
       },
-      "max": 2,
+      "max": 1,
       "memory": "2Gi",
       "min": 0,
       "secrets": [
@@ -107,15 +107,15 @@
       "behindGateway": false,
       "concurrency": 2,
       "consumer": true,
-      "cpu": "2",
+      "cpu": "1",
       "drainSeconds": 240,
       "enabled": false,
       "env": {
         "CPU_WORKER_PROCESSES": "2",
         "DETECTION_CONCURRENCY": "2"
       },
-      "max": 3,
-      "memory": "4Gi",
+      "max": 1,
+      "memory": "3Gi",
       "min": 0,
       "secrets": [
         {
@@ -144,15 +144,15 @@
       "behindGateway": false,
       "concurrency": 2,
       "consumer": true,
-      "cpu": "2",
+      "cpu": "1",
       "drainSeconds": 240,
       "enabled": false,
       "env": {
         "CPU_WORKER_PROCESSES": "2",
         "QUEUE_WORKER_CONCURRENCY": "2"
       },
-      "max": 3,
-      "memory": "4Gi",
+      "max": 1,
+      "memory": "3Gi",
       "min": 0,
       "secrets": [
         {

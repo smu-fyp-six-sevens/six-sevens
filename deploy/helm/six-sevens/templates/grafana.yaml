@@ -80,7 +80,7 @@ spec:
           imagePullPolicy: {{ .Values.pullPolicy }}
           args: ["--web.listen-address=:9090", "--query.project-id={{ .Values.projectId }}"]
           resources:
-            {{- include "six.resources" (dict "root" . "cpu" "250m" "memory" "256Mi") | nindent 12 }}
+            {{- include "six.resources" (dict "root" . "cpu" .Values.grafana.proxyCpu "memory" .Values.grafana.proxyMemory) | nindent 12 }}
           readinessProbe:
             tcpSocket:
               port: 9090

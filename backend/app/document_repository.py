@@ -418,7 +418,7 @@ def request_detection_cancel(document_id: str) -> None:
     """
     Flags an officer's detection cancel on the document, so a run on any instance sees it through the database alone
     (workers/detection._cancel_requested_since). Never raises: the cancel event still goes out, and the run also
-    checks the audit trail (and does only that before sql/2026-11-14_cancel_requested_at.sql is applied).
+    checks the audit trail.
     """
     try:
         supabase_client.table("documents").update({"cancel_requested_at": datetime.now(timezone.utc).isoformat()}).eq(

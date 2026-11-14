@@ -117,7 +117,7 @@ The measured figures stay in the write-up, so the move reads as a deliberate des
 
 | Concern | Choice | Why |
 |---|---|---|
-| Cluster | GKE Autopilot, regional, `asia-southeast1`, one cluster (prod) | No nodes to manage; survives a zone loss |
+| Cluster | GKE Autopilot, regional, `asia-southeast1`, one cluster (prod) | No nodes to manage; the control plane survives a zone loss. The lean profile (one replica each, for a team of 5-6 on free-trial credits) doesn't: raising `kong.replicas` and api's `gke.min` to 2 spreads them across zones and adds their disruption budgets |
 | Namespaces | One per role, plus `gateway`, `frontend`, `observability` | A boundary each; dashboards already key on `namespace` |
 | Front door | `sixsevens.me` on Cloud Load Balancing (Gateway API, global external) with a Google-managed certificate (Certificate Manager, DNS authorisation) → Kong; services internal (ClusterIP) | One front door, by the network; the gateway key (backend `gateway.py`) stays until phase 6 as a second guard |
 | WebSockets | A `GCPBackendPolicy` with `timeoutSec: 3600` on Kong's backend (the default 30 s would cut every case WebSocket); a `HealthCheckPolicy` on `/health` | Live updates through the load balancer |
@@ -143,8 +143,8 @@ The measured figures stay in the write-up, so the move reads as a deliberate des
 - **Network:** default-deny per namespace; gateway → api and audit-metrics only; Kong takes traffic only from Google's front ends and health checks (`35.191.0.0/16`, `130.211.0.0/22`, also Kong's trusted IPs for the real client address); workers take no inbound traffic except the metrics scrape; egress only to DNS, Supabase, Vertex AI or Anthropic, Pub/Sub, registries.
 - **Labels:** chosen once. Deployment selectors are immutable, so a changed label means deleting the Deployment.
 - **KEDA** is installed once per cluster (a pinned `helm install`, in `deploy/terraform/README.md`), not by this chart.
-- **Pods:** non-root (uid 10001), read-only root, no privilege escalation, CPU and memory limits; a pod disruption budget for Kong and api.
-- **CI on kind:** Pub/Sub emulator, stub Supabase, Calico; smoke test (health, one event per worker, one call the policies must block); Checkov on the rendered chart. About 6–8 minutes, on chart changes and weekly.
+- **Pods:** non-root (uid 10001), read-only root, no privilege escalation, CPU and memory limits; a disruption budget for Kong and api once they run 2 or more (with one, it would block every node drain).
+- **CI on kind:** Pub/Sub emulator, stub Supabase, Calico; smoke test (health, one event per worker, one call the policies must block); Checkov on the rendered chart. Values, render and Checkov run on any chart-input change (about 2 minutes); the kind run only when the templates, smoke files, Kong, event code or Dockerfile change, and weekly (about 8–10 minutes, images cached).
 
 ## 17. Migration
 
@@ -155,7 +155,7 @@ Each worker's subscription switches from push to pull in place, so only one plat
 | 1 | Cluster, NAT, load balancer, Cloud Armor (preview) and the chart, every worker at 0; subscriber rights granted, no subscription changed | Pods healthy; the smoke test's health and must-block calls against the cluster (it publishes nothing: the topic is shared, and Cloud Run's workers would take the events) | `gke_enabled = false`, apply |
 | 2 | audit-metrics' events (the sweeper moves with them: only the pull subscriber gets sweeps). Cloud Run audit-metrics keeps serving `/audit` to Cloud Run's Kong until phase 5 | Every event stored; sweeps run | Push back |
 | 3 | case-worker | p95 and failures within 10% of Cloud Run | Push back |
-| 4 | detection-worker, then doc-worker (`sql/2026-11-14_cancel_requested_at.sql` applied first) | Same; no more recoveries or dead letters | Push back per role |
+| 4 | detection-worker, then doc-worker | Same; no more recoveries or dead letters | Push back per role |
 | 5 | api, Kong, frontend, Grafana at `sixsevens.me`. Both front doors run side by side (api only publishes, so two are safe); CORS gains the new origin | The gateway checks pass through the new load balancer | Officers use the `run.app` URL again |
 | 6 | Remove the Cloud Run services, the push identity and its grants after a stable week (Terraform) | — | Re-apply them from git history |
 
@@ -193,7 +193,7 @@ Kong's real-IP settings (`deploy/kong/render.sh`) need the load balancer's range
 | | Monthly |
 |---|---|
 | Helm chart on kind in CI | $0 |
-| Production on GKE Autopilot (Kong, api, frontend, Grafana, audit-metrics always on; workers at 0) plus NAT, load balancer and Cloud Armor | roughly $200–260, plus per document; GKE's free-tier credit may cover one cluster's management fee, so check the calculator before quoting |
+| Production on GKE Autopilot, lean profile (one each of Kong, api, frontend, Grafana and audit-metrics always on, 1.6 vCPU; workers at 0, at most one each; 4.85 vCPU at peak, under the free trial's 8) plus NAT, load balancer and Cloud Armor | roughly $130–150, about $4–5 a day, plus per document and about $2–3 of image scans per push; about $1.50 a day with every pod scaled to 0 (`deploy/terraform/README.md`). GKE's free-tier credit may cover one cluster's management fee. Check the calculator before quoting |
 | Today on Cloud Run | about $0 idle, cents per document |
 
 The cluster costs money while idle, unlike Cloud Run. The budget alert stays; delete the cluster after the assessment if nobody takes it over.

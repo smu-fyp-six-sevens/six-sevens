@@ -23,7 +23,8 @@ autoscaling:
 singleReplica: true
 enableAllRoles: true
 resourcesOverride:
-  cpu: 250m
+  cpu: 100m
+  cpuLimit: "1"
   memory: 768Mi
 monitoring:
   podMonitoring: false

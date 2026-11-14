@@ -8,6 +8,25 @@ resource "google_compute_network" "gke" {
   depends_on              = [google_project_service.apis]
 }
 
+# Nothing comes in unless a rule allows it. GKE adds its own rules (nodes, control plane, the load balancer's health
+# checks) at priority 1000, above this one.
+resource "google_compute_firewall" "deny_ingress" {
+  count     = var.gke_enabled ? 1 : 0
+  name      = "six-sevens-deny-ingress"
+  network   = google_compute_network.gke[0].id
+  direction = "INGRESS"
+  priority  = 65534
+
+  deny {
+    protocol = "all"
+  }
+  source_ranges = ["0.0.0.0/0"]
+
+  log_config {
+    metadata = "INCLUDE_ALL_METADATA"
+  }
+}
+
 resource "google_compute_subnetwork" "gke" {
   count         = var.gke_enabled ? 1 : 0
   name          = "six-sevens-${var.region}"

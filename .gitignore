@@ -45,4 +45,7 @@ deploy/terraform/.terraform/
 deploy/terraform/.terraform.lock.hcl.bak
 deploy/terraform/*.tfstate*
 deploy/terraform/terraform.tfvars
+# Saved plans (terraform plan -out) hold secret values in plain text.
+deploy/terraform/tfplan
+deploy/terraform/*.tfplan
 deploy/terraform/set-secrets.ps1

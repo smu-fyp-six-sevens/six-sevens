@@ -102,12 +102,13 @@ spec:
             {{- end }}
           resources:
             {{- include "six.resources" (dict "root" $ "cpu" $role.cpu "memory" $role.memory "ephemeral" (ternary "4Gi" "1Gi" $role.consumer)) | nindent 12 }}
+          # Up to 5 minutes: at a fraction of a vCPU, with no start-up boost as on Cloud Run, the imports are slow.
           startupProbe:
             httpGet:
               path: /health
               port: http
             periodSeconds: 5
-            failureThreshold: 36
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /health

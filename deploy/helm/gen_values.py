@@ -37,13 +37,15 @@ def render() -> str:
     roles = {}
     for name, role in table["roles"].items():
         consumer = name in consumers
+        gke = role["gke"]
         roles[name] = {
-            "cpu": role["cpu"],
-            "memory": role["memory"],
+            # The gke block's sizes where it sets them, else Cloud Run's.
+            "cpu": gke.get("cpu", role["cpu"]),
+            "memory": gke.get("memory", role["memory"]),
             "concurrency": role["concurrency"],
-            "min": role["gke"]["min"],
-            "max": role["max"],
-            "drainSeconds": role["gke"]["drain_seconds"],
+            "min": gke["min"],
+            "max": gke.get("max", role["max"]),
+            "drainSeconds": gke["drain_seconds"],
             "behindGateway": role["public"],
             "consumer": consumer,
             # A consumer runs on GKE only once its subscription is pulled; a non-consumer (api) always runs.

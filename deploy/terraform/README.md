@@ -114,9 +114,8 @@ Everything for GKE sits behind `gke_enabled` (Terraform) and the repository vari
 
 ### Before phase 1
 
-1. **Database:** run `backend/sql/2026-11-14_cancel_requested_at.sql` in Supabase's SQL editor.
-2. **Tools:** `winget install Helm.Helm`, then `gcloud components install gke-gcloud-auth-plugin kubectl`. Open a new terminal afterwards.
-3. **Budget:** the cluster costs money idle (roughly $200–260 a month), so raise `budget_amount_sgd` in `terraform.tfvars` (about 400) or the alert fires every month.
+1. **Tools:** `winget install Helm.Helm`, then `gcloud components install gke-gcloud-auth-plugin kubectl`. Open a new terminal afterwards.
+2. **Budget:** the cluster costs money idle. On the lean profile that's roughly $130–150 a month, about $4–5 a day; the sizes are in `roles.json`'s `gke` blocks and the chart's `values.yaml`. Raise `budget_amount_sgd` in `terraform.tfvars` to about 250, or the alert fires every month. On the $300 free trial that's about two months, and the trial caps the project at 8 vCPUs at once (the lean profile peaks at 4.85).
 
 ### Phase 1: the cluster, with nothing taking events
 
@@ -133,7 +132,7 @@ Everything for GKE sits behind `gke_enabled` (Terraform) and the repository vari
 7. **Repository variables:** set `GKE_ENABLED=true` and `SUPABASE_URL` (the same URL as `supabase_url`).
 8. **Release:** push a commit, or run Actions → Deploy to Cloud Run. The `gke` job signs the images and releases them through Cloud Deploy. Its verify step needs the certificate `ACTIVE`, so wait for step 4.
 9. **Check:**
-   - `kubectl get pods -A`: Kong (2), api (2), the frontend, Grafana, and audit-metrics (1, HTTP only) are running; the workers are at 0.
+   - `kubectl get pods -A`: one each of Kong, api, the frontend, Grafana, and audit-metrics (HTTP only) is running; the workers are at 0.
    - `https://sixsevens.me` loads and logs in.
    - No Binary Authorization dry-run violations. In Logs Explorer: `resource.type="k8s_cluster" protoPayload.response.metadata.annotations."alpha.image-policy.k8s.io/policy-dry-run"="true"` should return nothing for our images.
 10. **Then enforce:** set `binauthz_enforce = true` and apply. Once the Cloud Armor logs (Network Security → Cloud Armor → the policy's logs) show no false positives on normal use, set `cloud_armor_preview = false` and apply.
@@ -154,6 +153,15 @@ The order is audit-metrics, then case-worker, then detection-worker, then doc-wo
 
 ### Notes
 
+- **Idle overnight (saves credits):** scale everything to 0, which leaves about $1.50 a day for the load balancer, Cloud Armor and NAT. The site is down until you scale back, and a consumer that has moved to GKE takes no events meanwhile; they wait in its subscription.
+  ```
+  for %n in (api audit-metrics) do kubectl -n %n scale deploy/%n --replicas=0
+  kubectl -n gateway scale deploy/kong --replicas=0
+  kubectl -n frontend scale deploy/frontend --replicas=0
+  kubectl -n observability scale deploy/grafana --replicas=0
+  for %n in (doc-worker detection-worker case-worker) do kubectl -n %n annotate scaledobject/%n autoscaling.keda.sh/paused-replicas=0 --overwrite
+  ```
+  The HPAs for api and Kong put them back to 1 within a minute, so also run `kubectl -n api patch hpa api -p "{\"spec\":{\"minReplicas\":1,\"maxReplicas\":1}}"` and the same for `gateway`/`kong`, or simply delete both HPAs (`kubectl -n api delete hpa api`, `kubectl -n gateway delete hpa kong`). The next release puts all of it back as the chart says. To scale back without a release, re-run the last one: `gcloud deploy releases promote --release=<latest> --delivery-pipeline=six-sevens --region=asia-southeast1 --to-target=prod`, then remove the KEDA pause with `kubectl -n <worker> annotate scaledobject/<worker> autoscaling.keda.sh/paused-replicas-`.
 - **Pods by role:** `kubectl -n <role> logs deploy/<role>`. Each role has its own namespace; Kong is in `gateway` and Grafana in `observability`.
 - **Rollback of a release:** `gcloud deploy targets rollback prod --delivery-pipeline=six-sevens --region=asia-southeast1`. The deploy does this itself when a rollout fails.
 - **A changed secret:** `kubectl -n <role> rollout restart deploy/<role>`. The add-on mounts secrets as files, which are read at start.

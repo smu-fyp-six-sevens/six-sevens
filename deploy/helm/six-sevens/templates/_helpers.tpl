@@ -74,12 +74,14 @@ for f in {{ .Values.secrets.mountPath }}/*; do [ -f "$f" ] && export "$(basename
 {{- define "six.resources" -}}
 {{- $cpu := .root.Values.resourcesOverride.cpu | default .cpu -}}
 {{- $memory := .root.Values.resourcesOverride.memory | default .memory -}}
+{{- /* kind only: a small request with room to burst, so a start isn't starved. */}}
+{{- $cpuLimit := .root.Values.resourcesOverride.cpuLimit | default $cpu -}}
 requests:
   cpu: {{ $cpu | quote }}
   memory: {{ $memory | quote }}
   ephemeral-storage: {{ .ephemeral | default "1Gi" | quote }}
 limits:
-  cpu: {{ $cpu | quote }}
+  cpu: {{ $cpuLimit | quote }}
   memory: {{ $memory | quote }}
   ephemeral-storage: {{ .ephemeral | default "1Gi" | quote }}
 {{- end }}

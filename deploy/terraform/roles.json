@@ -1,5 +1,5 @@
 {
-  "_about": "The one role table: Terraform reads it (main.tf), and deploy/helm/gen_values.py writes the chart's role values from it. cpu, memory, concurrency, timeout and max are Cloud Run's; the gke block is the chart's (min replicas, seconds a pulled run gets to finish at shutdown). Secrets are environment variable names; each is Secret Manager's lower-case, dashed id.",
+  "_about": "The one role table: Terraform reads it (main.tf), and deploy/helm/gen_values.py writes the chart's role values from it. cpu, memory, concurrency, timeout and max are Cloud Run's. The gke block is the chart's: replicas (min, max), the pod's cpu and memory (a lean profile: a team of 5-6, and a free trial allows 8 vCPUs at once), and the seconds a pulled run gets to finish at shutdown. Secrets are environment variable names; each is Secret Manager's lower-case, dashed id.",
   "common_env": {
     "EVENT_TRANSPORT": "pubsub",
     "OTEL_ENABLED": "true",
@@ -15,9 +15,23 @@
       "max": 3,
       "public": true,
       "publishes": true,
-      "secrets": ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "AUTH_USERS", "AUTH_SECRET_KEY", "GATEWAY_SECRET"],
-      "env": { "CORS_IN_APP": "false" },
-      "gke": { "min": 2, "drain_seconds": 0 }
+      "secrets": [
+        "SUPABASE_PUBLISHABLE_KEY",
+        "SUPABASE_SECRET_KEY",
+        "AUTH_USERS",
+        "AUTH_SECRET_KEY",
+        "GATEWAY_SECRET"
+      ],
+      "env": {
+        "CORS_IN_APP": "false"
+      },
+      "gke": {
+        "min": 1,
+        "max": 2,
+        "cpu": "500m",
+        "memory": "1Gi",
+        "drain_seconds": 0
+      }
     },
     "doc-worker": {
       "note": "OCR, classify, extract.",
@@ -28,9 +42,22 @@
       "max": 3,
       "public": false,
       "publishes": true,
-      "secrets": ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "ANTHROPIC_API_KEY"],
-      "env": { "QUEUE_WORKER_CONCURRENCY": "2", "CPU_WORKER_PROCESSES": "2" },
-      "gke": { "min": 0, "drain_seconds": 240 }
+      "secrets": [
+        "SUPABASE_PUBLISHABLE_KEY",
+        "SUPABASE_SECRET_KEY",
+        "ANTHROPIC_API_KEY"
+      ],
+      "env": {
+        "QUEUE_WORKER_CONCURRENCY": "2",
+        "CPU_WORKER_PROCESSES": "2"
+      },
+      "gke": {
+        "min": 0,
+        "max": 1,
+        "cpu": "1",
+        "memory": "3Gi",
+        "drain_seconds": 240
+      }
     },
     "detection-worker": {
       "note": "Lead and specialists; the registry lookups need their keys. OneMap needs no token.",
@@ -41,9 +68,24 @@
       "max": 3,
       "public": false,
       "publishes": true,
-      "secrets": ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "ANTHROPIC_API_KEY", "DATA_GOV_SG_API_KEY", "URA_API_KEY"],
-      "env": { "DETECTION_CONCURRENCY": "2", "CPU_WORKER_PROCESSES": "2" },
-      "gke": { "min": 0, "drain_seconds": 240 }
+      "secrets": [
+        "SUPABASE_PUBLISHABLE_KEY",
+        "SUPABASE_SECRET_KEY",
+        "ANTHROPIC_API_KEY",
+        "DATA_GOV_SG_API_KEY",
+        "URA_API_KEY"
+      ],
+      "env": {
+        "DETECTION_CONCURRENCY": "2",
+        "CPU_WORKER_PROCESSES": "2"
+      },
+      "gke": {
+        "min": 0,
+        "max": 1,
+        "cpu": "1",
+        "memory": "3Gi",
+        "drain_seconds": 240
+      }
     },
     "case-worker": {
       "note": "Case analysis, score, summary, adverse media.",
@@ -54,9 +96,21 @@
       "max": 2,
       "public": false,
       "publishes": true,
-      "secrets": ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "ANTHROPIC_API_KEY"],
-      "env": { "CASE_ANALYSIS_TIMEOUT_SECONDS": "900" },
-      "gke": { "min": 0, "drain_seconds": 240 }
+      "secrets": [
+        "SUPABASE_PUBLISHABLE_KEY",
+        "SUPABASE_SECRET_KEY",
+        "ANTHROPIC_API_KEY"
+      ],
+      "env": {
+        "CASE_ANALYSIS_TIMEOUT_SECONDS": "900"
+      },
+      "gke": {
+        "min": 0,
+        "max": 1,
+        "cpu": "500m",
+        "memory": "2Gi",
+        "drain_seconds": 240
+      }
     },
     "audit-metrics": {
       "note": "Behind Kong (it answers only Kong's GATEWAY_SECRET); runs the sweeper, which publishes recovery requests. On GKE at least 1, for the 5-minute sweep.",
@@ -67,9 +121,23 @@
       "max": 2,
       "public": true,
       "publishes": true,
-      "secrets": ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "AUTH_SECRET_KEY", "GATEWAY_SECRET"],
-      "env": { "SWEEPER_ENABLED": "true", "CORS_IN_APP": "false" },
-      "gke": { "min": 1, "drain_seconds": 20 }
+      "secrets": [
+        "SUPABASE_PUBLISHABLE_KEY",
+        "SUPABASE_SECRET_KEY",
+        "AUTH_SECRET_KEY",
+        "GATEWAY_SECRET"
+      ],
+      "env": {
+        "SWEEPER_ENABLED": "true",
+        "CORS_IN_APP": "false"
+      },
+      "gke": {
+        "min": 1,
+        "max": 1,
+        "cpu": "250m",
+        "memory": "512Mi",
+        "drain_seconds": 20
+      }
     }
   }
 }
