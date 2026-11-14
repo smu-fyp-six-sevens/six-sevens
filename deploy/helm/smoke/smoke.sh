@@ -83,16 +83,22 @@ echo "doc-worker -> api: blocked"
 
 step "Must pass: one event reaches each worker by pull"
 kubectl -n stubs run publish --rm -i --restart=Never --image=six-sevens/backend:kind --overrides='{"spec":{"containers":[{"name":"publish","image":"six-sevens/backend:kind","imagePullPolicy":"Never","command":["python","/smoke/publish.py"],"env":[{"name":"EVENT_TRANSPORT","value":"pubsub"},{"name":"GOOGLE_CLOUD_PROJECT","value":"local"},{"name":"PUBSUB_EMULATOR_HOST","value":"pubsub-emulator.stubs.svc.cluster.local:8085"}],"volumeMounts":[{"name":"smoke","mountPath":"/smoke"}]}],"volumes":[{"name":"smoke","configMap":{"name":"smoke"}}]}}'
-port=18100
+# Read each worker's metrics from inside its pod: no port-forward to go wrong.
+metrics() {
+  kubectl -n "$1" exec "deploy/$1" -- python -c \
+    "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:9100/metrics', timeout=5).read().decode())" \
+    2>/dev/null || true
+}
 for role in $WORKERS; do
-  port=$((port + 1))
-  forward "$role" "deploy/$role" "$port:9100"
   for _ in $(seq 1 30); do
-    if curl -s "http://localhost:$port/metrics" | grep -q "^events_handled_total{role=\"$role\""; then
+    if metrics "$role" | grep -q "^events_handled_total{role=\"$role\""; then
       echo "$role: handled its event"; continue 2
     fi
     sleep 4
   done
+  echo "--- $role's log"; kubectl -n "$role" logs "deploy/$role" --tail=40 || true
+  echo "--- $role's events_handled"; metrics "$role" | grep "^events_handled" || echo "(none)"
+  echo "--- the emulator's log"; kubectl -n stubs logs deploy/pubsub-emulator --tail=40 || true
   fail "$role handled no event in 2 minutes"
 done
 

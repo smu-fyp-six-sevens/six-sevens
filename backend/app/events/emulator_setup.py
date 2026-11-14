@@ -85,15 +85,18 @@ def main() -> None:
     _create_topic(publisher, topic)
     _create_topic(publisher, dead_letter)
     pull = settings.EVENT_DELIVERY == "pull"
+    # EMULATOR_FILTERS=false (the kind smoke test): every role gets every event and ignores the ones it doesn't handle.
+    filters = os.environ.get("EMULATOR_FILTERS", "true").lower() != "false"
     for role, subscribed in SUBSCRIPTIONS.items():
         name = subscriber.subscription_path(project, subscription_id(role))
         request = {
             "name": name,
             "topic": topic,
             "ack_deadline_seconds": ACK_DEADLINE_SECONDS,
-            "filter": subscription_filter(subscribed, role),
             "dead_letter_policy": {"dead_letter_topic": dead_letter, "max_delivery_attempts": MAX_DELIVERY_ATTEMPTS},
         }
+        if filters:
+            request["filter"] = subscription_filter(subscribed, role)
         if not pull:
             request["push_config"] = {"push_endpoint": _endpoint(role)}
         _create_subscription(subscriber, request)

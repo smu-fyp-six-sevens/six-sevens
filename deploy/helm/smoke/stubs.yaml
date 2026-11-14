@@ -92,3 +92,5 @@ spec:
             - { name: PUBSUB_EMULATOR_HOST, value: "pubsub-emulator.stubs.svc.cluster.local:8085" }
             - { name: GOOGLE_CLOUD_PROJECT, value: local }
             - { name: EVENT_DELIVERY, value: pull }
+            # The test is pull delivery and the policies; real Pub/Sub's filters are proven on Cloud Run.
+            - { name: EMULATOR_FILTERS, value: "false" }

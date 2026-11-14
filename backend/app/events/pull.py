@@ -143,6 +143,8 @@ async def _handle(role: str, message: "Message") -> None:
         )
         message.nack()
         return
+    # One line per message, as push gets one access-log line per request.
+    logger.info("Pulled %s %s for %s (attempt %s)", event.type, event.event_id, role, message.delivery_attempt)
     synced_cases = document_repository.track_request_syncs()
     try:
         # The publisher's traceparent, so the work joins the trace of the request that caused it.
