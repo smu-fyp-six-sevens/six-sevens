@@ -2,65 +2,57 @@
 
 Planned and open cloud work only. Delete an item once it's done. Updated 2026-11-14.
 
-**Where it stands:** the cloud as built is summarised in `HOW_IT_WORKS.md` §9. Operations and every problem met are in `deploy/terraform/README.md`; running the split locally is in `README.md`. Sections 1–7 and 12 moved there, so the numbers from 8 on are unchanged. Adding a service: `docs/ADDING_A_SERVICE.md`. Kubernetes (planned): §13–24.
+**Where it stands:** production runs on Cloud Run today. The cloud as built is summarised in `HOW_IT_WORKS.md` §9; operations and every problem met are in `deploy/terraform/README.md`; running the split locally is in `README.md`. Sections 1–7 and 12 moved there, so the numbers from 8 on are unchanged. Adding a service: `docs/ADDING_A_SERVICE.md`.
+
+**Decided 2026-11-14:**
+- **Production moves to GKE Autopilot**, and the Cloud Run deployment is removed once GKE is stable (§13–24). This is a Cloud Native award, so Kubernetes is the platform, not an afterthought. Load doesn't require it: detection's p95 is 92 s against a 600 s limit.
+- **No staging environment.** It's designed (below, for the record) but not built: about 3–5 days of work before the deadline. Load tests run against the local compose stack with Claude stubbed; failure tests run on production after the move, on synthetic cases.
 
 ## 8. Open decisions
 
-1. **Award check:** confirm the Cloud Native assessment accepts Kubernetes as a tested Helm chart rather than a running cluster.
-2. **Login:** keep `AUTH_USERS` as a stated limit, or move to Supabase Auth.
-3. **Staging:** promote automatically or after approval; Grafana in staging; who approves; smoke test per merge or nightly.
+1. **Login:** keep `AUTH_USERS` (hashed now) as a stated limit, or move to Supabase Auth.
 
 ## 9. To do
 
-- **Failure tests** (a deliverable): kill a worker mid-run; flood uploads; stop audit-metrics; a poison message; a lost publish (set a document to `queued` without publishing; the sweeper should recover it).
+- **Failure tests** (a deliverable), on production after the GKE move, on synthetic cases at a quiet time: kill a worker pod mid-run; flood uploads; stop audit-metrics; a poison message; a lost publish (set a document to `queued` without publishing; the sweeper should recover it). The lost publish writes to the shared database.
 - **Shared Anthropic rate budget:** today each instance caps itself.
 - **Kong behaviour test in CI** (routes, CORS, rate limits, WebSocket upgrade): CI only checks the config parses.
-- **Optional:** ingestion out of api; the frontend reading Kong's URL at runtime (needed for staging).
+- **Optional:** ingestion out of api.
 
-**Staging** (planned, not started): a second GCP project (`fyp-six-sevens-staging`) and a second free Supabase project, same Terraform with its own variables and state.
-1. **Schema as migrations** (`supabase/migrations/`), staging first.
-2. **Frontend runtime config** (`/config.js` from an env variable), so one image serves both.
-3. **Terraform environments** (`staging.tfvars`, `production.tfvars`); the identity condition also requires the GitHub environment.
-4. **Create the project**, apply, fill secrets with **no Anthropic key**, share production's image registry.
-5. **No Claude on staging:** a stub setting makes `langgraph/_anthropic.py` return canned replies. Staging then proves the wiring, not Claude; API-side breaks are caught by the on-demand live check (`PENDING_WORK.md`).
-6. **Pipeline:** `main` → staging → gateway check and smoke test → same images to production (automatic, or after a GitHub approval).
-7. **Nightly on staging:** the full path on synthetic documents plus the failure tests (also keeps the free Supabase project awake).
-8. **Terraform in the pipeline:** plan on PRs, apply to staging on merge, to production behind approval.
+**Staging (designed, not built):** a second GCP project and Supabase project, the same Terraform with its own variables; schema as migrations; a frontend runtime config so one image serves both; no Anthropic key, with `langgraph/_anthropic.py` returning canned replies; `main` → staging → smoke test → the same images to production. Revisit after the deadline, or if GLDB asks for one.
 
-Cost: ~$0 idle, cents per run.
+## 10. Stage 2 (revised after the supervisor's feedback, 2026-10-26; updated 2026-11-14)
 
-## 10. Stage 2 (revised after the supervisor's feedback, 2026-10-26)
+**Feedback in short:** the architecture is fine. A handful of users doesn't justify heavier infrastructure without a measured need. Let load testing drive decisions; spend the time on testing, productionisation, usability and business value. `docker compose up` liked; on-prem accepted as hard; a deployment document (server, model, RAM, storage) requested. The GKE move goes beyond that advice deliberately, for the award; the measured load figures stay in the write-up.
 
-**Feedback in short:** the architecture is fine. A handful of users doesn't justify heavier infrastructure without a measured need. Let load testing drive decisions; spend the time on testing, productionisation, usability and business value. Staging approved; `docker compose up` liked; on-prem accepted as hard; a deployment document (server, model, RAM, storage) requested.
+**Steps, in order:**
+1. **GKE production** (§13–24).
+2. **Claude through Vertex AI** (Google identity and billing, regional processing); check which Claude models Vertex offers in `asia-southeast1` first. Can be done with the move.
+3. **Load tests as code** (k6 or Locust) against the local compose stack, written up as a capacity report. **No Claude calls** (stubbed) and **no Supabase writes** (writes go to an in-memory store).
+4. **Tune autoscaling** (KEDA, pod sizes) from the results, recording before and after.
+5. **Failure tests** on production (§9).
+6. **Service-level targets** with burn-rate alerts.
+7. **Cost guardrails:** shared rate budget, a spend cap per case, budget alerts (the cluster costs money idle, §21).
+8. **Self-host kit** (`docker compose up` install and the Helm chart) and one Supabase backup-and-restore drill.
 
-**Steps, in order** (6 can run alongside):
-1. **Staging and promotion** (§9).
-2. **Load tests as code** (k6 or Locust) against staging, written up as a capacity report. **No Claude calls** (stubbed) and **no Supabase writes** (writes go to an in-memory store).
-3. **Tune autoscaling** from the results, recording before and after.
-4. **Failure tests on staging**, automated nightly.
-5. **Service-level targets** with burn-rate alerts.
-6. **Claude through Vertex AI** (Google identity and billing, regional processing); check the models are offered in-region first.
-7. **Cost guardrails:** shared rate budget, a spend cap per case, budget alerts.
-8. **Self-host kit** (`docker compose up` install) and one Supabase backup-and-restore drill.
-
-**Not doing:** nightly evals or model-comparison runs (they spend tokens).
-
-**Kubernetes** (decided 2026-11-02): production stays on Cloud Run; a Helm chart is built as a handover kit and tested on `kind` in CI. Measured 2026-11-02: detection p95 92 s, extraction 36 s, analysis 26 s, far below the 600 s limit. Triggers, design and cost: §13–24. Ask GLDB what its platform team runs.
+**Not doing:** staging (above); nightly evals or model-comparison runs (they spend tokens).
 
 ## 11. Risks
 
 - **Database written, publish lost:** the sweeper recovers it.
 - **Supabase Realtime** carries all live updates; untested under load.
 - **Kong** is a single entry point: a wrong `Host` or CORS rule breaks the frontend; test with compose first.
-- **One environment** until staging: the post-deploy check and rollback are the safety net.
+- **One environment:** with no staging, the post-deploy check, the phased move (§17) and rollback are the safety net.
 - **Shared Supabase:** local and cloud see each other's data; whole-database scans (the sweeper) run only in the cloud.
-- **Time:** staging, load and failure tests compete with the Helm chart before the deadline.
+- **Time:** the GKE move competes with testing and the write-up before the deadline. If it runs out, production stays on Cloud Run and the chart is shown running on GKE for the demo only (with its own topic, its sweeper off).
 
-# Kubernetes deployment (planned only)
+---
 
-How Six Sevens would move from Cloud Run to Kubernetes, and when. Nothing here is built. Written 2026-11-13; builds on §10 (the Helm handover kit). Sections 13–24.
+# Kubernetes deployment (decided, not built)
 
-**The rule:** every later step is watched on the agents' sensibility checks (built, §13) and, once built, the officer-verdict accuracy trend. Production stays on Cloud Run until a measured trigger fires. The Helm chart is built anyway, as the kit GLDB's platform team would take.
+How Six Sevens moves from Cloud Run to GKE. Decided 2026-11-14; nothing here is built yet. Sections 13–24.
+
+**The rule:** every phase is watched on the agents' sensibility checks (built, §13) and, once built, the officer-verdict accuracy trend.
 
 ## 13. First: the evaluation harness
 
@@ -68,7 +60,7 @@ How Six Sevens would move from Cloud Run to Kubernetes, and when. Nothing here i
 
 ### 13.1 Open on the sensibility checks
 
-- **Tests:** `PENDING_TESTS.md` rows 34–39, then one real run per run kind (a payslip, a bank statement, a case) to see the checks on a live trace.
+- **Tests:** `PENDING_TESTS.md` rows 36, 37 and 39 (the rest are written: `tests/test_evals.py`), then one real run per run kind (a payslip, a bank statement, a case) to see the checks on a live trace.
 - **Tune from real runs:** the overconfidence gap (0.3); the expected-checks table (`evals/detection.py`: today only Content Validation's numerical checks on income documents and bank statements, and Digital Authenticity's metadata check); the field-name rules for dates and amounts (`evals/extraction.py`). A check that warns on most runs is noise: change or drop it.
 - **Extraction rerun:** records no `extraction` step, so its field checks don't run (only its second look is checked).
 
@@ -101,69 +93,82 @@ How Six Sevens would move from Cloud Run to Kubernetes, and when. Nothing here i
 - **No golden set, no nightly evals, no scheduled token spend.** Evals run inside normal use and cost nothing extra per run.
 - **No personal data** in metrics or the trace's check results (field names, never values).
 
-## 14. When to move
+## 14. Why GKE, and what it shows
 
-| Stage | Trigger (any one) | Today | Until then |
-|---|---|---|---|
-| A. Helm kit, tested on kind in CI | Already decided | — | Cloud Run serves everything |
-| B. Staging on GKE | GLDB confirms it runs Kubernetes, or the assessment needs a live cluster | Neither answered | Staging on Cloud Run |
-| C. Production on GKE | A stage's p95 passes 480 s (push limit 600 s) | Detection 92 s, extraction 36 s, analysis 26 s | Push delivery |
-| | Load above what Cloud Run handles at current `max_instances` | Not measured | Raise `max_instances` |
-| | Cloud Run costs over 1.2× GKE Autopilot for two months | ~$0 idle | Scale to zero |
-| | GLDB needs its own cluster or network rules Cloud Run can't express | Not asked | Kong and IAM |
+The move isn't forced by load (detection p95 92 s against Cloud Run's 600 s push limit), so it's justified by what Kubernetes demonstrates and what a bank would run:
+
+| Reason | What it shows |
+|---|---|
+| Portability | The same Helm chart runs on GLDB's own cluster, on-premises or in any cloud; Cloud Run is Google-only |
+| Network isolation | Services are internal (no public URLs); only the load balancer and Kong face the internet |
+| No request-time ceiling | Pull workers have no 600 s push limit, so a long case analysis can't be cut off |
+| Event-driven scaling | Workers scale on undelivered messages (KEDA), down to zero |
+| Supply-chain control | Only signed images from our registry are admitted |
+| Operations a bank recognises | GitOps-style releases, namespaces per service, network policies, pod security |
+
+The measured figures stay in the write-up, so the move reads as a deliberate design choice, not a load fix.
 
 ## 15. Target design
 
 | Concern | Choice | Why |
 |---|---|---|
-| Cluster | GKE Autopilot, regional, `asia-southeast1`, one per environment | No nodes to manage; survives a zone loss |
+| Cluster | GKE Autopilot, regional, `asia-southeast1`, one cluster (prod) | No nodes to manage; survives a zone loss |
 | Namespaces | One per role, plus `gateway`, `frontend`, `observability` | A boundary each; dashboards already key on `namespace` |
-| Ingress | One Google load balancer → Kong; services internal (ClusterIP) | One front door, by the network rather than Cloud Run's gateway key (backend `gateway.py`) |
-| Events | Same topic; workers switch from push to pull | Private services can't take push; removes the 600 s limit |
-| Scaling | KEDA on undelivered messages, 0 to max | Keeps scale to zero |
+| Front door | Cloud Load Balancing (Gateway API) with a Google-managed certificate → Kong; services internal (ClusterIP) | One front door, by the network rather than Cloud Run's gateway key (backend `gateway.py`) |
+| Edge protection | Cloud Armor on the load balancer: OWASP rules and per-address rate limits before traffic reaches Kong | A bank-facing app gets a web application firewall; Kong keeps the per-officer limits |
+| Events | Same topic; workers switch from push to pull subscriptions | Private services can't take push; removes the 600 s limit |
+| Scaling | KEDA on undelivered messages, 0 to max; Kong, api and frontend at least 1 | Idle workers cost nothing |
 | Database | Supabase outside; egress via Cloud NAT on a static IP, allow-listed | A leaked key is useless elsewhere |
-| Secrets | Secret Manager add-on | No secrets in Helm values |
+| Secrets | Secret Manager through the GKE add-on | No secrets in Helm values |
 | Identity | Workload Identity, one account per role (as today) | No keys |
-| Claude | Through Vertex AI, in `asia-southeast1` if the models are offered there (else the nearest region that has them), with each worker's own Google identity; the public Claude API as the fallback. Same move on Cloud Run first (§10 step 6) | No Anthropic key to hold or leak; Google billing; regional processing |
-| Monitoring | Managed Prometheus, same Grafana, Cloud Trace | Nothing new |
+| Claude | Through Vertex AI, in `asia-southeast1` if the models are offered there (else the nearest region that has them), with each worker's own Google identity; the public Claude API as the fallback | No Anthropic key to hold or leak; Google billing; regional processing |
+| Images | Artifact Registry with Artifact Analysis (vulnerability scanning on push); Binary Authorization admits only signed images | Only our software runs, and every image has a parts list |
+| Releases | Cloud Deploy, rendering the Helm chart, with a rollout record, approval and one-click rollback | Every production change is recorded and reversible, without running a deploy tool inside the cluster |
+| Monitoring | Managed Prometheus, the same Grafana (in `observability`), Cloud Logging, Cloud Trace; the GKE security posture dashboard | Mostly what runs today; posture is free with GKE |
+| Scheduled work | Cloud Scheduler's sweep (as today) | Nothing new |
 | Backups | Cluster holds no state; Supabase point-in-time recovery matters | No cluster backup tool |
-| Environments | dev (laptop), staging (Claude stubbed, no Anthropic key), prod | The chart refuses staging with a key |
+| Environments | dev (laptop, compose or kind) and prod | No staging (decided) |
 
-## 16. The Helm kit (Stage A)
+**Not used, on purpose:** Cloud SQL, Firestore, Cloud Storage and Memorystore (Supabase Postgres and Storage, and no Redis, are settled); a service mesh (network policies suffice); GKE Enterprise (not needed for one cluster).
 
-- **Chart:** one chart, a template per kind; per-role values generated from Terraform's `local.roles`. Values files: default, kind, staging, prod.
-- **Network:** default-deny per namespace; gateway → api and audit-metrics only; workers take no inbound traffic; egress only to DNS, Supabase, Anthropic, Pub/Sub, registries.
-- **Pods:** non-root (uid 10001), read-only root, no privilege escalation, CPU and memory limits.
-- **CI on kind:** Pub/Sub emulator, stub Supabase, Calico; smoke test (health, one event per worker, one call the policies must block); Checkov on the rendered chart. ~6–8 min, on chart changes and weekly.
+## 16. The Helm chart
 
-## 17. Migration (Stages B and C)
+- **Chart:** one chart, a template per kind; per-role values generated from Terraform's `local.roles`. Values files: default, kind, prod.
+- **Network:** default-deny per namespace; gateway → api and audit-metrics only; workers take no inbound traffic; egress only to DNS, Supabase, Vertex AI or Anthropic, Pub/Sub, registries.
+- **Pods:** non-root (uid 10001), read-only root, no privilege escalation, CPU and memory limits; a pod disruption budget for Kong and api.
+- **CI on kind:** Pub/Sub emulator, stub Supabase, Calico; smoke test (health, one event per worker, one call the policies must block); Checkov on the rendered chart. About 6–8 minutes, on chart changes and weekly.
 
-Each worker's subscription switches push → pull in place, so only one platform gets a role's messages; rollback is switching back. Each phase is also watched on the sensibility checks and the accuracy trend (§13): a jump in warnings or failures after a move holds the next phase.
+## 17. Migration
+
+Each worker's subscription switches from push to pull in place, so only one platform gets a role's messages at a time; rollback is switching back. Each phase is watched on the sensibility checks: a jump in warnings or failures holds the next phase.
 
 | Phase | Moves | Check before next | Rollback |
 |---|---|---|---|
-| 1 | Staging, all roles | Failure tests pass; a green week | Delete the cluster |
-| 2 | audit-metrics (sweeper moves with it) | Every event stored; sweeps run | Push back; sweeper back |
-| 3 | case-worker | p95 and failures within 10% | Push back |
+| 1 | Cluster, NAT, load balancer, Cloud Armor and the chart, every worker at 0 and nothing public | Pods healthy; the kind smoke test against the cluster | Delete the cluster |
+| 2 | audit-metrics (the sweeper moves with it) | Every event stored; sweeps run | Push back; sweeper back |
+| 3 | case-worker | p95 and failures within 10% of Cloud Run | Push back |
 | 4 | detection-worker, then doc-worker | Same; no more recoveries or dead letters | Push back per role |
-| 5 | api, Kong, frontend; DNS switched | Deploy gateway check passes | DNS back |
-| 6 | Remove Cloud Run after 30 stable days | — | — |
+| 5 | api, Kong, frontend, Grafana; DNS switched | The deploy's gateway check passes through the new load balancer | DNS back |
+| 6 | Remove the Cloud Run services after a stable week (Terraform) | — | Re-apply them from git history |
+
+Then the failure tests (§9).
 
 ## 18. CI/CD on GKE
 
-Actions builds, signs (cosign) and attaches an SBOM, then opens a PR bumping the image digest. Argo CD syncs the cluster from the repo; rollback = revert the PR. Terraform owns the cloud pieces; Helm via Argo CD owns everything inside the cluster. Only Argo CD deploys; Binary Authorization admits only signed images.
+Actions builds, signs (cosign), attaches an SBOM and pushes to Artifact Registry, then creates a Cloud Deploy release that renders the chart with the new image digests. Cloud Deploy rolls it out and records it; rollback is its previous release. Terraform owns the cloud pieces; the chart owns everything inside the cluster. Binary Authorization admits only signed images. The checks that block today (Checkov, pip-audit, npm audit) keep blocking.
 
 ## 19. Tools: in and out
 
 | Tool | Why | Cost | When |
 |---|---|---|---|
-| Argo CD | Every production change is a reviewed commit (MAS TRM) | Free; a day | Stage B |
-| KEDA | Idle cost near zero | Free | Stage B |
-| Binary Authorization, cosign, SBOM | Only our images run; parts list for vulnerability reviews | Free; a day | Stage B |
-| Secret Manager add-on | Secrets in one audited place | Included | Stage B |
-| NetworkPolicy | Services can't talk to each other unless allowed | Included | Stage A |
+| Cloud Deploy | Every production release recorded, approved and reversible (MAS TRM) | Small per active pipeline; check the calculator | With the move |
+| KEDA | Idle workers cost nothing | Free | With the move |
+| Binary Authorization, cosign, SBOM, Artifact Analysis | Only our images run; a parts list for vulnerability reviews | Free to small | With the move |
+| Cloud Armor | Web application firewall and edge rate limits | Per policy, rule and request; check the calculator | With the move |
+| Secret Manager add-on | Secrets in one audited place | Included | With the move |
+| NetworkPolicy | Services can't talk to each other unless allowed | Included | In the chart |
 
-**Left out:** a service mesh (NetworkPolicies suffice; too much to run), Kyverno/Gatekeeper (Autopilot covers it), Velero (no state to back up), Falco (needs privileged pods; GKE's posture dashboard covers basics), Litmus (scripted failure tests instead).
+**Left out:** Argo CD (Cloud Deploy covers releases without running a tool in the cluster), a service mesh, Kyverno or Gatekeeper (Autopilot covers it), Velero (no state to back up), Falco (needs privileged pods; the posture dashboard covers basics), Litmus (scripted failure tests instead).
 
 ## 20. Open security items on GKE
 
@@ -174,31 +179,31 @@ Actions builds, signs (cosign) and attaches an SBOM, then opens a PR bumping the
 | 6.1 any service can publish any event | Unchanged |
 | Cross-instance detection cancel: a cancel that lands on another instance is seen only through the audit trail, so not while audit-metrics is down | Do it with the move: a `cancel_requested_at` column on `documents` that the detection run polls (`workers/detection.py`, `_cancel_requested_since`), so a cancel needs only the database. More pods make a cross-instance cancel likelier. M |
 
-Kong's real-IP settings (`deploy/kong/render.sh`) need the load balancer's ranges as trusted IPs on GKE, and the gateway key (backend `gateway.py`) can go once the services are internal.
+Kong's real-IP settings (`deploy/kong/render.sh`) need the load balancer's ranges as trusted IPs, and the gateway key (backend `gateway.py`) can go once the services are internal.
 
 ## 21. Cost (rough; check Google's calculator before quoting)
 
-| Stage | Monthly |
+| | Monthly |
 |---|---|
-| A. Helm kit on kind in CI | $0 |
-| B. Staging on GKE (public services always on, workers at 0) | $100–130 |
-| C. Production on GKE (two replicas of public services) | $200–260 plus per document |
-| Today on Cloud Run | ~$0 idle, cents per document |
+| Helm chart on kind in CI | $0 |
+| Production on GKE Autopilot (Kong, api, frontend, Grafana always on; workers at 0) plus NAT, load balancer and Cloud Armor | roughly $200–260, plus per document |
+| Today on Cloud Run | about $0 idle, cents per document |
 
-Below the triggers, Cloud Run is cheaper.
+The cluster costs money while idle, unlike Cloud Run. The budget alert stays; delete the cluster after the assessment if nobody takes it over.
 
 ## 22. Risks
 
 | Risk | Mitigation |
 |---|---|
-| The chart drifts from Cloud Run | Values generated from `local.roles`; kind test on every chart change |
-| Staging calls Claude by mistake | No key in staging; chart refuses one |
+| No staging: production is the first cluster | The phased move (§17), one role at a time, each reversible; the kind test on every chart change |
+| The chart drifts from what Cloud Run ran | Values generated from `local.roles` |
 | A message processed twice during a switch | Handlers are idempotent; one subscription per role |
-| Idle cost surprises | KEDA to zero; budget alerts; Stage B only on a trigger |
-| A wrong network policy breaks a flow | kind test has a must-pass and a must-block call; staging first |
-| Supabase can't allow-list the NAT IP on our plan | Confirm before Stage B |
-| Nobody to run it after handover | Autopilot, Argo CD, a short runbook |
-| Data leaves Singapore | Regional cluster and registry; Claude via Vertex AI in-region |
+| Idle cost | KEDA to zero for workers; budget alert; delete the cluster when it's no longer needed |
+| A wrong network policy or Cloud Armor rule breaks a flow | kind test has a must-pass and a must-block call; Cloud Armor rules start in preview mode |
+| Supabase can't allow-list the NAT IP on our plan | Confirm before phase 1 |
+| Nobody to run it after handover | Autopilot, Cloud Deploy, a short runbook |
+| Data leaves Singapore | Regional cluster and registry; Claude via Vertex AI in-region where offered |
+| The move doesn't finish before the deadline | Stop at the last stable phase; the remaining roles stay on Cloud Run (§11) |
 | Too few officer verdicts to read accuracy | Show the count with each figure; a person decides below 30 cases |
 
 ## 23. Why each piece (in the bank's terms)
@@ -206,16 +211,15 @@ Below the triggers, Cloud Run is cheaper.
 | Feature | Problem it solves | Expectation it meets |
 |---|---|---|
 | Evaluation harness | Catches agents going off track on every run; accuracy from officer verdicts | MAS FEAT (monitoring); TRM change management |
-| Helm kit | GLDB can run it on its own platform | MAS outsourcing (exit, portability) |
-| Staging without Claude | Changes tested without spend or real data | TRM; PDPA |
+| Helm chart | GLDB can run it on its own platform | MAS outsourcing (exit, portability) |
 | Pull workers + KEDA | No 10-minute ceiling; free when idle | TRM capacity |
-| One gateway, internal services | Nobody bypasses rate limits | TRM access control |
+| Load balancer + Cloud Armor, internal services | Nobody reaches a service directly; common web attacks stopped at the edge | TRM access control; OWASP |
 | NetworkPolicies | A hijacked part can't reach the others | TRM segmentation |
 | Workload Identity | No keys to leak | TRM least privilege |
 | Secret Manager add-on | Secrets in one audited place | TRM; PDPA |
 | NAT allow-list | Leaked database key useless elsewhere | TRM; PDPA |
-| Argo CD | Every change reviewed and reversible | TRM change management |
-| Signing and Binary Authorization | Only our software runs | TRM supply chain; OWASP A08 |
+| Cloud Deploy | Every release recorded, approved and reversible | TRM change management |
+| Signing, Binary Authorization, Artifact Analysis | Only our software runs, with known parts | TRM supply chain; OWASP A08 |
 | Regional, Singapore only | Survives a zone outage; data stays in Singapore | TRM; PDPA; MAS outsourcing |
 | Claude through Vertex AI | No model key to leak; calls billed and audited in Google Cloud; processing in-region where offered | TRM least privilege; PDPA; MAS outsourcing |
 
@@ -223,7 +227,7 @@ Below the triggers, Cloud Run is cheaper.
 
 We have little access to GLDB's technical side, so these stand until the bank says otherwise.
 
-- **GLDB's platform:** assumed unknown. The Helm kit (Stage A) is built and tested on kind as the handover; Stages B and C wait for a trigger in §14.
-- **No paid test cluster** (~$100–130 a month idle) unless the bank or the assessment asks for a live one.
-- **Ownership after handover:** GLDB's platform team, if it adopts the kit. Until someone owns a cluster, production stays on Cloud Run.
-- **Claude through Vertex AI** (§10 step 6, §15) is in scope, after checking which Claude models Vertex offers in `asia-southeast1`.
+- **GLDB's platform:** unknown. GKE stands in for the bank's own Kubernetes: the chart is what its platform team would install.
+- **The demo line:** "Production runs on Kubernetes (GKE Autopilot). We have no access to GLDB's infrastructure, so we run the same Helm chart on our own Google Cloud project; the bank's platform team would install it on theirs, on-premises or in their cloud, with no code changes."
+- **Ownership after handover:** GLDB's platform team, if it adopts the chart. Otherwise the cluster is deleted after the assessment.
+- **Claude through Vertex AI** is in scope, after checking which Claude models Vertex offers in `asia-southeast1`.

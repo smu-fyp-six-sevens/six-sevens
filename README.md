@@ -17,7 +17,7 @@ It automates the forgery-check stage of GLDB's loan workflow: officers upload a 
 | `HOW_IT_WORKS.md` | How the system behaves today, settings, cost logs |
 | `FRAUD_DETECTION_MAP.md` | How the fraud checks and agents are wired; known detection bugs |
 | `CROSS_DOCUMENT_AND_RISK_PLAN.md` | Design of the case analysis and risk score |
-| `CLOUD_ARCHITECTURE_PLAN.md` | What's left in the cloud: to-dos, staging, Stage 2, open decisions (§8–11); if and how to move to Kubernetes, planned only (§13–24). The cloud as built: `HOW_IT_WORKS.md` §9 and `deploy/terraform/README.md` |
+| `CLOUD_ARCHITECTURE_PLAN.md` | What's left in the cloud: to-dos, Stage 2, open decisions (§8–11); the move of production to GKE, decided and not built (§13–24). The cloud as built: `HOW_IT_WORKS.md` §9 and `deploy/terraform/README.md` |
 | `CODEBASE_AUDIT.md` | Open bugs, stability, performance, code structure and security findings |
 | `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md` | Test gaps, and tests owed for recent fixes |
 | `PENDING_WORK.md` | Open product and platform work |

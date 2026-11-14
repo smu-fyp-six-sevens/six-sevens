@@ -4,7 +4,7 @@
 -- Agent learning (finding_feedback's keys and indexes, feedback_counts, type_corrections, field_edit_counts) was
 -- migrated live on 2026-11-10.
 -- The one-running-analysis index, the feedback_counts fix, the finding_feedback grants and the audit_events action
--- index were applied live on 2026-11-13. case_cost_totals: sql/2026-11-13_case_cost_totals.sql (run it before deploying).
+-- index were applied live on 2026-11-13. case_cost_totals and agent_versions were applied live on 2026-11-14.
 -- A snapshot, not a migration: it rebuilds an empty database (staging, a fresh project). Keep it in step by hand
 -- when the schema changes.
 
@@ -278,8 +278,23 @@ create table public.audit_events (
     constraint audit_events_outcome_check check (outcome = any (array['success'::text, 'failed'::text, 'cancelled'::text]))
 );
 
+-- One row per agent version (app/agent_versions.py), added at start-up and never changed or deleted. Keyed by no case
+-- or document, so nothing cascades.
+create table public.agent_versions (
+    fingerprint text not null,
+    agent_id text not null,
+    model text not null,
+    tools jsonb not null default '[]'::jsonb,
+    prompt_sha256 text not null,
+    call_budget text not null default '',
+    git_commit text not null default 'local',
+    first_seen_at timestamptz not null default now(),
+    constraint agent_versions_pkey primary key (fingerprint)
+);
+
 -- Indexes -----------------------------------------------------------------------------------------------------------
 
+create index agent_versions_agent_idx on public.agent_versions (agent_id, first_seen_at desc);
 create unique index cases_greenlink_case_id_key on public.cases (greenlink_case_id) where greenlink_case_id is not null;
 create index documents_case_id_idx on public.documents (case_id);
 create index idx_extracted_fields_document_id on public.extracted_fields (document_id);
@@ -523,6 +538,7 @@ alter table public.case_analysis_runs enable row level security;
 alter table public.risk_scores enable row level security;
 alter table public.case_notes enable row level security;
 alter table public.audit_events enable row level security;
+alter table public.agent_versions enable row level security;
 
 -- Grants ------------------------------------------------------------------------------------------------------------
 
@@ -534,8 +550,8 @@ declare t text;
 begin
     foreach t in array array[
         'cases', 'documents', 'extracted_fields', 'detection_results', 'findings', 'review_sign_offs', 'finding_feedback',
-        'langgraph_trace', 'case_analysis_runs', 'risk_scores', 'case_notes', 'audit_events', 'latest_risk_scores',
-        'case_stage_counts'
+        'langgraph_trace', 'case_analysis_runs', 'risk_scores', 'case_notes', 'audit_events', 'agent_versions',
+        'latest_risk_scores', 'case_stage_counts'
     ] loop
         execute format('revoke all on public.%I from anon, authenticated, service_role', t);
     end loop;
@@ -546,7 +562,7 @@ grant select, insert, update, delete
        public.review_sign_offs, public.finding_feedback, public.langgraph_trace, public.case_analysis_runs,
        public.risk_scores, public.case_notes
     to service_role;
-grant select, insert on public.audit_events to service_role;
+grant select, insert on public.audit_events, public.agent_versions to service_role;
 grant select on public.latest_risk_scores, public.case_stage_counts to service_role;
 revoke all on sequence public.greenlink_case_id_seq from anon, authenticated;
 grant select, usage on sequence public.greenlink_case_id_seq to service_role;

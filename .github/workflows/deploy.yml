@@ -82,7 +82,7 @@ jobs:
           }
           for role in $BACKEND_ROLES; do
             # Every role shares the dependency layers, so each may also start from api's cache.
-            build "$role" backend/Dockerfile --target "$role" \
+            build "$role" backend/Dockerfile --target "$role" --build-arg GIT_COMMIT="$GITHUB_SHA" \
               --cache-from "type=registry,ref=$REGISTRY/buildcache:api" \
               --secret id=data_gov_sg_api_key,env=DATA_GOV_SG_API_KEY
           done

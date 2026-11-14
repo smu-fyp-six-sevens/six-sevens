@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from . import audit, auth, case_repository, case_stage, document_repository, events, health, metrics, query_stats, realtime_listener, sweeper, telemetry
+from . import agent_versions, audit, auth, case_repository, case_stage, document_repository, events, health, metrics, query_stats, realtime_listener, sweeper, telemetry
 from .config import settings
 from .events import bus, registry, types
 from .events import push as event_push
@@ -129,6 +129,8 @@ async def lifespan(app: FastAPI):
             await asyncio.to_thread(warm_up)
         except Exception:
             logger.exception("Claude client warm-up failed — continuing anyway")
+        # One row per agent version not seen before; in the background, and it never fails startup.
+        background_tasks.append(asyncio.create_task(asyncio.to_thread(agent_versions.register)))
 
     reporter = asyncio.create_task(query_stats.run_reporter())
 

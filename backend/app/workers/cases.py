@@ -6,7 +6,7 @@ import asyncio
 import logging
 from datetime import datetime
 
-from .. import events, query_stats
+from .. import agent_versions, events, query_stats
 from ..case_pipeline import repository as analysis_repository
 from ..case_pipeline import service as analysis_service
 from ..events import Event, Stopwatch, types
@@ -45,6 +45,7 @@ async def on_analysis_requested(event: Event) -> None:
             "error": analysis.error,
             "run": "case_analysis",
             **unit.llm_detail(),
+            "agent_versions": agent_versions.for_run("case_analysis"),
             "requested_by": officer_of(event),
         },
         **timer.fields(),

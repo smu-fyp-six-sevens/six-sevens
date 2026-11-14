@@ -10,7 +10,9 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 
-from .. import events, metrics, query_stats
+from typing import Any
+
+from .. import agent_versions, events, metrics, query_stats
 from ..config import settings
 from ..events import Event, types
 from ..events.envelope import Outcome
@@ -60,10 +62,13 @@ async def cancel_when(task: asyncio.Task, cancelled: Callable[[], Awaitable[bool
 
 
 class Meter:
-    """What a run spent on Claude (query_stats' llm detail), filled in when its metered block ends, however it ends."""
+    """
+    What a run spent on Claude (query_stats' llm detail) and which agent versions it used, filled in when its metered
+    block ends, however it ends.
+    """
 
     def __init__(self) -> None:
-        self.usage: dict[str, float | int] = {}
+        self.usage: dict[str, Any] = {}
 
 
 @contextmanager
@@ -76,7 +81,7 @@ def metered(label: str, kind: str, meter: Meter) -> Iterator[None]:
         try:
             yield
         finally:
-            meter.usage = unit.llm_detail()
+            meter.usage = {**unit.llm_detail(), "agent_versions": agent_versions.for_run(kind)}
 
 
 class RunTracker:

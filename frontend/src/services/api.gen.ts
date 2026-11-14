@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Get Agent Registry
-         * @description Read-only snapshot of configured agents and the limits currently applied to their pipelines.
+         * @description Read-only snapshot of configured agents, the limits currently applied to their pipelines, and their versions.
          */
         get: operations["get_agent_registry_agents_get"];
         put?: never;
@@ -1935,6 +1935,8 @@ export interface components {
             access_summary: string[];
             /** Call Budget */
             call_budget: string;
+            /** Fingerprint */
+            fingerprint: string | null;
             /** Group */
             group: string;
             /** Id */

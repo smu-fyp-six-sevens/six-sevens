@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 
+from .. import agent_versions
 from ..agent_registry import AgentRecord, list_agents
 from ..agent_prompts import AgentPrompt, get_agent_prompt
 
@@ -8,8 +9,12 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 
 @router.get("", response_model=list[AgentRecord])
 async def get_agent_registry() -> list[AgentRecord]:
-    """Read-only snapshot of configured agents and the limits currently applied to their pipelines."""
-    return list_agents()
+    """Read-only snapshot of configured agents, the limits currently applied to their pipelines, and their versions."""
+    versions = agent_versions.current()
+    return [
+        record.model_copy(update={"fingerprint": versions[record.id].fingerprint if record.id in versions else None})
+        for record in list_agents()
+    ]
 
 
 @router.get("/{agent_id}/prompt", response_model=AgentPrompt)

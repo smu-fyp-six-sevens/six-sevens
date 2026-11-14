@@ -14,6 +14,8 @@ export interface AgentRecord {
   call_budget: string;
   owner: string | null;
   prompt_options: string[];
+  // Hash of the agent's prompts, model, tools and call budget (backend agent_versions.py).
+  fingerprint?: string | null;
 }
 
 export interface AgentPrompt {

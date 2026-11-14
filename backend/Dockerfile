@@ -67,21 +67,35 @@ RUN --mount=type=secret,id=data_gov_sg_api_key,uid=10001 \
         exit 1; \
     fi
 
+# GIT_COMMIT (the deploy passes the commit) goes last in each stage, so a new commit rebuilds no cached layer.
+# agent_versions.py records it beside each new agent version.
 FROM runtime AS api
 ENV ROLE=api
+ARG GIT_COMMIT=local
+ENV GIT_COMMIT=$GIT_COMMIT
 
 FROM runtime AS doc-worker
 ENV ROLE=doc-worker
+ARG GIT_COMMIT=local
+ENV GIT_COMMIT=$GIT_COMMIT
 
 FROM with-land-use AS detection-worker
 ENV ROLE=detection-worker
+ARG GIT_COMMIT=local
+ENV GIT_COMMIT=$GIT_COMMIT
 
 FROM runtime AS case-worker
 ENV ROLE=case-worker
+ARG GIT_COMMIT=local
+ENV GIT_COMMIT=$GIT_COMMIT
 
 FROM runtime AS audit-metrics
 ENV ROLE=audit-metrics
+ARG GIT_COMMIT=local
+ENV GIT_COMMIT=$GIT_COMMIT
 
 # Every role in one process, as the single Cloud Run service ran before the split.
 FROM with-land-use AS all
 ENV ROLE=all
+ARG GIT_COMMIT=local
+ENV GIT_COMMIT=$GIT_COMMIT

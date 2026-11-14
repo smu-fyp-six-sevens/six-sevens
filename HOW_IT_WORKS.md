@@ -168,7 +168,10 @@ At the end of each run (classification and extraction, an extraction rerun, dete
 - **Summary writer** (only when the model wrote it): kept its limits; no advice to approve or decline (fail); no protected attribute (fail).
 - **Evidence requests:** say what they would show; cite findings that exist. **Adverse media:** a result backed by sources.
 
-What they read that the trace didn't hold before: refused tool calls (`classify_tool_refused`, `extraction_tool_refused`), the lead's `detection_review` and `fallback_briefs`, each specialist's `tool_rounds`, `wrapped_up`, `unassessed` and `floor_overruled`, the planner's `unknown_tools` and `probes_added_by_code`, and the extraction's `field_shape`.
+### Which agent version ran (`app/agent_versions.py`)
+Each agent has a **fingerprint**: a hash of what the agent directory (`/agents`, `agent_registry.py` and `agent_prompts.py`) shows for it, meaning its prompt templates (every document type's, for the extractor, plus its second look), model, tools and call budget. Change any of them and the fingerprint changes, so a version can't be forgotten. It's computed once per process. Every document, extraction-rerun, detection and case-analysis run's end event carries the fingerprints of the agents it used (`detail.agent_versions`, about 20 characters each), so the audit trail answers "which version produced this finding?". The `agent_versions` table has one row per fingerprint, with its model, tools, prompt hash and the commit it first appeared in (`GIT_COMMIT`, set by the deploy). Each Claude-calling role adds its rows at start-up, skips any already stored, and never fails start-up over it. The agent directory shows each agent's fingerprint. Nothing reads them to decide anything. The summary writer, evidence requests and adverse media aren't in the registry, so they have no fingerprint yet.
+
+What the sensibility checks read that the trace didn't hold before: refused tool calls (`classify_tool_refused`, `extraction_tool_refused`), the lead's `detection_review` and `fallback_briefs`, each specialist's `tool_rounds`, `wrapped_up`, `unassessed` and `floor_overruled`, the planner's `unknown_tools` and `probes_added_by_code`, and the extraction's `field_shape`.
 
 ---
 

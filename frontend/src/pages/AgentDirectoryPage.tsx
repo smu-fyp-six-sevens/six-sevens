@@ -46,6 +46,12 @@ function AgentModelCard({ agent }: { agent: AgentRecord }) {
       <dl className="agent-directory-fields">
         <div><dt>Model</dt><dd>{agent.model}</dd></div>
         <div><dt>Prompt version</dt><dd>{agent.prompt_version ?? 'Not versioned'}</dd></div>
+        <div>
+          <dt>Fingerprint</dt>
+          <dd title="Changes whenever this agent's prompts, model, tools or call budget change; every run records the one it used">
+            <code>{agent.fingerprint ?? 'Not recorded'}</code>
+          </dd>
+        </div>
         <div><dt>Call budget</dt><dd>{agent.call_budget}</dd></div>
         <div><dt>Owner</dt><dd>{agent.owner ?? 'Not assigned'}</dd></div>
       </dl>

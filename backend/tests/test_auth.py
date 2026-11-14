@@ -6,18 +6,22 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app import auth
+from app import auth, passwords
 from app.auth import require_auth
 from app.main import app
 
 client = TestClient(app)
+
+# Stored as hashes, as AUTH_USERS holds them; made once, since each takes a fraction of a second.
+DEMO_HASH = passwords.hash_password("s3cret")
+BOB_HASH = passwords.hash_password("bobs-pass")
 
 
 @pytest.fixture(autouse=True)
 def _real_auth(monkeypatch: pytest.MonkeyPatch):
     """Undo conftest's global bypass so this file exercises the real gate."""
     app.dependency_overrides.pop(require_auth, None)
-    monkeypatch.setattr(auth.settings, "AUTH_USERS", {"demo": "s3cret"})
+    monkeypatch.setattr(auth.settings, "AUTH_USERS", {"demo": DEMO_HASH})
     monkeypatch.setattr(auth.settings, "AUTH_SECRET_KEY", "test-signing-key")
     yield
 
@@ -84,7 +88,7 @@ def test_verify_token_rejects_a_correctly_signed_payload_of_the_wrong_shape(payl
 
 @pytest.fixture
 def two_accounts(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(auth.settings, "AUTH_USERS", {"demo": "s3cret", "bob": "bobs-pass"})
+    monkeypatch.setattr(auth.settings, "AUTH_USERS", {"demo": DEMO_HASH, "bob": BOB_HASH})
 
 
 def test_each_account_logs_in_as_itself(two_accounts):
@@ -117,21 +121,31 @@ def test_with_no_accounts_nobody_can_log_in_even_with_blank_credentials(monkeypa
     assert client.post("/auth/login", json={"username": "", "password": ""}).status_code == 401
 
 
-def test_auth_users_is_a_semicolon_separated_list_of_name_colon_password():
+def test_auth_users_is_a_semicolon_separated_list_of_name_colon_hash():
     from app.config import _users
 
     assert _users("") == {}
-    assert _users("alice:pw1;bob:pw2") == {"alice": "pw1", "bob": "pw2"}
-    assert _users(" alice : pw1 ; ; bob:pw2; ") == {"alice": "pw1", "bob": "pw2"}
-    assert _users("carol:pa:ss") == {"carol": "pa:ss"}  # a password may contain a colon
+    assert _users(f"alice:{DEMO_HASH};bob:{BOB_HASH}") == {"alice": DEMO_HASH, "bob": BOB_HASH}
+    assert _users(f" alice : {DEMO_HASH} ; ; bob:{BOB_HASH}; ") == {"alice": DEMO_HASH, "bob": BOB_HASH}
 
 
-@pytest.mark.parametrize("bad", ["alice", "alice:", ":pw", "alice:pw1;bob"], ids=["no colon", "no password", "no name", "one bad entry"])
+@pytest.mark.parametrize(
+    "bad", ["alice", "alice:", f":{DEMO_HASH}", f"alice:{DEMO_HASH};bob", "alice:password1"],
+    ids=["no colon", "no password", "no name", "one bad entry", "plain-text password"],
+)
 def test_a_malformed_auth_users_entry_is_refused_at_start_up(bad: str):
     from app.config import _users
 
     with pytest.raises(ValueError):
         _users(bad)
+
+
+def test_an_unknown_name_still_runs_one_hash(monkeypatch: pytest.MonkeyPatch):
+    checked: list[str] = []
+    monkeypatch.setattr(auth.passwords, "verify", lambda password, stored: checked.append(stored) or False)
+
+    assert auth.verify_credentials("ghost", "s3cret") is None
+    assert checked == [passwords.DUMMY_HASH]
 
 
 # The only routes that answer without a login: probes and the login itself. Pub/Sub's /push and /metrics are not in

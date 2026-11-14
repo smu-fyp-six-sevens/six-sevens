@@ -26,6 +26,8 @@ class AgentRecord(BaseModel):
     call_budget: str
     owner: str | None = None
     prompt_options: list[str] = []
+    # A hash of this agent's prompts, model, tools and budget (agent_versions.py); set by the /agents route.
+    fingerprint: str | None = None
 
 
 def list_agents() -> list[AgentRecord]:

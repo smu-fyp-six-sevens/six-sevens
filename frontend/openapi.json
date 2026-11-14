@@ -898,6 +898,17 @@
             "title": "Call Budget",
             "type": "string"
           },
+          "fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fingerprint"
+          },
           "group": {
             "title": "Group",
             "type": "string"
@@ -972,7 +983,8 @@
           "access_summary",
           "call_budget",
           "owner",
-          "prompt_options"
+          "prompt_options",
+          "fingerprint"
         ],
         "title": "AgentRecord",
         "type": "object"
@@ -8381,7 +8393,7 @@
   "paths": {
     "/agents": {
       "get": {
-        "description": "Read-only snapshot of configured agents and the limits currently applied to their pipelines.",
+        "description": "Read-only snapshot of configured agents, the limits currently applied to their pipelines, and their versions.",
         "operationId": "get_agent_registry_agents_get",
         "parameters": [
           {
