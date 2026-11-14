@@ -274,6 +274,14 @@ jobs:
             image=$1
             digest=$(gcloud artifacts docker images describe "$REGISTRY/$image:$GITHUB_SHA" --format='value(image_summary.digest)')
             ref="$REGISTRY/$image@$digest"
+            # An image this push didn't change keeps its digest, already attested by an earlier run (a second
+            # attestation is refused as a conflict). The attestation is the last step, so it means all of them ran.
+            if [ -n "$(gcloud container binauthz attestations list --attestor=built-by-ci \
+                --attestor-project="$PROJECT_ID" --artifact-url="$ref" --format='value(name)' --limit=1)" ]; then
+              echo "$image already signed and attested"
+              echo "$image $ref" > "image-$image.txt"
+              return 0
+            fi
             # Straight from the registry, not through the runner's Docker (the backend images are large).
             syft scan "registry:$ref" -o spdx-json -q > "sbom-$image.json"
             # No public transparency log: the signatures stay in our registry.
