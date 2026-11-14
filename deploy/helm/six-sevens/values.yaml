@@ -60,6 +60,9 @@ network:
 
 gateway:
   enabled: true
+  # Seconds a new Kong, frontend or Grafana pod is ready before its old one goes: the load balancer health-checks a
+  # new pod first, and with one replica a quick swap answers 503 meanwhile.
+  handoverSeconds: 45
   className: gke-l7-global-external-managed
   # Terraform's global address and certificate map (edge.tf), and the Cloud Armor policy.
   addressName: sixsevens-lb

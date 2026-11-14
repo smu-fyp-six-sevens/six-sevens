@@ -368,6 +368,20 @@ jobs:
             sleep 15
           done
           echo "::error::The GKE rollout of $release did not succeed (${state:-timed out}); rolling back"
-          gcloud deploy targets rollback prod --delivery-pipeline=six-sevens --region="$REGION" --quiet \
-            || echo "::warning::No earlier release to roll back to"
+          # To the newest release that last rolled out fine. A plain rollback steps back from the release Cloud Deploy
+          # still counts as current (the last good one, since this one failed), so it went one release too far.
+          good=""
+          for r in $(gcloud deploy releases list --delivery-pipeline=six-sevens --region="$REGION" \
+              --sort-by=~createTime --limit=10 --format='value(name.basename())'); do
+            [ "$r" = "$release" ] && continue
+            if gcloud deploy rollouts list --release="$r" --delivery-pipeline=six-sevens --region="$REGION" \
+                --format='value(state)' | grep -qx SUCCEEDED; then good=$r; break; fi
+          done
+          if [ -n "$good" ]; then
+            echo "Rolling back to $good"
+            gcloud deploy targets rollback prod --delivery-pipeline=six-sevens --region="$REGION" --release="$good" --quiet \
+              || echo "::warning::The rollback to $good failed; roll back by hand (deploy/terraform/README.md)"
+          else
+            echo "::warning::No earlier release rolled out fine; nothing to roll back to"
+          fi
           exit 1

@@ -20,6 +20,8 @@ spec:
   # Logins live in the instance's own SQLite; one instance keeps them consistent.
   replicas: 1
   revisionHistoryLimit: 3
+  # The load balancer health-checks a new pod before sending it traffic: keep the old one serving meanwhile.
+  minReadySeconds: {{ .Values.gateway.handoverSeconds }}
   selector:
     matchLabels:
       {{- include "six.selector" $ctx | nindent 6 }}

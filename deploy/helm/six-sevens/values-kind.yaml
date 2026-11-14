@@ -30,6 +30,8 @@ monitoring:
   podMonitoring: false
 gateway:
   enabled: false
+  # No load balancer to wait for.
+  handoverSeconds: 0
 frontend:
   enabled: false
 grafana:

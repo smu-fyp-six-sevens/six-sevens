@@ -20,6 +20,8 @@ metadata:
 spec:
   replicas: {{ .Values.frontend.replicas }}
   revisionHistoryLimit: 3
+  # The load balancer health-checks a new pod before sending it traffic: keep the old one serving meanwhile.
+  minReadySeconds: {{ .Values.gateway.handoverSeconds }}
   selector:
     matchLabels:
       {{- include "six.selector" $ctx | nindent 6 }}
