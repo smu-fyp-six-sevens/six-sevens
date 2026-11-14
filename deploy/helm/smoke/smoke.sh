@@ -91,7 +91,8 @@ metrics() {
 }
 for role in $WORKERS; do
   for _ in $(seq 1 30); do
-    if metrics "$role" | grep -q "^events_handled_total{role=\"$role\""; then
+    # Labels print in alphabetical order (result, role, type), so match role anywhere in the braces.
+    if metrics "$role" | grep -qE "^events_handled_total\{[^}]*role=\"$role\""; then
       echo "$role: handled its event"; continue 2
     fi
     sleep 4
