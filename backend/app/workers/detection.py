@@ -28,6 +28,9 @@ _runs = recovery.RunTracker("detection")
 
 
 async def _cancel_requested_since(document_id: str, since: datetime) -> bool:
+    """A cancel made through another instance: the document's flag, else the audit trail (which needs audit-metrics)."""
+    if await asyncio.to_thread(document_repository.detection_cancel_requested_since, document_id, since):
+        return True
     found = await asyncio.to_thread(audit.find, types.DETECTION_CANCEL_REQUESTED, document_id=document_id, since=since)
     return bool(found)
 

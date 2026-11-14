@@ -14,6 +14,8 @@ from .envelope import Event
 logger = logging.getLogger(__name__)
 
 _TRANSPORTS = ("inprocess", "pubsub")
+# none: the process takes no events at all (GKE's audit-metrics serving /audit before its events move, §17).
+_DELIVERIES = ("push", "pull", "none")
 # Handler tasks started in-process; kept so they aren't garbage collected and can be cancelled at shutdown.
 _tasks: set[asyncio.Task] = set()
 _publisher: Any = None
@@ -50,6 +52,12 @@ def check_transport() -> None:
         raise ValueError(f"EVENT_TRANSPORT must be one of {_TRANSPORTS}, not {settings.EVENT_TRANSPORT!r}")
     if settings.EVENT_TRANSPORT == "pubsub" and not settings.GOOGLE_CLOUD_PROJECT:
         raise ValueError("EVENT_TRANSPORT=pubsub needs GOOGLE_CLOUD_PROJECT")
+    if settings.EVENT_DELIVERY not in _DELIVERIES:
+        raise ValueError(f"EVENT_DELIVERY must be one of {_DELIVERIES}, not {settings.EVENT_DELIVERY!r}")
+    if settings.EVENT_DELIVERY == "pull" and settings.EVENT_TRANSPORT != "pubsub":
+        raise ValueError("EVENT_DELIVERY=pull needs EVENT_TRANSPORT=pubsub")
+    if settings.PULL_MAX_MESSAGES < 1:
+        raise ValueError("PULL_MAX_MESSAGES must be at least 1")
 
 
 def _dispatch_in_process(event: Event) -> None:

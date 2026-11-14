@@ -25,14 +25,20 @@ resource "google_pubsub_subscription" "push" {
   topic    = google_pubsub_topic.events.id
   filter   = each.value.filter
 
-  # The maximum; a run must finish inside it (detection takes 1-2 minutes), or it is redelivered.
+  # The maximum; a pushed run must finish inside it (detection takes 1-2 minutes), or it is redelivered. A pulled
+  # run's client extends it as it works.
   ack_deadline_seconds = 600
 
-  push_config {
-    push_endpoint = "${local.url[each.key]}/push/${each.key}"
-    oidc_token {
-      service_account_email = google_service_account.pubsub_push.email
-      audience              = local.url[each.key]
+  # Pushed to Cloud Run until the role moves to GKE (migration.json), then pulled. Removing push_config switches the
+  # same subscription in place (the plan must say "update in-place"), so only one platform gets the role's events.
+  dynamic "push_config" {
+    for_each = contains(local.pull_roles, each.key) ? [] : [1]
+    content {
+      push_endpoint = "${local.url[each.key]}/push/${each.key}"
+      oidc_token {
+        service_account_email = google_service_account.pubsub_push.email
+        audience              = local.url[each.key]
+      }
     }
   }
 

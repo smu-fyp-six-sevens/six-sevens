@@ -1,0 +1,73 @@
+{{- if .Values.frontend.enabled }}
+{{- $ctx := dict "root" . "name" "frontend" "namespace" "frontend" "component" "frontend" }}
+---
+{{ include "six.serviceAccount" $ctx }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: frontend
+  labels:
+    {{- include "six.labels" $ctx | nindent 4 }}
+  annotations:
+    checkov.io/skip1: CKV_K8S_23=nginx's master runs as root to bind port 80; its workers run as nginx (frontend/Dockerfile)
+    checkov.io/skip2: CKV_K8S_20=as above
+    checkov.io/skip3: CKV_K8S_22=nginx writes its cache and pid at start
+    checkov.io/skip4: CKV_K8S_28=as above
+    checkov.io/skip5: CKV_K8S_37=the master needs setuid and setgid to drop to the nginx user
+    checkov.io/skip6: CKV_K8S_40=as above
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "six.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "six.labels" $ctx | nindent 8 }}
+    spec:
+      serviceAccountName: frontend
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          image: {{ required "images.frontend is required" .Values.images.frontend }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            {{- include "six.resources" (dict "root" . "cpu" .Values.frontend.cpu "memory" .Values.frontend.memory) | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: frontend
+  labels:
+    {{- include "six.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "six.selector" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+{{- end }}

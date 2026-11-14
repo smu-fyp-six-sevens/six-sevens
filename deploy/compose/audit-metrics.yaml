@@ -14,6 +14,9 @@ services:
       GOOGLE_CLOUD_PROJECT: local
       CORS_IN_APP: "false"
       OTEL_SERVICE_NAME: audit-metrics
+      EVENT_DELIVERY: ${EVENT_DELIVERY:-push}
+      # Pull mode only: storing an event is quick, so take many at once (its concurrency on Cloud Run).
+      PULL_MAX_MESSAGES: "40"
     depends_on:
       pubsub-init:
         condition: service_completed_successfully

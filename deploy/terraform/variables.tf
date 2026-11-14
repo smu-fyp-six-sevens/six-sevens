@@ -89,3 +89,29 @@ variable "budget_amount_sgd" {
   type        = number
   default     = 50
 }
+
+# --- GKE (CLOUD_ARCHITECTURE_PLAN.md sections 13-24) ---
+
+variable "gke_enabled" {
+  description = "Create the GKE cluster and everything around it (network, NAT, DNS, certificate, Cloud Armor, signing, Cloud Deploy). Starts billing, idle included."
+  type        = bool
+  default     = false
+}
+
+variable "domain" {
+  description = "The front door: the frontend at the apex, api. and grafana. under it."
+  type        = string
+  default     = "sixsevens.me"
+}
+
+variable "cloud_armor_preview" {
+  description = "Cloud Armor rules only log (true) or also block (false). Start in preview; switch once the logs show no false positives."
+  type        = bool
+  default     = true
+}
+
+variable "binauthz_enforce" {
+  description = "Binary Authorization blocks unattested images (true) or only logs them (false, dry run). Enforce once a release passes in dry run."
+  type        = bool
+  default     = false
+}

@@ -1,0 +1,149 @@
+{{- if .Values.network.policies }}
+{{- /*
+Default-deny in every namespace, then only what each part needs (CLOUD_ARCHITECTURE_PLAN.md section 16):
+the load balancer -> Kong, the frontend and Grafana; Kong -> api and audit-metrics; the scraper -> metrics ports.
+Workers take nothing in. Egress: DNS, the metadata server (Workload Identity), and HTTPS out (Supabase, Anthropic,
+Pub/Sub and other Google APIs, the registries), never to private ranges.
+*/}}
+{{- $dns := list
+  (dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" "kube-system")))) "ports" (list (dict "protocol" "UDP" "port" 53) (dict "protocol" "TCP" "port" 53)))
+  (dict "to" (list (dict "ipBlock" (dict "cidr" "169.254.169.254/32")) (dict "ipBlock" (dict "cidr" "169.254.20.10/32"))) "ports" (list (dict "protocol" "UDP" "port" 53) (dict "protocol" "TCP" "port" 53)))
+}}
+{{- $metadata := list
+  (dict "to" (list (dict "ipBlock" (dict "cidr" "169.254.169.254/32"))) "ports" (list (dict "protocol" "TCP" "port" 80)))
+  (dict "to" (list (dict "ipBlock" (dict "cidr" "169.254.169.252/32"))) "ports" (list (dict "protocol" "TCP" "port" 988)))
+}}
+{{- $internet := list
+  (dict "to" (list (dict "ipBlock" (dict "cidr" "0.0.0.0/0" "except" (list "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16")))) "ports" (list (dict "protocol" "TCP" "port" 443)))
+}}
+{{- $frontEnds := list }}
+{{- range .Values.network.frontEndRanges }}{{ $frontEnds = append $frontEnds (dict "ipBlock" (dict "cidr" .)) }}{{ end }}
+{{- $scraper := list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" "gmp-system"))) }}
+{{- $kong := list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" "gateway")) "podSelector" (dict "matchLabels" (dict "app.kubernetes.io/name" "kong"))) }}
+
+{{- $namespaces := keys .Values.roles | sortAlpha }}
+{{- $namespaces = append $namespaces "gateway" }}
+{{- if .Values.frontend.enabled }}{{ $namespaces = append $namespaces "frontend" }}{{ end }}
+{{- if .Values.grafana.enabled }}{{ $namespaces = append $namespaces "observability" }}{{ end }}
+{{- range $namespaces }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: {{ . }}
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+{{- end }}
+
+{{- range $name, $role := .Values.roles }}
+{{- $ingress := list (dict "from" $scraper "ports" (list (dict "protocol" "TCP" "port" (int $.Values.monitoring.metricsPort)))) }}
+{{- if $role.behindGateway }}
+{{- $ingress = append $ingress (dict "from" $kong "ports" (list (dict "protocol" "TCP" "port" 8000))) }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  namespace: {{ $name }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    {{- toYaml $ingress | nindent 4 }}
+  egress:
+    {{- toYaml (concat $dns $metadata $internet $.Values.network.extraEgress) | nindent 4 }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kong
+  namespace: gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kong
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    {{- if $frontEnds }}
+    - from:
+        {{- toYaml $frontEnds | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 8100
+    {{- end }}
+    - from:
+        {{- toYaml $scraper | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 8100
+  egress:
+    {{- toYaml $dns | nindent 4 }}
+    - to:
+        {{- range $name, $role := .Values.roles }}
+        {{- if $role.behindGateway }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $name }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ $name }}
+        {{- end }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 8000
+{{- if .Values.frontend.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend
+  namespace: frontend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    {{- if $frontEnds }}
+    - from:
+        {{- toYaml $frontEnds | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 80
+    {{- end }}
+  egress:
+    {{- toYaml $dns | nindent 4 }}
+{{- end }}
+{{- if .Values.grafana.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana
+  namespace: observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    {{- if $frontEnds }}
+    - from:
+        {{- toYaml $frontEnds | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 3000
+    {{- end }}
+  egress:
+    {{- toYaml (concat $dns $metadata $internet) | nindent 4 }}
+{{- end }}
+{{- end }}

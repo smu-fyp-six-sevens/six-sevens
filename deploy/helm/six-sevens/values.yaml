@@ -1,0 +1,99 @@
+# Defaults for every install. The roles themselves (sizes, secrets, env, which consumers run) come from
+# values-roles.yaml, generated from deploy/terraform/*.json; pass it with every install (-f values-roles.yaml).
+# Overlays: values-prod.yaml (GKE) and values-kind.yaml (the CI smoke test).
+
+projectId: ""
+supabaseUrl: ""
+supabaseStorageBucket: documents
+pubsubTopic: domain-events
+
+images:
+  # Per backend role, e.g. api: <registry>/api@sha256:... (prod: set by CI, always by digest).
+  backend: {}
+  # Used for any role missing above (kind: one image runs every role, ROLE picks).
+  backendDefault: ""
+  kong: ""
+  frontend: ""
+  grafana: ""
+  grafanaProxy: gke.gcr.io/prometheus-engine/frontend:v0.15.3-gke.0
+pullPolicy: IfNotPresent
+
+# Overrides on top of the roles' env (commonEnv < role env < this).
+envOverrides: {}
+# The local Pub/Sub emulator (kind only).
+pubsubEmulatorHost: ""
+
+# GKE Workload Identity: each pod's Kubernetes account acts as its role's Google account (run-<name>), as on Cloud Run.
+workloadIdentity:
+  enabled: true
+
+secrets:
+  # csi: Secret Manager through the GKE add-on. kubernetes: a Secret named app-secrets in each namespace (kind).
+  mode: csi
+  # Mounted as files named after their variables; the start command exports them (the app and Kong read env).
+  mountPath: /var/secrets
+
+autoscaling:
+  # KEDA for the consumers (on undelivered messages), an HPA for api and Kong. Off: fixed replicas.
+  enabled: true
+  cooldownSeconds: 300
+  pollingSeconds: 15
+# Every role at one replica, consumers included (kind).
+singleReplica: false
+# Run every consumer whether or not migration.json lists it (kind only: never in prod).
+enableAllRoles: false
+# Replace every pod's CPU and memory (kind's node is small); empty keeps the role's own.
+resourcesOverride: {}
+
+monitoring:
+  # Managed Prometheus PodMonitoring for every backend role and Kong.
+  podMonitoring: true
+  # The backend's metrics port (METRICS_PORT), apart from the app's so no gateway key is needed.
+  metricsPort: 9100
+
+network:
+  policies: true
+  # Google's front ends and health checkers: the only sources that reach Kong, the frontend and Grafana.
+  frontEndRanges: ["35.191.0.0/16", "130.211.0.0/22"]
+  # More egress rules for the backend (kind: the stub namespace).
+  extraEgress: []
+
+gateway:
+  enabled: true
+  className: gke-l7-global-external-managed
+  # Terraform's global address and certificate map (edge.tf), and the Cloud Armor policy.
+  addressName: sixsevens-lb
+  certificateMap: sixsevens
+  securityPolicy: sixsevens-edge
+  hosts:
+    frontend: sixsevens.me
+    api: api.sixsevens.me
+    grafana: grafana.sixsevens.me
+  # The load balancer's own address, for Kong's trusted IPs (it appends itself to X-Forwarded-For).
+  address: ""
+  # A case WebSocket lives up to this long through the load balancer (its default is 30 s).
+  backendTimeoutSeconds: 3600
+
+kong:
+  replicas: 2
+  maxReplicas: 3
+  cpu: 500m
+  memory: 512Mi
+  # Comma-separated frontend origins for Kong's CORS plugin.
+  corsOrigins: "https://sixsevens.me"
+  # Kong's image user (kong:3.9.1).
+  uid: 1000
+
+frontend:
+  enabled: true
+  replicas: 1
+  cpu: 250m
+  memory: 256Mi
+
+grafana:
+  enabled: true
+  cpu: 500m
+  memory: 512Mi
+  billingExportLocation: US
+  # The grafana image's user.
+  uid: 472

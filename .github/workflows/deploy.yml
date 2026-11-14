@@ -94,6 +94,10 @@ jobs:
               *) build "$name" "$file" ;;
             esac
           done
+          # GKE's frontend calls the API at its own fixed address (the gke job below).
+          if [ "${{ vars.GKE_ENABLED }}" = "true" ]; then
+            build frontend-gke frontend/Dockerfile --build-arg VITE_API_URL="https://api.${{ vars.GKE_DOMAIN || 'sixsevens.me' }}"
+          fi
 
   deploy:
     needs: build
@@ -207,8 +211,110 @@ jobs:
         if: success()
         run: |
           {
-            echo "### Deployed $GITHUB_SHA"
+            echo "### Deployed $GITHUB_SHA to Cloud Run"
             echo "- Frontend: $(gcloud run services describe frontend --region "$REGION" --format='value(status.url)')"
             echo "- API (Kong): $(gcloud run services describe kong --region "$REGION" --format='value(status.url)')"
             echo "- Grafana: $(gcloud run services describe grafana --region "$REGION" --format='value(status.url)')"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # GKE (CLOUD_ARCHITECTURE_PLAN.md section 18), beside Cloud Run until phase 6 and only once Terraform has made the
+  # cluster (repository variable GKE_ENABLED=true). Signs every image (cosign signature and SBOM, and the Binary
+  # Authorization attestation, all with one Cloud KMS key), renders the chart with the images by digest, and hands
+  # it to Cloud Deploy, which applies it, records it and runs the gateway checks. A failed rollout is rolled back.
+  gke:
+    needs: build
+    if: vars.GKE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      KMS_KEY: projects/${{ vars.GCP_PROJECT_ID }}/locations/${{ vars.GCP_REGION || 'asia-southeast1' }}/keyRings/six-sevens/cryptoKeys/image-signing/cryptoKeyVersions/1
+    steps:
+      - uses: actions/checkout@v5
+
+      # The token for gcloud and Docker; cosign signs through Cloud KMS with the credentials file. An hour: the
+      # rollout is waited for here.
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+          token_format: access_token
+          access_token_lifetime: 3600s
+          create_credentials_file: true
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Give gcloud the token
+        run: echo "CLOUDSDK_AUTH_ACCESS_TOKEN=${{ steps.auth.outputs.access_token }}" >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - uses: sigstore/cosign-installer@v3
+      - uses: anchore/sbom-action/download-syft@v0
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Sign and attest every image
+        run: |
+          : > images.txt
+          for image in $BACKEND_ROLES kong frontend-gke grafana; do
+            digest=$(gcloud artifacts docker images describe "$REGISTRY/$image:$GITHUB_SHA" --format='value(image_summary.digest)')
+            ref="$REGISTRY/$image@$digest"
+            echo "$image $ref" >> images.txt
+            syft "$ref" -o spdx-json > "sbom-$image.json"
+            # No public transparency log: the signatures stay in our registry.
+            cosign sign --yes --tlog-upload=false --key "gcpkms://$KMS_KEY" "$ref"
+            cosign attest --yes --tlog-upload=false --key "gcpkms://$KMS_KEY" --type spdxjson --predicate "sbom-$image.json" "$ref"
+            gcloud container binauthz attestations sign-and-create --quiet --artifact-url="$ref" \
+              --attestor=built-by-ci --attestor-project="$PROJECT_ID" --keyversion-project="$PROJECT_ID" \
+              --keyversion-location="$REGION" --keyversion-keyring=six-sevens --keyversion-key=image-signing --keyversion=1
+          done
+          cat images.txt
+
+      - name: Render the release
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+        run: |
+          LB=$(gcloud compute addresses describe sixsevens-lb --global --format='value(address)')
+          args=()
+          while read -r image ref; do
+            case "$image" in
+              kong) args+=(--set "images.kong=$ref") ;;
+              frontend-gke) args+=(--set "images.frontend=$ref") ;;
+              grafana) args+=(--set "images.grafana=$ref") ;;
+              *) args+=(--set "images.backend.$image=$ref") ;;
+            esac
+          done < images.txt
+          mkdir -p release
+          cp deploy/clouddeploy/skaffold.yaml release/
+          C=deploy/helm/six-sevens
+          helm template six "$C" -f "$C/values-roles.yaml" -f "$C/values-prod.yaml" \
+            --set projectId="$PROJECT_ID" --set supabaseUrl="$SUPABASE_URL" --set gateway.address="$LB" \
+            "${args[@]}" > release/manifest.yaml
+          grep -c '^kind:' release/manifest.yaml
+
+      - name: Release, and wait for the rollout
+        run: |
+          release="r-${GITHUB_SHA::8}-${GITHUB_RUN_ATTEMPT}"
+          gcloud deploy releases create "$release" --delivery-pipeline=six-sevens --region="$REGION" \
+            --source=release --skaffold-file=skaffold.yaml --quiet
+          state=""
+          for _ in $(seq 1 140); do
+            state=$(gcloud deploy rollouts list --release="$release" --delivery-pipeline=six-sevens \
+              --region="$REGION" --format='value(state)' | head -1)
+            echo "rollout: ${state:-pending}"
+            case "$state" in
+              SUCCEEDED) echo "### Deployed $GITHUB_SHA to GKE ($release)" >> "$GITHUB_STEP_SUMMARY"; exit 0 ;;
+              FAILED|CANCELLED|HALTED) break ;;
+            esac
+            sleep 15
+          done
+          echo "::error::The GKE rollout of $release did not succeed (${state:-timed out}); rolling back"
+          gcloud deploy targets rollback prod --delivery-pipeline=six-sevens --region="$REGION" --quiet \
+            || echo "::warning::No earlier release to roll back to"
+          exit 1

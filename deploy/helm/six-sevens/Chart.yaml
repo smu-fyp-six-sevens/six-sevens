@@ -1,0 +1,6 @@
+apiVersion: v2
+name: six-sevens
+description: Six Sevens (agentic fraud detection) on Kubernetes - the five backend roles, Kong, the frontend and Grafana.
+type: application
+version: 0.1.0
+appVersion: "1.0"

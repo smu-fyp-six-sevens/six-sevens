@@ -72,6 +72,7 @@ create table public.documents (
     extraction_confidence double precision,
     fields_reviewed_at timestamptz,
     guard_result jsonb,
+    cancel_requested_at timestamptz,
     constraint documents_pkey primary key (id),
     constraint documents_case_id_fkey foreign key (case_id) references public.cases(id) on update cascade on delete cascade
 );

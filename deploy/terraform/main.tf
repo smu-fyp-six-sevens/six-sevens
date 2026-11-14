@@ -9,73 +9,29 @@ locals {
   # Terraform creates each service on this image; the deploy workflow then rolls out the real ones.
   placeholder_image = "us-docker.pkg.dev/cloudrun/container/hello"
 
-  supabase = ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY"]
-  # OneMap needs no token (ONEMAP_API_TOKEN is optional and not set in the cloud).
-  registries = ["DATA_GOV_SG_API_KEY", "URA_API_KEY"]
+  # The role table (roles.json), shared with the Helm chart (deploy/helm/gen_values.py). Normalised so every role
+  # has the same type.
+  role_table = jsondecode(file("${path.module}/roles.json"))
+  roles = { for name, role in local.role_table.roles : name => {
+    cpu         = role.cpu
+    memory      = role.memory
+    concurrency = role.concurrency
+    timeout     = role.timeout
+    max         = role.max
+    public      = role.public
+    publishes   = role.publishes
+    secrets     = tolist(role.secrets)
+    env         = tomap(role.env)
+  } }
 
-  common_env = {
-    EVENT_TRANSPORT         = "pubsub"
+  # The consumers GKE runs (migration.json): their subscriptions are pulled, not pushed.
+  pull_roles = toset(jsondecode(file("${path.module}/migration.json")).pull_roles)
+
+  common_env = merge(local.role_table.common_env, {
     GOOGLE_CLOUD_PROJECT    = var.project_id
     SUPABASE_URL            = var.supabase_url
     SUPABASE_STORAGE_BUCKET = var.supabase_storage_bucket
-    # Traces to Cloud Trace, one service name each (K_SERVICE).
-    OTEL_ENABLED = "true"
-    # Cases created here need every required document approved before analysis (cases.checklist_enforced).
-    REQUIRE_COMPLETE_CHECKLIST = "true"
-  }
-
-  # One entry per backend role (CLOUD_ARCHITECTURE_PLAN.md section 2).
-  roles = {
-    api = {
-      cpu         = "1"
-      memory      = "1Gi"
-      concurrency = 40
-      timeout     = 3600
-      # WebSocket tickets are signed, and each instance has its own Realtime listener, so api scales out.
-      max       = 3
-      public    = true
-      publishes = true
-      secrets   = concat(local.supabase, ["AUTH_USERS", "AUTH_SECRET_KEY", "GATEWAY_SECRET"])
-      env       = tomap({ CORS_IN_APP = "false" })
-    }
-    doc-worker = {
-      cpu       = "2", memory = "4Gi", concurrency = 2, timeout = 600, max = 3
-      public    = false
-      publishes = true
-      secrets   = concat(local.supabase, ["ANTHROPIC_API_KEY"])
-      env       = tomap({ QUEUE_WORKER_CONCURRENCY = "2", CPU_WORKER_PROCESSES = "2" })
-    }
-    detection-worker = {
-      cpu       = "2", memory = "4Gi", concurrency = 2, timeout = 600, max = 3
-      public    = false
-      publishes = true
-      secrets   = concat(local.supabase, ["ANTHROPIC_API_KEY"], local.registries)
-      env       = tomap({ DETECTION_CONCURRENCY = "2", CPU_WORKER_PROCESSES = "2" })
-    }
-    case-worker = {
-      cpu       = "1", memory = "2Gi", concurrency = 4, timeout = 600, max = 2
-      public    = false
-      publishes = true
-      secrets   = concat(local.supabase, ["ANTHROPIC_API_KEY"])
-      env       = tomap({ CASE_ANALYSIS_TIMEOUT_SECONDS = "900" })
-    }
-    audit-metrics = {
-      cpu         = "1"
-      memory      = "1Gi"
-      concurrency = 40
-      timeout     = 60
-      max         = 2
-      # Public so Kong can reach it; it answers only Kong's GATEWAY_SECRET, and its /push checks Pub/Sub's OIDC token.
-      public = true
-      # It runs the sweeper (Cloud Scheduler's sweep.requested), which publishes recovery requests.
-      publishes = true
-      secrets   = concat(local.supabase, ["AUTH_SECRET_KEY", "GATEWAY_SECRET"])
-      env = tomap({
-        SWEEPER_ENABLED = "true"
-        CORS_IN_APP     = "false"
-      })
-    }
-  }
+  })
 
   all_secrets = toset(flatten([for role in values(local.roles) : role.secrets]))
 }
@@ -97,6 +53,17 @@ resource "google_project_service" "apis" {
     "cloudtrace.googleapis.com",
     "cloudscheduler.googleapis.com",
     "bigquery.googleapis.com",
+    # GKE (gke.tf, network.tf, edge.tf, supply_chain.tf): enabling an API costs nothing until something uses it.
+    "container.googleapis.com",
+    "compute.googleapis.com",
+    "dns.googleapis.com",
+    "certificatemanager.googleapis.com",
+    "binaryauthorization.googleapis.com",
+    "containeranalysis.googleapis.com",
+    "containerscanning.googleapis.com",
+    "clouddeploy.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "cloudkms.googleapis.com",
   ])
   service            = each.value
   disable_on_destroy = false

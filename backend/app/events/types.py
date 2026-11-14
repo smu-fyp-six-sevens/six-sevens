@@ -77,6 +77,11 @@ SUBSCRIPTIONS: dict[str, frozenset[str]] = {
 }
 
 
+def subscription_id(role: str) -> str:
+    """Named for push, its first delivery mode; the name stays when it switches to pull (a rename replaces it)."""
+    return f"{role}-push"
+
+
 # Pub/Sub's limit on a filter expression; a filter is also immutable, so changing one replaces the subscription.
 MAX_FILTER_BYTES = 256
 

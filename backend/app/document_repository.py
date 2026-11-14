@@ -414,6 +414,42 @@ def update_ingest_results(document_id: str, *, guard_result: dict, metadata: dic
     supabase_client.table("documents").update(update).eq("id", document_id).execute()
 
 
+def request_detection_cancel(document_id: str) -> None:
+    """
+    Flags an officer's detection cancel on the document, so a run on any instance sees it through the database alone
+    (workers/detection._cancel_requested_since). Never raises: the cancel event still goes out, and the run also
+    checks the audit trail (and does only that before sql/2026-11-14_cancel_requested_at.sql is applied).
+    """
+    try:
+        supabase_client.table("documents").update({"cancel_requested_at": datetime.now(timezone.utc).isoformat()}).eq(
+            "id", document_id
+        ).execute()
+    except Exception as exc:
+        logger.warning("Document %s: the cancel flag could not be saved: %s", document_id, exc)
+
+
+def detection_cancel_requested_since(document_id: str, since: datetime) -> bool | None:
+    """Whether the document's cancel flag was set after `since`; None when it can't be read (e.g. no column yet)."""
+    try:
+        rows = supabase_client.table("documents").select("cancel_requested_at").eq("id", document_id).execute().data
+    except Exception as exc:
+        logger.debug("Document %s: cancel flag unreadable: %s", document_id, exc)
+        return None
+    row = rows[0] if rows else None
+    raw = row.get("cancel_requested_at") if isinstance(row, dict) else None
+    if not raw:
+        return False
+    try:
+        flagged = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+    if flagged.tzinfo is None:
+        flagged = flagged.replace(tzinfo=timezone.utc)
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    return flagged >= since
+
+
 def get_guard_result(document_id: str) -> dict | None:
     """The saved guard_result, or None: not ingested yet, or saving it at ingest failed (ingest doesn't fail for it)."""
     try:

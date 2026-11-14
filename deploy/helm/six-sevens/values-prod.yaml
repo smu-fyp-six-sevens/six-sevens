@@ -1,0 +1,10 @@
+# GKE production (fyp-six-sevens). The deploy sets images (by digest), projectId, supabaseUrl and gateway.address
+# at release time (.github/workflows/deploy.yml), so nothing environment-specific or secret lives here.
+pullPolicy: IfNotPresent
+
+kong:
+  corsOrigins: "https://sixsevens.me"
+
+grafana:
+  # Where the Cloud Billing export lives (deploy/terraform variables.tf, billing_export_location).
+  billingExportLocation: US

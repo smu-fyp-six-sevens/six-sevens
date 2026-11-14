@@ -53,7 +53,7 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 ## Cloud operations
 
-- **Remove the unused publishable Supabase key:** drop it from `local.supabase` in `deploy/terraform/main.tf`, `terraform apply`, delete the secret, then disable the legacy keys in Supabase.
+- **Remove the unused publishable Supabase key:** drop `SUPABASE_PUBLISHABLE_KEY` from every role's secrets in `deploy/terraform/roles.json`, run `python deploy/helm/gen_values.py`, `terraform apply`, delete the secret, then disable the legacy keys in Supabase.
 - **Make Snyk blocking again** when its quota resets: delete the two `continue-on-error: true` lines in `.github/workflows/ci-cd.yml`, and "temporarily non-blocking" from CLAUDE.md, README and `HOW_IT_WORKS.md` §9.
 - **Frontend fully non-root:** `nginx-unprivileged` on 8080 (change `nginx.conf`, `run.tf`'s `container_port` and compose together; apply first).
 - **Dead letters** sit in `domain-events-dead-letter-pull` until someone reads them.

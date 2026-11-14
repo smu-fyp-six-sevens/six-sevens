@@ -1,0 +1,14 @@
+{{- /* One namespace per backend role (dashboards key on namespace), plus gateway (Kong and the Gateway), frontend and observability. */}}
+{{- $namespaces := keys .Values.roles | sortAlpha }}
+{{- $namespaces = append $namespaces "gateway" }}
+{{- if .Values.frontend.enabled }}{{ $namespaces = append $namespaces "frontend" }}{{ end }}
+{{- if .Values.grafana.enabled }}{{ $namespaces = append $namespaces "observability" }}{{ end }}
+{{- range $namespaces }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ . }}
+  labels:
+    app.kubernetes.io/part-of: six-sevens
+{{- end }}

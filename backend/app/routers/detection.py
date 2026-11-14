@@ -414,6 +414,8 @@ async def cancel_document_detection(
             status_code=status.HTTP_409_CONFLICT,
             detail="No detection run is currently in progress for this document.",
         )
+    # Before the event, so a run on any instance sees the cancel through the database alone.
+    await asyncio.to_thread(document_repository.request_detection_cancel, document_id)
     await events.publish(officer_event(
         types.DETECTION_CANCEL_REQUESTED, document_id=document_id, case_id=document.case_id,
     ))

@@ -1,0 +1,40 @@
+# Cloud Deploy's release source (deploy/terraform/supply_chain.tf). The deploy renders the chart itself, with images
+# by digest, into manifest.yaml beside this file, so each release records exactly what was applied. Verify runs
+# the gateway checks through the load balancer (no Claude, no database writes); a failure fails the rollout and
+# the deploy rolls the target back to its previous release.
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: six-sevens
+manifests:
+  rawYaml:
+    - manifest.yaml
+deploy:
+  kubectl: {}
+verify:
+  - name: gateway-checks
+    container:
+      name: checks
+      image: curlimages/curl:8.11.1
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eu
+          expect() {
+            got=$(curl -s -o /dev/null -w '%{http_code}' -X "$2" "$3")
+            echo "$2 $3 -> $got (want $1)"
+            [ "$got" = "$1" ]
+          }
+          expect 200 GET https://api.sixsevens.me/health
+          curl -s https://api.sixsevens.me/health | grep -q '"status":"ok"'
+          expect 401 GET https://api.sixsevens.me/cases
+          expect 401 GET https://api.sixsevens.me/audit/events
+          expect 404 GET https://api.sixsevens.me/metrics
+          expect 404 POST https://api.sixsevens.me/push/doc-worker
+          expect 200 GET https://sixsevens.me/
+          expect 301 GET http://sixsevens.me/
+          expect 200 GET https://grafana.sixsevens.me/api/health
+          expect 401 GET https://grafana.sixsevens.me/api/dashboards/uid/six-services
+          curl -s -o /dev/null -D - -X OPTIONS https://api.sixsevens.me/cases -H "Origin: https://sixsevens.me" \
+            -H "Access-Control-Request-Method: GET" | grep -qi "access-control-allow-origin: https://sixsevens.me"
+          echo "Gateway checks passed."

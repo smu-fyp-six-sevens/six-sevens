@@ -1,0 +1,160 @@
+{{- /* Kong, the only entry to api and audit-metrics (deploy/kong). Reached only from the load balancer. */}}
+{{- $ctx := dict "root" . "name" "kong" "namespace" "gateway" "component" "gateway" }}
+{{- $trusted := .Values.network.frontEndRanges }}
+{{- if .Values.gateway.address }}{{ $trusted = append $trusted (printf "%s/32" .Values.gateway.address) }}{{ end }}
+---
+{{ include "six.serviceAccount" $ctx }}
+{{- include "six.secretProviderClass" (merge (dict "secrets" (list (dict "env" "GATEWAY_SECRET" "id" "gateway-secret"))) $ctx) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong
+  namespace: gateway
+  labels:
+    {{- include "six.labels" $ctx | nindent 4 }}
+  annotations:
+    checkov.io/skip1: CKV_K8S_22=Kong writes its runtime prefix (/usr/local/kong) at start
+    checkov.io/skip2: CKV_K8S_40=the kong image's own user (1000)
+spec:
+  {{- if or (not .Values.autoscaling.enabled) .Values.singleReplica }}
+  replicas: {{ if .Values.singleReplica }}1{{ else }}{{ .Values.kong.replicas }}{{ end }}
+  {{- end }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "six.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "six.labels" $ctx | nindent 8 }}
+    spec:
+      serviceAccountName: kong
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.kong.uid }}
+        runAsGroup: {{ .Values.kong.uid }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- include "six.spread" $ctx | nindent 6 }}
+      containers:
+        - name: kong
+          image: {{ required "images.kong is required" .Values.images.kong }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          command: ["sh", "-c"]
+          args:
+            - {{ include "six.withSecrets" . }} /kong/render.sh
+          ports:
+            - name: proxy
+              containerPort: 8000
+            - name: status
+              containerPort: 8100
+          env:
+            - name: PORT
+              value: "8000"
+            - name: KONG_STATUS_PORT
+              value: "8100"
+            - name: API_URL
+              value: http://api.api.svc.cluster.local
+            - name: AUDIT_URL
+              value: http://audit-metrics.audit-metrics.svc.cluster.local
+            - name: PRESERVE_HOST
+              value: "true"
+            - name: CORS_ORIGINS
+              value: {{ .Values.kong.corsOrigins | quote }}
+            # The load balancer appends the client, then itself, to X-Forwarded-For: skip trusted hops from the right.
+            - name: KONG_TRUSTED_IPS
+              value: {{ join "," $trusted | quote }}
+            - name: KONG_REAL_IP_RECURSIVE
+              value: "on"
+          resources:
+            {{- include "six.resources" (dict "root" . "cpu" .Values.kong.cpu "memory" .Values.kong.memory) | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: status
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: status
+            periodSeconds: 20
+            failureThreshold: 6
+          securityContext:
+            # Kong writes its runtime prefix (/usr/local/kong) at start.
+            {{- include "six.containerSecurity" (dict "readOnly" false) | nindent 12 }}
+          volumeMounts:
+            - name: secrets
+              mountPath: {{ .Values.secrets.mountPath }}
+              readOnly: true
+      volumes:
+        {{- include "six.secretVolume" $ctx | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong
+  namespace: gateway
+  labels:
+    {{- include "six.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "six.selector" $ctx | nindent 4 }}
+  ports:
+    - name: proxy
+      port: 80
+      targetPort: proxy
+    - name: status
+      port: 8100
+      targetPort: status
+{{- if and .Values.autoscaling.enabled (not .Values.singleReplica) }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: kong
+  namespace: gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: kong
+  minReplicas: {{ .Values.kong.replicas }}
+  maxReplicas: {{ .Values.kong.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kong
+  namespace: gateway
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "six.selector" $ctx | nindent 6 }}
+{{- end }}
+{{- if .Values.monitoring.podMonitoring }}
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: kong
+  namespace: gateway
+spec:
+  selector:
+    matchLabels:
+      {{- include "six.selector" $ctx | nindent 6 }}
+  endpoints:
+    - port: status
+      path: /metrics
+      interval: 30s
+{{- end }}

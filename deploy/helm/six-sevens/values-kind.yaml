@@ -1,0 +1,48 @@
+# The CI smoke test on kind (.github/workflows/helm.yml): one locally built backend image runs every role, against
+# the Pub/Sub emulator and a stub Supabase in the stubs namespace. No Google identity, no Claude, no real data.
+projectId: local
+supabaseUrl: http://supabase-stub.stubs.svc.cluster.local:8080
+pubsubEmulatorHost: pubsub-emulator.stubs.svc.cluster.local:8085
+
+images:
+  backendDefault: six-sevens/backend:kind
+  kong: six-sevens/kong:kind
+pullPolicy: Never
+
+envOverrides:
+  OTEL_ENABLED: "false"
+  # One process per pod: kind's node is small.
+  CPU_WORKER_PROCESSES: "0"
+
+workloadIdentity:
+  enabled: false
+secrets:
+  mode: kubernetes
+autoscaling:
+  enabled: false
+singleReplica: true
+enableAllRoles: true
+resourcesOverride:
+  cpu: 250m
+  memory: 768Mi
+monitoring:
+  podMonitoring: false
+gateway:
+  enabled: false
+frontend:
+  enabled: false
+grafana:
+  enabled: false
+
+network:
+  frontEndRanges: []
+  extraEgress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: stubs
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8085

@@ -1,0 +1,111 @@
+{{- if .Values.gateway.enabled }}
+{{- /*
+The front door: Google's global external load balancer (Gateway API), on Terraform's static address with its
+certificate map (edge.tf). HTTPS only; plain HTTP is redirected. Every backend gets Cloud Armor and a health check.
+*/}}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: external
+  namespace: gateway
+  annotations:
+    networking.gke.io/certmap: {{ .Values.gateway.certificateMap }}
+spec:
+  gatewayClassName: {{ .Values.gateway.className }}
+  addresses:
+    - type: NamedAddress
+      value: {{ .Values.gateway.addressName }}
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              app.kubernetes.io/part-of: six-sevens
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: redirect-to-https
+  namespace: gateway
+spec:
+  parentRefs:
+    - name: external
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+{{- $backends := list (dict "name" "kong" "namespace" "gateway" "host" .Values.gateway.hosts.api "port" 80 "healthPort" 8100 "healthPath" "/status") }}
+{{- if .Values.frontend.enabled }}
+{{- $backends = append $backends (dict "name" "frontend" "namespace" "frontend" "host" .Values.gateway.hosts.frontend "port" 80 "healthPort" 80 "healthPath" "/") }}
+{{- end }}
+{{- if .Values.grafana.enabled }}
+{{- $backends = append $backends (dict "name" "grafana" "namespace" "observability" "host" .Values.gateway.hosts.grafana "port" 3000 "healthPort" 3000 "healthPath" "/api/health") }}
+{{- end }}
+{{- range $backends }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+spec:
+  parentRefs:
+    - name: external
+      namespace: gateway
+      sectionName: https
+  hostnames:
+    - {{ .host | quote }}
+  rules:
+    - backendRefs:
+        - name: {{ .name }}
+          port: {{ .port }}
+---
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+spec:
+  default:
+    securityPolicy: {{ $.Values.gateway.securityPolicy }}
+    timeoutSec: {{ $.Values.gateway.backendTimeoutSeconds }}
+    logging:
+      enabled: true
+      sampleRate: 1000000
+  targetRef:
+    group: ""
+    kind: Service
+    name: {{ .name }}
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+spec:
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+        port: {{ .healthPort }}
+        requestPath: {{ .healthPath }}
+  targetRef:
+    group: ""
+    kind: Service
+    name: {{ .name }}
+{{- end }}
+{{- end }}

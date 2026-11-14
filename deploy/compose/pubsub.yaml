@@ -23,6 +23,8 @@ services:
       PUSH_PORT: ${PUSH_PORT:-8000}
       PUSH_HOST_AUDIT_METRICS: audit-metrics
       PUSH_PORT_AUDIT_METRICS: "8000"
+      # EVENT_DELIVERY=pull docker compose up: subscriptions without a push endpoint, and the workers pull (as on GKE).
+      EVENT_DELIVERY: ${EVENT_DELIVERY:-push}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

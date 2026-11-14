@@ -101,3 +101,10 @@ def record_work(work: str, cost_usd: float, calls: int, input_tokens: int, cache
 
 def exposition() -> tuple[bytes, str]:
     return generate_latest(), CONTENT_TYPE_LATEST
+
+
+def serve_on(port: int) -> None:
+    """The same metrics on a port of their own (a daemon thread), for a scraper that isn't on loopback."""
+    from prometheus_client import start_http_server
+
+    start_http_server(port)

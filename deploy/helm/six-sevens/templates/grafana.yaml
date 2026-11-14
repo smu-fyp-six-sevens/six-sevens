@@ -1,0 +1,111 @@
+{{- if .Values.grafana.enabled }}
+{{- /* Grafana with Google's query proxy beside it, which signs each query as Grafana's account (as on Cloud Run). */}}
+{{- $ctx := dict "root" . "name" "grafana" "namespace" "observability" "component" "observability" }}
+---
+{{ include "six.serviceAccount" $ctx }}
+{{- include "six.secretProviderClass" (merge (dict "secrets" (list (dict "env" "GF_SECURITY_ADMIN_PASSWORD" "id" "grafana-admin-password"))) $ctx) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: observability
+  labels:
+    {{- include "six.labels" $ctx | nindent 4 }}
+  annotations:
+    checkov.io/skip1: CKV_K8S_22=Grafana writes its SQLite database and plugins under /var/lib/grafana
+    checkov.io/skip2: CKV_K8S_40=the grafana image's own user (472)
+    checkov.io/skip3: CKV_K8S_43=Google's query proxy is pinned by tag, kept in step with Cloud Run's (README)
+spec:
+  # Logins live in the instance's own SQLite; one instance keeps them consistent.
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "six.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "six.labels" $ctx | nindent 8 }}
+    spec:
+      serviceAccountName: grafana
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.grafana.uid }}
+        runAsGroup: 0
+        fsGroup: {{ .Values.grafana.uid }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: grafana
+          image: {{ required "images.grafana is required" .Values.images.grafana }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: GF_SERVER_ROOT_URL
+              value: https://{{ .Values.gateway.hosts.grafana }}
+            - name: PROMETHEUS_URL
+              value: http://localhost:9090
+            - name: GCP_PROJECT
+              value: {{ .Values.projectId | quote }}
+            - name: BIGQUERY_LOCATION
+              value: {{ .Values.grafana.billingExportLocation | quote }}
+            # Grafana reads the password from the mounted file itself.
+            - name: GF_SECURITY_ADMIN_PASSWORD__FILE
+              value: {{ .Values.secrets.mountPath }}/GF_SECURITY_ADMIN_PASSWORD
+          resources:
+            {{- include "six.resources" (dict "root" . "cpu" .Values.grafana.cpu "memory" .Values.grafana.memory) | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          securityContext:
+            {{- include "six.containerSecurity" (dict "readOnly" false) | nindent 12 }}
+          volumeMounts:
+            - name: secrets
+              mountPath: {{ .Values.secrets.mountPath }}
+              readOnly: true
+        - name: prometheus
+          image: {{ .Values.images.grafanaProxy }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          args: ["--web.listen-address=:9090", "--query.project-id={{ .Values.projectId }}"]
+          resources:
+            {{- include "six.resources" (dict "root" . "cpu" "250m" "memory" "256Mi") | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: 9090
+          livenessProbe:
+            tcpSocket:
+              port: 9090
+            periodSeconds: 20
+          securityContext:
+            {{- include "six.containerSecurity" (dict "readOnly" true) | nindent 12 }}
+      volumes:
+        {{- include "six.secretVolume" $ctx | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: observability
+  labels:
+    {{- include "six.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "six.selector" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+{{- end }}

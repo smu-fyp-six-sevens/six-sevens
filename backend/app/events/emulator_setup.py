@@ -1,10 +1,11 @@
 """
-Creates the topic, dead-letter topic and one push subscription per role on the local Pub/Sub emulator
-(compose's pubsub-init). In the cloud, Terraform creates the same from events/types.SUBSCRIPTIONS.
+Creates the topic, dead-letter topic and one subscription per role on the local Pub/Sub emulator (compose's
+pubsub-init). In the cloud, Terraform creates the same from events/types.SUBSCRIPTIONS.
 
     PUBSUB_EMULATOR_HOST=localhost:8085 GOOGLE_CLOUD_PROJECT=local python -m app.events.emulator_setup
 
-Each role pushes to PUSH_ENDPOINT_<ROLE> (e.g. PUSH_ENDPOINT_DETECTION_WORKER), else to
+With EVENT_DELIVERY=pull the subscriptions have no push endpoint and the workers pull (events/pull.py). Otherwise
+each role pushes to PUSH_ENDPOINT_<ROLE> (e.g. PUSH_ENDPOINT_DETECTION_WORKER), else to
 http://<PUSH_HOST_<ROLE> or PUSH_HOST>:<PUSH_PORT_<ROLE> or PUSH_PORT or 8000>/push/<role>.
 
     python -m app.events.emulator_setup --poison   # publish one malformed message (dead-letter test)
@@ -22,7 +23,7 @@ from google.cloud import pubsub_v1
 
 from ..config import settings
 from . import types
-from .types import SUBSCRIPTIONS, subscription_filter
+from .types import SUBSCRIPTIONS, subscription_filter, subscription_id
 
 logger = logging.getLogger("events.emulator_setup")
 
@@ -83,18 +84,20 @@ def main() -> None:
     dead_letter = publisher.topic_path(project, f"{settings.PUBSUB_TOPIC}-dead-letter")
     _create_topic(publisher, topic)
     _create_topic(publisher, dead_letter)
+    pull = settings.EVENT_DELIVERY == "pull"
     for role, subscribed in SUBSCRIPTIONS.items():
-        name = subscriber.subscription_path(project, f"{role}-push")
+        name = subscriber.subscription_path(project, subscription_id(role))
         request = {
             "name": name,
             "topic": topic,
-            "push_config": {"push_endpoint": _endpoint(role)},
             "ack_deadline_seconds": ACK_DEADLINE_SECONDS,
             "filter": subscription_filter(subscribed, role),
             "dead_letter_policy": {"dead_letter_topic": dead_letter, "max_delivery_attempts": MAX_DELIVERY_ATTEMPTS},
         }
+        if not pull:
+            request["push_config"] = {"push_endpoint": _endpoint(role)}
         _create_subscription(subscriber, request)
-        logger.info("%s -> %s", name, request["push_config"]["push_endpoint"])
+        logger.info("%s -> %s", name, "pulled" if pull else _endpoint(role))
     # Somewhere to read dead-lettered messages from.
     _create_subscription(subscriber, {
         "name": subscriber.subscription_path(project, f"{settings.PUBSUB_TOPIC}-dead-letter-pull"),

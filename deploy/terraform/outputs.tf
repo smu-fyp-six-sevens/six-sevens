@@ -35,3 +35,20 @@ output "secrets_to_fill" {
   description = "Secret Manager secrets whose values must be added by hand."
   value       = sort([for s in google_secret_manager_secret.secret : s.secret_id])
 }
+
+# --- GKE ---
+
+output "dns_name_servers" {
+  description = "Set these as sixsevens.me's name servers at the registrar."
+  value       = var.gke_enabled ? google_dns_managed_zone.public[0].name_servers : []
+}
+
+output "gke" {
+  description = "The cluster, its addresses, and the KEDA account for its one-time install (README.md)."
+  value = var.gke_enabled ? {
+    cluster      = google_container_cluster.prod[0].name
+    lb_address   = google_compute_global_address.lb[0].address
+    nat_address  = google_compute_address.nat[0].address
+    keda_account = google_service_account.keda[0].email
+  } : null
+}

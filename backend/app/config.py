@@ -103,6 +103,19 @@ class Settings:
     # Needed on a public service (audit-metrics sits behind Kong); private workers are also guarded by Cloud Run IAM.
     PUSH_AUDIENCE: str = _str("PUSH_AUDIENCE")
     PUSH_SERVICE_ACCOUNT: str = _str("PUSH_SERVICE_ACCOUNT")
+    # How workers receive events: "push" (Cloud Run: Pub/Sub posts to /push/<role>) or "pull" (GKE: events/pull.py
+    # streams from the role's subscription). Same subscription either way, switched in place (CLOUD_ARCHITECTURE_PLAN.md §17).
+    # "none": no events at all, only HTTP (a role serving requests on GKE while Cloud Run still takes its events).
+    EVENT_DELIVERY: str = _str("EVENT_DELIVERY", "push").lower()
+    # Messages each role's subscription hands this process at once (the role's concurrency on Cloud Run).
+    PULL_MAX_MESSAGES: int = _int("PULL_MAX_MESSAGES", 2)
+    # The longest a run may hold its message; the client keeps extending the ack deadline until then.
+    PULL_MAX_LEASE_SECONDS: int = _int("PULL_MAX_LEASE_SECONDS", 3600)
+    # At shutdown, how long runs in flight get to finish before they're stopped and their messages redelivered.
+    PULL_DRAIN_SECONDS: float = _float("PULL_DRAIN_SECONDS", 20)
+    # When set (GKE), /metrics is also served on this port, apart from the app's, so the cluster's scraper reaches
+    # it without the gateway key; the network policies let only the scraper in. 0: only the app's /metrics.
+    METRICS_PORT: int = _int("METRICS_PORT", 0)
     # Kong sends this in X-Gateway-Key on every request it forwards; api and audit-metrics refuse a request without
     # it (gateway.py), so nobody can call them around Kong's rate limits. Empty in a plain uvicorn run.
     GATEWAY_SECRET: str = _str("GATEWAY_SECRET")

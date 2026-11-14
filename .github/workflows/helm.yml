@@ -1,0 +1,107 @@
+name: Helm chart
+
+# The GKE chart (deploy/helm): its role values are current, it renders, Checkov passes on what prod would get,
+# and it runs on kind with Calico (network policies enforced) against the Pub/Sub emulator and a stub Supabase.
+# No Claude, no Google credentials, no real data. On chart changes, weekly, and by hand.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/helm/**'
+      - 'deploy/terraform/roles.json'
+      - 'deploy/terraform/migration.json'
+      - 'deploy/terraform/subscriptions.json'
+      - 'deploy/kong/**'
+      - 'backend/app/events/**'
+      - '.github/workflows/helm.yml'
+  pull_request:
+    paths:
+      - 'deploy/helm/**'
+      - 'deploy/terraform/roles.json'
+      - 'deploy/terraform/migration.json'
+      - 'deploy/terraform/subscriptions.json'
+      - 'deploy/kong/**'
+      - 'backend/app/events/**'
+      - '.github/workflows/helm.yml'
+  schedule:
+    - cron: '0 2 * * 1' # Monday 10:00 SGT
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chart:
+    name: Chart on kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Role values match Terraform's table
+        run: python deploy/helm/gen_values.py --check
+
+      - name: Lint and render (prod, with placeholder digests)
+        run: |
+          C=deploy/helm/six-sevens
+          helm lint "$C" -f "$C/values-roles.yaml" -f "$C/values-kind.yaml"
+          d=sha256:0000000000000000000000000000000000000000000000000000000000000000
+          r=asia-southeast1-docker.pkg.dev/project/app
+          helm template six "$C" -f "$C/values-roles.yaml" -f "$C/values-prod.yaml" \
+            --set projectId=project --set supabaseUrl=https://example.supabase.co --set gateway.address=203.0.113.10 \
+            --set images.backendDefault="$r/api@$d" --set images.kong="$r/kong@$d" \
+            --set images.frontend="$r/frontend@$d" --set images.grafana="$r/grafana@$d" \
+            --set roles.doc-worker.enabled=true --set roles.detection-worker.enabled=true \
+            --set roles.case-worker.enabled=true --set roles.audit-metrics.enabled=true > "$RUNNER_TEMP/prod.yaml"
+
+      - name: Checkov (rendered chart)
+        run: |
+          python -m pip install "checkov>=3.2,<4"
+          # CKV_K8S_15 (pull policy Always): every image is pinned by digest, so IfNotPresent pulls the same bytes.
+          checkov -f "$RUNNER_TEMP/prod.yaml" --framework kubernetes --compact --quiet --skip-check CKV_K8S_15
+
+      - name: Build the images (one backend image runs every role)
+        run: |
+          docker build -q -t six-sevens/backend:kind -f backend/Dockerfile --target detection-worker \
+            --build-arg ALLOW_MISSING_LAND_USE=true .
+          docker build -q -t six-sevens/kong:kind -f deploy/kong/Dockerfile .
+
+      - name: kind with Calico
+        uses: helm/kind-action@v1
+        with:
+          version: v0.27.0
+          cluster_name: smoke
+          config: deploy/helm/smoke/kind.yaml
+          # Nodes aren't ready until Calico is in (next step).
+          wait: 0s
+
+      - name: Install Calico and load the images
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.3/manifests/calico.yaml
+          kubectl -n kube-system rollout status daemonset/calico-node --timeout=300s
+          kind load docker-image six-sevens/backend:kind six-sevens/kong:kind --name smoke
+
+      - name: Smoke test
+        run: bash deploy/helm/smoke/smoke.sh
+
+      - name: What was running (on failure)
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide || true
+          for ns in api doc-worker detection-worker case-worker audit-metrics gateway stubs; do
+            echo "--- $ns"; kubectl -n "$ns" describe pods | tail -40 || true
+            kubectl -n "$ns" logs --all-containers --prefix -l app.kubernetes.io/part-of=six-sevens --tail=80 || true
+          done
+          kubectl -n stubs logs deploy/supabase-stub --tail=40 || true

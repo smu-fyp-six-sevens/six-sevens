@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from . import agent_versions, audit, auth, case_repository, case_stage, document_repository, events, health, metrics, query_stats, realtime_listener, sweeper, telemetry
 from .config import settings
 from .events import bus, registry, types
+from .events import pull as event_pull
 from .events import push as event_push
 from .events.envelope import request_id
 from .fraud_detection.external_validation.registry_lookups import land_use
@@ -59,6 +60,10 @@ for _role, _handlers in _HANDLERS.items():
     if _role in ROLES:
         registry.install(_role, _handlers)
 
+# Pub/Sub delivers this process's events by posting to /push (Cloud Run) or it pulls them (GKE, events/pull.py).
+PUSHES = not IN_PROCESS and settings.EVENT_DELIVERY == "push" and bool(registry.installed_roles())
+PULLS = not IN_PROCESS and settings.EVENT_DELIVERY == "pull" and bool(registry.installed_roles())
+
 
 def check_signing_key() -> None:
     """A deployed service must not sign tokens with an empty key, which anyone could reproduce."""
@@ -83,7 +88,7 @@ def check_gateway_secret() -> None:
 
 def check_push_verification() -> None:
     """A deployed service taking pushes must check Pub/Sub's token, or anyone could post it events."""
-    if IN_PROCESS or not registry.installed_roles() or os.environ.get("PUBSUB_EMULATOR_HOST"):
+    if not PUSHES or os.environ.get("PUBSUB_EMULATOR_HOST"):
         return
     if not (settings.PUSH_AUDIENCE and settings.PUSH_SERVICE_ACCOUNT):
         raise RuntimeError("PUSH_AUDIENCE and PUSH_SERVICE_ACCOUNT must both be set (deploy/terraform/run.tf)")
@@ -96,6 +101,8 @@ async def lifespan(app: FastAPI):
     check_push_verification()
     logger.info("Starting roles %s with %s events", sorted(ROLES), settings.EVENT_TRANSPORT)
     metrics.set_info(ROLES)
+    if settings.METRICS_PORT:
+        metrics.serve_on(settings.METRICS_PORT)
     background_tasks: list[asyncio.Task[None]] = []
     if "api" in ROLES and not settings.AUTH_USERS:
         logger.warning("AUTH_USERS is not set, so nobody can log in. Set it in backend/.env")
@@ -133,10 +140,15 @@ async def lifespan(app: FastAPI):
         background_tasks.append(asyncio.create_task(asyncio.to_thread(agent_versions.register)))
 
     reporter = asyncio.create_task(query_stats.run_reporter())
+    if PULLS:
+        await event_pull.start()
 
     yield
 
-    # SIGTERM: uvicorn stops taking requests and waits for those in flight (a push's work runs inside one).
+    # SIGTERM: uvicorn stops taking requests and waits for those in flight (a push's work runs inside one);
+    # pulled runs get PULL_DRAIN_SECONDS.
+    if PULLS:
+        await event_pull.stop()
     reporter.cancel()
     await bus.shutdown()
     if "api" in ROLES:
@@ -237,7 +249,7 @@ if "api" in ROLES:
 if "audit-metrics" in ROLES:
     app.include_router(audit_router.router, dependencies=_protected)
 
-if not IN_PROCESS and registry.installed_roles():
+if PUSHES:
     app.include_router(event_push.router)
 
 

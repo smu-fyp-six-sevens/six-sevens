@@ -1,0 +1,246 @@
+{{- /*
+The five backend roles, one namespace each. A consumer (it takes events) runs only once migration.json lists it,
+since only one platform may take a role's events; until then its Deployment is at 0. Consumers pull their
+subscription (EVENT_DELIVERY=pull) and scale on undelivered messages (KEDA); api scales on CPU.
+*/}}
+{{- range $name, $role := .Values.roles }}
+{{- $ctx := dict "root" $ "name" $name "namespace" $name "component" "backend" }}
+{{- $enabled := or $role.enabled $.Values.enableAllRoles }}
+{{- /* A consumer behind Kong (audit-metrics) serves its HTTP routes before its events move, taking none. */}}
+{{- $httpOnly := and $role.consumer $role.behindGateway (not $enabled) }}
+{{- $running := or $enabled $httpOnly }}
+{{- $autoscaled := and $enabled $.Values.autoscaling.enabled (not $.Values.singleReplica) }}
+{{- $env := merge (deepCopy $.Values.envOverrides) (deepCopy $role.env) (deepCopy $.Values.commonEnv) }}
+---
+{{ include "six.serviceAccount" $ctx }}
+{{- include "six.secretProviderClass" (merge (dict "secrets" $role.secrets) $ctx) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $name }}
+  labels:
+    {{- include "six.labels" $ctx | nindent 4 }}
+spec:
+  {{- if not $autoscaled }}
+  replicas: {{ if not $running }}0{{ else if $.Values.singleReplica }}1{{ else }}{{ max 1 $role.min }}{{ end }}
+  {{- end }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "six.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "six.labels" $ctx | nindent 8 }}
+      annotations:
+        # A consumer's run in flight isn't evicted to repack nodes; it ends only on a rollout or a scale-down.
+        cluster-autoscaler.kubernetes.io/safe-to-evict: {{ if $role.consumer }}"false"{{ else }}"true"{{ end }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      # uvicorn's 8 s for requests, then the pulled runs' drain, then the streams' close.
+      terminationGracePeriodSeconds: {{ add $role.drainSeconds 30 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if not $role.consumer }}
+      {{- include "six.spread" $ctx | nindent 6 }}
+      {{- end }}
+      containers:
+        - name: app
+          image: {{ include "six.backendImage" $ctx }}
+          imagePullPolicy: {{ $.Values.pullPolicy }}
+          command: ["sh", "-c"]
+          args:
+            - {{ include "six.withSecrets" $ }} uvicorn app.main:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 8
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: metrics
+              containerPort: {{ $.Values.monitoring.metricsPort }}
+          env:
+            - name: ROLE
+              value: {{ $name | quote }}
+            - name: PORT
+              value: "8000"
+            - name: OTEL_SERVICE_NAME
+              value: {{ $name | quote }}
+            - name: METRICS_PORT
+              value: {{ $.Values.monitoring.metricsPort | quote }}
+            - name: GOOGLE_CLOUD_PROJECT
+              value: {{ required "projectId is required" $.Values.projectId | quote }}
+            - name: SUPABASE_URL
+              value: {{ required "supabaseUrl is required" $.Values.supabaseUrl | quote }}
+            - name: SUPABASE_STORAGE_BUCKET
+              value: {{ $.Values.supabaseStorageBucket | quote }}
+            - name: PUBSUB_TOPIC
+              value: {{ $.Values.pubsubTopic | quote }}
+            {{- if $httpOnly }}
+            - name: EVENT_DELIVERY
+              value: "none"
+            {{- else if $role.consumer }}
+            - name: EVENT_DELIVERY
+              value: "pull"
+            - name: PULL_MAX_MESSAGES
+              value: {{ $role.concurrency | quote }}
+            - name: PULL_DRAIN_SECONDS
+              value: {{ $role.drainSeconds | quote }}
+            {{- end }}
+            {{- if $.Values.pubsubEmulatorHost }}
+            - name: PUBSUB_EMULATOR_HOST
+              value: {{ $.Values.pubsubEmulatorHost | quote }}
+            {{- end }}
+            {{- range $key, $value := $env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          resources:
+            {{- include "six.resources" (dict "root" $ "cpu" $role.cpu "memory" $role.memory "ephemeral" (ternary "4Gi" "1Gi" $role.consumer)) | nindent 12 }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 6
+          securityContext:
+            {{- include "six.containerSecurity" (dict "readOnly" true) | nindent 12 }}
+          volumeMounts:
+            - name: secrets
+              mountPath: {{ $.Values.secrets.mountPath }}
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            # Font and model caches (the image's home); the root filesystem is read-only.
+            - name: home
+              mountPath: /home/app
+      volumes:
+        {{- include "six.secretVolume" $ctx | nindent 8 }}
+        - name: tmp
+          emptyDir: {}
+        - name: home
+          emptyDir: {}
+{{- if $role.behindGateway }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $name }}
+  labels:
+    {{- include "six.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "six.selector" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+{{- end }}
+{{- if $.Values.monitoring.podMonitoring }}
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: {{ $name }}
+  namespace: {{ $name }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "six.selector" $ctx | nindent 6 }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s
+{{- end }}
+{{- if and $autoscaled $role.consumer }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: gcp
+  namespace: {{ $name }}
+spec:
+  # KEDA's own Google identity reads the backlog (deploy/terraform/workload_identity.tf).
+  podIdentity:
+    provider: gcp
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ $name }}
+  namespace: {{ $name }}
+spec:
+  scaleTargetRef:
+    name: {{ $name }}
+  minReplicaCount: {{ $role.min }}
+  maxReplicaCount: {{ $role.max }}
+  pollingInterval: {{ $.Values.autoscaling.pollingSeconds }}
+  cooldownPeriod: {{ $.Values.autoscaling.cooldownSeconds }}
+  triggers:
+    - type: gcp-pubsub
+      authenticationRef:
+        name: gcp
+      metadata:
+        # Named for push; kept when switched to pull (events/types.subscription_id).
+        subscriptionName: projects/{{ $.Values.projectId }}/subscriptions/{{ $name }}-push
+        mode: SubscriptionSize
+        # Undelivered messages per replica: what one pod takes at once.
+        value: {{ $role.concurrency | quote }}
+        activationValue: "0"
+{{- end }}
+{{- if and $autoscaled (not $role.consumer) }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  namespace: {{ $name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ max 1 $role.min }}
+  maxReplicas: {{ $role.max }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+{{- end }}
+{{- if and $running (not $role.consumer) (gt (int $role.min) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  namespace: {{ $name }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "six.selector" $ctx | nindent 6 }}
+{{- end }}
+{{- end }}

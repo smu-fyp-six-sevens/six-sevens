@@ -1,0 +1,75 @@
+{
+  "_about": "The one role table: Terraform reads it (main.tf), and deploy/helm/gen_values.py writes the chart's role values from it. cpu, memory, concurrency, timeout and max are Cloud Run's; the gke block is the chart's (min replicas, seconds a pulled run gets to finish at shutdown). Secrets are environment variable names; each is Secret Manager's lower-case, dashed id.",
+  "common_env": {
+    "EVENT_TRANSPORT": "pubsub",
+    "OTEL_ENABLED": "true",
+    "REQUIRE_COMPLETE_CHECKLIST": "true"
+  },
+  "roles": {
+    "api": {
+      "note": "WebSocket tickets are signed, and each instance has its own Realtime listener, so api scales out.",
+      "cpu": "1",
+      "memory": "1Gi",
+      "concurrency": 40,
+      "timeout": 3600,
+      "max": 3,
+      "public": true,
+      "publishes": true,
+      "secrets": ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "AUTH_USERS", "AUTH_SECRET_KEY", "GATEWAY_SECRET"],
+      "env": { "CORS_IN_APP": "false" },
+      "gke": { "min": 2, "drain_seconds": 0 }
+    },
+    "doc-worker": {
+      "note": "OCR, classify, extract.",
+      "cpu": "2",
+      "memory": "4Gi",
+      "concurrency": 2,
+      "timeout": 600,
+      "max": 3,
+      "public": false,
+      "publishes": true,
+      "secrets": ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "ANTHROPIC_API_KEY"],
+      "env": { "QUEUE_WORKER_CONCURRENCY": "2", "CPU_WORKER_PROCESSES": "2" },
+      "gke": { "min": 0, "drain_seconds": 240 }
+    },
+    "detection-worker": {
+      "note": "Lead and specialists; the registry lookups need their keys. OneMap needs no token.",
+      "cpu": "2",
+      "memory": "4Gi",
+      "concurrency": 2,
+      "timeout": 600,
+      "max": 3,
+      "public": false,
+      "publishes": true,
+      "secrets": ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "ANTHROPIC_API_KEY", "DATA_GOV_SG_API_KEY", "URA_API_KEY"],
+      "env": { "DETECTION_CONCURRENCY": "2", "CPU_WORKER_PROCESSES": "2" },
+      "gke": { "min": 0, "drain_seconds": 240 }
+    },
+    "case-worker": {
+      "note": "Case analysis, score, summary, adverse media.",
+      "cpu": "1",
+      "memory": "2Gi",
+      "concurrency": 4,
+      "timeout": 600,
+      "max": 2,
+      "public": false,
+      "publishes": true,
+      "secrets": ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "ANTHROPIC_API_KEY"],
+      "env": { "CASE_ANALYSIS_TIMEOUT_SECONDS": "900" },
+      "gke": { "min": 0, "drain_seconds": 240 }
+    },
+    "audit-metrics": {
+      "note": "Behind Kong (it answers only Kong's GATEWAY_SECRET); runs the sweeper, which publishes recovery requests. On GKE at least 1, for the 5-minute sweep.",
+      "cpu": "1",
+      "memory": "1Gi",
+      "concurrency": 40,
+      "timeout": 60,
+      "max": 2,
+      "public": true,
+      "publishes": true,
+      "secrets": ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "AUTH_SECRET_KEY", "GATEWAY_SECRET"],
+      "env": { "SWEEPER_ENABLED": "true", "CORS_IN_APP": "false" },
+      "gke": { "min": 1, "drain_seconds": 20 }
+    }
+  }
+}
