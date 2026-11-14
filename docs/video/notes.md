@@ -183,3 +183,7 @@
 
 ## Wave 33 - subheader
 - Score's last line reads "And it recommends documents that would reduce overall risk score." Re-rendered renders/additional-documents-handles.mp4 (frames 2406-2542, 1 s handles) and spliced into renders/picture.mp4.
+
+## Wave 34 - the app title
+- Every screen re-captured with the title "GLDB Anomaly Detection Portal" (a renamed copy of the built frontend; the app source is unchanged). Overlay measurements identical.
+- tools/diff-ranges.py compared the old and new visuals: four stretches changed (portal intro, agent trace, risk and review, dashboard click). Swap clips with 1 s handles in renders/title-swaps (README.txt has placements); renders/picture.mp4 is the full renamed render.
