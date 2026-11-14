@@ -87,7 +87,7 @@
       },
       "max": 1,
       "memory": "2Gi",
-      "min": 0,
+      "min": 1,
       "secrets": [
         {
           "env": "SUPABASE_PUBLISHABLE_KEY",
@@ -108,15 +108,15 @@
       "concurrency": 2,
       "consumer": true,
       "cpu": "1",
-      "drainSeconds": 240,
+      "drainSeconds": 570,
       "enabled": true,
       "env": {
         "CPU_WORKER_PROCESSES": "2",
         "DETECTION_CONCURRENCY": "2"
       },
-      "max": 1,
+      "max": 2,
       "memory": "4Gi",
-      "min": 0,
+      "min": 1,
       "secrets": [
         {
           "env": "SUPABASE_PUBLISHABLE_KEY",
@@ -145,15 +145,15 @@
       "concurrency": 2,
       "consumer": true,
       "cpu": "1",
-      "drainSeconds": 240,
+      "drainSeconds": 570,
       "enabled": true,
       "env": {
         "CPU_WORKER_PROCESSES": "2",
         "QUEUE_WORKER_CONCURRENCY": "2"
       },
-      "max": 1,
+      "max": 2,
       "memory": "4Gi",
-      "min": 0,
+      "min": 1,
       "secrets": [
         {
           "env": "SUPABASE_PUBLISHABLE_KEY",

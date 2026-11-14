@@ -2,7 +2,26 @@
 
 Planned and open cloud work only. Delete an item once it's done. Updated 2026-11-14.
 
-**Where it stands:** production runs on GKE Autopilot since 2026-11-14: `sixsevens.me` is its front door, and every consumer pulls its events there (phases 1–4). Cloud Run still serves its `run.app` URLs and takes no events, until phase 6. The cloud as built is summarised in `HOW_IT_WORKS.md` §9; operations and every problem met are in `deploy/terraform/README.md`; running the split locally is in `README.md`. Sections 1–7 and 12 moved there, so the numbers from 8 on are unchanged. Adding a service: `docs/ADDING_A_SERVICE.md`.
+## Status and next steps (read this first)
+
+**Now:** the app runs on GKE at `sixsevens.me`. Cloud Run still exists as a fallback and its `run.app` URLs still work, but once step 1 is done it takes no work.
+
+**Next, in order:**
+
+| # | Step | Who | When |
+|---|---|---|---|
+| 1 | Move the four workers' events to GKE: `terraform plan` (only subscriptions "update in-place"), `terraform apply`, then push | You | Now |
+| 2 | Run one synthetic document end to end on `sixsevens.me`; check each worker's `kubectl logs` shows `Pulled` lines | You (send me the output) | After step 1's deploy |
+| 3 | Use the site normally; then check Cloud Armor's logs and set `cloud_armor_preview = false` | You, me to read the logs | After about a day |
+| 3b | After the demo (Friday 2026-11-20): put the workers back to scaling from zero. In `deploy/terraform/roles.json`, each worker's `gke` block has `min` 1 (always warm, about $5 a day, so teammates never wait on a cold start) and doc- and detection-worker `max` 2; set `min` back to 0, run `gen_values.py`, push. Warm them again the same way before the Cloud Native presentation | You | 2026-11-20 or 21 |
+| 4 | Delete Cloud Run (phase 6): its services, the push identity, the Cloud Run deploy in CI, the Grafana panels moved to GKE | Me to prepare, you to apply | About 2026-11-21, once GKE has been stable |
+| 5 | Failure tests (§9), then Claude through Vertex AI | Both | After step 4 |
+
+**If something breaks after step 1:** remove that role from `deploy/terraform/migration.json`, run `gen_values.py`, `terraform apply`, push. Cloud Run takes its work again.
+
+## Background
+
+The cloud as built is summarised in `HOW_IT_WORKS.md` §9; operations and every problem met are in `deploy/terraform/README.md`; running the split locally is in `README.md`. Sections 1–7 and 12 moved there, so the numbers from 8 on are unchanged. Adding a service: `docs/ADDING_A_SERVICE.md`.
 
 **Decided 2026-11-14:**
 - **Production moves to GKE Autopilot**, and the Cloud Run deployment is removed once GKE is stable (§13–24). This is a Cloud Native award, so Kubernetes is the platform, not an afterthought. Load doesn't require it: detection's p95 is 92 s against a 600 s limit.
@@ -11,7 +30,7 @@ Planned and open cloud work only. Delete an item once it's done. Updated 2026-11
 - **No release approval in Cloud Deploy, ever:** a green push to `main` deploys, as today. The human checkpoint is the merge to `main`; every release is still recorded and one step to roll back.
 - **Claude through Vertex AI** is kept but comes after phase 6 (§17). Vertex appears not to serve the Claude 5 models in `asia-southeast1` (only `global` and the US and EU multi-regions; confirm in Model Garden), so its case rests on no Anthropic key, Google IAM, billing and audit logs, not on processing in Singapore.
 
-**What's left of the move:** watch phases 2–4 (§17); Cloud Armor out of preview after a day of normal use (`cloud_armor_preview = false`; Binary Authorization already enforces); phase 6 after a stable week; the Cloud Run panels' GKE versions in `build_dashboards.py` and the budget's new amount; then Vertex. Runbook: `deploy/terraform/README.md` ("GKE").
+Also open, no rush: the budget's new amount for GKE. Runbook for every step: `deploy/terraform/README.md` ("GKE").
 
 ## 8. Open decisions
 

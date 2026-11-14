@@ -25,6 +25,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const AgentDirectoryPage = lazy(() => import('./pages/AgentDirectoryPage'));
 import { getToken } from './lib/api';
 import { LoadErrorState } from './components/LoadErrorState';
+import DocumentTitle from './components/DocumentTitle';
 
 function CaseQueueRoute() {
   const navigate = useNavigate();
@@ -205,6 +206,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <DocumentTitle />
       <Suspense fallback={<PageSkeleton />}>
       <Routes>
         <Route

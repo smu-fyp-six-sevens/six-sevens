@@ -52,11 +52,11 @@
         "CPU_WORKER_PROCESSES": "2"
       },
       "gke": {
-        "min": 0,
-        "max": 1,
+        "min": 1,
+        "max": 2,
         "cpu": "1",
         "memory": "4Gi",
-        "drain_seconds": 240
+        "drain_seconds": 570
       }
     },
     "detection-worker": {
@@ -80,11 +80,11 @@
         "CPU_WORKER_PROCESSES": "2"
       },
       "gke": {
-        "min": 0,
-        "max": 1,
+        "min": 1,
+        "max": 2,
         "cpu": "1",
         "memory": "4Gi",
-        "drain_seconds": 240
+        "drain_seconds": 570
       }
     },
     "case-worker": {
@@ -105,7 +105,7 @@
         "CASE_ANALYSIS_TIMEOUT_SECONDS": "900"
       },
       "gke": {
-        "min": 0,
+        "min": 1,
         "max": 1,
         "cpu": "500m",
         "memory": "2Gi",
