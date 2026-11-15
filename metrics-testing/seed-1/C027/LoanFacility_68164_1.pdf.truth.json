@@ -1,0 +1,26 @@
+{
+  "filename": "LoanFacility_68164_1.pdf",
+  "files": [
+    "LoanFacility_68164_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Primrose Florist & Gifts Pte Ltd",
+    "company_address": "106D Punggol Field, #02-71, Singapore 824106",
+    "individual_name": "Yeo Chee Keong",
+    "loan_amount": 250000.0,
+    "uen": "201683387R",
+    "facility_type": "Term Loan",
+    "offer_date": "2026-09-22",
+    "interest_rate": 5.52,
+    "loan_tenure": "84 months",
+    "monthly_instalment": 3594.88
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

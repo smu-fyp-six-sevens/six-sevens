@@ -24,6 +24,7 @@ re-seeding its own.
 from __future__ import annotations
 
 import hashlib
+import os
 import random
 import re
 import warnings
@@ -56,9 +57,28 @@ SHARE_SPLITS = [(60, 40), (70, 30), (75, 25), (51, 49), (80, 20), (65, 35)]
 SHARE_CAPITALS = [100_000, 250_000, 500_000, 750_000, 1_000_000]
 
 
+_NRIC_WEIGHTS = (2, 7, 6, 5, 4, 3, 2)
+
+
+def nric_check_letter(prefix: str, digits: str) -> str:
+    """The check letter a real S/T/F/G NRIC or FIN carries for these 7 digits (the same rule the detection checks
+    apply: app/fraud_detection/numerical_validation/identity_company.py)."""
+    prefix = prefix.upper()
+    index = ((4 if prefix in ("T", "G") else 0) + sum(int(d) * w for d, w in zip(digits, _NRIC_WEIGHTS))) % 11
+    return ("JZIHGFEDCBA" if prefix in ("S", "T") else "XWUTRQPNMLK")[index]
+
+
+def salted(key: str) -> str:
+    """`key` with the run's seed added, when DOCGEN_SEED is set. Unset (the default), every case generates the
+    documents it always has; a seed gives the same cases different invented values (amounts, dates, account
+    numbers). Values that come from the mastersheet are unaffected."""
+    seed = os.environ.get("DOCGEN_SEED", "").strip()
+    return f"{key}|seed:{seed}" if seed else key
+
+
 def seeded_rng(key: str) -> random.Random:
     """SHA-256 seeding, matching the convention used across docgen."""
-    return random.Random(int(hashlib.sha256(key.encode("utf-8")).hexdigest()[:16], 16))
+    return random.Random(int(hashlib.sha256(salted(key).encode("utf-8")).hexdigest()[:16], 16))
 
 
 def as_date(value: Any) -> date | None:
@@ -71,6 +91,9 @@ def as_date(value: Any) -> date | None:
             return datetime.fromisoformat(value.strip()).date()
         except ValueError:
             return None
+    # A date cell saved without a date format reads back as Excel's day count (30725 = 13 Feb 1984).
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and 1 < value < 80_000:
+        return date(1899, 12, 30) + timedelta(days=int(value))
     return None
 
 
@@ -102,7 +125,9 @@ def company_facts(case: dict[str, Any], people: list[dict[str, Any]]) -> dict[st
 
     firm, firm_address = CORP_SEC_FIRMS[rng.randrange(len(CORP_SEC_FIRMS))]
     secretary = SECRETARY_NAMES[rng.randrange(len(SECRETARY_NAMES))]
-    secretary_id = f"S{rng.randint(6000000, 8999999)}{rng.choice('ABCDEFGHIJZ')}"
+    secretary_digits = f"{rng.randint(6000000, 8999999)}"
+    rng.choice("ABCDEFGHIJZ")  # the check letter used to be drawn here; still drawn so later values don't shift
+    secretary_id = f"S{secretary_digits}{nric_check_letter('S', secretary_digits)}"
     secretary_appointed = incorporation_date + timedelta(days=rng.randint(0, 90))
     # Appointments are on record by the time the case's documents are issued (a few weeks before the
     # application), and never before incorporation.

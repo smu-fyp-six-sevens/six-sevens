@@ -1,0 +1,42 @@
+{
+  "filename": "SimTH_Passport_scan.jpg",
+  "files": [
+    "SimTH_Passport_scan.jpg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Sim Teck Huat",
+    "passport_number": "E5384110E",
+    "date_of_birth": "1986-01-23",
+    "date_of_expiry": "2034-11-06",
+    "date_of_issue": "2024-11-06",
+    "place_of_birth": "Singapore",
+    "sex": "M",
+    "nric_number": "S8651228I"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": true,
+  "tampering": [
+    {
+      "dimension": "Metadata",
+      "defect_type": "metadata",
+      "expected_tools": [
+        "metadata_tool"
+      ],
+      "description": "Image EXIF Software set to Adobe Photoshop, inconsistent with a scanned passport.",
+      "edits": [
+        {
+          "printed_before": "PASSPORT",
+          "printed_after": null,
+          "injector": "Tampered document metadata: creator='Adobe Photoshop 25.0'"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "filename": "IBS_Constitution.pdf",
+  "files": [
+    "IBS_Constitution.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Ironleaf Building Services Pte Ltd",
+    "uen": "201651600K",
+    "incorporation_date": "2016-05-18",
+    "company_address": "31 Woodlands Close, #01-09, Singapore 737855",
+    "share_capital": 1000000.0,
+    "issued_shares": 1000000,
+    "subscribers": [
+      {
+        "name": "Chua Zhen Yu",
+        "address": "354B Admiralty Drive, #11-360, Singapore 752354",
+        "id_number": "S7580953J",
+        "shares": 510000
+      },
+      {
+        "name": "Iskandar bin Hamzah",
+        "address": "318A Yishun Avenue 9, #03-319, Singapore 761318",
+        "id_number": "S7032675B",
+        "shares": 490000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2016-05-18"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

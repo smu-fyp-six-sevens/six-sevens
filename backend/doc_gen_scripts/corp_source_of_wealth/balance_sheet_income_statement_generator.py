@@ -47,6 +47,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import openpyxl
+import truth
 from case_facts import as_date, company_facts, seeded_rng
 from synthetic_signature import signature_paragraph_style
 from pypdf import PdfReader, PdfWriter
@@ -251,6 +252,15 @@ def _distribute(rng, total: float, weight_ranges: list[tuple[float, float]]) -> 
     return amounts
 
 
+def _tax_after_partial_exemption(profit_before_tax: float) -> float:
+    """17% of chargeable income after Singapore's partial tax exemption (YA2020 onwards): 75% of the first $10,000
+    and 50% of the next $190,000 are exempt. A flat 17% of profit is what a forger would write, and is flagged
+    (FS.TAX_EXPENSE_RATE)."""
+    income = max(profit_before_tax, 0.0)
+    exempt = 0.75 * min(income, 10_000) + 0.50 * min(max(income - 10_000, 0), 190_000)
+    return (income - exempt) * 0.17
+
+
 def _build_year(rng, revenue: float, structure: Structure,
                  retained_earnings_begin: float, share_capital: float) -> dict[str, Any]:
     cost_ratio = rng.uniform(0.55, 0.70)
@@ -272,7 +282,7 @@ def _build_year(rng, revenue: float, structure: Structure,
     profit_from_ops = gross_profit + other_income - opex_total
     finance_costs = round(revenue * rng.uniform(0.006, 0.018), -2)
     profit_before_tax = profit_from_ops - finance_costs
-    tax_expense = round(max(profit_before_tax, 0) * 0.17, -2)
+    tax_expense = round(_tax_after_partial_exemption(profit_before_tax), -2)
     profit_for_year = profit_before_tax - tax_expense
 
     retained_earnings_end = retained_earnings_begin + profit_for_year
@@ -650,6 +660,11 @@ def generate_financial_statements(
         writer.add_metadata({"/Keywords": SYNTHETIC_TAG})
         with open(output_path, "wb") as fh:
             writer.write(fh)
+
+    truth.record(output_path, "source_of_wealth", truth.financial_statements(
+        company_name=company_name, uen=company_uen, period_end=period_end, signing_date=signing_date,
+        cur=cur, prev=prev,
+    ))
 
     return {
         "output_path": output_path, "company_name": company_name,

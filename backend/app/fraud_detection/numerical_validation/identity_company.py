@@ -98,11 +98,21 @@ _UEN_RE = re.compile(r"^(\d{4})(\d{5}|-\d{4})[A-Z]$", re.IGNORECASE)
 _UEN_BUSINESS_RE = re.compile(r"^\d{8}[A-Z]$", re.IGNORECASE)
 
 
-@check(code="ID.UEN_FORMAT")
+# The document types that carry the company's UEN (as uen, tax_reference_number or tin). On the others (an NRIC, a
+# utility bill) an ID-like value is something else, such as an NRIC or an account number, and is no UEN to check.
+UEN_DOCUMENT_TYPES = (
+    "certificate_of_incorporation", "certificate_of_incumbency", "company_constitution", "source_of_wealth",
+    "list_of_loans", "notice_of_assessment", "fatca_crs_declaration",
+)
+
+
+@check(code="ID.UEN_FORMAT", applies=UEN_DOCUMENT_TYPES)
 def _check_uen_format(*, uen: Any, today: date) -> CheckResult:
     """A UEN is 9 or 10 characters ending in a letter, with a plausible year prefix. Businesses registered before
     UEN existed use an 8-digit registration number instead, which this doesn't apply to."""
     uen = str(uen).strip().upper()
+    if _NRIC_RE.fullmatch(uen):
+        return [], skipped(reason=f"{uen} is an NRIC or FIN, not a UEN")
     if _UEN_BUSINESS_RE.match(uen):
         return [], None
 
@@ -223,6 +233,9 @@ def _mrz_lines(raw: Any) -> list[str]:
     if len(compact) == 88:
         return [compact[:44], compact[44:]]
     lines = [ln.strip() for ln in str(raw).strip().splitlines() if ln.strip()]
+    if len(lines) == 1:
+        # Extraction often joins the two lines with a space instead of a newline.
+        lines = str(raw).split()
     return [_fit_mrz_filler(ln) for ln in lines] if len(lines) == 2 else lines
 
 

@@ -1,0 +1,24 @@
+{
+  "filename": "PrimroseFloristGifts_NOA_YA2025.pdf",
+  "files": [
+    "PrimroseFloristGifts_NOA_YA2025.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Primrose Florist & Gifts Pte Ltd",
+    "tax_reference_number": "201683387R",
+    "company_address": "106D Punggol Field, #02-71, Singapore 824106",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-07-22",
+    "eci": 674900,
+    "tax_payable": 57308.0,
+    "previous_assessment_date": "2025-06-04"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

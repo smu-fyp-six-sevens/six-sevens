@@ -1,0 +1,36 @@
+{
+  "filename": "IBS_BalanceSheet_Audited.pdf",
+  "files": [
+    "IBS_BalanceSheet_Audited.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Ironleaf Building Services Pte Ltd",
+    "uen": "201651600K",
+    "financial_year_end": "2026-06-30",
+    "signing_date": "2026-11-22",
+    "revenue": 2210000.0,
+    "profit_for_the_year": 251000.0,
+    "profit_for_the_year_prior_year": 238000.0,
+    "total_assets": 4611000.0,
+    "total_liabilities": 2814000.0,
+    "total_equity": 1797000.0,
+    "share_capital": 1000000.0,
+    "total_current_assets": 3025100.0,
+    "total_non_current_assets": 1585900.0,
+    "total_current_liabilities": 1795900.0,
+    "total_non_current_liabilities": 1018100.0,
+    "retained_earnings_closing": 797000.0,
+    "retained_earnings_closing_prior_year": 546000.0,
+    "total_assets_prior_year": 3729000.0,
+    "total_liabilities_prior_year": 2183000.0,
+    "total_equity_prior_year": 1546000.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

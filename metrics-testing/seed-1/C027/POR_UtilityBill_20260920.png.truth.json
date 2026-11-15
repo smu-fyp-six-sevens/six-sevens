@@ -1,0 +1,23 @@
+{
+  "filename": "POR_UtilityBill_20260920.png",
+  "files": [
+    "POR_UtilityBill_20260920.png"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Yeo Chee Keong",
+    "individual_address": "106D Punggol Field, #02-71, Singapore 824106",
+    "entity_type": "individual",
+    "bill_date": "2026-09-19",
+    "billing_period_end": "2026-08-31",
+    "total_payable": 96.38,
+    "due_date": "2026-10-03"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

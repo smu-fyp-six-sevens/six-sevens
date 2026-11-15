@@ -1,0 +1,24 @@
+{
+  "filename": "NPE_COI_scan.pdf",
+  "files": [
+    "NPE_COI_scan.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Northbridge Precision Engineering Pte Ltd",
+    "uen": "201377812E",
+    "incorporation_date": "2013-03-31",
+    "company_type": "Private company limited by shares",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2014-06-25",
+    "company_former_name": "Diamond Rim Investments Pte. Ltd.",
+    "company_former_name_change_date": "2014-05-25"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

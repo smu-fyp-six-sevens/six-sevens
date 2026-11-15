@@ -1,0 +1,27 @@
+{
+  "filename": "KohPS_Salary_Slip_20260825.pdf",
+  "files": [
+    "KohPS_Salary_Slip_20260825.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Koh Pei Shan",
+    "company_name": "Greenfield Agri-Tech Pte Ltd",
+    "net_pay": 6166.66,
+    "basic_pay": 6990.0,
+    "employee_cpf": 1494.0
+  },
+  "not_printed": {
+    "company_address": "9 Temasek Boulevard, #02-04, Singapore 038989",
+    "total_earnings": 7760.0,
+    "total_deductions": 1593.34,
+    "pay_date": "2026-07-31",
+    "pay_period_end": "2026-07-31"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

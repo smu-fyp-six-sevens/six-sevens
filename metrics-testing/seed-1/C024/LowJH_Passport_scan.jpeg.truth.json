@@ -1,0 +1,26 @@
+{
+  "filename": "LowJH_Passport_scan.jpeg",
+  "files": [
+    "LowJH_Passport_scan.jpeg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Low Jun Hao",
+    "passport_number": "E9265217H",
+    "date_of_birth": "1989-10-22",
+    "date_of_expiry": "2029-06-16",
+    "date_of_issue": "2019-06-16",
+    "place_of_birth": "Singapore",
+    "sex": "M",
+    "nric_number": "S8903368C"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

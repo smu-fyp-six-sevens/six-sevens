@@ -1,0 +1,22 @@
+{
+  "filename": "HDM_COI_scan.pdf",
+  "files": [
+    "HDM_COI_scan.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Harbourview Digital Media Pte Ltd",
+    "uen": "200991856C",
+    "incorporation_date": "2009-09-18",
+    "company_type": "Private company limited by shares",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2009-09-18"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,38 @@
+{
+  "filename": "VPIS_Constitution.pdf",
+  "files": [
+    "VPIS_Constitution.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Vantage Point IT Solutions Pte Ltd",
+    "uen": "201630706M",
+    "incorporation_date": "2016-10-21",
+    "company_address": "116 Marsiling Rise, #02-59, Singapore 730116",
+    "share_capital": 1000000.0,
+    "issued_shares": 1000000,
+    "subscribers": [
+      {
+        "name": "Ng Zhen Yu",
+        "address": "116 Marsiling Rise, #02-59, Singapore 730116",
+        "id_number": "S8475358J",
+        "shares": 750000
+      },
+      {
+        "name": "Chan Shu Fen",
+        "address": "243A Tengah Central, #04-37, Singapore 691243",
+        "id_number": "S8523729B",
+        "shares": 250000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2016-10-21"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

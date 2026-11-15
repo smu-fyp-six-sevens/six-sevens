@@ -251,6 +251,10 @@ class Settings:
     # Both optional: without them the anonymous limits apply, and a lookup
     # that hits its rate limit is reported as unable to assess.
     DATA_GOV_SG_API_KEY: str = _str("DATA_GOV_SG_API_KEY")
+    # Testing only: answer ACRA lookups for the synthetic test companies from registry_lookups/
+    # synthetic_acra_registry.json instead of data.gov.sg, whose register doesn't hold their made-up UENs. Any
+    # other UEN is still looked up for real. Never set it for real applications.
+    SYNTHETIC_ACRA_REGISTRY: bool = _bool("SYNTHETIC_ACRA_REGISTRY", False)
     ONEMAP_API_TOKEN: str = _str("ONEMAP_API_TOKEN")
     # URA Data Service access key (eservice.ura.gov.sg/maps/api): for "Approved Residential
     # Use". Optional: without it that lookup is skipped and zoning alone is used.

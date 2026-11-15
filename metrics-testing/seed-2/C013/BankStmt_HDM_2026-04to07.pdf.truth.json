@@ -1,0 +1,336 @@
+{
+  "filename": "BankStmt_HDM_2026-04to07.pdf",
+  "files": [
+    "BankStmt_HDM_2026-04to07.pdf"
+  ],
+  "document_type": "bank_statement",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "bank_name": "DBS Bank Ltd",
+    "account_number": "1229278096",
+    "company_name": "HARBOURVIEW DIGITAL MEDIA PTE LTD",
+    "company_address": "1 GATEWAY DRIVE, #06-04, SINGAPORE 608531",
+    "entity_type": "corporate",
+    "statement_period_start": "2026-04-01",
+    "statement_period_end": "2026-07-31",
+    "opening_balance": 62279.13,
+    "ledger_balance": 77856.23,
+    "transactions": [
+      {
+        "date": "2026-04-01",
+        "description": "GIRO PAYMENT PREMISES RENTAL APR26",
+        "amount": -7370.0,
+        "balance": 54909.13
+      },
+      {
+        "date": "2026-04-05",
+        "description": "Inward PayNow PAYMENT SG3P897388581666 C488598639095 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 15,417",
+        "amount": 15416.8,
+        "balance": 70325.93
+      },
+      {
+        "date": "2026-04-06",
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT FAIRPRICE FINEST SI NG 06APR 4996-XXXX-XXXX-7983",
+        "amount": -52.87,
+        "balance": 70273.06
+      },
+      {
+        "date": "2026-04-10",
+        "description": "Inward PayNow PAYMENT SG3P581045786935 C510939942118 OTHER SUNRISE PROVISIONS PTE LTD SGD 12,712",
+        "amount": 12711.83,
+        "balance": 82984.89
+      },
+      {
+        "date": "2026-04-10",
+        "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+        "amount": -1078.96,
+        "balance": 81905.93
+      },
+      {
+        "date": "2026-04-13",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT23498684946 0016RF1766357 UNITED PAPER SUPPLY PTE. LTD. SGD 8,151",
+        "amount": -8150.65,
+        "balance": 73755.28
+      },
+      {
+        "date": "2026-04-16",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT34548253628 0016RF6388477 MERIDIAN LOGISTICS SERVICES SGD 8,864",
+        "amount": -8864.27,
+        "balance": 64891.01
+      },
+      {
+        "date": "2026-04-21",
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT COURTS MEGASTORE SI NG 21APR 4309-XXXX-XXXX-5723",
+        "amount": -831.14,
+        "balance": 64059.87
+      },
+      {
+        "date": "2026-04-23",
+        "description": "Inward PayNow PAYMENT SG3P927166206481 C741058475379 OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 13,794",
+        "amount": 13794.2,
+        "balance": 77854.07
+      },
+      {
+        "date": "2026-04-23",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT87867320753 0016RF9615973 TAN HENG PACKAGING PTE LTD SGD 7,952",
+        "amount": -7952.4,
+        "balance": 69901.67
+      },
+      {
+        "date": "2026-04-25",
+        "description": "FAST PAYMENT SALARY EBGPP52935188051306C100000000000 M:+6593344295 SALARY PAYMENT SGD 5,047",
+        "amount": -5047.39,
+        "balance": 64854.28
+      },
+      {
+        "date": "2026-04-25",
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP93305497137447C100000000000 M:IDEAL SALARY PAYMENT",
+        "amount": -0.5,
+        "balance": 64853.78
+      },
+      {
+        "date": "2026-04-30",
+        "description": "SERVICE CHARGE",
+        "amount": -35.0,
+        "balance": 64818.78
+      },
+      {
+        "date": "2026-05-02",
+        "description": "GIRO PAYMENT PREMISES RENTAL MAY26",
+        "amount": -7370.0,
+        "balance": 57448.78
+      },
+      {
+        "date": "2026-05-03",
+        "description": "Inward PayNow PAYMENT SG3P991097309660 C248233216221 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 18,886",
+        "amount": 18886.46,
+        "balance": 76335.24
+      },
+      {
+        "date": "2026-05-06",
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT SHELL SERVICE STN SI NG 06MAY 4980-XXXX-XXXX-9505",
+        "amount": -775.38,
+        "balance": 75559.86
+      },
+      {
+        "date": "2026-05-09",
+        "description": "Inward PayNow PAYMENT SG3P969904209194 C734121341478 OTHER SUNRISE PROVISIONS PTE LTD SGD 12,972",
+        "amount": 12972.21,
+        "balance": 88532.07
+      },
+      {
+        "date": "2026-05-13",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT37451118184 0016RF4257449 UNITED PAPER SUPPLY PTE. LTD. SGD 9,085",
+        "amount": -9085.16,
+        "balance": 79446.91
+      },
+      {
+        "date": "2026-05-14",
+        "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+        "amount": -967.2,
+        "balance": 78479.71
+      },
+      {
+        "date": "2026-05-14",
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT SHELL SERVICE STN SI NG 14MAY 4238-XXXX-XXXX-5696",
+        "amount": -77.86,
+        "balance": 78401.85
+      },
+      {
+        "date": "2026-05-16",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT60098482631 0016RF2049619 MERIDIAN LOGISTICS SERVICES SGD 7,756",
+        "amount": -7755.71,
+        "balance": 70646.14
+      },
+      {
+        "date": "2026-05-25",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT15907771911 0016RF4135653 TAN HENG PACKAGING PTE LTD SGD 8,645",
+        "amount": -8644.7,
+        "balance": 62001.44
+      },
+      {
+        "date": "2026-05-25",
+        "description": "FAST PAYMENT SALARY EBGPP99971205456931C100000000000 M:+6581979547 SALARY PAYMENT SGD 5,047",
+        "amount": -5047.39,
+        "balance": 56954.05
+      },
+      {
+        "date": "2026-05-25",
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP24959318869290C100000000000 M:IDEAL SALARY PAYMENT",
+        "amount": -0.5,
+        "balance": 56953.55
+      },
+      {
+        "date": "2026-05-27",
+        "description": "Inward PayNow PAYMENT SG3P246696570153 C950580896946 OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 13,209",
+        "amount": 13208.64,
+        "balance": 70162.19
+      },
+      {
+        "date": "2026-05-31",
+        "description": "SERVICE CHARGE",
+        "amount": -35.0,
+        "balance": 70127.19
+      },
+      {
+        "date": "2026-06-02",
+        "description": "GIRO PAYMENT PREMISES RENTAL JUN26",
+        "amount": -7370.0,
+        "balance": 62757.19
+      },
+      {
+        "date": "2026-06-05",
+        "description": "Inward PayNow PAYMENT SG3P407425765690 C731984834703 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 15,864",
+        "amount": 15863.56,
+        "balance": 78620.75
+      },
+      {
+        "date": "2026-06-05",
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT SHELL SERVICE STN SI NG 05JUN 4487-XXXX-XXXX-2332",
+        "amount": -320.63,
+        "balance": 78300.12
+      },
+      {
+        "date": "2026-06-07",
+        "description": "Inward PayNow PAYMENT SG3P928977420363 C823352970527 OTHER SUNRISE PROVISIONS PTE LTD SGD 15,540",
+        "amount": 15540.18,
+        "balance": 93840.3
+      },
+      {
+        "date": "2026-06-10",
+        "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+        "amount": -1021.09,
+        "balance": 92819.21
+      },
+      {
+        "date": "2026-06-16",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT38414352914 0016RF4396736 UNITED PAPER SUPPLY PTE. LTD. SGD 9,651",
+        "amount": -9650.79,
+        "balance": 83168.42
+      },
+      {
+        "date": "2026-06-17",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT73129921535 0016RF1182708 MERIDIAN LOGISTICS SERVICES SGD 8,714",
+        "amount": -8713.5,
+        "balance": 74454.92
+      },
+      {
+        "date": "2026-06-23",
+        "description": "Inward PayNow PAYMENT SG3P950150353610 C468590066874 OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 14,386",
+        "amount": 14385.51,
+        "balance": 88840.43
+      },
+      {
+        "date": "2026-06-23",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT95349079802 0016RF9125961 TAN HENG PACKAGING PTE LTD SGD 7,997",
+        "amount": -7996.82,
+        "balance": 80843.61
+      },
+      {
+        "date": "2026-06-25",
+        "description": "FAST PAYMENT SALARY EBGPP99499241443598C100000000000 M:+6582932534 SALARY PAYMENT SGD 5,047",
+        "amount": -5047.39,
+        "balance": 75796.22
+      },
+      {
+        "date": "2026-06-25",
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP59875535496659C100000000000 M:IDEAL SALARY PAYMENT",
+        "amount": -0.5,
+        "balance": 75795.72
+      },
+      {
+        "date": "2026-06-30",
+        "description": "SERVICE CHARGE",
+        "amount": -35.0,
+        "balance": 75760.72
+      },
+      {
+        "date": "2026-07-01",
+        "description": "GIRO PAYMENT PREMISES RENTAL JUL26",
+        "amount": -7370.0,
+        "balance": 68390.72
+      },
+      {
+        "date": "2026-07-04",
+        "description": "Inward PayNow PAYMENT SG3P949458371676 C416957056536 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 15,315",
+        "amount": 15314.84,
+        "balance": 83705.56
+      },
+      {
+        "date": "2026-07-10",
+        "description": "Inward PayNow PAYMENT SG3P462358989723 C529162879537 OTHER SUNRISE PROVISIONS PTE LTD SGD 13,916",
+        "amount": 13915.63,
+        "balance": 97621.19
+      },
+      {
+        "date": "2026-07-13",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT57037085953 0016RF6589378 UNITED PAPER SUPPLY PTE. LTD. SGD 8,438",
+        "amount": -8437.62,
+        "balance": 89183.57
+      },
+      {
+        "date": "2026-07-15",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT75937034309 0016RF6967070 MERIDIAN LOGISTICS SERVICES SGD 6,766",
+        "amount": -6765.51,
+        "balance": 82418.06
+      },
+      {
+        "date": "2026-07-18",
+        "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+        "amount": -1124.07,
+        "balance": 81293.99
+      },
+      {
+        "date": "2026-07-18",
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT FAIRPRICE FINEST SI NG 18JUL 4634-XXXX-XXXX-1144",
+        "amount": -626.18,
+        "balance": 80667.81
+      },
+      {
+        "date": "2026-07-21",
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT SHELL SERVICE STN SI NG 21JUL 4620-XXXX-XXXX-4280",
+        "amount": -825.12,
+        "balance": 79842.69
+      },
+      {
+        "date": "2026-07-23",
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT92333389812 0016RF7362793 TAN HENG PACKAGING PTE LTD SGD 9,356",
+        "amount": -9356.21,
+        "balance": 70486.48
+      },
+      {
+        "date": "2026-07-25",
+        "description": "Inward PayNow PAYMENT SG3P164601376249 C566211878922 OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 12,453",
+        "amount": 12452.64,
+        "balance": 82939.12
+      },
+      {
+        "date": "2026-07-25",
+        "description": "FAST PAYMENT SALARY EBGPP22792096016020C100000000000 M:+6595073183 SALARY PAYMENT SGD 5,047",
+        "amount": -5047.39,
+        "balance": 77891.73
+      },
+      {
+        "date": "2026-07-25",
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP42416757639975C100000000000 M:IDEAL SALARY PAYMENT",
+        "amount": -0.5,
+        "balance": 77891.23
+      },
+      {
+        "date": "2026-07-31",
+        "description": "SERVICE CHARGE",
+        "amount": -35.0,
+        "balance": 77856.23
+      }
+    ]
+  },
+  "not_printed": {
+    "total_credits": 174462.5,
+    "total_debits": 158885.4
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

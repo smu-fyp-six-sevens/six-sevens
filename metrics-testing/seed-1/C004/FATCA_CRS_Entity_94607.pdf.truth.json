@@ -1,0 +1,38 @@
+{
+  "filename": "FATCA_CRS_Entity_94607.pdf",
+  "files": [
+    "FATCA_CRS_Entity_94607.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Northbridge Precision Engineering Pte Ltd",
+    "company_address": "3 Soon Lee Street, #01-13, Singapore 627606",
+    "tin": "201377812E",
+    "declaration_date": "2026-09-11",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201377812E"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Tan Kok Wai"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Teo Zhi Hao"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

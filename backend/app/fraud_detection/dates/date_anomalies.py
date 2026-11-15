@@ -553,12 +553,13 @@ def _check_cr_age_at_opening(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck
         opened = _parse_field_date(row.get("date_opened"))
         if opened is None:
             continue
-        age_days = (opened - dob).days
+        # Age in whole years, by birthday: days / 365.25 puts someone on their 21st birthday a fraction short of 21.
+        age = opened.year - dob.year - ((opened.month, opened.day) < (dob.month, dob.day))
         min_age = 21 if "card" in str(row.get("product_type") or "").lower() else 18
-        if age_days < min_age * 365.25:
+        if age < min_age:
             findings.append(_finding(
                 "CR.AGE_AT_OPENING", "impossible",
-                f"Account {i + 1} was opened at age {age_days / 365.25:.1f}, below the "
+                f"Account {i + 1} was opened at age {age}, below the "
                 f"minimum of {min_age} for this product type",
                 field=f"accounts[{i}].date_opened",
             ))

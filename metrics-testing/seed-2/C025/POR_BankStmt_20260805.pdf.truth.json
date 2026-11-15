@@ -1,0 +1,251 @@
+{
+  "filename": "POR_BankStmt_20260805.pdf",
+  "files": [
+    "POR_BankStmt_20260805.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [
+    "bank_statement"
+  ],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "TOH YONG SHENG",
+    "individual_address": "273C JURONG WEST AVENUE 3, #06-365, SINGAPORE 643273",
+    "entity_type": "individual",
+    "account_number": "762-484537-263",
+    "statement_period_start": "2026-04-01",
+    "statement_period_end": "2026-07-31",
+    "opening_balance": 3771.45,
+    "ledger_balance": 25624.32,
+    "transactions": [
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -233.56,
+        "balance": 3537.89
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 6751.2,
+        "balance": 10289.09
+      },
+      {
+        "description": "RETAIL CARD PAYMENT",
+        "amount": -616.52,
+        "balance": 9672.57
+      },
+      {
+        "description": "PHARMACY CARD PAYMENT",
+        "amount": -691.26,
+        "balance": 8981.31
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -280,
+        "balance": 8701.31
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 3.38,
+        "balance": 8704.69
+      },
+      {
+        "description": "SUPERMARKET CARD PAYMENT",
+        "amount": -111.91,
+        "balance": 8592.78
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -64.79,
+        "balance": 8527.99
+      },
+      {
+        "description": "ONLINE TRANSFER",
+        "amount": 825.09,
+        "balance": 9353.08
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 6751.2,
+        "balance": 16104.28
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -230,
+        "balance": 15874.28
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -280,
+        "balance": 15594.28
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -180,
+        "balance": 15414.28
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 9.84,
+        "balance": 15424.12
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -250,
+        "balance": 15174.12
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -177.97,
+        "balance": 14996.15
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 6751.2,
+        "balance": 21747.35
+      },
+      {
+        "description": "SUPERMARKET CARD PAYMENT",
+        "amount": -193.42,
+        "balance": 21553.93
+      },
+      {
+        "description": "ONLINE TRANSFER",
+        "amount": -917.28,
+        "balance": 20636.65
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 16.32,
+        "balance": 20652.97
+      },
+      {
+        "date": "2026-07-01",
+        "description": "ATM WITHDRAWAL",
+        "amount": -270,
+        "balance": 20382.97
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -230,
+        "balance": 20152.97
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -219.87,
+        "balance": 19933.1
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -260,
+        "balance": 19673.1
+      },
+      {
+        "description": "PHARMACY CARD PAYMENT",
+        "amount": -343.62,
+        "balance": 19329.48
+      },
+      {
+        "description": "PHARMACY CARD PAYMENT",
+        "amount": -492.2,
+        "balance": 18837.28
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 6751.2,
+        "balance": 25588.48
+      },
+      {
+        "date": "2026-07-31",
+        "description": "INTEREST CREDIT",
+        "amount": 35.84,
+        "balance": 25624.32
+      }
+    ]
+  },
+  "not_printed": {
+    "transactions": [
+      {
+        "date": "2026-04-12"
+      },
+      {
+        "date": "2026-04-16"
+      },
+      {
+        "date": "2026-04-19"
+      },
+      {
+        "date": "2026-04-22"
+      },
+      {
+        "date": "2026-04-30"
+      },
+      {
+        "date": "2026-04-30"
+      },
+      {
+        "date": "2026-05-01"
+      },
+      {
+        "date": "2026-05-10"
+      },
+      {
+        "date": "2026-05-19"
+      },
+      {
+        "date": "2026-05-22"
+      },
+      {
+        "date": "2026-05-25"
+      },
+      {
+        "date": "2026-05-31"
+      },
+      {
+        "date": "2026-05-31"
+      },
+      {
+        "date": "2026-05-31"
+      },
+      {
+        "date": "2026-06-03"
+      },
+      {
+        "date": "2026-06-05"
+      },
+      {
+        "date": "2026-06-16"
+      },
+      {
+        "date": "2026-06-18"
+      },
+      {
+        "date": "2026-06-29"
+      },
+      {
+        "date": "2026-06-30"
+      },
+      {
+        "date": "2026-07-02"
+      },
+      {
+        "date": "2026-07-12"
+      },
+      {
+        "date": "2026-07-15"
+      },
+      {
+        "date": "2026-07-16"
+      },
+      {
+        "date": "2026-07-18"
+      },
+      {
+        "date": "2026-07-22"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

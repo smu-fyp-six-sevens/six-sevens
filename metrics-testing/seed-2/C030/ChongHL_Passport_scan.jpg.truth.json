@@ -1,0 +1,26 @@
+{
+  "filename": "ChongHL_Passport_scan.jpg",
+  "files": [
+    "ChongHL_Passport_scan.jpg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Chong Hui Ling",
+    "passport_number": "E4694323C",
+    "date_of_birth": "1976-06-10",
+    "date_of_expiry": "2031-02-02",
+    "date_of_issue": "2021-02-02",
+    "place_of_birth": "Singapore",
+    "sex": "F",
+    "nric_number": "S7641659A"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

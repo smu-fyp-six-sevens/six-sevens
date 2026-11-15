@@ -1,0 +1,27 @@
+{
+  "filename": "Payslip_Jul2026_Iskandar.pdf",
+  "files": [
+    "Payslip_Jul2026_Iskandar.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Iskandar bin Hamzah",
+    "company_name": "Ironleaf Building Services Pte Ltd",
+    "net_pay": 7798.08,
+    "basic_pay": 8870.0,
+    "employee_cpf": 1483.0
+  },
+  "not_printed": {
+    "company_address": "31 Woodlands Close, #01-09, Singapore 737855",
+    "total_earnings": 9340.0,
+    "total_deductions": 1541.92,
+    "pay_date": "2026-07-31",
+    "pay_period_end": "2026-07-31"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

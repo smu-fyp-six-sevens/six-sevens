@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any
 
+from ....config import settings
 from ....identifiers import company_names_match, uen_key
 from ...numerical_validation.common import _parse_field_date
 from ...numerical_validation.models import SkippedCheck
@@ -25,6 +26,7 @@ from .datagov import collection, dataset_name, datastore_search
 from .http import LookupUnavailable
 from .onemap import POSTAL_CODE_RE
 from .models import RegistryFinding
+from . import synthetic_acra
 
 SOURCE = "ACRA (data.gov.sg)"
 UEN_COLLECTION = 1  # "Registered Entities with Unique Entity Number"
@@ -96,6 +98,15 @@ def _is_stale(last_updated: datetime | None) -> bool:
 
 async def lookup_entity(uen: str) -> tuple[AcraEntity | None, datetime | None]:
     """The entity, and when ACRA's register was last updated (to judge a "not found")."""
+    if settings.SYNTHETIC_ACRA_REGISTRY:
+        record = synthetic_acra.lookup(uen)
+        if record is not None:
+            return AcraEntity(
+                uen=record["uen"], name=record["name"], status=record["status"],
+                incorporation_date=_parse_field_date(record.get("incorporation_date")),
+                postal_code=record.get("postal_code"), address=record.get("address", ""),
+                former_names=tuple(record.get("former_names") or ()),
+            ), datetime.now(timezone.utc)
     datasets, last_updated = await _uen_datasets()
     basic = None
     for dataset_id in datasets:

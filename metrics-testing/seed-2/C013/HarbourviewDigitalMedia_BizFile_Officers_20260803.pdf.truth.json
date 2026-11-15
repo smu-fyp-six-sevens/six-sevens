@@ -1,0 +1,55 @@
+{
+  "filename": "HarbourviewDigitalMedia_BizFile_Officers_20260803.pdf",
+  "files": [
+    "HarbourviewDigitalMedia_BizFile_Officers_20260803.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "HARBOURVIEW DIGITAL MEDIA PTE LTD",
+    "uen": "200991856C",
+    "incorporation_date": "2009-09-18",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "1 GATEWAY DRIVE, #06-04, SINGAPORE 608531",
+    "share_capital": 750000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "LIM ZHEN YU",
+        "identification_no": "S9238419E",
+        "address": "413 BEDOK NORTH AVENUE 2, #12-323, SINGAPORE 460413",
+        "shares": 450000
+      },
+      {
+        "name": "KOH CHEE KEONG",
+        "identification_no": "S7574298C",
+        "address": "159 WOODLANDS STREET 13, #10-310, SINGAPORE 730159",
+        "shares": 300000
+      }
+    ],
+    "officers": [
+      {
+        "name": "LIM ZHEN YU",
+        "identification_no": "S9238419E",
+        "position": "Director",
+        "date_of_appointment": "2009-09-18"
+      },
+      {
+        "name": "RAJESWARI D/O MUTHUSAMY",
+        "identification_no": "S7912065J",
+        "position": "Secretary",
+        "date_of_appointment": "2009-10-23"
+      }
+    ],
+    "document_date": "2026-08-04",
+    "last_agm_date": "2026-04-17",
+    "last_annual_return_date": "2026-05-10",
+    "financial_year_end": "2025-12-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

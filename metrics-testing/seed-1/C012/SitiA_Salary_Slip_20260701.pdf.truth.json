@@ -1,0 +1,27 @@
+{
+  "filename": "SitiA_Salary_Slip_20260701.pdf",
+  "files": [
+    "SitiA_Salary_Slip_20260701.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Siti Aishah binte Kamal",
+    "company_name": "Quillstone Corporate Services Pte Ltd",
+    "net_pay": 5517.53,
+    "basic_pay": 6430.0,
+    "total_earnings": 7670.0,
+    "total_deductions": 2152.47,
+    "employee_cpf": 1380.0,
+    "pay_date": "2026-06-30",
+    "pay_period_end": "2026-06-30"
+  },
+  "not_printed": {
+    "company_address": "20 Pasir Panjang Road, #06-09, Singapore 117439"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

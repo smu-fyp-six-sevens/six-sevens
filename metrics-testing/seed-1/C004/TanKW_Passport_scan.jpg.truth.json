@@ -1,0 +1,26 @@
+{
+  "filename": "TanKW_Passport_scan.jpg",
+  "files": [
+    "TanKW_Passport_scan.jpg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Tan Kok Wai",
+    "passport_number": "E5510794D",
+    "date_of_birth": "1967-07-09",
+    "date_of_expiry": "2031-12-03",
+    "date_of_issue": "2021-12-03",
+    "place_of_birth": "Singapore",
+    "sex": "F",
+    "nric_number": "S1390314Z"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

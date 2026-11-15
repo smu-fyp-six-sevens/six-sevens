@@ -1,0 +1,26 @@
+{
+  "filename": "NgZY_Passport_scan.jpg",
+  "files": [
+    "NgZY_Passport_scan.jpg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Ng Zhen Yu",
+    "passport_number": "E5359031I",
+    "date_of_birth": "1984-05-25",
+    "date_of_expiry": "2029-02-20",
+    "date_of_issue": "2019-02-20",
+    "place_of_birth": "Singapore",
+    "sex": "M",
+    "nric_number": "S8475358J"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,36 @@
+{
+  "filename": "NPE_BalanceSheet_Audited.pdf",
+  "files": [
+    "NPE_BalanceSheet_Audited.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Northbridge Precision Engineering Pte Ltd",
+    "uen": "201377812E",
+    "financial_year_end": "2025-12-31",
+    "signing_date": "2026-03-28",
+    "revenue": 3981000.0,
+    "profit_for_the_year": 453400.0,
+    "profit_for_the_year_prior_year": 297300.0,
+    "total_assets": 3917700.0,
+    "total_liabilities": 2070000.0,
+    "total_equity": 1847700.0,
+    "share_capital": 750000.0,
+    "total_current_assets": 2235700.0,
+    "total_non_current_assets": 1682000.0,
+    "total_current_liabilities": 2070000.0,
+    "total_non_current_liabilities": 0,
+    "retained_earnings_closing": 1097700.0,
+    "retained_earnings_closing_prior_year": 644300.0,
+    "total_assets_prior_year": 2826200.0,
+    "total_liabilities_prior_year": 1431900.0,
+    "total_equity_prior_year": 1394300.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

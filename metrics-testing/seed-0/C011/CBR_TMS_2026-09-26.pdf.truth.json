@@ -1,0 +1,26 @@
+{
+  "filename": "CBR_TMS_2026-09-26.pdf",
+  "files": [
+    "CBR_TMS_2026-09-26.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Sim Teck Huat",
+    "id_number": "S8651228I",
+    "date_of_birth": "1986-01-23",
+    "nationality": "Singaporean",
+    "individual_address": "104 Jalan Dusun, #04-110, Singapore 320104",
+    "report_date": "2026-09-29",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 750000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

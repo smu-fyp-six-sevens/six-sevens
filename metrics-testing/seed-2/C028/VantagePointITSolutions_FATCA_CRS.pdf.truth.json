@@ -1,0 +1,38 @@
+{
+  "filename": "VantagePointITSolutions_FATCA_CRS.pdf",
+  "files": [
+    "VantagePointITSolutions_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Vantage Point IT Solutions Pte Ltd",
+    "company_address": "116 Marsiling Rise, #02-59, Singapore 730116",
+    "tin": "201630706M",
+    "declaration_date": "2026-07-03",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201630706M"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Ng Zhen Yu"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Chan Shu Fen"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

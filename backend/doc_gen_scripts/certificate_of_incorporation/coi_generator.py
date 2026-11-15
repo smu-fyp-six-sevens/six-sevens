@@ -11,6 +11,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import truth
 from case_facts import seeded_rng
 
 FONT = "Helvetica"
@@ -513,4 +514,5 @@ def generate_certificate_of_incorporation(
 
     out_path = Path(output_path)
     write_pdf_reportlab(context, out_path)
+    truth.record(out_path, "certificate_of_incorporation", truth.certificate_of_incorporation(context))
     return {"output_path": str(out_path), "company_name": context["company_name"], "company_number": context["uen"]}

@@ -1,0 +1,38 @@
+{
+  "filename": "NinefoldPrintPackaging_FATCA_CRS.pdf",
+  "files": [
+    "NinefoldPrintPackaging_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Ninefold Print & Packaging Pte Ltd",
+    "company_address": "438A Alexandra Road, #01-22, Singapore 119967",
+    "tin": "201065233R",
+    "declaration_date": "2026-07-07",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201065233R"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Priya d/o Subramaniam"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Low Jun Hao"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

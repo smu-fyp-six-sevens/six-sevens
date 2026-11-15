@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_8442_front.jpg",
+  "files": [
+    "NRIC_8442_front.jpg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S8818442D",
+    "individual_name": "Mohamed Hafiz bin Yusof",
+    "date_of_birth": "1988-10-06",
+    "country": "Singapore",
+    "race": "Malay",
+    "sex": "M",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,24 @@
+{
+  "filename": "EBT_COI_scan.pdf",
+  "files": [
+    "EBT_COI_scan.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Evergreen Botanics Trading Pte Ltd",
+    "uen": "201013127C",
+    "incorporation_date": "2010-06-10",
+    "company_type": "Limited Exempt Private Company",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2016-10-23",
+    "company_former_name": "Vantage Cove Distribution Pte. Ltd.",
+    "company_former_name_change_date": "2016-09-22"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

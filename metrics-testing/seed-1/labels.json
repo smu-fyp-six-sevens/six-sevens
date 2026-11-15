@@ -1,0 +1,1662 @@
+{
+  "seed": 1,
+  "mastersheet": "v18_document_mastersheet.xlsx",
+  "risk_rubric": "The risk rubric, from what is injected into the case (never from what the system says about it):\n  Low     nothing is forged.\n  Medium  one document carries cosmetic edits only (spelling, font, metadata) and no value is changed.\n  High    a value is changed (an amount, a date, an identity or address detail), an image is manipulated or\n          generated, or two or more documents are forged.\n  Critical  three or more documents are forged, the corroboration the system's own Critical rule asks for.",
+  "cases": {
+    "C004": {
+      "company_name": "Northbridge Precision Engineering Pte Ltd",
+      "expected_risk": "Low",
+      "fraud_case": false,
+      "forged_documents": [],
+      "documents": [
+        {
+          "filename": "ACRA_Incumbency_20260907.pdf",
+          "files": [
+            "ACRA_Incumbency_20260907.pdf"
+          ],
+          "document_type": "certificate_of_incumbency",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 13
+        },
+        {
+          "filename": "AcctStatement_NPE_20260907.pdf",
+          "files": [
+            "AcctStatement_NPE_20260907.pdf"
+          ],
+          "document_type": "bank_statement",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 10
+        },
+        {
+          "filename": "CBR_NPE_2026-09-08.pdf",
+          "files": [
+            "CBR_NPE_2026-09-08.pdf"
+          ],
+          "document_type": "credit_report",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "FATCA_CRS_Entity_94607.pdf",
+          "files": [
+            "FATCA_CRS_Entity_94607.pdf"
+          ],
+          "document_type": "fatca_crs_declaration",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "FacilityLetter_NPE_1.pdf",
+          "files": [
+            "FacilityLetter_NPE_1.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "LoanOffer_12806.pdf",
+          "files": [
+            "LoanOffer_12806.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "NOA_YA2025_201377812E.pdf",
+          "files": [
+            "NOA_YA2025_201377812E.pdf"
+          ],
+          "document_type": "notice_of_assessment",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "NPE_BalanceSheet_Audited.pdf",
+          "files": [
+            "NPE_BalanceSheet_Audited.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 20
+        },
+        {
+          "filename": "NPE_COI_scan.pdf",
+          "files": [
+            "NPE_COI_scan.pdf"
+          ],
+          "document_type": "certificate_of_incorporation",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 6
+        },
+        {
+          "filename": "NPE_Constitution.pdf",
+          "files": [
+            "NPE_Constitution.pdf"
+          ],
+          "document_type": "company_constitution",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "POR_BankStmt_20260907.pdf",
+          "files": [
+            "POR_BankStmt_20260907.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "Payslip_Aug2026_TeoZH.pdf",
+          "files": [
+            "Payslip_Aug2026_TeoZH.pdf"
+          ],
+          "document_type": "payslip",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 10
+        },
+        {
+          "filename": "TanKW_Passport_scan.jpg",
+          "files": [
+            "TanKW_Passport_scan.jpg"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "TeoZH_Passport_scan.png",
+          "files": [
+            "TeoZH_Passport_scan.png"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        }
+      ]
+    },
+    "C008": {
+      "company_name": "Ironleaf Building Services Pte Ltd",
+      "expected_risk": "High",
+      "fraud_case": true,
+      "forged_documents": [
+        "ACRA_CertIncorp_201651600K.pdf",
+        "CreditReport_CBS_20260808.pdf"
+      ],
+      "documents": [
+        {
+          "filename": "ACRA_CertIncorp_201651600K.pdf",
+          "files": [
+            "ACRA_CertIncorp_201651600K.pdf"
+          ],
+          "document_type": "certificate_of_incorporation",
+          "fraud_expected": true,
+          "dimensions": [
+            "Date Anomalies"
+          ],
+          "scored_fields": 6
+        },
+        {
+          "filename": "BankStmt_IBS_2026-04to07.pdf",
+          "files": [
+            "BankStmt_IBS_2026-04to07.pdf"
+          ],
+          "document_type": "bank_statement",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 11
+        },
+        {
+          "filename": "BusinessProfile_IBS_20260808.pdf",
+          "files": [
+            "BusinessProfile_IBS_20260808.pdf"
+          ],
+          "document_type": "certificate_of_incumbency",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 13
+        },
+        {
+          "filename": "ChuaZY_Passport_scan.png",
+          "files": [
+            "ChuaZY_Passport_scan.png"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "CreditReport_CBS_20260808.pdf",
+          "files": [
+            "CreditReport_CBS_20260808.pdf"
+          ],
+          "document_type": "credit_report",
+          "fraud_expected": true,
+          "dimensions": [
+            "Metadata",
+            "Misalignment"
+          ],
+          "scored_fields": 7
+        },
+        {
+          "filename": "FATCA_CRS_Entity_90175.pdf",
+          "files": [
+            "FATCA_CRS_Entity_90175.pdf"
+          ],
+          "document_type": "fatca_crs_declaration",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "IBS_BalanceSheet_Audited.pdf",
+          "files": [
+            "IBS_BalanceSheet_Audited.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 20
+        },
+        {
+          "filename": "IBS_Constitution.pdf",
+          "files": [
+            "IBS_Constitution.pdf"
+          ],
+          "document_type": "company_constitution",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "IRAS_NOA_Company_20250807.pdf",
+          "files": [
+            "IRAS_NOA_Company_20250807.pdf"
+          ],
+          "document_type": "notice_of_assessment",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "Iskandar_Passport_scan.jpg",
+          "files": [
+            "Iskandar_Passport_scan.jpg"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "POR_UtilityBill_20260808.pdf",
+          "files": [
+            "POR_UtilityBill_20260808.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "Payslip_Jul2026_Iskandar.pdf",
+          "files": [
+            "Payslip_Jul2026_Iskandar.pdf"
+          ],
+          "document_type": "payslip",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 5
+        },
+        {
+          "filename": "SP_Utilities_IBS.pdf",
+          "files": [
+            "SP_Utilities_IBS.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 12
+        }
+      ]
+    },
+    "C010": {
+      "company_name": "Evergreen Botanics Trading Pte Ltd",
+      "expected_risk": "Low",
+      "fraud_case": false,
+      "forged_documents": [],
+      "documents": [
+        {
+          "filename": "BankStmt_EBT_2026-04to07.pdf",
+          "files": [
+            "BankStmt_EBT_2026-04to07.pdf"
+          ],
+          "document_type": "bank_statement",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 10
+        },
+        {
+          "filename": "BusinessProfile_EBT_20260825.pdf",
+          "files": [
+            "BusinessProfile_EBT_20260825.pdf"
+          ],
+          "document_type": "certificate_of_incumbency",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 14
+        },
+        {
+          "filename": "CBR_EBT_2026-08-25.pdf",
+          "files": [
+            "CBR_EBT_2026-08-25.pdf"
+          ],
+          "document_type": "credit_report",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "ChanBK_Passport_scan.jpg",
+          "files": [
+            "ChanBK_Passport_scan.jpg"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "ChanBK_Salary_Slip_20260825.pdf",
+          "files": [
+            "ChanBK_Salary_Slip_20260825.pdf"
+          ],
+          "document_type": "payslip",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 10
+        },
+        {
+          "filename": "EBT_COI_scan.pdf",
+          "files": [
+            "EBT_COI_scan.pdf"
+          ],
+          "document_type": "certificate_of_incorporation",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "EvergreenBotanicsTrading_Constitution_signed.pdf",
+          "files": [
+            "EvergreenBotanicsTrading_Constitution_signed.pdf"
+          ],
+          "document_type": "company_constitution",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "EvergreenBotanicsTrading_FinancialStatements_FY2025.pdf",
+          "files": [
+            "EvergreenBotanicsTrading_FinancialStatements_FY2025.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 20
+        },
+        {
+          "filename": "FATCA_SelfCert_EBT_2026.pdf",
+          "files": [
+            "FATCA_SelfCert_EBT_2026.pdf"
+          ],
+          "document_type": "fatca_crs_declaration",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "IRAS_NOA_Company_20250918.pdf",
+          "files": [
+            "IRAS_NOA_Company_20250918.pdf"
+          ],
+          "document_type": "notice_of_assessment",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "LoanOffer_48112.pdf",
+          "files": [
+            "LoanOffer_48112.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "NRIC_8442_back.jpg",
+          "files": [
+            "NRIC_8442_back.jpg"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 4
+        },
+        {
+          "filename": "NRIC_8442_front.jpg",
+          "files": [
+            "NRIC_8442_front.jpg"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "POR_BankStmt_20260825.pdf",
+          "files": [
+            "POR_BankStmt_20260825.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        }
+      ]
+    },
+    "C011": {
+      "company_name": "Tidewater Marine Supplies Pte Ltd",
+      "expected_risk": "Critical",
+      "fraud_case": true,
+      "forged_documents": [
+        "POR_NRIC_20260925.pdf",
+        "SP_Utilities_TMS.pdf",
+        "SimTH_Passport_scan.jpg",
+        "TayYS_Salary_Slip_20260925.pdf"
+      ],
+      "documents": [
+        {
+          "filename": "ACRA_CertIncorp_201657409E.pdf",
+          "files": [
+            "ACRA_CertIncorp_201657409E.pdf"
+          ],
+          "document_type": "certificate_of_incorporation",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 6
+        },
+        {
+          "filename": "BankStmt_TMS_2026-05to08.pdf",
+          "files": [
+            "BankStmt_TMS_2026-05to08.pdf"
+          ],
+          "document_type": "bank_statement",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 10
+        },
+        {
+          "filename": "CBR_TMS_2026-09-26.pdf",
+          "files": [
+            "CBR_TMS_2026-09-26.pdf"
+          ],
+          "document_type": "credit_report",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "FATCA_SelfCert_TMS_2026.pdf",
+          "files": [
+            "FATCA_SelfCert_TMS_2026.pdf"
+          ],
+          "document_type": "fatca_crs_declaration",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "LoanOffer_48214.pdf",
+          "files": [
+            "LoanOffer_48214.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 10
+        },
+        {
+          "filename": "NRIC_8175_back.jpg",
+          "files": [
+            "NRIC_8175_back.jpg"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 4
+        },
+        {
+          "filename": "NRIC_8175_front.jpg",
+          "files": [
+            "NRIC_8175_front.jpg"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "POR_NRIC_20260925.pdf",
+          "files": [
+            "POR_NRIC_20260925.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": true,
+          "dimensions": [
+            "AI-Generated"
+          ],
+          "scored_fields": 9
+        },
+        {
+          "filename": "POR_UtilityBill_20260925.jpeg",
+          "files": [
+            "POR_UtilityBill_20260925.jpeg"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "SP_Utilities_TMS.pdf",
+          "files": [
+            "SP_Utilities_TMS.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": true,
+          "dimensions": [
+            "Cross-Document"
+          ],
+          "scored_fields": 12
+        },
+        {
+          "filename": "SimTH_Passport_scan.jpg",
+          "files": [
+            "SimTH_Passport_scan.jpg"
+          ],
+          "document_type": "passport",
+          "fraud_expected": true,
+          "dimensions": [
+            "Metadata"
+          ],
+          "scored_fields": 8
+        },
+        {
+          "filename": "TMS_BalanceSheet_Audited.pdf",
+          "files": [
+            "TMS_BalanceSheet_Audited.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 20
+        },
+        {
+          "filename": "TMS_Constitution.pdf",
+          "files": [
+            "TMS_Constitution.pdf"
+          ],
+          "document_type": "company_constitution",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "TayYS_Salary_Slip_20260925.pdf",
+          "files": [
+            "TayYS_Salary_Slip_20260925.pdf"
+          ],
+          "document_type": "payslip",
+          "fraud_expected": true,
+          "dimensions": [
+            "Text Overlay"
+          ],
+          "scored_fields": 5
+        },
+        {
+          "filename": "TidewaterMarineSupplies_BizFile_Officers_20260925.pdf",
+          "files": [
+            "TidewaterMarineSupplies_BizFile_Officers_20260925.pdf"
+          ],
+          "document_type": "certificate_of_incumbency",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 13
+        },
+        {
+          "filename": "TidewaterMarineSupplies_NOA_YA2025.pdf",
+          "files": [
+            "TidewaterMarineSupplies_NOA_YA2025.pdf"
+          ],
+          "document_type": "notice_of_assessment",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        }
+      ]
+    },
+    "C012": {
+      "company_name": "Quillstone Corporate Services Pte Ltd",
+      "expected_risk": "Low",
+      "fraud_case": false,
+      "forged_documents": [],
+      "documents": [
+        {
+          "filename": "BankStmt_QCS_2026-03to06.pdf",
+          "files": [
+            "BankStmt_QCS_2026-03to06.pdf"
+          ],
+          "document_type": "bank_statement",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "BusinessProfile_QCS_20260701.pdf",
+          "files": [
+            "BusinessProfile_QCS_20260701.pdf"
+          ],
+          "document_type": "certificate_of_incumbency",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 14
+        },
+        {
+          "filename": "CreditReport_CBS_20260701.pdf",
+          "files": [
+            "CreditReport_CBS_20260701.pdf"
+          ],
+          "document_type": "credit_report",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "FATCA_CRS_Entity_37583.pdf",
+          "files": [
+            "FATCA_CRS_Entity_37583.pdf"
+          ],
+          "document_type": "fatca_crs_declaration",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "IRAS_NOA_Company_20250624.pdf",
+          "files": [
+            "IRAS_NOA_Company_20250624.pdf"
+          ],
+          "document_type": "notice_of_assessment",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "InvestmentStatement_TohCK.pdf",
+          "files": [
+            "InvestmentStatement_TohCK.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 6
+        },
+        {
+          "filename": "LoanFacility_79031_2.pdf",
+          "files": [
+            "LoanFacility_79031_2.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "LoanOffer_72404.pdf",
+          "files": [
+            "LoanOffer_72404.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "POR_BankStmt_20260701.pdf",
+          "files": [
+            "POR_BankStmt_20260701.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "POR_UtilityBill_20260701.jpg",
+          "files": [
+            "POR_UtilityBill_20260701.jpg"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "QCS_BalanceSheet_Audited.pdf",
+          "files": [
+            "QCS_BalanceSheet_Audited.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 20
+        },
+        {
+          "filename": "QCS_Constitution.pdf",
+          "files": [
+            "QCS_Constitution.pdf"
+          ],
+          "document_type": "company_constitution",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "QuillstoneCorporateServices_Incorporation_Cert.pdf",
+          "files": [
+            "QuillstoneCorporateServices_Incorporation_Cert.pdf"
+          ],
+          "document_type": "certificate_of_incorporation",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "SOW_Declaration_9820.pdf",
+          "files": [
+            "SOW_Declaration_9820.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 6
+        },
+        {
+          "filename": "SitiA_Passport_scan.jpeg",
+          "files": [
+            "SitiA_Passport_scan.jpeg"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "SitiA_Salary_Slip_20260701.pdf",
+          "files": [
+            "SitiA_Salary_Slip_20260701.pdf"
+          ],
+          "document_type": "payslip",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "TohCK_Passport_scan.jpg",
+          "files": [
+            "TohCK_Passport_scan.jpg"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        }
+      ]
+    },
+    "C015": {
+      "company_name": "Orchid Lane Wellness Pte Ltd",
+      "expected_risk": "Critical",
+      "fraud_case": true,
+      "forged_documents": [
+        "POR_UtilityBill_20260904.png",
+        "Rajesh_Salary_Slip_20260904.pdf",
+        "eStmt_download_630.pdf"
+      ],
+      "documents": [
+        {
+          "filename": "ACRA_Incumbency_20260904.pdf",
+          "files": [
+            "ACRA_Incumbency_20260904.pdf"
+          ],
+          "document_type": "certificate_of_incumbency",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 13
+        },
+        {
+          "filename": "CreditReport_CBS_20260904.pdf",
+          "files": [
+            "CreditReport_CBS_20260904.pdf"
+          ],
+          "document_type": "credit_report",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "FacilityLetter_OLW_1.pdf",
+          "files": [
+            "FacilityLetter_OLW_1.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "FacilityLetter_OLW_2.pdf",
+          "files": [
+            "FacilityLetter_OLW_2.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "HoML_Passport_scan.jpg",
+          "files": [
+            "HoML_Passport_scan.jpg"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "InvestmentStatement_HoML.pdf",
+          "files": [
+            "InvestmentStatement_HoML.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 6
+        },
+        {
+          "filename": "LoanOffer_55066.pdf",
+          "files": [
+            "LoanOffer_55066.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 10
+        },
+        {
+          "filename": "NRIC_6464_back.png",
+          "files": [
+            "NRIC_6464_back.png"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 4
+        },
+        {
+          "filename": "NRIC_6464_front.png",
+          "files": [
+            "NRIC_6464_front.png"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "OLW_BalanceSheet_Audited.pdf",
+          "files": [
+            "OLW_BalanceSheet_Audited.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 20
+        },
+        {
+          "filename": "OLW_COI_scan.pdf",
+          "files": [
+            "OLW_COI_scan.pdf"
+          ],
+          "document_type": "certificate_of_incorporation",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 6
+        },
+        {
+          "filename": "OLW_Constitution.pdf",
+          "files": [
+            "OLW_Constitution.pdf"
+          ],
+          "document_type": "company_constitution",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "OrchidLaneWellness_FATCA_CRS.pdf",
+          "files": [
+            "OrchidLaneWellness_FATCA_CRS.pdf"
+          ],
+          "document_type": "fatca_crs_declaration",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "OrchidLaneWellness_NOA_YA2025.pdf",
+          "files": [
+            "OrchidLaneWellness_NOA_YA2025.pdf"
+          ],
+          "document_type": "notice_of_assessment",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "POR_BankStmt_20260904.pdf",
+          "files": [
+            "POR_BankStmt_20260904.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "POR_UtilityBill_20260904.png",
+          "files": [
+            "POR_UtilityBill_20260904.png"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": true,
+          "dimensions": [
+            "Cross-Document"
+          ],
+          "scored_fields": 7
+        },
+        {
+          "filename": "Rajesh_Salary_Slip_20260904.pdf",
+          "files": [
+            "Rajesh_Salary_Slip_20260904.pdf"
+          ],
+          "document_type": "payslip",
+          "fraud_expected": true,
+          "dimensions": [
+            "Misalignment"
+          ],
+          "scored_fields": 9
+        },
+        {
+          "filename": "eStmt_download_630.pdf",
+          "files": [
+            "eStmt_download_630.pdf"
+          ],
+          "document_type": "bank_statement",
+          "fraud_expected": true,
+          "dimensions": [
+            "Font/Size",
+            "Numerical"
+          ],
+          "scored_fields": 9
+        }
+      ]
+    },
+    "C020": {
+      "company_name": "Greenfield Agri-Tech Pte Ltd",
+      "expected_risk": "High",
+      "fraud_case": true,
+      "forged_documents": [
+        "LoanFacility_17299_1.pdf"
+      ],
+      "documents": [
+        {
+          "filename": "ACRA_Incumbency_20260825.pdf",
+          "files": [
+            "ACRA_Incumbency_20260825.pdf"
+          ],
+          "document_type": "certificate_of_incumbency",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 13
+        },
+        {
+          "filename": "AcctStatement_GA_20260825.pdf",
+          "files": [
+            "AcctStatement_GA_20260825.pdf"
+          ],
+          "document_type": "bank_statement",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 11
+        },
+        {
+          "filename": "BizFile_700828.pdf",
+          "files": [
+            "BizFile_700828.pdf"
+          ],
+          "document_type": "certificate_of_incorporation",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 6
+        },
+        {
+          "filename": "CRI_Telecom.pdf",
+          "files": [
+            "CRI_Telecom.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "Company_Constitution_20260825.pdf",
+          "files": [
+            "Company_Constitution_20260825.pdf"
+          ],
+          "document_type": "company_constitution",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "CreditReport_CBS_20260825.pdf",
+          "files": [
+            "CreditReport_CBS_20260825.pdf"
+          ],
+          "document_type": "credit_report",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "FATCA_SelfCert_GA_2026.pdf",
+          "files": [
+            "FATCA_SelfCert_GA_2026.pdf"
+          ],
+          "document_type": "fatca_crs_declaration",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "FacilityLetter_GA_2.pdf",
+          "files": [
+            "FacilityLetter_GA_2.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "GA_BalanceSheet_Audited.pdf",
+          "files": [
+            "GA_BalanceSheet_Audited.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 20
+        },
+        {
+          "filename": "IRAS_NOA_Company_20250819.pdf",
+          "files": [
+            "IRAS_NOA_Company_20250819.pdf"
+          ],
+          "document_type": "notice_of_assessment",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "KohPS_Passport_scan.jpeg",
+          "files": [
+            "KohPS_Passport_scan.jpeg"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "KohPS_Salary_Slip_20260825.pdf",
+          "files": [
+            "KohPS_Salary_Slip_20260825.pdf"
+          ],
+          "document_type": "payslip",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 5
+        },
+        {
+          "filename": "LoanFacility_17299_1.pdf",
+          "files": [
+            "LoanFacility_17299_1.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": true,
+          "dimensions": [
+            "Text Overlay"
+          ],
+          "scored_fields": 9
+        },
+        {
+          "filename": "POR_UtilityBill_20260825.jpg",
+          "files": [
+            "POR_UtilityBill_20260825.jpg"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "TeoJH_Passport_scan.jpg",
+          "files": [
+            "TeoJH_Passport_scan.jpg"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        }
+      ]
+    },
+    "C024": {
+      "company_name": "Ninefold Print & Packaging Pte Ltd",
+      "expected_risk": "Medium",
+      "fraud_case": true,
+      "forged_documents": [
+        "ACRA_CertIncorp_201065233R.pdf"
+      ],
+      "documents": [
+        {
+          "filename": "ACRA_CertIncorp_201065233R.pdf",
+          "files": [
+            "ACRA_CertIncorp_201065233R.pdf"
+          ],
+          "document_type": "certificate_of_incorporation",
+          "fraud_expected": true,
+          "dimensions": [
+            "Font/Size"
+          ],
+          "scored_fields": 6
+        },
+        {
+          "filename": "ACRA_Incumbency_20260705.pdf",
+          "files": [
+            "ACRA_Incumbency_20260705.pdf"
+          ],
+          "document_type": "certificate_of_incumbency",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 13
+        },
+        {
+          "filename": "AcctStatement_NPP_20260705.pdf",
+          "files": [
+            "AcctStatement_NPP_20260705.pdf"
+          ],
+          "document_type": "bank_statement",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "IRAS_NOA_Company_20251114.pdf",
+          "files": [
+            "IRAS_NOA_Company_20251114.pdf"
+          ],
+          "document_type": "notice_of_assessment",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "InvestmentStatement_LowJH.pdf",
+          "files": [
+            "InvestmentStatement_LowJH.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 6
+        },
+        {
+          "filename": "LowJH_Passport_scan.jpeg",
+          "files": [
+            "LowJH_Passport_scan.jpeg"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "LowJH_Salary_Slip_20260705.pdf",
+          "files": [
+            "LowJH_Salary_Slip_20260705.pdf"
+          ],
+          "document_type": "payslip",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "NPP_BalanceSheet_Audited.pdf",
+          "files": [
+            "NPP_BalanceSheet_Audited.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 20
+        },
+        {
+          "filename": "NinefoldPrintPackaging_Constitution_signed.pdf",
+          "files": [
+            "NinefoldPrintPackaging_Constitution_signed.pdf"
+          ],
+          "document_type": "company_constitution",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "NinefoldPrintPackaging_CreditBureau.pdf",
+          "files": [
+            "NinefoldPrintPackaging_CreditBureau.pdf"
+          ],
+          "document_type": "credit_report",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "NinefoldPrintPackaging_FATCA_CRS.pdf",
+          "files": [
+            "NinefoldPrintPackaging_FATCA_CRS.pdf"
+          ],
+          "document_type": "fatca_crs_declaration",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "POR_BankStmt_20260705.pdf",
+          "files": [
+            "POR_BankStmt_20260705.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "POR_UtilityBill_20260705.pdf",
+          "files": [
+            "POR_UtilityBill_20260705.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "Priya_Passport_scan.jpg",
+          "files": [
+            "Priya_Passport_scan.jpg"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "SOW_Declaration_7362.pdf",
+          "files": [
+            "SOW_Declaration_7362.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 6
+        }
+      ]
+    },
+    "C025": {
+      "company_name": "Lighthouse Learning Hub Pte Ltd",
+      "expected_risk": "Medium",
+      "fraud_case": true,
+      "forged_documents": [
+        "ACRA_CertIncorp_201013138R.pdf"
+      ],
+      "documents": [
+        {
+          "filename": "ACRA_CertIncorp_201013138R.pdf",
+          "files": [
+            "ACRA_CertIncorp_201013138R.pdf"
+          ],
+          "document_type": "certificate_of_incorporation",
+          "fraud_expected": true,
+          "dimensions": [
+            "Spelling"
+          ],
+          "scored_fields": 6
+        },
+        {
+          "filename": "AcctStatement_LLH_20260805.pdf",
+          "files": [
+            "AcctStatement_LLH_20260805.pdf"
+          ],
+          "document_type": "bank_statement",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 10
+        },
+        {
+          "filename": "FS_LLH_2025.pdf",
+          "files": [
+            "FS_LLH_2025.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 20
+        },
+        {
+          "filename": "IRAS_NOA_Company_20250708.pdf",
+          "files": [
+            "IRAS_NOA_Company_20250708.pdf"
+          ],
+          "document_type": "notice_of_assessment",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "LeeLT_Salary_Slip_20260805.pdf",
+          "files": [
+            "LeeLT_Salary_Slip_20260805.pdf"
+          ],
+          "document_type": "payslip",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 10
+        },
+        {
+          "filename": "LighthouseLearningHub_BizFile_Officers_20260805.pdf",
+          "files": [
+            "LighthouseLearningHub_BizFile_Officers_20260805.pdf"
+          ],
+          "document_type": "certificate_of_incumbency",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 13
+        },
+        {
+          "filename": "LighthouseLearningHub_Constitution_signed.pdf",
+          "files": [
+            "LighthouseLearningHub_Constitution_signed.pdf"
+          ],
+          "document_type": "company_constitution",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "LighthouseLearningHub_CreditBureau.pdf",
+          "files": [
+            "LighthouseLearningHub_CreditBureau.pdf"
+          ],
+          "document_type": "credit_report",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "LighthouseLearningHub_FATCA_CRS.pdf",
+          "files": [
+            "LighthouseLearningHub_FATCA_CRS.pdf"
+          ],
+          "document_type": "fatca_crs_declaration",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "LoanFacility_10193_1.pdf",
+          "files": [
+            "LoanFacility_10193_1.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "NRIC_2746_back.jpg",
+          "files": [
+            "NRIC_2746_back.jpg"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 4
+        },
+        {
+          "filename": "NRIC_2746_front.jpg",
+          "files": [
+            "NRIC_2746_front.jpg"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "NRIC_6866_back.jpg",
+          "files": [
+            "NRIC_6866_back.jpg"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 4
+        },
+        {
+          "filename": "NRIC_6866_front.jpg",
+          "files": [
+            "NRIC_6866_front.jpg"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "POR_BankStmt_20260805.pdf",
+          "files": [
+            "POR_BankStmt_20260805.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        }
+      ]
+    },
+    "C027": {
+      "company_name": "Primrose Florist & Gifts Pte Ltd",
+      "expected_risk": "Low",
+      "fraud_case": false,
+      "forged_documents": [],
+      "documents": [
+        {
+          "filename": "ACRA_Incumbency_20260920.pdf",
+          "files": [
+            "ACRA_Incumbency_20260920.pdf"
+          ],
+          "document_type": "certificate_of_incumbency",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 13
+        },
+        {
+          "filename": "BankStmt_PFG_2026-05to08.pdf",
+          "files": [
+            "BankStmt_PFG_2026-05to08.pdf"
+          ],
+          "document_type": "bank_statement",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "CBR_PFG_2026-09-19.pdf",
+          "files": [
+            "CBR_PFG_2026-09-19.pdf"
+          ],
+          "document_type": "credit_report",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "FATCA_CRS_Entity_59701.pdf",
+          "files": [
+            "FATCA_CRS_Entity_59701.pdf"
+          ],
+          "document_type": "fatca_crs_declaration",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "InvestmentStatement_YeoCK.pdf",
+          "files": [
+            "InvestmentStatement_YeoCK.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 6
+        },
+        {
+          "filename": "LoanFacility_68164_1.pdf",
+          "files": [
+            "LoanFacility_68164_1.pdf"
+          ],
+          "document_type": "list_of_loans",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 10
+        },
+        {
+          "filename": "NRIC_8252_back.png",
+          "files": [
+            "NRIC_8252_back.png"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 4
+        },
+        {
+          "filename": "NRIC_8252_front.png",
+          "files": [
+            "NRIC_8252_front.png"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "PFG_BalanceSheet_Audited.pdf",
+          "files": [
+            "PFG_BalanceSheet_Audited.pdf"
+          ],
+          "document_type": "source_of_wealth",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 20
+        },
+        {
+          "filename": "PFG_COI_scan.pdf",
+          "files": [
+            "PFG_COI_scan.pdf"
+          ],
+          "document_type": "certificate_of_incorporation",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 6
+        },
+        {
+          "filename": "POR_BankStmt_20260920.pdf",
+          "files": [
+            "POR_BankStmt_20260920.pdf"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "POR_UtilityBill_20260920.png",
+          "files": [
+            "POR_UtilityBill_20260920.png"
+          ],
+          "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 7
+        },
+        {
+          "filename": "PrimroseFloristGifts_Constitution_signed.pdf",
+          "files": [
+            "PrimroseFloristGifts_Constitution_signed.pdf"
+          ],
+          "document_type": "company_constitution",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "PrimroseFloristGifts_NOA_YA2025.pdf",
+          "files": [
+            "PrimroseFloristGifts_NOA_YA2025.pdf"
+          ],
+          "document_type": "notice_of_assessment",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        },
+        {
+          "filename": "TohZY_Salary_Slip_20260920.pdf",
+          "files": [
+            "TohZY_Salary_Slip_20260920.pdf"
+          ],
+          "document_type": "payslip",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "YeoCK_Passport_scan.png",
+          "files": [
+            "YeoCK_Passport_scan.png"
+          ],
+          "document_type": "passport",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 8
+        }
+      ]
+    }
+  },
+  "problems": []
+}

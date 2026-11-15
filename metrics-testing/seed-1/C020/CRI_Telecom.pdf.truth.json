@@ -1,0 +1,26 @@
+{
+  "filename": "CRI_Telecom.pdf",
+  "files": [
+    "CRI_Telecom.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "GREENFIELD AGRI-TECH PTE LTD",
+    "company_address": "9 Temasek Boulevard, #02-04, Singapore 038989",
+    "entity_type": "corporate",
+    "bill_date": "2026-11-05",
+    "previous_balance": 204.94,
+    "current_charges": 99.44,
+    "total_payable": 323.13,
+    "gst_amount": 8.21
+  },
+  "not_printed": {
+    "due_date": "2026-11-19"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

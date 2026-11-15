@@ -38,7 +38,8 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import openpyxl
-from case_facts import company_facts
+import truth
+from case_facts import company_facts, salted
 from synthetic_signature import pick_signature_font, signature_paragraph_style
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
@@ -84,7 +85,7 @@ SHARE_CAPITALS = [100_000, 250_000, 500_000, 750_000, 1_000_000]
 
 
 def seeded_rng(case_id: str) -> random.Random:
-    return random.Random(int(hashlib.sha256(case_id.encode("utf-8")).hexdigest()[:16], 16))
+    return random.Random(int(hashlib.sha256(salted(case_id).encode("utf-8")).hexdigest()[:16], 16))
 
 
 # --------------------------------------------------------------------------
@@ -695,6 +696,7 @@ def generate(
         content = apply_defect(build_content(record), defect)
         filename = record["doc_row"].get("Filename") or f"{record['case_id']}_Constitution.pdf"
         path = render(content, Path(outdir) / filename, synthetic_tag=synthetic_tag)
+        truth.record(path, "company_constitution", truth.company_constitution(content))
         written.append(path)
         print(
             f"{record['case_id']}  {filename}  [{content.get('defect') or 'clean'}]  "

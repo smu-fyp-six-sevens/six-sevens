@@ -1,0 +1,22 @@
+{
+  "filename": "SOW_Declaration_1056.pdf",
+  "files": [
+    "SOW_Declaration_1056.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "LEE PEI SHAN",
+    "individual_address": "288A JURONG EAST STREET 21,#10-224,Singapore,601288",
+    "account_number": "1008616960001364",
+    "net_asset_value": 19189.74,
+    "portfolio_value": 17637.2,
+    "cash_balance": 1552.54
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,24 @@
+{
+  "filename": "VantagePointITSolutions_NOA_YA2025.pdf",
+  "files": [
+    "VantagePointITSolutions_NOA_YA2025.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Vantage Point IT Solutions Pte Ltd",
+    "tax_reference_number": "201630706M",
+    "company_address": "116 Marsiling Rise, #02-59, Singapore 730116",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-06-11",
+    "eci": 728700,
+    "tax_payable": 66454.0,
+    "previous_assessment_date": "2025-04-14"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

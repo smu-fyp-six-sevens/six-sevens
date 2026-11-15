@@ -1,0 +1,24 @@
+{
+  "filename": "IRAS_NOA_Company_20250624.pdf",
+  "files": [
+    "IRAS_NOA_Company_20250624.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Quillstone Corporate Services Pte Ltd",
+    "tax_reference_number": "201324905W",
+    "company_address": "20 Pasir Panjang Road, #06-09, Singapore 117439",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-06-24",
+    "eci": 851700,
+    "tax_payable": 87364.0,
+    "previous_assessment_date": "2025-05-21"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

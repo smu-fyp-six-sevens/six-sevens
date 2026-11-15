@@ -1,0 +1,305 @@
+{
+  "about": "Synthetic test companies only; read when SYNTHETIC_ACRA_REGISTRY=true. Built by scripts/metrics/synthetic_registry.py from v18_document_mastersheet.xlsx.",
+  "entities": [
+    {
+      "uen": "201298459R",
+      "name": "BRIGHTWAVE ANALYTICS PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2012-12-12",
+      "address": "21 MEDIA CIRCLE, #03-05, SINGAPORE 138562",
+      "postal_code": "138562",
+      "former_names": [],
+      "case_id": "C001"
+    },
+    {
+      "uen": "201156535W",
+      "name": "KESTREL FREIGHT FORWARDING PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2011-03-21",
+      "address": "21 BUKIT BATOK CRESCENT, #04-18, SINGAPORE 658065",
+      "postal_code": "658065",
+      "former_names": [],
+      "case_id": "C002"
+    },
+    {
+      "uen": "201063283R",
+      "name": "LUMINA INTERIOR STUDIO PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2010-02-06",
+      "address": "2A BOON TIONG ROAD, #12-27, SINGAPORE 164002",
+      "postal_code": "164002",
+      "former_names": [],
+      "case_id": "C003"
+    },
+    {
+      "uen": "201377812E",
+      "name": "NORTHBRIDGE PRECISION ENGINEERING PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2013-03-31",
+      "address": "3 SOON LEE STREET, #01-13, SINGAPORE 627606",
+      "postal_code": "627606",
+      "former_names": [],
+      "case_id": "C004"
+    },
+    {
+      "uen": "201277971Z",
+      "name": "SAFFRON TABLE CATERING PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2012-11-27",
+      "address": "50 GAMBAS CRESCENT, #05-13, SINGAPORE 757022",
+      "postal_code": "757022",
+      "former_names": [],
+      "case_id": "C005"
+    },
+    {
+      "uen": "201294420E",
+      "name": "COBALT RIDGE CAPITAL ADVISORY PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2012-06-19",
+      "address": "302 TIONG BAHRU ROAD, #10-24, SINGAPORE 168732",
+      "postal_code": "168732",
+      "former_names": [],
+      "case_id": "C006"
+    },
+    {
+      "uen": "201830203N",
+      "name": "WILLOWBROOK TUITION SERVICES PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2018-07-25",
+      "address": "550 SERANGOON NORTH AVENUE 3, #09-240, SINGAPORE 550550",
+      "postal_code": "550550",
+      "former_names": [],
+      "case_id": "C007"
+    },
+    {
+      "uen": "201651600K",
+      "name": "IRONLEAF BUILDING SERVICES PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2016-05-18",
+      "address": "31 WOODLANDS CLOSE, #01-09, SINGAPORE 737855",
+      "postal_code": "737855",
+      "former_names": [],
+      "case_id": "C008"
+    },
+    {
+      "uen": "201857413H",
+      "name": "PEARLGATE TRAVEL & TOURS PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2018-09-28",
+      "address": "1 GEORGE STREET, #09-19, SINGAPORE 049145",
+      "postal_code": "049145",
+      "former_names": [],
+      "case_id": "C009"
+    },
+    {
+      "uen": "201013127C",
+      "name": "EVERGREEN BOTANICS TRADING PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2010-06-10",
+      "address": "3 IRVING ROAD, #04-10, SINGAPORE 369522",
+      "postal_code": "369522",
+      "former_names": [],
+      "case_id": "C010"
+    },
+    {
+      "uen": "201657409E",
+      "name": "TIDEWATER MARINE SUPPLIES PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2016-11-06",
+      "address": "5012 ANG MO KIO AVENUE 5, #01-21, SINGAPORE 569876",
+      "postal_code": "569876",
+      "former_names": [],
+      "case_id": "C011"
+    },
+    {
+      "uen": "201324905W",
+      "name": "QUILLSTONE CORPORATE SERVICES PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2013-01-04",
+      "address": "20 PASIR PANJANG ROAD, #06-09, SINGAPORE 117439",
+      "postal_code": "117439",
+      "former_names": [],
+      "case_id": "C012"
+    },
+    {
+      "uen": "200991856C",
+      "name": "HARBOURVIEW DIGITAL MEDIA PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2009-09-18",
+      "address": "1 GATEWAY DRIVE, #06-04, SINGAPORE 608531",
+      "postal_code": "608531",
+      "former_names": [],
+      "case_id": "C013"
+    },
+    {
+      "uen": "201618187W",
+      "name": "MAPLECREST HOME BAKERY PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2016-02-04",
+      "address": "248 PASIR RIS STREET 21, #08-69, SINGAPORE 510248",
+      "postal_code": "510248",
+      "former_names": [],
+      "case_id": "C014"
+    },
+    {
+      "uen": "200941250Z",
+      "name": "ORCHID LANE WELLNESS PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2009-05-02",
+      "address": "1 FUSIONOPOLIS WALK, #08-13, SINGAPORE 138628",
+      "postal_code": "138628",
+      "former_names": [],
+      "case_id": "C015"
+    },
+    {
+      "uen": "200973418E",
+      "name": "STELLAR ARC SOFTWARE PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2009-08-23",
+      "address": "60 PAYA LEBAR ROAD, #03-12, SINGAPORE 409051",
+      "postal_code": "409051",
+      "former_names": [],
+      "case_id": "C016"
+    },
+    {
+      "uen": "201655475N",
+      "name": "JUNCTION NINE LOGISTICS PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2016-04-11",
+      "address": "8 BURN ROAD, #03-13, SINGAPORE 369977",
+      "postal_code": "369977",
+      "former_names": [],
+      "case_id": "C017"
+    },
+    {
+      "uen": "201587920G",
+      "name": "COPPERFIELD BOOKKEEPING SERVICES PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2015-11-23",
+      "address": "288A JURONG EAST STREET 21, #10-224, SINGAPORE 601288",
+      "postal_code": "601288",
+      "former_names": [],
+      "case_id": "C018"
+    },
+    {
+      "uen": "201069884N",
+      "name": "BAYFRONT EVENT MANAGEMENT PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2010-11-15",
+      "address": "6 EU TONG SEN STREET, #05-26, SINGAPORE 059817",
+      "postal_code": "059817",
+      "former_names": [],
+      "case_id": "C019"
+    },
+    {
+      "uen": "201425482H",
+      "name": "GREENFIELD AGRI-TECH PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2014-12-16",
+      "address": "9 TEMASEK BOULEVARD, #02-04, SINGAPORE 038989",
+      "postal_code": "038989",
+      "former_names": [],
+      "case_id": "C020"
+    },
+    {
+      "uen": "200921425R",
+      "name": "SILVERPINE FURNITURE WORKS PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2009-12-15",
+      "address": "2 BUKIT BATOK STREET 23, #05-21, SINGAPORE 659554",
+      "postal_code": "659554",
+      "former_names": [],
+      "case_id": "C021"
+    },
+    {
+      "uen": "201648605K",
+      "name": "AZURE COAST TRADING PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2016-08-05",
+      "address": "545 SERANGOON NORTH AVENUE 3, #03-70, SINGAPORE 550545",
+      "postal_code": "550545",
+      "former_names": [],
+      "case_id": "C022"
+    },
+    {
+      "uen": "201877625H",
+      "name": "REDWOOD FITNESS STUDIO PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2018-10-05",
+      "address": "1 CHANGI BUSINESS PARK CRESCENT, #11-05, SINGAPORE 486025",
+      "postal_code": "486025",
+      "former_names": [],
+      "case_id": "C023"
+    },
+    {
+      "uen": "201065233R",
+      "name": "NINEFOLD PRINT & PACKAGING PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2010-11-23",
+      "address": "438A ALEXANDRA ROAD, #01-22, SINGAPORE 119967",
+      "postal_code": "119967",
+      "former_names": [],
+      "case_id": "C024"
+    },
+    {
+      "uen": "201013138R",
+      "name": "LIGHTHOUSE LEARNING HUB PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2010-12-15",
+      "address": "10 ANSON ROAD, #09-30, SINGAPORE 079903",
+      "postal_code": "079903",
+      "former_names": [],
+      "case_id": "C025"
+    },
+    {
+      "uen": "201521828G",
+      "name": "CEDAR & CO RENOVATION PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2015-06-21",
+      "address": "362 CLEMENTI AVENUE 2, #03-92, SINGAPORE 120362",
+      "postal_code": "120362",
+      "former_names": [],
+      "case_id": "C026"
+    },
+    {
+      "uen": "201683387R",
+      "name": "PRIMROSE FLORIST & GIFTS PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2016-02-10",
+      "address": "106D PUNGGOL FIELD, #02-71, SINGAPORE 824106",
+      "postal_code": "824106",
+      "former_names": [],
+      "case_id": "C027"
+    },
+    {
+      "uen": "201630706M",
+      "name": "VANTAGE POINT IT SOLUTIONS PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2016-10-21",
+      "address": "116 MARSILING RISE, #02-59, SINGAPORE 730116",
+      "postal_code": "730116",
+      "former_names": [],
+      "case_id": "C028"
+    },
+    {
+      "uen": "201585653M",
+      "name": "SUMMIT PEAK RECRUITMENT PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2015-07-07",
+      "address": "9 RAFFLES PLACE, #09-28, SINGAPORE 048619",
+      "postal_code": "048619",
+      "former_names": [],
+      "case_id": "C029"
+    },
+    {
+      "uen": "201078782M",
+      "name": "CORAL BAY SEAFOOD SUPPLY PTE LTD",
+      "status": "Live Company",
+      "incorporation_date": "2010-01-15",
+      "address": "50 TUAS AVENUE 11, #01-30, SINGAPORE 639107",
+      "postal_code": "639107",
+      "former_names": [],
+      "case_id": "C030"
+    }
+  ]
+}

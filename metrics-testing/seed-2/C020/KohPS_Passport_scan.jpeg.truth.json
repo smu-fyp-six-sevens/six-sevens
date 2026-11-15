@@ -1,0 +1,26 @@
+{
+  "filename": "KohPS_Passport_scan.jpeg",
+  "files": [
+    "KohPS_Passport_scan.jpeg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Koh Pei Shan",
+    "passport_number": "E2834629F",
+    "date_of_birth": "1977-11-10",
+    "date_of_expiry": "2035-12-19",
+    "date_of_issue": "2025-12-19",
+    "place_of_birth": "Singapore",
+    "sex": "F",
+    "nric_number": "S7717862G"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

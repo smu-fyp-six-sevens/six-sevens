@@ -39,6 +39,7 @@ from reportlab.lib.utils import ImageReader, simpleSplit
 from reportlab.pdfgen import canvas as pdfcanvas
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import truth  # noqa: E402
 from case_facts import seeded_rng  # noqa: E402
 
 PAGE_W, PAGE_H = A4
@@ -498,6 +499,7 @@ def generate(xlsx: str | Path, outdir: str | Path, cases: list[str] | None = Non
         path = Path(outdir) / filename
         persona = build_persona(row)
         generate_telecom_bill(str(path), synthetic_tag=synthetic_tag, **persona)
+        truth.record(path, "proof_of_address", truth.telecom_bill(persona), derived={"entity_type"})
         written.append(path)
         print(f"{row.get('Case ID')}  {filename}  {row.get('Company Name (auto)')}")
     return written

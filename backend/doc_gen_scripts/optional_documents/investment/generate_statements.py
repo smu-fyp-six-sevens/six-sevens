@@ -41,6 +41,7 @@ from reportlab.lib.utils import ImageReader, simpleSplit
 from reportlab.pdfgen import canvas as pdfcanvas
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import truth  # noqa: E402
 from case_facts import seeded_rng as _case_seeded_rng  # noqa: E402
 
 CURRENCIES = ["SGD", "USD", "HKD", "CNH", "JPY", "KRW"]
@@ -1263,6 +1264,7 @@ def generate(xlsx: str | Path, outdir: str | Path, cases: list[str] | None = Non
         path = Path(outdir) / filename
         persona = build_persona(row)
         generate_investment_statement(str(path), synthetic_tag=synthetic_tag, **persona)
+        truth.record(path, "source_of_wealth", truth.investment_statement(persona["stmt"]))
         written.append(path)
         print(f"{row.get('Case ID')}  {filename}  {row.get('Individual Name (auto)')}")
     return written

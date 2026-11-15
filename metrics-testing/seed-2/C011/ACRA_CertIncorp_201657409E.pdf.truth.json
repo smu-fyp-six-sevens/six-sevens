@@ -1,0 +1,24 @@
+{
+  "filename": "ACRA_CertIncorp_201657409E.pdf",
+  "files": [
+    "ACRA_CertIncorp_201657409E.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Tidewater Marine Supplies Pte Ltd",
+    "uen": "201657409E",
+    "incorporation_date": "2016-11-06",
+    "company_type": "Limited Exempt Private Company",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2018-04-03",
+    "company_former_name": "Azure Point Trading Pte. Ltd.",
+    "company_former_name_change_date": "2018-02-26"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

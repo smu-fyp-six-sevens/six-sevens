@@ -1,0 +1,24 @@
+{
+  "filename": "BizFile_405057.pdf",
+  "files": [
+    "BizFile_405057.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Saffron Table Catering Pte Ltd",
+    "uen": "201277971Z",
+    "incorporation_date": "2012-11-27",
+    "company_type": "Private company limited by shares",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2016-05-07",
+    "company_former_name": "Zenith Field Logistics Pte. Ltd.",
+    "company_former_name_change_date": "2016-03-24"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

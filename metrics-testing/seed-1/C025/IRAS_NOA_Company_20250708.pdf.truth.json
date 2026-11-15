@@ -1,0 +1,24 @@
+{
+  "filename": "IRAS_NOA_Company_20250708.pdf",
+  "files": [
+    "IRAS_NOA_Company_20250708.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Lighthouse Learning Hub Pte Ltd",
+    "tax_reference_number": "201013138R",
+    "company_address": "10 Anson Road, #09-30, Singapore 079903",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-07-08",
+    "eci": 763100,
+    "tax_payable": 72302.0,
+    "previous_assessment_date": "2025-05-24"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

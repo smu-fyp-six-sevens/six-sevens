@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_9098_front.jpeg",
+  "files": [
+    "NRIC_9098_front.jpeg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7729098B",
+    "individual_name": "Tan Hui Ling",
+    "date_of_birth": "1977-08-23",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "M",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

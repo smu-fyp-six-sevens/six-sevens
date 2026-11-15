@@ -1,0 +1,24 @@
+{
+  "filename": "IRAS_NOA_Company_20250918.pdf",
+  "files": [
+    "IRAS_NOA_Company_20250918.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Evergreen Botanics Trading Pte Ltd",
+    "tax_reference_number": "201013127C",
+    "company_address": "3 Irving Road, #04-10, Singapore 369522",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-09-18",
+    "eci": 265800,
+    "tax_payable": 13880.5,
+    "previous_assessment_date": "2025-07-12"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

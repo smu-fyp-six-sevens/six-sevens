@@ -1,0 +1,38 @@
+{
+  "filename": "LighthouseLearningHub_Constitution_signed.pdf",
+  "files": [
+    "LighthouseLearningHub_Constitution_signed.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Lighthouse Learning Hub Pte Ltd",
+    "uen": "201013138R",
+    "incorporation_date": "2010-12-15",
+    "company_address": "10 Anson Road, #09-30, Singapore 079903",
+    "share_capital": 500000.0,
+    "issued_shares": 500000,
+    "subscribers": [
+      {
+        "name": "Toh Yong Sheng",
+        "address": "273C Jurong West Avenue 3, #06-365, Singapore 643273",
+        "id_number": "S7606866F",
+        "shares": 350000
+      },
+      {
+        "name": "Lee Li Ting",
+        "address": "221B Tengah Garden Walk, #12-86, Singapore 692221",
+        "id_number": "S0022746C",
+        "shares": 150000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2010-12-15"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

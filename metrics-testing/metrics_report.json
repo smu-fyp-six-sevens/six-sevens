@@ -1,0 +1,5124 @@
+{
+  "summary": {
+    "extraction": {
+      "key_fields": {
+        "correct": 144,
+        "total": 150,
+        "accuracy": 0.96
+      },
+      "all_fields": {
+        "correct": 256,
+        "total": 286,
+        "accuracy": 0.8951
+      },
+      "all_fields_any_name": {
+        "correct": 269,
+        "total": 286,
+        "accuracy": 0.9406
+      },
+      "table_rows": {
+        "found": 97,
+        "total": 115,
+        "rate": 0.8435
+      },
+      "key_fields_by_seed": {
+        "0": {
+          "correct": 73,
+          "total": 76,
+          "accuracy": 0.9605
+        },
+        "1": {
+          "correct": 71,
+          "total": 74,
+          "accuracy": 0.9595
+        }
+      },
+      "key_fields_by_document_type": {
+        "bank_statement": {
+          "correct": 4,
+          "total": 7,
+          "accuracy": 0.5714
+        },
+        "certificate_of_incorporation": {
+          "correct": 12,
+          "total": 12,
+          "accuracy": 1.0
+        },
+        "certificate_of_incumbency": {
+          "correct": 16,
+          "total": 16,
+          "accuracy": 1.0
+        },
+        "company_constitution": {
+          "correct": 14,
+          "total": 14,
+          "accuracy": 1.0
+        },
+        "credit_report": {
+          "correct": 13,
+          "total": 13,
+          "accuracy": 1.0
+        },
+        "fatca_crs_declaration": {
+          "correct": 10,
+          "total": 10,
+          "accuracy": 1.0
+        },
+        "list_of_loans": {
+          "correct": 10,
+          "total": 10,
+          "accuracy": 1.0
+        },
+        "notice_of_assessment": {
+          "correct": 14,
+          "total": 14,
+          "accuracy": 1.0
+        },
+        "nric": {
+          "correct": 22,
+          "total": 22,
+          "accuracy": 1.0
+        },
+        "passport": {
+          "correct": 14,
+          "total": 14,
+          "accuracy": 1.0
+        },
+        "payslip": {
+          "correct": 6,
+          "total": 6,
+          "accuracy": 1.0
+        },
+        "proof_of_address": {
+          "correct": 5,
+          "total": 8,
+          "accuracy": 0.625
+        },
+        "source_of_wealth": {
+          "correct": 4,
+          "total": 4,
+          "accuracy": 1.0
+        }
+      },
+      "key_fields_on_forged_documents": {
+        "correct": 33,
+        "total": 34,
+        "accuracy": 0.9706
+      },
+      "classification": {
+        "correct": 32,
+        "total": 32,
+        "accuracy": 1.0
+      },
+      "documents_not_uploaded": []
+    },
+    "risk": {
+      "correct": 2,
+      "total": 2,
+      "accuracy": 1.0,
+      "by_seed": {
+        "0": 1.0,
+        "1": 1.0
+      },
+      "confusion": {
+        "Critical -> Critical": 2
+      },
+      "wrong": [],
+      "clean_cases_rated_above_low": {
+        "count": 0,
+        "total": 0,
+        "rate": null
+      }
+    },
+    "detection": {
+      "forged_documents_flagged": {
+        "flagged": 8,
+        "total": 8,
+        "accuracy": 1.0
+      },
+      "by_seed": {
+        "0": 1.0,
+        "1": 1.0
+      },
+      "forgeries_caught_by_the_right_check": {
+        "caught": 8,
+        "total": 8,
+        "rate": 1.0
+      },
+      "forgeries_where_a_finding_names_the_changed_value": {
+        "named": 4,
+        "total": 4,
+        "rate": 1.0
+      },
+      "right_check_by_dimension": {
+        "AI-Generated": {
+          "caught": 2,
+          "total": 2
+        },
+        "Cross-Document": {
+          "caught": 2,
+          "total": 2
+        },
+        "Metadata": {
+          "caught": 2,
+          "total": 2
+        },
+        "Text Overlay": {
+          "caught": 2,
+          "total": 2
+        }
+      },
+      "clean_documents_flagged": {
+        "flagged": 6,
+        "total": 24,
+        "rate": 0.25
+      },
+      "false_positives": [
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "CBR_TMS_2026-09-26.pdf",
+          "tool": "date_consistency_tool",
+          "severity": "high",
+          "summary": "Account 1 was opened at age 21.0, below the minimum of 21 for this product type"
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "CBR_TMS_2026-09-26.pdf",
+          "tool": "date_consistency_tool",
+          "severity": "high",
+          "summary": "Account 3 was opened at age 21.0, below the minimum of 21 for this product type"
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "FATCA_SelfCert_TMS_2026.pdf",
+          "tool": "font_consistency_tool",
+          "severity": "medium",
+          "summary": "Font deviation on 'signatory_designation': font 'Helvetica' vs. expected 'Aptos'; size 8.999999046325684 vs. expected 9.0 (1 occurrence)."
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "FATCA_SelfCert_TMS_2026.pdf",
+          "tool": "font_consistency_tool",
+          "severity": "medium",
+          "summary": "Font deviation on 'declaration_date': font 'Helvetica' vs. expected 'Aptos'; size 9.00000286102295 vs. expected 9.0 (1 occurrence)."
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "POR_UtilityBill_20260925.jpeg",
+          "tool": "date_consistency_tool",
+          "severity": "low",
+          "summary": "Contract end date (2032-03-10) is more than 5 years beyond the bill date \u2014 unusually long for a utility contract"
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "TMS_BalanceSheet_Audited.pdf",
+          "tool": "numerical_checks_tool",
+          "severity": "low",
+          "summary": "Tax expense (96,600.00) is a flat 17% of profit before tax with no sign of the partial tax exemption a genuine Singapore company would apply"
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "FATCA_SelfCert_TMS_2026.pdf",
+          "tool": "font_consistency_tool",
+          "severity": "medium",
+          "summary": "Font deviation on 'signatory_designation': font 'Helvetica' vs. expected 'Aptos'; size 8.999999046325684 vs. expected 9.0 (1 occurrence)."
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "FATCA_SelfCert_TMS_2026.pdf",
+          "tool": "font_consistency_tool",
+          "severity": "medium",
+          "summary": "Font deviation on 'declaration_date': font 'Helvetica' vs. expected 'Aptos'; size 9.00000286102295 vs. expected 9.0 (1 occurrence)."
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "NRIC_8175_front.jpg",
+          "tool": "numerical_checks_tool",
+          "severity": "high",
+          "summary": "S9798175B does not match any valid UEN format"
+        }
+      ],
+      "missed": [],
+      "forged_documents_never_scanned": []
+    }
+  },
+  "seeds": [
+    {
+      "seed": 0,
+      "cases_scored": [
+        "C011"
+      ],
+      "cases_without_results": [],
+      "extraction": [
+        {
+          "case_id": "C011",
+          "filename": "ACRA_CertIncorp_201657409E.pdf",
+          "document_type": "certificate_of_incorporation",
+          "classified_as": [
+            "certificate_of_incorporation"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "uen",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "incorporation_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-11-06",
+              "extracted": null
+            },
+            {
+              "field": "company_type",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Limited Exempt Private Company",
+              "extracted": null
+            },
+            {
+              "field": "incorporating_act",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Companies Act 1967",
+              "extracted": null
+            },
+            {
+              "field": "certificate_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-11-06",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "BankStmt_TMS_2026-05to08.pdf",
+          "document_type": "bank_statement",
+          "classified_as": [
+            "bank_statement"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "bank_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Oversea-Chinese Banking Corporation Limited",
+              "extracted": null
+            },
+            {
+              "field": "account_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "546525372720",
+              "extracted": null
+            },
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "TIDEWATER MARINE SUPPLIES PTE LTD",
+              "extracted": "TIDEWATER MARINE"
+            },
+            {
+              "field": "entity_type",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "corporate",
+              "extracted": null
+            },
+            {
+              "field": "statement_period_start",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-05-01",
+              "extracted": null
+            },
+            {
+              "field": "statement_period_end",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-08-31",
+              "extracted": null
+            },
+            {
+              "field": "opening_balance",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 66283.16,
+              "extracted": null
+            },
+            {
+              "field": "ledger_balance",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 44735.52,
+              "extracted": null
+            },
+            {
+              "field": "total_credits",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 99609.69,
+              "extracted": null
+            },
+            {
+              "field": "total_debits",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 121157.33,
+              "extracted": null
+            },
+            {
+              "field": "transactions",
+              "key": true,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": true,
+              "rows_found": 42,
+              "rows_total": 50,
+              "expected": "[50 rows]",
+              "extracted": [
+                {
+                  "date": "31 Aug 2026",
+                  "amount": -35.0,
+                  "balance": 44735.52,
+                  "description": "0000004025078959 Txn Charges Billing CHARGES Billing Statement 0000004025078959",
+                  "counterparty": null
+                },
+                {
+                  "date": "27 Aug 2026",
+                  "amount": -235.48,
+                  "balance": 44770.52,
+                  "description": "0000006171737074 Card Transaction CARD GRAB* TRIP SI NG 27AUG 4948-XXXX-XXXX-4407",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 Aug 2026",
+                  "amount": -0.5,
+                  "balance": 45006.0,
+                  "description": "0000003272939523 Txn Charges Billing CHARGES Billing Statement 0000003272939523",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 Aug 2026",
+                  "amount": -5052.37,
+                  "balance": 45006.5,
+                  "description": "0000006163408077 Salary Payment FAST PAYMENT M:+6589489535 SALARY PAYMENT SGD 5,052",
+                  "counterparty": null
+                },
+                {
+                  "date": "24 Aug 2026",
+                  "amount": -6895.01,
+                  "balance": 50058.87,
+                  "description": "0000007164447544 Outward Remittance GIRO MERIDIAN LOGISTICS SERVICES SGD 6,895",
+                  "counterparty": "MERIDIAN LOGISTICS SERVICES"
+                },
+                {
+                  "date": "23 Aug 2026",
+                  "amount": -328.94,
+                  "balance": 56953.88,
+                  "description": "0000007440319996 Card Transaction CARD SHELL SERVICE STN SI NG 23AUG 4273-XXXX-XXXX-5753",
+                  "counterparty": null
+                },
+                {
+                  "date": "18 Aug 2026",
+                  "amount": -4780.03,
+                  "balance": 57282.82,
+                  "description": "0000009163001416 Outward Remittance GIRO UNITED PAPER SUPPLY PTE. LTD. SGD 4,780",
+                  "counterparty": "UNITED PAPER SUPPLY PTE. LTD."
+                },
+                {
+                  "date": "18 Aug 2026",
+                  "amount": 9120.67,
+                  "balance": 62062.85,
+                  "description": "0000005659490863 Inward Funds Transfer FAST PAYMENT OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 9,121",
+                  "counterparty": "HARBOURFRONT DISTRIBUTORS PTE LTD"
+                },
+                {
+                  "date": "16 Aug 2026",
+                  "amount": 8241.53,
+                  "balance": 52942.18,
+                  "description": "0000006603494007 Inward Funds Transfer FAST PAYMENT OTHER KIM SENG TRADING PTE. LTD. SGD 8,242",
+                  "counterparty": "KIM SENG TRADING PTE. LTD."
+                },
+                {
+                  "date": "12 Aug 2026",
+                  "amount": -1243.96,
+                  "balance": 44700.65,
+                  "description": "0000002791732777 Giro Payment GIRO SP SERVICES LTD UTILITIES",
+                  "counterparty": "SP SERVICES LTD"
+                },
+                {
+                  "date": "12 Aug 2026",
+                  "amount": -5538.05,
+                  "balance": 45944.61,
+                  "description": "0000007171087201 Outward Remittance GIRO SEAWAY FREIGHT (S) PTE LTD SGD 5,538",
+                  "counterparty": "SEAWAY FREIGHT (S) PTE LTD"
+                },
+                {
+                  "date": "11 Aug 2026",
+                  "amount": 8054.02,
+                  "balance": 51482.66,
+                  "description": "0000007275323445 Inward Funds Transfer FAST PAYMENT OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 8,054",
+                  "counterparty": "ORIENT PACIFIC SUPPLIES PTE LTD"
+                },
+                {
+                  "date": "01 Aug 2026",
+                  "amount": -6690.0,
+                  "balance": 43428.64,
+                  "description": "0000007358819115 Giro Payment GIRO PREMISES RENTAL AUG26",
+                  "counterparty": null
+                },
+                {
+                  "date": "31 Jul 2026",
+                  "amount": -35.0,
+                  "balance": 50118.64,
+                  "description": "0000004998345235 Txn Charges Billing CHARGES Billing Statement 0000004998345235",
+                  "counterparty": null
+                },
+                {
+                  "date": "26 Jul 2026",
+                  "amount": -748.72,
+                  "balance": 50153.64,
+                  "description": "0000008870115666 Card Transaction CARD SP SERVICES LTD SI NG 26JUL 4604-XXXX-XXXX-3825",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 Jul 2026",
+                  "amount": -0.5,
+                  "balance": 50902.36,
+                  "description": "0000003073101750 Txn Charges Billing CHARGES Billing Statement 0000003073101750",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 Jul 2026",
+                  "amount": -5052.37,
+                  "balance": 50902.86,
+                  "description": "0000004828857466 Salary Payment FAST PAYMENT M:+6596876294 SALARY PAYMENT SGD 5,052",
+                  "counterparty": null
+                },
+                {
+                  "date": "21 Jul 2026",
+                  "amount": -5722.27,
+                  "balance": 55955.23,
+                  "description": "0000002173753911 Outward Remittance GIRO MERIDIAN LOGISTICS SERVICES SGD 5,722",
+                  "counterparty": "MERIDIAN LOGISTICS SERVICES"
+                },
+                {
+                  "date": "20 Jul 2026",
+                  "amount": 10240.6,
+                  "balance": 61677.5,
+                  "description": "0000002782354843 Inward Funds Transfer FAST PAYMENT OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 10,241",
+                  "counterparty": "HARBOURFRONT DISTRIBUTORS PTE LTD"
+                },
+                {
+                  "date": "17 Jul 2026",
+                  "amount": -5617.47,
+                  "balance": 51436.9,
+                  "description": "0000006848274603 Outward Remittance GIRO UNITED PAPER SUPPLY PTE. LTD. SGD 5,617",
+                  "counterparty": "UNITED PAPER SUPPLY PTE. LTD."
+                },
+                {
+                  "date": "16 Jul 2026",
+                  "amount": 8401.71,
+                  "balance": 57054.37,
+                  "description": "0000009489559560 Inward Funds Transfer FAST PAYMENT OTHER KIM SENG TRADING PTE. LTD. SGD 8,402",
+                  "counterparty": "KIM SENG TRADING PTE. LTD."
+                },
+                {
+                  "date": "14 Jul 2026",
+                  "amount": 6570.83,
+                  "balance": 48652.66,
+                  "description": "0000005118333721 Inward Funds Transfer FAST PAYMENT OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 6,571",
+                  "counterparty": "ORIENT PACIFIC SUPPLIES PTE LTD"
+                },
+                {
+                  "date": "13 Jul 2026",
+                  "amount": -1243.96,
+                  "balance": 42081.83,
+                  "description": "0000008953540761 Giro Payment GIRO SP SERVICES LTD UTILITIES",
+                  "counterparty": "SP SERVICES LTD"
+                },
+                {
+                  "date": "13 Jul 2026",
+                  "amount": -4410.4,
+                  "balance": 43325.79,
+                  "description": "0000009571070333 Outward Remittance GIRO SEAWAY FREIGHT (S) PTE LTD SGD 4,410",
+                  "counterparty": "SEAWAY FREIGHT (S) PTE LTD"
+                },
+                {
+                  "date": "01 Jul 2026",
+                  "amount": -6690.0,
+                  "balance": 47736.19,
+                  "description": "0000009515708768 Giro Payment GIRO PREMISES RENTAL JUL26",
+                  "counterparty": null
+                },
+                {
+                  "date": "30 Jun 2026",
+                  "amount": -35.0,
+                  "balance": 54426.19,
+                  "description": "0000003670730339 Txn Charges Billing CHARGES Billing Statement 0000003670730339",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 Jun 2026",
+                  "amount": -0.5,
+                  "balance": 54461.19,
+                  "description": "0000001012773910 Txn Charges Billing CHARGES Billing Statement 0000001012773910",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 Jun 2026",
+                  "amount": -5052.37,
+                  "balance": 54461.69,
+                  "description": "0000004725494826 Salary Payment FAST PAYMENT M:+6583553970 SALARY PAYMENT SGD 5,052",
+                  "counterparty": null
+                },
+                {
+                  "date": "19 Jun 2026",
+                  "amount": -5897.61,
+                  "balance": 59514.06,
+                  "description": "0000001080198658 Outward Remittance GIRO MERIDIAN LOGISTICS SERVICES SGD 5,898",
+                  "counterparty": "MERIDIAN LOGISTICS SERVICES"
+                },
+                {
+                  "date": "17 Jun 2026",
+                  "amount": 10345.1,
+                  "balance": 65411.67,
+                  "description": "0000006604671522 Inward Funds Transfer FAST PAYMENT OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 10,345",
+                  "counterparty": "HARBOURFRONT DISTRIBUTORS PTE LTD"
+                },
+                {
+                  "date": "15 Jun 2026",
+                  "amount": -5195.12,
+                  "balance": 55066.57,
+                  "description": "0000008367826034 Outward Remittance GIRO UNITED PAPER SUPPLY PTE. LTD. SGD 5,195",
+                  "counterparty": "UNITED PAPER SUPPLY PTE. LTD."
+                },
+                {
+                  "date": "14 Jun 2026",
+                  "amount": 7708.68,
+                  "balance": 60261.69,
+                  "description": "0000001025772971 Inward Funds Transfer FAST PAYMENT OTHER KIM SENG TRADING PTE. LTD. SGD 7,709",
+                  "counterparty": "KIM SENG TRADING PTE. LTD."
+                },
+                {
+                  "date": "12 Jun 2026",
+                  "amount": 7215.4,
+                  "balance": 52553.01,
+                  "description": "0000008186837919 Inward Funds Transfer FAST PAYMENT OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 7,215",
+                  "counterparty": "ORIENT PACIFIC SUPPLIES PTE LTD"
+                },
+                {
+                  "date": "11 Jun 2026",
+                  "amount": -1243.96,
+                  "balance": 45337.61,
+                  "description": "0000007255517428 Giro Payment GIRO SP SERVICES LTD UTILITIES",
+                  "counterparty": "SP SERVICES LTD"
+                },
+                {
+                  "date": "11 Jun 2026",
+                  "amount": -4193.22,
+                  "balance": 46581.57,
+                  "description": "0000006430460552 Outward Remittance GIRO SEAWAY FREIGHT (S) PTE LTD SGD 4,193",
+                  "counterparty": "SEAWAY FREIGHT (S) PTE LTD"
+                },
+                {
+                  "date": "09 Jun 2026",
+                  "amount": -766.73,
+                  "balance": 50774.79,
+                  "description": "0000004341867511 Card Transaction CARD GRAB* TRIP SI NG 09JUN 4862-XXXX-XXXX-2546",
+                  "counterparty": null
+                },
+                {
+                  "date": "07 Jun 2026",
+                  "amount": -777.8,
+                  "balance": 51541.52,
+                  "description": "0000009102068572 Card Transaction CARD COURTS MEGASTORE SI NG 07JUN 4440-XXXX-XXXX-2094",
+                  "counterparty": null
+                },
+                {
+                  "date": "02 Jun 2026",
+                  "amount": -6690.0,
+                  "balance": 52319.32,
+                  "description": "0000003213656732 Giro Payment GIRO PREMISES RENTAL JUN26",
+                  "counterparty": null
+                },
+                {
+                  "date": "31 May 2026",
+                  "amount": -35.0,
+                  "balance": 59009.32,
+                  "description": "0000003318544211 Txn Charges Billing CHARGES Billing Statement 0000003318544211",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 May 2026",
+                  "amount": -0.5,
+                  "balance": 59044.32,
+                  "description": "0000001813571410 Txn Charges Billing CHARGES Billing Statement 0000001813571410",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 May 2026",
+                  "amount": -5052.37,
+                  "balance": 59044.82,
+                  "description": "0000001156627769 Salary Payment FAST PAYMENT M:+6582209044 SALARY PAYMENT SGD 5,052",
+                  "counterparty": null
+                },
+                {
+                  "date": "20 May 2026",
+                  "amount": -5581.74,
+                  "balance": 64097.19,
+                  "description": "0000009786259778 Outward Remittance GIRO MERIDIAN LOGISTICS SERVICES SGD 5,582",
+                  "counterparty": "MERIDIAN LOGISTICS SERVICES"
+                },
+                {
+                  "date": "20 May 2026",
+                  "amount": 8093.5,
+                  "balance": 69678.93,
+                  "description": "0000002654136546 Inward Funds Transfer FAST PAYMENT OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 8,094",
+                  "counterparty": "HARBOURFRONT DISTRIBUTORS PTE LTD"
+                },
+                {
+                  "date": "18 May 2026",
+                  "amount": -5977.01,
+                  "balance": 61585.43,
+                  "description": "0000009803307329 Outward Remittance GIRO UNITED PAPER SUPPLY PTE. LTD. SGD 5,977",
+                  "counterparty": "UNITED PAPER SUPPLY PTE. LTD."
+                },
+                {
+                  "date": "16 May 2026",
+                  "amount": 7777.5,
+                  "balance": 67562.44,
+                  "description": "0000009033247315 Inward Funds Transfer FAST PAYMENT OTHER KIM SENG TRADING PTE. LTD. SGD 7,778",
+                  "counterparty": "KIM SENG TRADING PTE. LTD."
+                },
+                {
+                  "date": "12 May 2026",
+                  "amount": -1243.96,
+                  "balance": 59784.94,
+                  "description": "0000007621910352 Giro Payment GIRO SP SERVICES LTD UTILITIES",
+                  "counterparty": "SP SERVICES LTD"
+                },
+                {
+                  "date": "12 May 2026",
+                  "amount": 7840.15,
+                  "balance": 61028.9,
+                  "description": "0000002399828593 Inward Funds Transfer FAST PAYMENT OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 7,840",
+                  "counterparty": "ORIENT PACIFIC SUPPLIES PTE LTD"
+                },
+                {
+                  "date": "11 May 2026",
+                  "amount": -5649.44,
+                  "balance": 53188.75,
+                  "description": "0000002149349572 Outward Remittance GIRO SEAWAY FREIGHT (S) PTE LTD SGD 5,649",
+                  "counterparty": "SEAWAY FREIGHT (S) PTE LTD"
+                },
+                {
+                  "date": "02 May 2026",
+                  "amount": -754.97,
+                  "balance": 58838.19,
+                  "description": "0000004678801389 Card Transaction CARD COURTS MEGASTORE SI NG 02MAY 4546-XXXX-XXXX-9288",
+                  "counterparty": null
+                },
+                {
+                  "date": "02 May 2026",
+                  "amount": -6690.0,
+                  "balance": 59593.16,
+                  "description": "0000003349364641 Giro Payment GIRO PREMISES RENTAL MAY26",
+                  "counterparty": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "CBR_TMS_2026-09-26.pdf",
+          "document_type": "credit_report",
+          "classified_as": [
+            "credit_report"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Sim Teck Huat",
+              "extracted": null
+            },
+            {
+              "field": "id_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S8651228I",
+              "extracted": null
+            },
+            {
+              "field": "date_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "1986-01-23",
+              "extracted": null
+            },
+            {
+              "field": "nationality",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singaporean",
+              "extracted": null
+            },
+            {
+              "field": "individual_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "104 Jalan Dusun, #04-110, Singapore 320104",
+              "extracted": null
+            },
+            {
+              "field": "report_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-09-29",
+              "extracted": null
+            },
+            {
+              "field": "defaults",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "[0 rows]",
+              "extracted": null
+            },
+            {
+              "field": "bankruptcy_proceedings",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "[0 rows]",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "FATCA_SelfCert_TMS_2026.pdf",
+          "document_type": "fatca_crs_declaration",
+          "classified_as": [
+            "fatca_crs_declaration"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 Ang Mo Kio Avenue 5, #01-21, Singapore 569876",
+              "extracted": null
+            },
+            {
+              "field": "tin",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "declaration_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-09-29",
+              "extracted": null
+            },
+            {
+              "field": "country_of_incorporation",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singapore",
+              "extracted": null
+            },
+            {
+              "field": "tax_residences",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": true,
+              "rows_found": 1,
+              "rows_total": 1,
+              "expected": "[1 rows]",
+              "extracted": null
+            },
+            {
+              "field": "controlling_persons",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": true,
+              "rows_found": 0,
+              "rows_total": 1,
+              "expected": "[1 rows]",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "LoanOffer_48214.pdf",
+          "document_type": "list_of_loans",
+          "classified_as": [
+            "list_of_loans"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 Ang Mo Kio Avenue 5, #01-21, Singapore 569876",
+              "extracted": null
+            },
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Sim Teck Huat",
+              "extracted": null
+            },
+            {
+              "field": "loan_amount",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 375000.0,
+              "extracted": null
+            },
+            {
+              "field": "uen",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "facility_type",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Term Loan",
+              "extracted": null
+            },
+            {
+              "field": "offer_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-09-29",
+              "extracted": null
+            },
+            {
+              "field": "interest_rate",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 4.97,
+              "extracted": null
+            },
+            {
+              "field": "loan_tenure",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "84 months",
+              "extracted": null
+            },
+            {
+              "field": "monthly_instalment",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 5294.93,
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "NRIC_8175_back.jpg",
+          "document_type": "nric",
+          "classified_as": [
+            "nric"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "nric_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S9798175B",
+              "extracted": null
+            },
+            {
+              "field": "individual_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201 Ang Mo Kio Avenue 3, #04-209, Singapore 560201",
+              "extracted": null
+            },
+            {
+              "field": "date_of_issue",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2023-01-22",
+              "extracted": null
+            },
+            {
+              "field": "document_side",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "back",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "NRIC_8175_front.jpg",
+          "document_type": "nric",
+          "classified_as": [
+            "nric"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "nric_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S9798175B",
+              "extracted": null
+            },
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tay Yong Sheng",
+              "extracted": null
+            },
+            {
+              "field": "date_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "1997-08-29",
+              "extracted": null
+            },
+            {
+              "field": "country",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singapore",
+              "extracted": null
+            },
+            {
+              "field": "race",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Chinese",
+              "extracted": null
+            },
+            {
+              "field": "sex",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "M",
+              "extracted": null
+            },
+            {
+              "field": "document_side",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "front",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "POR_NRIC_20260925.pdf",
+          "document_type": "nric",
+          "classified_as": [
+            "nric"
+          ],
+          "classified_correctly": true,
+          "forged": true,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "nric_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S8651228I",
+              "extracted": null
+            },
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Sim Teck Huat",
+              "extracted": null
+            },
+            {
+              "field": "date_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "1986-01-23",
+              "extracted": null
+            },
+            {
+              "field": "country",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singapore",
+              "extracted": null
+            },
+            {
+              "field": "race",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Chinese",
+              "extracted": null
+            },
+            {
+              "field": "sex",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "F",
+              "extracted": null
+            },
+            {
+              "field": "individual_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "104 Jalan Dusun, #04-110, Singapore 320104",
+              "extracted": null
+            },
+            {
+              "field": "date_of_issue",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2020-01-26",
+              "extracted": null
+            },
+            {
+              "field": "document_side",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "single",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "POR_UtilityBill_20260925.jpeg",
+          "document_type": "proof_of_address",
+          "classified_as": [
+            "proof_of_address"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tay Yong Sheng",
+              "extracted": null
+            },
+            {
+              "field": "individual_address",
+              "key": true,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201 Ang Mo Kio Avenue 3, #04-209, Singapore 560201",
+              "extracted": null
+            },
+            {
+              "field": "entity_type",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "individual",
+              "extracted": null
+            },
+            {
+              "field": "bill_date",
+              "key": false,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-09-21",
+              "extracted": null
+            },
+            {
+              "field": "billing_period_end",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-08-31",
+              "extracted": null
+            },
+            {
+              "field": "total_payable",
+              "key": false,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 133.85,
+              "extracted": null
+            },
+            {
+              "field": "due_date",
+              "key": false,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-10-05",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "SP_Utilities_TMS.pdf",
+          "document_type": "proof_of_address",
+          "classified_as": [
+            "proof_of_address"
+          ],
+          "classified_correctly": true,
+          "forged": true,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 Ang Mo Kio Avenue 5 #01-12, Singapore 569876",
+              "extracted": null
+            },
+            {
+              "field": "entity_type",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "corporate",
+              "extracted": null
+            },
+            {
+              "field": "bill_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-11-06",
+              "extracted": null
+            },
+            {
+              "field": "billing_period_end",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-10-31",
+              "extracted": null
+            },
+            {
+              "field": "total_payable",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1243.96,
+              "extracted": null
+            },
+            {
+              "field": "due_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-11-20",
+              "extracted": null
+            },
+            {
+              "field": "previous_balance",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1240.37,
+              "extracted": null
+            },
+            {
+              "field": "payment_received",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1240.37,
+              "extracted": null
+            },
+            {
+              "field": "current_charges",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1243.96,
+              "extracted": null
+            },
+            {
+              "field": "contract_end_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2029-01-10",
+              "extracted": null
+            },
+            {
+              "field": "usage_this_period",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 4291,
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "SimTH_Passport_scan.jpg",
+          "document_type": "passport",
+          "classified_as": [
+            "passport"
+          ],
+          "classified_correctly": true,
+          "forged": true,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Sim Teck Huat",
+              "extracted": null
+            },
+            {
+              "field": "passport_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "E2496105E",
+              "extracted": null
+            },
+            {
+              "field": "date_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "1986-01-23",
+              "extracted": null
+            },
+            {
+              "field": "date_of_expiry",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2030-12-24",
+              "extracted": null
+            },
+            {
+              "field": "date_of_issue",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2020-12-24",
+              "extracted": null
+            },
+            {
+              "field": "place_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singapore",
+              "extracted": null
+            },
+            {
+              "field": "sex",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "F",
+              "extracted": null
+            },
+            {
+              "field": "nric_number",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S8651228I",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "TMS_BalanceSheet_Audited.pdf",
+          "document_type": "source_of_wealth",
+          "classified_as": [
+            "source_of_wealth"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "uen",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "financial_year_end",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-03-31",
+              "extracted": null
+            },
+            {
+              "field": "signing_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-08-08",
+              "extracted": null
+            },
+            {
+              "field": "revenue",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 3173000.0,
+              "extracted": null
+            },
+            {
+              "field": "profit_for_the_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 471700.0,
+              "extracted": null
+            },
+            {
+              "field": "profit_for_the_year_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 276900.0,
+              "extracted": null
+            },
+            {
+              "field": "total_assets",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 3290400.0,
+              "extracted": null
+            },
+            {
+              "field": "total_liabilities",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1784800.0,
+              "extracted": null
+            },
+            {
+              "field": "total_equity",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1505600.0,
+              "extracted": null
+            },
+            {
+              "field": "share_capital",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 200000.0,
+              "extracted": null
+            },
+            {
+              "field": "total_current_assets",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 2067000.0,
+              "extracted": null
+            },
+            {
+              "field": "total_non_current_assets",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1223400.0,
+              "extracted": null
+            },
+            {
+              "field": "total_current_liabilities",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 899400.0,
+              "extracted": null
+            },
+            {
+              "field": "total_non_current_liabilities",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 885400.0,
+              "extracted": null
+            },
+            {
+              "field": "retained_earnings_closing",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1305600.0,
+              "extracted": null
+            },
+            {
+              "field": "retained_earnings_closing_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 833900.0,
+              "extracted": null
+            },
+            {
+              "field": "total_assets_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 2572200.0,
+              "extracted": null
+            },
+            {
+              "field": "total_liabilities_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1538300.0,
+              "extracted": null
+            },
+            {
+              "field": "total_equity_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1033900.0,
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "TMS_Constitution.pdf",
+          "document_type": "company_constitution",
+          "classified_as": [
+            "company_constitution"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "uen",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "incorporation_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-11-06",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 Ang Mo Kio Avenue 5, #01-21, Singapore 569876",
+              "extracted": null
+            },
+            {
+              "field": "share_capital",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 200000.0,
+              "extracted": null
+            },
+            {
+              "field": "issued_shares",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 200000,
+              "extracted": null
+            },
+            {
+              "field": "subscribers",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": true,
+              "rows_found": 2,
+              "rows_total": 2,
+              "expected": "[2 rows]",
+              "extracted": null
+            },
+            {
+              "field": "quorum",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 2,
+              "extracted": null
+            },
+            {
+              "field": "adoption_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-11-06",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "TayYS_Salary_Slip_20260925.pdf",
+          "document_type": "payslip",
+          "classified_as": [
+            "payslip"
+          ],
+          "classified_correctly": true,
+          "forged": true,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tay Yong Sheng",
+              "extracted": null
+            },
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "net_pay",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 8180.29,
+              "extracted": null
+            },
+            {
+              "field": "basic_pay",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 3420.0,
+              "extracted": null
+            },
+            {
+              "field": "employee_cpf",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 776.0,
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "TidewaterMarineSupplies_BizFile_Officers_20260925.pdf",
+          "document_type": "certificate_of_incumbency",
+          "classified_as": [
+            "certificate_of_incumbency"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "TIDEWATER MARINE SUPPLIES PTE LTD",
+              "extracted": null
+            },
+            {
+              "field": "uen",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "incorporation_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-11-06",
+              "extracted": null
+            },
+            {
+              "field": "company_type",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "LIMITED EXEMPT PRIVATE COMPANY",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 ANG MO KIO AVENUE 5, #01-21, SINGAPORE 569876",
+              "extracted": null
+            },
+            {
+              "field": "share_capital",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 200000.0,
+              "extracted": null
+            },
+            {
+              "field": "share_class",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "ORDINARY",
+              "extracted": null
+            },
+            {
+              "field": "shareholders",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": true,
+              "rows_found": 2,
+              "rows_total": 2,
+              "expected": "[2 rows]",
+              "extracted": null
+            },
+            {
+              "field": "officers",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": true,
+              "rows_found": 2,
+              "rows_total": 2,
+              "expected": "[2 rows]",
+              "extracted": null
+            },
+            {
+              "field": "document_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-09-20",
+              "extracted": null
+            },
+            {
+              "field": "last_agm_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-04-05",
+              "extracted": null
+            },
+            {
+              "field": "last_annual_return_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-05-03",
+              "extracted": null
+            },
+            {
+              "field": "financial_year_end",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025-12-31",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "TidewaterMarineSupplies_NOA_YA2025.pdf",
+          "document_type": "notice_of_assessment",
+          "classified_as": [
+            "notice_of_assessment"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "tax_reference_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 Ang Mo Kio Avenue 5, #01-21, Singapore 569876",
+              "extracted": null
+            },
+            {
+              "field": "year_of_assessment",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025",
+              "extracted": null
+            },
+            {
+              "field": "noa_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025-06-10",
+              "extracted": null
+            },
+            {
+              "field": "eci",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 568300,
+              "extracted": null
+            },
+            {
+              "field": "tax_payable",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 39593.0,
+              "extracted": null
+            },
+            {
+              "field": "previous_assessment_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025-04-15",
+              "extracted": null
+            }
+          ]
+        }
+      ],
+      "detection": [
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "ACRA_CertIncorp_201657409E.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "BankStmt_TMS_2026-05to08.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "CBR_TMS_2026-09-26.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "date_consistency_tool"
+          ],
+          "own_findings": [
+            {
+              "tool": "date_consistency_tool",
+              "severity": "high",
+              "summary": "Account 1 was opened at age 21.0, below the minimum of 21 for this product type"
+            },
+            {
+              "tool": "date_consistency_tool",
+              "severity": "high",
+              "summary": "Account 3 was opened at age 21.0, below the minimum of 21 for this product type"
+            }
+          ],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "FATCA_SelfCert_TMS_2026.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis",
+            "font_consistency_tool"
+          ],
+          "own_findings": [
+            {
+              "tool": "font_consistency_tool",
+              "severity": "medium",
+              "summary": "Font deviation on 'signatory_designation': font 'Helvetica' vs. expected 'Aptos'; size 8.999999046325684 vs. expected 9.0 (1 occurrence)."
+            },
+            {
+              "tool": "font_consistency_tool",
+              "severity": "medium",
+              "summary": "Font deviation on 'declaration_date': font 'Helvetica' vs. expected 'Aptos'; size 9.00000286102295 vs. expected 9.0 (1 occurrence)."
+            }
+          ],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "LoanOffer_48214.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis"
+          ],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "NRIC_8175_back.jpg",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "NRIC_8175_front.jpg",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "POR_NRIC_20260925.pdf",
+          "forged": true,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "ai_generation_tool",
+            "metadata_tool"
+          ],
+          "own_findings": [],
+          "tampering": [
+            {
+              "dimension": "AI-Generated",
+              "right_check": true,
+              "names_value": null
+            }
+          ]
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "POR_UtilityBill_20260925.jpeg",
+          "forged": false,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "date_consistency_tool"
+          ],
+          "own_findings": [
+            {
+              "tool": "date_consistency_tool",
+              "severity": "low",
+              "summary": "Contract end date (2032-03-10) is more than 5 years beyond the bill date \u2014 unusually long for a utility contract"
+            }
+          ],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "SP_Utilities_TMS.pdf",
+          "forged": true,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis",
+            "layout_anomalies_tool",
+            "numerical_checks_tool"
+          ],
+          "own_findings": [],
+          "tampering": [
+            {
+              "dimension": "Cross-Document",
+              "right_check": true,
+              "names_value": true
+            }
+          ]
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "SimTH_Passport_scan.jpg",
+          "forged": true,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "metadata_tool",
+            "numerical_checks_tool"
+          ],
+          "own_findings": [],
+          "tampering": [
+            {
+              "dimension": "Metadata",
+              "right_check": true,
+              "names_value": null
+            }
+          ]
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "TMS_BalanceSheet_Audited.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "numerical_checks_tool"
+          ],
+          "own_findings": [
+            {
+              "tool": "numerical_checks_tool",
+              "severity": "low",
+              "summary": "Tax expense (96,600.00) is a flat 17% of profit before tax with no sign of the partial tax exemption a genuine Singapore company would apply"
+            }
+          ],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "TMS_Constitution.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis"
+          ],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "TayYS_Salary_Slip_20260925.pdf",
+          "forged": true,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "layout_anomalies_tool",
+            "numerical_checks_tool"
+          ],
+          "own_findings": [],
+          "tampering": [
+            {
+              "dimension": "Text Overlay",
+              "right_check": true,
+              "names_value": true
+            }
+          ]
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "TidewaterMarineSupplies_BizFile_Officers_20260925.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis"
+          ],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "filename": "TidewaterMarineSupplies_NOA_YA2025.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis"
+          ],
+          "own_findings": [],
+          "tampering": []
+        }
+      ],
+      "risk": [
+        {
+          "seed": 0,
+          "case_id": "C011",
+          "expected": "Critical",
+          "system": "Critical",
+          "system_level": "Critical",
+          "score": 93
+        }
+      ],
+      "run_notes": [
+        "C011: officer step on BankStmt_TMS_2026-05to08.pdf: saved the fields unchanged (entity_type low-confidence)",
+        "C011: officer step on TayYS_Salary_Slip_20260925.pdf: saved the fields unchanged (basic_pay low-confidence)",
+        "C011: officer step on CBR_TMS_2026-09-26.pdf: saved the fields unchanged (accounts low-confidence)",
+        "C011: officer step on POR_NRIC_20260925.pdf: saved the fields unchanged (nric_number low-confidence)",
+        "C011: officer step on POR_UtilityBill_20260925.jpeg: confirmed the classifier's type; saved the fields unchanged (consumption_trend low-confidence)",
+        "C011: officer step on SimTH_Passport_scan.jpg: saved the fields unchanged (mrz low-confidence)",
+        "C011: officer step on SP_Utilities_TMS.pdf: saved the fields unchanged (consumption_trend low-confidence)",
+        "C011: analysis start answered 409: {\"detail\":\"An analysis is already running for this case.\"}"
+      ]
+    },
+    {
+      "seed": 1,
+      "cases_scored": [
+        "C011"
+      ],
+      "cases_without_results": [
+        "C004",
+        "C008",
+        "C010",
+        "C012",
+        "C015",
+        "C020",
+        "C024",
+        "C025",
+        "C027"
+      ],
+      "extraction": [
+        {
+          "case_id": "C011",
+          "filename": "ACRA_CertIncorp_201657409E.pdf",
+          "document_type": "certificate_of_incorporation",
+          "classified_as": [
+            "certificate_of_incorporation"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "uen",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "incorporation_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-11-06",
+              "extracted": null
+            },
+            {
+              "field": "company_type",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Limited Exempt Private Company",
+              "extracted": null
+            },
+            {
+              "field": "incorporating_act",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Companies Act 1967",
+              "extracted": null
+            },
+            {
+              "field": "certificate_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-11-06",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "BankStmt_TMS_2026-05to08.pdf",
+          "document_type": "bank_statement",
+          "classified_as": [
+            "bank_statement"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "bank_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Oversea-Chinese Banking Corporation Limited",
+              "extracted": null
+            },
+            {
+              "field": "account_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "546525372720",
+              "extracted": null
+            },
+            {
+              "field": "entity_type",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "corporate",
+              "extracted": null
+            },
+            {
+              "field": "statement_period_start",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-05-01",
+              "extracted": null
+            },
+            {
+              "field": "statement_period_end",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-08-31",
+              "extracted": null
+            },
+            {
+              "field": "opening_balance",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 72193.39,
+              "extracted": null
+            },
+            {
+              "field": "ledger_balance",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 79370.01,
+              "extracted": null
+            },
+            {
+              "field": "total_credits",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 163960.73,
+              "extracted": null
+            },
+            {
+              "field": "total_debits",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 156784.11,
+              "extracted": null
+            },
+            {
+              "field": "transactions",
+              "key": true,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": true,
+              "rows_found": 41,
+              "rows_total": 49,
+              "expected": "[49 rows]",
+              "extracted": [
+                {
+                  "date": "31 Aug 2026",
+                  "amount": -35.0,
+                  "balance": 79370.01,
+                  "description": "0000006931976050 Txn Charges Billing CHARGES Billing Statement 0000006931976050",
+                  "counterparty": null
+                },
+                {
+                  "date": "28 Aug 2026",
+                  "amount": -508.93,
+                  "balance": 79405.01,
+                  "description": "0000008757714465 Card Transaction CARD FAIRPRICE FINEST SI NG 28AUG 4101-XXXX-XXXX-1633",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 Aug 2026",
+                  "amount": -0.5,
+                  "balance": 79913.94,
+                  "description": "0000003993639828 Txn Charges Billing CHARGES Billing Statement 0000003993639828",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 Aug 2026",
+                  "amount": -4741.02,
+                  "balance": 79914.44,
+                  "description": "0000005679305767 Salary Payment FAST PAYMENT M:+6599371038 SALARY PAYMENT SGD 4,741",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 Aug 2026",
+                  "amount": -8098.05,
+                  "balance": 84655.46,
+                  "description": "0000008841034289 Outward Remittance GIRO MERIDIAN LOGISTICS SERVICES SGD 8,098",
+                  "counterparty": "MERIDIAN LOGISTICS SERVICES"
+                },
+                {
+                  "date": "24 Aug 2026",
+                  "amount": -11204.86,
+                  "balance": 92753.51,
+                  "description": "0000005185277953 Outward Remittance GIRO UNITED PAPER SUPPLY PTE. LTD. SGD 11,205",
+                  "counterparty": "UNITED PAPER SUPPLY PTE. LTD."
+                },
+                {
+                  "date": "18 Aug 2026",
+                  "amount": -1245.7,
+                  "balance": 103958.37,
+                  "description": "0000001486204690 Giro Payment GIRO SP SERVICES LTD UTILITIES",
+                  "counterparty": "SP SERVICES LTD"
+                },
+                {
+                  "date": "10 Aug 2026",
+                  "amount": 14919.72,
+                  "balance": 105204.07,
+                  "description": "0000007333627643 Inward Funds Transfer FAST PAYMENT OTHER KIM SENG TRADING PTE. LTD. SGD 14,920",
+                  "counterparty": "KIM SENG TRADING PTE. LTD."
+                },
+                {
+                  "date": "08 Aug 2026",
+                  "amount": 11639.2,
+                  "balance": 90284.35,
+                  "description": "0000008630398750 Inward Funds Transfer FAST PAYMENT OTHER SUNRISE PROVISIONS PTE LTD SGD 11,639",
+                  "counterparty": "SUNRISE PROVISIONS PTE LTD"
+                },
+                {
+                  "date": "04 Aug 2026",
+                  "amount": -11510.07,
+                  "balance": 78645.15,
+                  "description": "0000009869794320 Outward Remittance GIRO TAN HENG PACKAGING PTE LTD SGD 11,510",
+                  "counterparty": "TAN HENG PACKAGING PTE LTD"
+                },
+                {
+                  "date": "04 Aug 2026",
+                  "amount": 13439.82,
+                  "balance": 90155.22,
+                  "description": "0000005614386760 Inward Funds Transfer FAST PAYMENT OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 13,440",
+                  "counterparty": "HARBOURFRONT DISTRIBUTORS PTE LTD"
+                },
+                {
+                  "date": "01 Aug 2026",
+                  "amount": -4570.0,
+                  "balance": 76715.4,
+                  "description": "0000003770775635 Giro Payment GIRO PREMISES RENTAL AUG26",
+                  "counterparty": null
+                },
+                {
+                  "date": "31 Jul 2026",
+                  "amount": -35.0,
+                  "balance": 81285.4,
+                  "description": "0000004864909760 Txn Charges Billing CHARGES Billing Statement 0000004864909760",
+                  "counterparty": null
+                },
+                {
+                  "date": "28 Jul 2026",
+                  "amount": -8108.38,
+                  "balance": 81320.4,
+                  "description": "0000001011081003 Outward Remittance GIRO MERIDIAN LOGISTICS SERVICES SGD 8,108",
+                  "counterparty": "MERIDIAN LOGISTICS SERVICES"
+                },
+                {
+                  "date": "25 Jul 2026",
+                  "amount": -0.5,
+                  "balance": 89428.78,
+                  "description": "0000002397552678 Txn Charges Billing CHARGES Billing Statement 0000002397552678",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 Jul 2026",
+                  "amount": -4741.02,
+                  "balance": 89429.28,
+                  "description": "0000006041912411 Salary Payment FAST PAYMENT M:+6593457837 SALARY PAYMENT SGD 4,741",
+                  "counterparty": null
+                },
+                {
+                  "date": "22 Jul 2026",
+                  "amount": -8457.12,
+                  "balance": 94170.3,
+                  "description": "0000002783698873 Outward Remittance GIRO UNITED PAPER SUPPLY PTE. LTD. SGD 8,457",
+                  "counterparty": "UNITED PAPER SUPPLY PTE. LTD."
+                },
+                {
+                  "date": "15 Jul 2026",
+                  "amount": -377.3,
+                  "balance": 102627.42,
+                  "description": "0000009066626639 Card Transaction CARD SHELL SERVICE STN SI NG 15JUL 4427-XXXX-XXXX-9269",
+                  "counterparty": null
+                },
+                {
+                  "date": "10 Jul 2026",
+                  "amount": -1245.7,
+                  "balance": 103004.72,
+                  "description": "0000007114959369 Giro Payment GIRO SP SERVICES LTD UTILITIES",
+                  "counterparty": "SP SERVICES LTD"
+                },
+                {
+                  "date": "09 Jul 2026",
+                  "amount": 11885.76,
+                  "balance": 104250.42,
+                  "description": "0000005880658881 Inward Funds Transfer FAST PAYMENT OTHER SUNRISE PROVISIONS PTE LTD SGD 11,886",
+                  "counterparty": "SUNRISE PROVISIONS PTE LTD"
+                },
+                {
+                  "date": "09 Jul 2026",
+                  "amount": 16103.99,
+                  "balance": 92364.66,
+                  "description": "0000008025167241 Inward Funds Transfer FAST PAYMENT OTHER KIM SENG TRADING PTE. LTD. SGD 16,104",
+                  "counterparty": "KIM SENG TRADING PTE. LTD."
+                },
+                {
+                  "date": "03 Jul 2026",
+                  "amount": -10026.54,
+                  "balance": 76260.67,
+                  "description": "0000006329150024 Outward Remittance GIRO TAN HENG PACKAGING PTE LTD SGD 10,027",
+                  "counterparty": "TAN HENG PACKAGING PTE LTD"
+                },
+                {
+                  "date": "03 Jul 2026",
+                  "amount": 12961.84,
+                  "balance": 86287.21,
+                  "description": "0000004353605771 Inward Funds Transfer FAST PAYMENT OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 12,962",
+                  "counterparty": "HARBOURFRONT DISTRIBUTORS PTE LTD"
+                },
+                {
+                  "date": "01 Jul 2026",
+                  "amount": -4570.0,
+                  "balance": 73325.37,
+                  "description": "0000009204705297 Giro Payment GIRO PREMISES RENTAL JUL26",
+                  "counterparty": null
+                },
+                {
+                  "date": "30 Jun 2026",
+                  "amount": -35.0,
+                  "balance": 77895.37,
+                  "description": "0000009627239521 Txn Charges Billing CHARGES Billing Statement 0000009627239521",
+                  "counterparty": null
+                },
+                {
+                  "date": "26 Jun 2026",
+                  "amount": -589.6,
+                  "balance": 77930.37,
+                  "description": "0000005109080392 Card Transaction CARD COURTS MEGASTORE SI NG 26JUN 4240-XXXX-XXXX-6217",
+                  "counterparty": null
+                },
+                {
+                  "date": "26 Jun 2026",
+                  "amount": -8668.38,
+                  "balance": 78519.97,
+                  "description": "0000009567203475 Outward Remittance GIRO MERIDIAN LOGISTICS SERVICES SGD 8,668",
+                  "counterparty": "MERIDIAN LOGISTICS SERVICES"
+                },
+                {
+                  "date": "25 Jun 2026",
+                  "amount": -0.5,
+                  "balance": 87188.35,
+                  "description": "0000001440004572 Txn Charges Billing CHARGES Billing Statement 0000001440004572",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 Jun 2026",
+                  "amount": -4741.02,
+                  "balance": 87188.85,
+                  "description": "0000007661083233 Salary Payment FAST PAYMENT M:+6583020285 SALARY PAYMENT SGD 4,741",
+                  "counterparty": null
+                },
+                {
+                  "date": "22 Jun 2026",
+                  "amount": -9103.65,
+                  "balance": 91929.87,
+                  "description": "0000008408507156 Outward Remittance GIRO UNITED PAPER SUPPLY PTE. LTD. SGD 9,104",
+                  "counterparty": "UNITED PAPER SUPPLY PTE. LTD."
+                },
+                {
+                  "date": "13 Jun 2026",
+                  "amount": -383.55,
+                  "balance": 101033.52,
+                  "description": "0000005094375847 Card Transaction CARD GRAB* TRIP SI NG 13JUN 4787-XXXX-XXXX-6440",
+                  "counterparty": null
+                },
+                {
+                  "date": "10 Jun 2026",
+                  "amount": -1245.7,
+                  "balance": 101417.07,
+                  "description": "0000003873793878 Giro Payment GIRO SP SERVICES LTD UTILITIES",
+                  "counterparty": "SP SERVICES LTD"
+                },
+                {
+                  "date": "10 Jun 2026",
+                  "amount": 12451.27,
+                  "balance": 102662.77,
+                  "description": "0000008949767356 Inward Funds Transfer FAST PAYMENT OTHER SUNRISE PROVISIONS PTE LTD SGD 12,451",
+                  "counterparty": "SUNRISE PROVISIONS PTE LTD"
+                },
+                {
+                  "date": "06 Jun 2026",
+                  "amount": -9602.04,
+                  "balance": 90211.5,
+                  "description": "0000008156306719 Outward Remittance GIRO TAN HENG PACKAGING PTE LTD SGD 9,602",
+                  "counterparty": "TAN HENG PACKAGING PTE LTD"
+                },
+                {
+                  "date": "06 Jun 2026",
+                  "amount": 16665.16,
+                  "balance": 99813.54,
+                  "description": "0000006604163933 Inward Funds Transfer FAST PAYMENT OTHER KIM SENG TRADING PTE. LTD. SGD 16,665",
+                  "counterparty": "KIM SENG TRADING PTE. LTD."
+                },
+                {
+                  "date": "04 Jun 2026",
+                  "amount": 11504.05,
+                  "balance": 83148.38,
+                  "description": "0000002747755229 Inward Funds Transfer FAST PAYMENT OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 11,504",
+                  "counterparty": "HARBOURFRONT DISTRIBUTORS PTE LTD"
+                },
+                {
+                  "date": "02 Jun 2026",
+                  "amount": -4570.0,
+                  "balance": 71644.33,
+                  "description": "0000004872534555 Giro Payment GIRO PREMISES RENTAL JUN26",
+                  "counterparty": null
+                },
+                {
+                  "date": "31 May 2026",
+                  "amount": -35.0,
+                  "balance": 76214.33,
+                  "description": "0000005250136946 Txn Charges Billing CHARGES Billing Statement 0000005250136946",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 May 2026",
+                  "amount": -0.5,
+                  "balance": 76249.33,
+                  "description": "0000004611809463 Txn Charges Billing CHARGES Billing Statement 0000004611809463",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 May 2026",
+                  "amount": -4741.02,
+                  "balance": 76249.83,
+                  "description": "0000008332379817 Salary Payment FAST PAYMENT M:+6593295204 SALARY PAYMENT SGD 4,741",
+                  "counterparty": null
+                },
+                {
+                  "date": "25 May 2026",
+                  "amount": -8210.94,
+                  "balance": 80990.85,
+                  "description": "0000009414016646 Outward Remittance GIRO MERIDIAN LOGISTICS SERVICES SGD 8,211",
+                  "counterparty": "MERIDIAN LOGISTICS SERVICES"
+                },
+                {
+                  "date": "19 May 2026",
+                  "amount": -9890.47,
+                  "balance": 89201.79,
+                  "description": "0000002859910405 Outward Remittance GIRO UNITED PAPER SUPPLY PTE. LTD. SGD 9,890",
+                  "counterparty": "UNITED PAPER SUPPLY PTE. LTD."
+                },
+                {
+                  "date": "15 May 2026",
+                  "amount": -1245.7,
+                  "balance": 99092.26,
+                  "description": "0000004072652137 Giro Payment GIRO SP SERVICES LTD UTILITIES",
+                  "counterparty": "SP SERVICES LTD"
+                },
+                {
+                  "date": "12 May 2026",
+                  "amount": 14848.02,
+                  "balance": 100337.96,
+                  "description": "0000002648736326 Inward Funds Transfer FAST PAYMENT OTHER SUNRISE PROVISIONS PTE LTD SGD 14,848",
+                  "counterparty": "SUNRISE PROVISIONS PTE LTD"
+                },
+                {
+                  "date": "07 May 2026",
+                  "amount": 13495.31,
+                  "balance": 85489.94,
+                  "description": "0000002141107066 Inward Funds Transfer FAST PAYMENT OTHER KIM SENG TRADING PTE. LTD. SGD 13,495",
+                  "counterparty": "KIM SENG TRADING PTE. LTD."
+                },
+                {
+                  "date": "05 May 2026",
+                  "amount": -668.42,
+                  "balance": 71994.63,
+                  "description": "0000006135303296 Card Transaction CARD SP SERVICES LTD SI NG 05MAY 4996-XXXX-XXXX-7683",
+                  "counterparty": "SP SERVICES LTD"
+                },
+                {
+                  "date": "04 May 2026",
+                  "amount": -9006.93,
+                  "balance": 72663.05,
+                  "description": "0000006640282441 Outward Remittance GIRO TAN HENG PACKAGING PTE LTD SGD 9,007",
+                  "counterparty": "TAN HENG PACKAGING PTE LTD"
+                },
+                {
+                  "date": "04 May 2026",
+                  "amount": 14046.59,
+                  "balance": 81669.98,
+                  "description": "0000009995584617 Inward Funds Transfer FAST PAYMENT OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 14,047",
+                  "counterparty": "HARBOURFRONT DISTRIBUTORS PTE LTD"
+                },
+                {
+                  "date": "02 May 2026",
+                  "amount": -4570.0,
+                  "balance": 67623.39,
+                  "description": "0000009144275455 Giro Payment GIRO PREMISES RENTAL MAY26",
+                  "counterparty": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "CBR_TMS_2026-09-26.pdf",
+          "document_type": "credit_report",
+          "classified_as": [
+            "credit_report"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Sim Teck Huat",
+              "extracted": null
+            },
+            {
+              "field": "id_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S8651228I",
+              "extracted": null
+            },
+            {
+              "field": "date_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "1986-01-23",
+              "extracted": null
+            },
+            {
+              "field": "nationality",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singaporean",
+              "extracted": null
+            },
+            {
+              "field": "individual_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "104 Jalan Dusun, #04-110, Singapore 320104",
+              "extracted": null
+            },
+            {
+              "field": "report_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-09-29",
+              "extracted": null
+            },
+            {
+              "field": "bankruptcy_proceedings",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "[0 rows]",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "FATCA_SelfCert_TMS_2026.pdf",
+          "document_type": "fatca_crs_declaration",
+          "classified_as": [
+            "fatca_crs_declaration"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 Ang Mo Kio Avenue 5, #01-21, Singapore 569876",
+              "extracted": null
+            },
+            {
+              "field": "tin",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "declaration_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-09-29",
+              "extracted": null
+            },
+            {
+              "field": "country_of_incorporation",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singapore",
+              "extracted": null
+            },
+            {
+              "field": "tax_residences",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": true,
+              "rows_found": 1,
+              "rows_total": 1,
+              "expected": "[1 rows]",
+              "extracted": null
+            },
+            {
+              "field": "controlling_persons",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": true,
+              "rows_found": 0,
+              "rows_total": 1,
+              "expected": "[1 rows]",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "LoanOffer_48214.pdf",
+          "document_type": "list_of_loans",
+          "classified_as": [
+            "list_of_loans"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 Ang Mo Kio Avenue 5, #01-21, Singapore 569876",
+              "extracted": null
+            },
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Sim Teck Huat",
+              "extracted": null
+            },
+            {
+              "field": "loan_amount",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 375000.0,
+              "extracted": null
+            },
+            {
+              "field": "uen",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "facility_type",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Term Loan",
+              "extracted": null
+            },
+            {
+              "field": "offer_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-09-29",
+              "extracted": null
+            },
+            {
+              "field": "interest_rate",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 4.97,
+              "extracted": null
+            },
+            {
+              "field": "loan_tenure",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "84 months",
+              "extracted": null
+            },
+            {
+              "field": "monthly_instalment",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 5294.93,
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "NRIC_8175_back.jpg",
+          "document_type": "nric",
+          "classified_as": [
+            "nric"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "nric_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S9798175B",
+              "extracted": null
+            },
+            {
+              "field": "individual_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201 Ang Mo Kio Avenue 3, #04-209, Singapore 560201",
+              "extracted": null
+            },
+            {
+              "field": "date_of_issue",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2021-01-24",
+              "extracted": null
+            },
+            {
+              "field": "document_side",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "back",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "NRIC_8175_front.jpg",
+          "document_type": "nric",
+          "classified_as": [
+            "nric"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "nric_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S9798175B",
+              "extracted": null
+            },
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tay Yong Sheng",
+              "extracted": null
+            },
+            {
+              "field": "date_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "1997-08-29",
+              "extracted": null
+            },
+            {
+              "field": "country",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singapore",
+              "extracted": null
+            },
+            {
+              "field": "race",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Chinese",
+              "extracted": null
+            },
+            {
+              "field": "sex",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "F",
+              "extracted": null
+            },
+            {
+              "field": "document_side",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "front",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "POR_NRIC_20260925.pdf",
+          "document_type": "nric",
+          "classified_as": [
+            "nric"
+          ],
+          "classified_correctly": true,
+          "forged": true,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "nric_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S8651228I",
+              "extracted": null
+            },
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Sim Teck Huat",
+              "extracted": null
+            },
+            {
+              "field": "date_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "1986-01-23",
+              "extracted": null
+            },
+            {
+              "field": "country",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singapore",
+              "extracted": null
+            },
+            {
+              "field": "race",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Chinese",
+              "extracted": null
+            },
+            {
+              "field": "sex",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "F",
+              "extracted": null
+            },
+            {
+              "field": "individual_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "104 Jalan Dusun, #04-110, Singapore 320104",
+              "extracted": null
+            },
+            {
+              "field": "date_of_issue",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2022-09-03",
+              "extracted": null
+            },
+            {
+              "field": "document_side",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "single",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "POR_UtilityBill_20260925.jpeg",
+          "document_type": "proof_of_address",
+          "classified_as": [
+            "proof_of_address"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tay Yong Sheng",
+              "extracted": null
+            },
+            {
+              "field": "individual_address",
+              "key": true,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201 Ang Mo Kio Avenue 3, #04-209, Singapore 560201",
+              "extracted": null
+            },
+            {
+              "field": "entity_type",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "individual",
+              "extracted": null
+            },
+            {
+              "field": "bill_date",
+              "key": false,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-09-24",
+              "extracted": null
+            },
+            {
+              "field": "billing_period_end",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-08-31",
+              "extracted": null
+            },
+            {
+              "field": "total_payable",
+              "key": false,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 109.26,
+              "extracted": null
+            },
+            {
+              "field": "due_date",
+              "key": false,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-10-08",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "SP_Utilities_TMS.pdf",
+          "document_type": "proof_of_address",
+          "classified_as": [
+            "proof_of_address"
+          ],
+          "classified_correctly": true,
+          "forged": true,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 Ang Mo Kio Avenue 5 #01-12, Singapore 569876",
+              "extracted": null
+            },
+            {
+              "field": "entity_type",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "corporate",
+              "extracted": null
+            },
+            {
+              "field": "bill_date",
+              "key": false,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-11-11",
+              "extracted": null
+            },
+            {
+              "field": "billing_period_end",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-10-31",
+              "extracted": null
+            },
+            {
+              "field": "total_payable",
+              "key": false,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1245.7,
+              "extracted": null
+            },
+            {
+              "field": "due_date",
+              "key": false,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-11-25",
+              "extracted": null
+            },
+            {
+              "field": "previous_balance",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1083.68,
+              "extracted": null
+            },
+            {
+              "field": "payment_received",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1083.68,
+              "extracted": null
+            },
+            {
+              "field": "current_charges",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1245.7,
+              "extracted": null
+            },
+            {
+              "field": "contract_end_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2030-10-28",
+              "extracted": null
+            },
+            {
+              "field": "usage_this_period",
+              "key": false,
+              "correct": false,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 4297,
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "SimTH_Passport_scan.jpg",
+          "document_type": "passport",
+          "classified_as": [
+            "passport"
+          ],
+          "classified_correctly": true,
+          "forged": true,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Sim Teck Huat",
+              "extracted": null
+            },
+            {
+              "field": "passport_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "E5384110E",
+              "extracted": null
+            },
+            {
+              "field": "date_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "1986-01-23",
+              "extracted": null
+            },
+            {
+              "field": "date_of_expiry",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2034-11-06",
+              "extracted": null
+            },
+            {
+              "field": "date_of_issue",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2024-11-06",
+              "extracted": null
+            },
+            {
+              "field": "place_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singapore",
+              "extracted": null
+            },
+            {
+              "field": "sex",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "M",
+              "extracted": null
+            },
+            {
+              "field": "nric_number",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S8651228I",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "TMS_BalanceSheet_Audited.pdf",
+          "document_type": "source_of_wealth",
+          "classified_as": [
+            "source_of_wealth"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "uen",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "financial_year_end",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025-12-31",
+              "extracted": null
+            },
+            {
+              "field": "signing_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-05-09",
+              "extracted": null
+            },
+            {
+              "field": "revenue",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 4385000.0,
+              "extracted": null
+            },
+            {
+              "field": "profit_for_the_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 645500.0,
+              "extracted": null
+            },
+            {
+              "field": "profit_for_the_year_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 439000.0,
+              "extracted": null
+            },
+            {
+              "field": "total_assets",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 3324200.0,
+              "extracted": null
+            },
+            {
+              "field": "total_liabilities",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1641700.0,
+              "extracted": null
+            },
+            {
+              "field": "total_equity",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1682500.0,
+              "extracted": null
+            },
+            {
+              "field": "share_capital",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 200000.0,
+              "extracted": null
+            },
+            {
+              "field": "total_current_assets",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 2094100.0,
+              "extracted": null
+            },
+            {
+              "field": "total_non_current_assets",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1230100.0,
+              "extracted": null
+            },
+            {
+              "field": "total_current_liabilities",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 924500.0,
+              "extracted": null
+            },
+            {
+              "field": "total_non_current_liabilities",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 717200.0,
+              "extracted": null
+            },
+            {
+              "field": "retained_earnings_closing",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1482500.0,
+              "extracted": null
+            },
+            {
+              "field": "retained_earnings_closing_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 837000.0,
+              "extracted": null
+            },
+            {
+              "field": "total_assets_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 2070600.0,
+              "extracted": null
+            },
+            {
+              "field": "total_liabilities_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1033600.0,
+              "extracted": null
+            },
+            {
+              "field": "total_equity_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1037000.0,
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "TMS_Constitution.pdf",
+          "document_type": "company_constitution",
+          "classified_as": [
+            "company_constitution"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "uen",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "incorporation_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-11-06",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 Ang Mo Kio Avenue 5, #01-21, Singapore 569876",
+              "extracted": null
+            },
+            {
+              "field": "share_capital",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 200000.0,
+              "extracted": null
+            },
+            {
+              "field": "issued_shares",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 200000,
+              "extracted": null
+            },
+            {
+              "field": "subscribers",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": true,
+              "rows_found": 2,
+              "rows_total": 2,
+              "expected": "[2 rows]",
+              "extracted": null
+            },
+            {
+              "field": "quorum",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 2,
+              "extracted": null
+            },
+            {
+              "field": "adoption_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-11-06",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "TayYS_Salary_Slip_20260925.pdf",
+          "document_type": "payslip",
+          "classified_as": [
+            "payslip"
+          ],
+          "classified_correctly": true,
+          "forged": true,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tay Yong Sheng",
+              "extracted": null
+            },
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "net_pay",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 10325.04,
+              "extracted": null
+            },
+            {
+              "field": "basic_pay",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 6220.0,
+              "extracted": null
+            },
+            {
+              "field": "employee_cpf",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1292.0,
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "TidewaterMarineSupplies_BizFile_Officers_20260925.pdf",
+          "document_type": "certificate_of_incumbency",
+          "classified_as": [
+            "certificate_of_incumbency"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "TIDEWATER MARINE SUPPLIES PTE LTD",
+              "extracted": null
+            },
+            {
+              "field": "uen",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "incorporation_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-11-06",
+              "extracted": null
+            },
+            {
+              "field": "company_type",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "LIMITED EXEMPT PRIVATE COMPANY",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 ANG MO KIO AVENUE 5, #01-21, SINGAPORE 569876",
+              "extracted": null
+            },
+            {
+              "field": "share_capital",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 200000.0,
+              "extracted": null
+            },
+            {
+              "field": "share_class",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "ORDINARY",
+              "extracted": null
+            },
+            {
+              "field": "shareholders",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": true,
+              "rows_found": 2,
+              "rows_total": 2,
+              "expected": "[2 rows]",
+              "extracted": null
+            },
+            {
+              "field": "officers",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": true,
+              "rows_found": 2,
+              "rows_total": 2,
+              "expected": "[2 rows]",
+              "extracted": null
+            },
+            {
+              "field": "document_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-09-23",
+              "extracted": null
+            },
+            {
+              "field": "last_agm_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-04-12",
+              "extracted": null
+            },
+            {
+              "field": "last_annual_return_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-05-10",
+              "extracted": null
+            },
+            {
+              "field": "financial_year_end",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025-12-31",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C011",
+          "filename": "TidewaterMarineSupplies_NOA_YA2025.pdf",
+          "document_type": "notice_of_assessment",
+          "classified_as": [
+            "notice_of_assessment"
+          ],
+          "classified_correctly": true,
+          "forged": false,
+          "uploaded": true,
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Tidewater Marine Supplies Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "tax_reference_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201657409E",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "5012 Ang Mo Kio Avenue 5, #01-21, Singapore 569876",
+              "extracted": null
+            },
+            {
+              "field": "year_of_assessment",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025",
+              "extracted": null
+            },
+            {
+              "field": "noa_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025-06-10",
+              "extracted": null
+            },
+            {
+              "field": "eci",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 777700,
+              "extracted": null
+            },
+            {
+              "field": "tax_payable",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 74784.0,
+              "extracted": null
+            },
+            {
+              "field": "previous_assessment_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025-04-22",
+              "extracted": null
+            }
+          ]
+        }
+      ],
+      "detection": [
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "ACRA_CertIncorp_201657409E.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "BankStmt_TMS_2026-05to08.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "CBR_TMS_2026-09-26.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "FATCA_SelfCert_TMS_2026.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis",
+            "font_consistency_tool"
+          ],
+          "own_findings": [
+            {
+              "tool": "font_consistency_tool",
+              "severity": "medium",
+              "summary": "Font deviation on 'signatory_designation': font 'Helvetica' vs. expected 'Aptos'; size 8.999999046325684 vs. expected 9.0 (1 occurrence)."
+            },
+            {
+              "tool": "font_consistency_tool",
+              "severity": "medium",
+              "summary": "Font deviation on 'declaration_date': font 'Helvetica' vs. expected 'Aptos'; size 9.00000286102295 vs. expected 9.0 (1 occurrence)."
+            }
+          ],
+          "tampering": []
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "LoanOffer_48214.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis"
+          ],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "NRIC_8175_back.jpg",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "NRIC_8175_front.jpg",
+          "forged": false,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "numerical_checks_tool"
+          ],
+          "own_findings": [
+            {
+              "tool": "numerical_checks_tool",
+              "severity": "high",
+              "summary": "S9798175B does not match any valid UEN format"
+            }
+          ],
+          "tampering": []
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "POR_NRIC_20260925.pdf",
+          "forged": true,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "ai_generation_tool",
+            "metadata_tool"
+          ],
+          "own_findings": [],
+          "tampering": [
+            {
+              "dimension": "AI-Generated",
+              "right_check": true,
+              "names_value": null
+            }
+          ]
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "POR_UtilityBill_20260925.jpeg",
+          "forged": false,
+          "scanned": false,
+          "flagged": false,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "SP_Utilities_TMS.pdf",
+          "forged": true,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis",
+            "layout_anomalies_tool"
+          ],
+          "own_findings": [],
+          "tampering": [
+            {
+              "dimension": "Cross-Document",
+              "right_check": true,
+              "names_value": true
+            }
+          ]
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "SimTH_Passport_scan.jpg",
+          "forged": true,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "metadata_tool",
+            "numerical_checks_tool"
+          ],
+          "own_findings": [],
+          "tampering": [
+            {
+              "dimension": "Metadata",
+              "right_check": true,
+              "names_value": null
+            }
+          ]
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "TMS_BalanceSheet_Audited.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "TMS_Constitution.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis"
+          ],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "TayYS_Salary_Slip_20260925.pdf",
+          "forged": true,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "layout_anomalies_tool",
+            "numerical_checks_tool"
+          ],
+          "own_findings": [],
+          "tampering": [
+            {
+              "dimension": "Text Overlay",
+              "right_check": true,
+              "names_value": true
+            }
+          ]
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "TidewaterMarineSupplies_BizFile_Officers_20260925.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis"
+          ],
+          "own_findings": [],
+          "tampering": []
+        },
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "filename": "TidewaterMarineSupplies_NOA_YA2025.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": true,
+          "tools_fired": [
+            "cross_document_analysis"
+          ],
+          "own_findings": [],
+          "tampering": []
+        }
+      ],
+      "risk": [
+        {
+          "seed": 1,
+          "case_id": "C011",
+          "expected": "Critical",
+          "system": "Critical",
+          "system_level": "Critical",
+          "score": 91
+        }
+      ],
+      "run_notes": [
+        "C011: not approved: POR_UtilityBill_20260925.jpeg: Only completed documents can be approved.",
+        "C011: officer step on POR_NRIC_20260925.pdf: saved the fields unchanged (nric_number low-confidence)",
+        "C011: officer step on SimTH_Passport_scan.jpg: saved the fields unchanged (mrz low-confidence)",
+        "C011: officer step on BankStmt_TMS_2026-05to08.pdf: saved the fields unchanged (bank_name, entity_type low-confidence)",
+        "C011: officer step on CBR_TMS_2026-09-26.pdf: saved the fields unchanged (accounts low-confidence)",
+        "C011: officer step on SP_Utilities_TMS.pdf: confirmed the classifier's type; saved the fields unchanged (document_title, utility_provider low-confidence)",
+        "C011: officer step on TayYS_Salary_Slip_20260925.pdf: saved the fields unchanged (basic_pay low-confidence)",
+        "C011: officer step on POR_UtilityBill_20260925.jpeg: confirmed the classifier's type; saved the fields unchanged (document_title, company_name low-confidence)",
+        "C011: not scanned: POR_UtilityBill_20260925.jpeg: status analyzed"
+      ]
+    }
+  ]
+}

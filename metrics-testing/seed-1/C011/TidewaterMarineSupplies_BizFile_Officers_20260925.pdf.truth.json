@@ -1,0 +1,55 @@
+{
+  "filename": "TidewaterMarineSupplies_BizFile_Officers_20260925.pdf",
+  "files": [
+    "TidewaterMarineSupplies_BizFile_Officers_20260925.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "TIDEWATER MARINE SUPPLIES PTE LTD",
+    "uen": "201657409E",
+    "incorporation_date": "2016-11-06",
+    "company_type": "LIMITED EXEMPT PRIVATE COMPANY",
+    "company_address": "5012 ANG MO KIO AVENUE 5, #01-21, SINGAPORE 569876",
+    "share_capital": 200000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "SIM TECK HUAT",
+        "identification_no": "S8651228I",
+        "address": "104 JALAN DUSUN, #04-110, SINGAPORE 320104",
+        "shares": 140000
+      },
+      {
+        "name": "TAY YONG SHENG",
+        "identification_no": "S9798175B",
+        "address": "201 ANG MO KIO AVENUE 3, #04-209, SINGAPORE 560201",
+        "shares": 60000
+      }
+    ],
+    "officers": [
+      {
+        "name": "SIM TECK HUAT",
+        "identification_no": "S8651228I",
+        "position": "Director",
+        "date_of_appointment": "2016-11-06"
+      },
+      {
+        "name": "NURUL AISYAH BINTE RAHMAN",
+        "identification_no": "S8333675G",
+        "position": "Secretary",
+        "date_of_appointment": "2017-01-14"
+      }
+    ],
+    "document_date": "2026-09-23",
+    "last_agm_date": "2026-04-12",
+    "last_annual_return_date": "2026-05-10",
+    "financial_year_end": "2025-12-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

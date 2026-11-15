@@ -1,0 +1,55 @@
+{
+  "filename": "LighthouseLearningHub_BizFile_Officers_20260805.pdf",
+  "files": [
+    "LighthouseLearningHub_BizFile_Officers_20260805.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "LIGHTHOUSE LEARNING HUB PTE LTD",
+    "uen": "201013138R",
+    "incorporation_date": "2010-12-15",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "10 ANSON ROAD, #09-30, SINGAPORE 079903",
+    "share_capital": 500000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "TOH YONG SHENG",
+        "identification_no": "S7606866F",
+        "address": "273C JURONG WEST AVENUE 3, #06-365, SINGAPORE 643273",
+        "shares": 350000
+      },
+      {
+        "name": "LEE LI TING",
+        "identification_no": "S0022746C",
+        "address": "221B TENGAH GARDEN WALK, #12-86, SINGAPORE 692221",
+        "shares": 150000
+      }
+    ],
+    "officers": [
+      {
+        "name": "TOH YONG SHENG",
+        "identification_no": "S7606866F",
+        "position": "Director",
+        "date_of_appointment": "2010-12-15"
+      },
+      {
+        "name": "RAJESWARI D/O MUTHUSAMY",
+        "identification_no": "S7383954H",
+        "position": "Secretary",
+        "date_of_appointment": "2010-12-25"
+      }
+    ],
+    "document_date": "2026-08-01",
+    "last_agm_date": "2025-07-07",
+    "last_annual_return_date": "2025-08-09",
+    "financial_year_end": "2025-03-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

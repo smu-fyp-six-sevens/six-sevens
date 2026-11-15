@@ -1,0 +1,27 @@
+{
+  "filename": "LowJH_Salary_Slip_20260705.pdf",
+  "files": [
+    "LowJH_Salary_Slip_20260705.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Low Jun Hao",
+    "company_name": "Ninefold Print & Packaging Pte Ltd",
+    "net_pay": 4825.33,
+    "basic_pay": 5790.0,
+    "total_earnings": 6870.0,
+    "total_deductions": 2044.67,
+    "employee_cpf": 1374.0,
+    "pay_date": "2026-06-30",
+    "pay_period_end": "2026-06-30"
+  },
+  "not_printed": {
+    "company_address": "438A Alexandra Road, #01-22, Singapore 119967"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,26 @@
+{
+  "filename": "LoanOffer_48214.pdf",
+  "files": [
+    "LoanOffer_48214.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Tidewater Marine Supplies Pte Ltd",
+    "company_address": "5012 Ang Mo Kio Avenue 5, #01-21, Singapore 569876",
+    "individual_name": "Sim Teck Huat",
+    "loan_amount": 375000.0,
+    "uen": "201657409E",
+    "facility_type": "Term Loan",
+    "offer_date": "2026-09-29",
+    "interest_rate": 4.97,
+    "loan_tenure": "84 months",
+    "monthly_instalment": 5294.93
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

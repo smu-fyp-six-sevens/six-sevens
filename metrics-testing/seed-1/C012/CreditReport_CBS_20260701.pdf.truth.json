@@ -1,0 +1,26 @@
+{
+  "filename": "CreditReport_CBS_20260701.pdf",
+  "files": [
+    "CreditReport_CBS_20260701.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Toh Chee Keong",
+    "id_number": "S7453862B",
+    "date_of_birth": "1974-06-09",
+    "nationality": "Singaporean",
+    "individual_address": "313 Shunfu Road, #07-108, Singapore 570313",
+    "report_date": "2026-07-06",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 1500000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

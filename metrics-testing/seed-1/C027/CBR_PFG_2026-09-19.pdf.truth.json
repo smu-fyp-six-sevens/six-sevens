@@ -1,0 +1,25 @@
+{
+  "filename": "CBR_PFG_2026-09-19.pdf",
+  "files": [
+    "CBR_PFG_2026-09-19.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Yeo Chee Keong",
+    "id_number": "S7483338A",
+    "date_of_birth": "1974-07-21",
+    "nationality": "Singaporean",
+    "individual_address": "106D Punggol Field, #02-71, Singapore 824106",
+    "report_date": "2026-09-22",
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 1500000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

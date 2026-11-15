@@ -1,0 +1,24 @@
+{
+  "filename": "IRAS_NOA_Company_20250819.pdf",
+  "files": [
+    "IRAS_NOA_Company_20250819.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Greenfield Agri-Tech Pte Ltd",
+    "tax_reference_number": "201425482H",
+    "company_address": "9 Temasek Boulevard, #02-04, Singapore 038989",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-08-19",
+    "eci": 315000,
+    "tax_payable": 18062.5,
+    "previous_assessment_date": "2025-07-15"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

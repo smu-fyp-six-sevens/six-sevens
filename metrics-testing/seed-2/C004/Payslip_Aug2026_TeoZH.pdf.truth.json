@@ -1,0 +1,26 @@
+{
+  "filename": "Payslip_Aug2026_TeoZH.pdf",
+  "files": [
+    "Payslip_Aug2026_TeoZH.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Teo Zhi Hao",
+    "company_name": "Northbridge Precision Engineering Pte Ltd",
+    "company_address": "3 Soon Lee Street, #01-13, Singapore 627606",
+    "net_pay": 5058.42,
+    "basic_pay": 5110.0,
+    "total_earnings": 5400.0,
+    "total_deductions": 341.58,
+    "employee_cpf": 270.0,
+    "pay_date": "2026-08-31",
+    "pay_period_end": "2026-08-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

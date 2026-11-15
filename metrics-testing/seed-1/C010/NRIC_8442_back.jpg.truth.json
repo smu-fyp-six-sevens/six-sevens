@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_8442_back.jpg",
+  "files": [
+    "NRIC_8442_back.jpg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S8818442D",
+    "individual_address": "471 Ang Mo Kio Avenue 10, #05-87, Singapore 560471",
+    "date_of_issue": "2020-03-08",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

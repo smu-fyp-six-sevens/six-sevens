@@ -1,0 +1,55 @@
+{
+  "filename": "ACRA_Incumbency_20260907.pdf",
+  "files": [
+    "ACRA_Incumbency_20260907.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "NORTHBRIDGE PRECISION ENGINEERING PTE LTD",
+    "uen": "201377812E",
+    "incorporation_date": "2013-03-31",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "3 SOON LEE STREET, #01-13, SINGAPORE 627606",
+    "share_capital": 750000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "TAN KOK WAI",
+        "identification_no": "S1390314Z",
+        "address": "20 TECK WHYE LANE, #05-46, SINGAPORE 680020",
+        "shares": 600000
+      },
+      {
+        "name": "TEO ZHI HAO",
+        "identification_no": "S1384715J",
+        "address": "115B JALAN AYER, #16-299, SINGAPORE 383115",
+        "shares": 150000
+      }
+    ],
+    "officers": [
+      {
+        "name": "TAN KOK WAI",
+        "identification_no": "S1390314Z",
+        "position": "Director",
+        "date_of_appointment": "2013-03-31"
+      },
+      {
+        "name": "CHAN SIEW PENG",
+        "identification_no": "S8282167H",
+        "position": "Secretary",
+        "date_of_appointment": "2013-05-16"
+      }
+    ],
+    "document_date": "2026-09-03",
+    "last_agm_date": "2025-10-25",
+    "last_annual_return_date": "2025-11-30",
+    "financial_year_end": "2025-06-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_3920_back.jpg",
+  "files": [
+    "NRIC_3920_back.jpg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7813920Z",
+    "individual_address": "481 Pasir Ris Drive 4, #10-240, Singapore 510481",
+    "date_of_issue": "2019-09-24",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

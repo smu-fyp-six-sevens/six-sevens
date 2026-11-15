@@ -1,0 +1,25 @@
+{
+  "filename": "LoanFacility_10193_1.pdf",
+  "files": [
+    "LoanFacility_10193_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Lighthouse Learning Hub Pte Ltd",
+    "company_address": "10 Anson Road, #09-30, Singapore 079903",
+    "individual_name": "Toh Yong Sheng",
+    "loan_amount": 290000.0,
+    "uen": "201013138R",
+    "facility_type": "Overdraft",
+    "offer_date": "2026-08-11",
+    "interest_rate": 6.09,
+    "review_date": "2027-08-11"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

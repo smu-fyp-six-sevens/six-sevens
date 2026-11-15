@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_6093_back.jpg",
+  "files": [
+    "NRIC_6093_back.jpg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7766093C",
+    "individual_address": "288A Jurong East Street 21, #10-224, Singapore 601288",
+    "date_of_issue": "2024-12-24",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

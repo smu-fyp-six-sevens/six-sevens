@@ -1,0 +1,22 @@
+{
+  "filename": "PFG_COI_scan.pdf",
+  "files": [
+    "PFG_COI_scan.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Primrose Florist & Gifts Pte Ltd",
+    "uen": "201683387R",
+    "incorporation_date": "2016-02-10",
+    "company_type": "Limited Exempt Private Company",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2016-02-10"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

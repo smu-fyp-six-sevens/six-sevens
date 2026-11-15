@@ -1,0 +1,25 @@
+{
+  "filename": "LoanOffer_48112.pdf",
+  "files": [
+    "LoanOffer_48112.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Evergreen Botanics Trading Pte Ltd",
+    "company_address": "3 Irving Road, #04-10, Singapore 369522",
+    "individual_name": "Mohamed Hafiz bin Yusof",
+    "loan_amount": 400000.0,
+    "uen": "201013127C",
+    "facility_type": "Term Loan under Enterprise Financing Scheme",
+    "offer_date": "2026-08-28",
+    "interest_rate": 4.25,
+    "loan_tenure": "5 years"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

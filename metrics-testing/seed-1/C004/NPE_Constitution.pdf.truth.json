@@ -1,0 +1,38 @@
+{
+  "filename": "NPE_Constitution.pdf",
+  "files": [
+    "NPE_Constitution.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Northbridge Precision Engineering Pte Ltd",
+    "uen": "201377812E",
+    "incorporation_date": "2013-03-31",
+    "company_address": "3 Soon Lee Street, #01-13, Singapore 627606",
+    "share_capital": 750000.0,
+    "issued_shares": 750000,
+    "subscribers": [
+      {
+        "name": "Tan Kok Wai",
+        "address": "20 Teck Whye Lane, #05-46, Singapore 680020",
+        "id_number": "S1390314Z",
+        "shares": 600000
+      },
+      {
+        "name": "Teo Zhi Hao",
+        "address": "115B Jalan Ayer, #16-299, Singapore 383115",
+        "id_number": "S1384715J",
+        "shares": 150000
+      }
+    ],
+    "quorum": 3,
+    "adoption_date": "2013-03-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_1500_back.png",
+  "files": [
+    "NRIC_1500_back.png"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S0801500G",
+    "individual_address": "454 Clementi Avenue 3, #05-63, Singapore 120454",
+    "date_of_issue": "2021-04-09",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

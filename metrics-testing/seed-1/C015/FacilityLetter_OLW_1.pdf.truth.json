@@ -1,0 +1,25 @@
+{
+  "filename": "FacilityLetter_OLW_1.pdf",
+  "files": [
+    "FacilityLetter_OLW_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Orchid Lane Wellness Pte Ltd",
+    "company_address": "1 Fusionopolis Walk, #08-13, Singapore 138628",
+    "individual_name": "Ho Mei Ling",
+    "loan_amount": 230000.0,
+    "uen": "200941250Z",
+    "facility_type": "Overdraft",
+    "offer_date": "2026-09-09",
+    "interest_rate": 6.44,
+    "review_date": "2027-09-09"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

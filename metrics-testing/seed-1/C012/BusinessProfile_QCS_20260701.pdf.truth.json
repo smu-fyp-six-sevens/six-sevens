@@ -1,0 +1,56 @@
+{
+  "filename": "BusinessProfile_QCS_20260701.pdf",
+  "files": [
+    "BusinessProfile_QCS_20260701.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "QUILLSTONE CORPORATE SERVICES PTE LTD",
+    "uen": "201324905W",
+    "incorporation_date": "2013-01-04",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "20 PASIR PANJANG ROAD, #06-09, SINGAPORE 117439",
+    "share_capital": 1000000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "TOH CHEE KEONG",
+        "identification_no": "S7453862B",
+        "address": "313 SHUNFU ROAD, #07-108, SINGAPORE 570313",
+        "shares": 650000
+      },
+      {
+        "name": "SITI AISHAH BINTE KAMAL",
+        "identification_no": "S7070937F",
+        "address": "105 HENDERSON CRESCENT, #21-333, SINGAPORE 150105",
+        "shares": 350000
+      }
+    ],
+    "officers": [
+      {
+        "name": "TOH CHEE KEONG",
+        "identification_no": "S7453862B",
+        "position": "Director",
+        "date_of_appointment": "2013-01-04"
+      },
+      {
+        "name": "RAJESWARI D/O MUTHUSAMY",
+        "identification_no": "S8846259I",
+        "position": "Secretary",
+        "date_of_appointment": "2013-02-07"
+      }
+    ],
+    "company_former_name": "AZURE BAY MARINE SERVICES PTE. LTD.",
+    "document_date": "2026-06-30",
+    "last_agm_date": "2026-05-13",
+    "last_annual_return_date": "2026-06-18",
+    "financial_year_end": "2025-12-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

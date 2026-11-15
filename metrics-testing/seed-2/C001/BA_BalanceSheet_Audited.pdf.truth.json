@@ -1,0 +1,36 @@
+{
+  "filename": "BA_BalanceSheet_Audited.pdf",
+  "files": [
+    "BA_BalanceSheet_Audited.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Brightwave Analytics Pte Ltd",
+    "uen": "201298459R",
+    "financial_year_end": "2026-06-30",
+    "signing_date": "2026-10-05",
+    "revenue": 2122000.0,
+    "profit_for_the_year": 180800.0,
+    "profit_for_the_year_prior_year": 176200.0,
+    "total_assets": 2454300.0,
+    "total_liabilities": 1363300.0,
+    "total_equity": 1091000.0,
+    "share_capital": 500000.0,
+    "total_current_assets": 1336100.0,
+    "total_non_current_assets": 1118200.0,
+    "total_current_liabilities": 900300.0,
+    "total_non_current_liabilities": 463000.0,
+    "retained_earnings_closing": 591000.0,
+    "retained_earnings_closing_prior_year": 410200.0,
+    "total_assets_prior_year": 2375900.0,
+    "total_liabilities_prior_year": 1465700.0,
+    "total_equity_prior_year": 910200.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

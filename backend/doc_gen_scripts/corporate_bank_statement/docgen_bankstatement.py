@@ -45,6 +45,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # backend/, for Singapore's public holidays
 
 import openpyxl
+import truth
+from case_facts import salted
 from app.fraud_detection.external_validation.sg_reference.holidays import SG_PUBLIC_HOLIDAYS
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -220,7 +222,7 @@ def load_stamp(path: str, white_cutoff: int = 232) -> ImageReader | None:
 # --------------------------------------------------------------------------
 
 def seeded_rng(key: str) -> random.Random:
-    return random.Random(int(hashlib.sha256(key.encode("utf-8")).hexdigest()[:16], 16))
+    return random.Random(int(hashlib.sha256(salted(key).encode("utf-8")).hexdigest()[:16], 16))
 
 
 def _rows(ws) -> list[dict[str, Any]]:
@@ -826,6 +828,8 @@ def generate(xlsx: str | Path, case_id: str, outdir: str | Path,
         writer.add_metadata({"/Keywords": SYNTHETIC_TAG})
         with open(out, "wb") as fh:
             writer.write(fh)
+
+    truth.record(out, "bank_statement", truth.bank_statement(ctx, blocks), derived={"entity_type"})
 
     months = ", ".join(m.strftime("%Y-%m") for m in ctx["months"])
     print(f"{case_id}  {out.name}  months={months}  "

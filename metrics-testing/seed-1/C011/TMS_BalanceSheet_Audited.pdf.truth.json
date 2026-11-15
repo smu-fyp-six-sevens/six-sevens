@@ -1,0 +1,36 @@
+{
+  "filename": "TMS_BalanceSheet_Audited.pdf",
+  "files": [
+    "TMS_BalanceSheet_Audited.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Tidewater Marine Supplies Pte Ltd",
+    "uen": "201657409E",
+    "financial_year_end": "2025-12-31",
+    "signing_date": "2026-05-09",
+    "revenue": 4385000.0,
+    "profit_for_the_year": 645500.0,
+    "profit_for_the_year_prior_year": 439000.0,
+    "total_assets": 3324200.0,
+    "total_liabilities": 1641700.0,
+    "total_equity": 1682500.0,
+    "share_capital": 200000.0,
+    "total_current_assets": 2094100.0,
+    "total_non_current_assets": 1230100.0,
+    "total_current_liabilities": 924500.0,
+    "total_non_current_liabilities": 717200.0,
+    "retained_earnings_closing": 1482500.0,
+    "retained_earnings_closing_prior_year": 837000.0,
+    "total_assets_prior_year": 2070600.0,
+    "total_liabilities_prior_year": 1033600.0,
+    "total_equity_prior_year": 1037000.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

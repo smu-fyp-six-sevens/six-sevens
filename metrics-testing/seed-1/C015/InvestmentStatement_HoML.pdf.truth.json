@@ -1,0 +1,22 @@
+{
+  "filename": "InvestmentStatement_HoML.pdf",
+  "files": [
+    "InvestmentStatement_HoML.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "HO MEI LING",
+    "individual_address": "120 BEDOK RESERVOIR ROAD,#07-136,Singapore,470120",
+    "account_number": "1008123132384174",
+    "net_asset_value": 13799.93,
+    "portfolio_value": 10769.62,
+    "cash_balance": 3030.31
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

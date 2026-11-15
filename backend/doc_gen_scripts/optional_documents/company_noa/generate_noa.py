@@ -47,6 +47,7 @@ from reportlab.lib.utils import ImageReader, simpleSplit
 from reportlab.pdfgen import canvas as pdfcanvas
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import truth  # noqa: E402
 from case_facts import seeded_rng  # noqa: E402
 from synthetic_signature import draw_signature  # noqa: E402
 from corp_source_of_wealth.balance_sheet_income_statement_generator import compute_years  # noqa: E402
@@ -485,6 +486,8 @@ def generate(xlsx: str | Path, outdir: str | Path, cases: list[str] | None = Non
         path = Path(outdir) / filename
         persona = build_persona(row)
         generate_noa(str(path), synthetic_tag=synthetic_tag, **persona)
+        truth.record(path, "notice_of_assessment",
+                     truth.notice_of_assessment(persona, compute_noa_tax(persona["eci"])["payable"]))
         written.append(path)
         print(f"{row.get('Case ID')}  {filename}  {row.get('Company Name (auto)')}")
     return written

@@ -215,7 +215,9 @@ def _history_retimer(dob: date, enquiry_date: date):
     account at 21 at the earliest (and no more than 22 years back), the newest event two months
     before this enquiry. The template's spacing is kept, compressed for a younger applicant."""
     end = enquiry_date - timedelta(days=60)
-    start = max(_years_after(dob, 21), enquiry_date - timedelta(days=round(22 * 365.25)))
+    # 31 days past the 21st birthday: _jitter_accounts then moves each account up to 30 days either way, and a
+    # card opened before 21 is flagged (CR.AGE_AT_OPENING).
+    start = max(_years_after(dob, 21) + timedelta(days=31), enquiry_date - timedelta(days=round(22 * 365.25)))
     start = min(start, end - timedelta(days=365))
     span = (_TEMPLATE_HISTORY_END - _TEMPLATE_HISTORY_START).days
     scale = min(1.0, (end - start).days / span)

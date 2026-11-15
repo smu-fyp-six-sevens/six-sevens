@@ -1,0 +1,26 @@
+{
+  "filename": "Iskandar_Passport_scan.jpg",
+  "files": [
+    "Iskandar_Passport_scan.jpg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Iskandar bin Hamzah",
+    "passport_number": "K3303511F",
+    "date_of_birth": "1970-11-14",
+    "date_of_expiry": "2030-08-18",
+    "date_of_issue": "2020-08-18",
+    "place_of_birth": "Singapore",
+    "sex": "M",
+    "nric_number": "S7032675B"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,26 @@
+{
+  "filename": "CreditReport_CBS_20260629.pdf",
+  "files": [
+    "CreditReport_CBS_20260629.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Ng Zhen Yu",
+    "id_number": "S8475358J",
+    "date_of_birth": "1984-05-25",
+    "nationality": "Singaporean",
+    "individual_address": "116 Marsiling Rise, #02-59, Singapore 730116",
+    "report_date": "2026-07-03",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 1500000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

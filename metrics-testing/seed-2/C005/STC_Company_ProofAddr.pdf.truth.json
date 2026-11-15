@@ -1,0 +1,28 @@
+{
+  "filename": "STC_Company_ProofAddr.pdf",
+  "files": [
+    "STC_Company_ProofAddr.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Saffron Table Catering Pte Ltd",
+    "company_address": "50 Gambas Crescent #05-13, Singapore 757022",
+    "entity_type": "corporate",
+    "bill_date": "2026-11-06",
+    "billing_period_end": "2026-10-31",
+    "total_payable": 698.53,
+    "due_date": "2026-11-20",
+    "previous_balance": 622.35,
+    "payment_received": 622.35,
+    "current_charges": 698.53,
+    "contract_end_date": "2031-04-01",
+    "usage_this_period": 2330
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

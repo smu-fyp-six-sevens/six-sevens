@@ -1,0 +1,55 @@
+{
+  "filename": "ACRA_Incumbency_20260705.pdf",
+  "files": [
+    "ACRA_Incumbency_20260705.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "NINEFOLD PRINT & PACKAGING PTE LTD",
+    "uen": "201065233R",
+    "incorporation_date": "2010-11-23",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "438A ALEXANDRA ROAD, #01-22, SINGAPORE 119967",
+    "share_capital": 250000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "PRIYA D/O SUBRAMANIAM",
+        "identification_no": "S6846510I",
+        "address": "427 BUKIT PANJANG RING ROAD, #03-20, SINGAPORE 670427",
+        "shares": 137500
+      },
+      {
+        "name": "LOW JUN HAO",
+        "identification_no": "S8903368C",
+        "address": "130A CANBERRA CRESCENT, #12-12, SINGAPORE 751130",
+        "shares": 112500
+      }
+    ],
+    "officers": [
+      {
+        "name": "PRIYA D/O SUBRAMANIAM",
+        "identification_no": "S6846510I",
+        "position": "Director",
+        "date_of_appointment": "2010-11-23"
+      },
+      {
+        "name": "RAJESWARI D/O MUTHUSAMY",
+        "identification_no": "S6880853G",
+        "position": "Secretary",
+        "date_of_appointment": "2010-12-06"
+      }
+    ],
+    "document_date": "2026-07-04",
+    "last_agm_date": "2026-01-26",
+    "last_annual_return_date": "2026-03-09",
+    "financial_year_end": "2025-09-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

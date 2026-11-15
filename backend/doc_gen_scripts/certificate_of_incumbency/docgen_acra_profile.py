@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "certificate_of_incorporation"))
 
 import openpyxl
+import truth
 from case_facts import company_facts, seeded_rng
 # Same seed key + word pools as coi_generator.py's own former-name synthesis, so a
 # case's Certificate of Incorporation and Certificate of Incumbency agree on
@@ -750,6 +751,7 @@ def generate(
         content = apply_defect(build_content(record), defect)
         filename = record["doc_row"].get("Filename") or f"{record['case_id']}_CertIncumbency.pdf"
         path = render(content, Path(outdir) / filename, synthetic_tag=synthetic_tag)
+        truth.record(path, "certificate_of_incumbency", truth.certificate_of_incumbency(content))
         written.append(path)
         print(
             f"{record['case_id']}  {filename}  [{content.get('defect') or 'clean'}]  "

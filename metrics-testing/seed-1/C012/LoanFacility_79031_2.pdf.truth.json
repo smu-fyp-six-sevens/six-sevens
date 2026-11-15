@@ -1,0 +1,25 @@
+{
+  "filename": "LoanFacility_79031_2.pdf",
+  "files": [
+    "LoanFacility_79031_2.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Quillstone Corporate Services Pte Ltd",
+    "company_address": "20 Pasir Panjang Road, #06-09, Singapore 117439",
+    "individual_name": "Toh Chee Keong",
+    "loan_amount": 100000.0,
+    "uen": "201324905W",
+    "facility_type": "Term Loan under Enterprise Financing Scheme",
+    "offer_date": "2026-07-06",
+    "interest_rate": 4.39,
+    "loan_tenure": "3 years"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

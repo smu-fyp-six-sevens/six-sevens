@@ -1,0 +1,38 @@
+{
+  "filename": "OLW_Constitution.pdf",
+  "files": [
+    "OLW_Constitution.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Orchid Lane Wellness Pte Ltd",
+    "uen": "200941250Z",
+    "incorporation_date": "2009-05-02",
+    "company_address": "1 Fusionopolis Walk, #08-13, Singapore 138628",
+    "share_capital": 750000.0,
+    "issued_shares": 750000,
+    "subscribers": [
+      {
+        "name": "Ho Mei Ling",
+        "address": "120 Bedok Reservoir Road, #07-136, Singapore 470120",
+        "id_number": "S7434568I",
+        "shares": 525000
+      },
+      {
+        "name": "Rajesh s/o Krishnan",
+        "address": "199B Punggol Field, #04-23, Singapore 822199",
+        "id_number": "S0426464I",
+        "shares": 225000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2009-05-02"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

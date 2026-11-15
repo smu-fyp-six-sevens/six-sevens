@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_4298_back.png",
+  "files": [
+    "NRIC_4298_back.png"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": "2",
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7574298C",
+    "individual_address": "159 Woodlands Street 13, #10-310, Singapore 730159",
+    "date_of_issue": "2019-05-17",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

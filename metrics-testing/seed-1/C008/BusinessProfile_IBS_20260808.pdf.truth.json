@@ -1,0 +1,55 @@
+{
+  "filename": "BusinessProfile_IBS_20260808.pdf",
+  "files": [
+    "BusinessProfile_IBS_20260808.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": "1",
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "IRONLEAF BUILDING SERVICES PTE LTD",
+    "uen": "201651600K",
+    "incorporation_date": "2016-05-18",
+    "company_type": "LIMITED EXEMPT PRIVATE COMPANY",
+    "company_address": "31 WOODLANDS CLOSE, #01-09, SINGAPORE 737855",
+    "share_capital": 1000000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "CHUA ZHEN YU",
+        "identification_no": "S7580953J",
+        "address": "354B ADMIRALTY DRIVE, #11-360, SINGAPORE 752354",
+        "shares": 510000
+      },
+      {
+        "name": "ISKANDAR BIN HAMZAH",
+        "identification_no": "S7032675B",
+        "address": "318A YISHUN AVENUE 9, #03-319, SINGAPORE 761318",
+        "shares": 490000
+      }
+    ],
+    "officers": [
+      {
+        "name": "CHUA ZHEN YU",
+        "identification_no": "S7580953J",
+        "position": "Director",
+        "date_of_appointment": "2016-05-18"
+      },
+      {
+        "name": "TEO LI XUAN",
+        "identification_no": "S6616651A",
+        "position": "Secretary",
+        "date_of_appointment": "2016-07-12"
+      }
+    ],
+    "document_date": "2026-07-29",
+    "last_agm_date": "2026-04-12",
+    "last_annual_return_date": "2026-05-06",
+    "financial_year_end": "2025-12-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -11,6 +11,7 @@ This script depends on `openpyxl` and `pandas` (added to requirements).
 from __future__ import annotations
 
 import functools
+import os
 import re
 import sys
 from pathlib import Path
@@ -39,6 +40,7 @@ from doc_gen_scripts.company_constitution.docgen_constitution import generate as
 from doc_gen_scripts.certificate_of_incumbency.docgen_acra_profile import generate as generate_cert_incumbency
 from doc_gen_scripts.fatca_crs.docgen_fatca_crs import build_personas as build_fatca_personas, fill_form as fill_fatca_form
 from doc_gen_scripts.case_facts import company_facts, as_date
+from doc_gen_scripts import truth
 from doc_gen_scripts.list_of_loans.term_loan_facility_generator import generate_term_loan_letter
 from doc_gen_scripts.list_of_loans.efs_facility_generator import generate_efs_letter
 from doc_gen_scripts.list_of_loans.overdraft_facility_generator import generate_overdraft_letter
@@ -59,8 +61,10 @@ from doc_gen_scripts.optional_documents.investment.generate_statements import ge
 from doc_gen_scripts.output_writer import normalize_extension, write_cropped_region, SUPPORTED_IMAGE_EXTS
 
 BASE = Path(__file__).resolve().parents[1]
-MASTERSHEET = BASE / "doc_gen_scripts" / "v17_document_mastersheet.xlsx"
-OUT_DIR = BASE / "documents_generated"
+# DOCGEN_MASTERSHEET / DOCGEN_OUT_DIR point a run at another sheet and folder (scripts/metrics/build_dataset.py
+# uses them); unset, both are what they always were.
+MASTERSHEET = Path(os.environ.get("DOCGEN_MASTERSHEET") or BASE / "doc_gen_scripts" / "v18_document_mastersheet.xlsx")
+OUT_DIR = Path(os.environ.get("DOCGEN_OUT_DIR") or BASE / "documents_generated")
 
 # Bank letterhead addresses for the List of Loans facility letters (section 10) —
 # a small local lookup rather than reusing BANK_PROFILES, since those letters are an
@@ -203,6 +207,11 @@ def generate_proof_of_address(case_id: str, out: Path, only_individuals=None) ->
                         invoice_address_lines=address_lines,
                         **synth,
                     )
+                    truth.record(
+                        util_path, "proof_of_address",
+                        truth.utility_bill(str(r.get("Individual Name (auto)") or ""), address_lines, synth, "individual"),
+                        derived={"entity_type"},
+                    )
                     print("Wrote", util_path)
                 except Exception as e:
                     print("Utility bill generation failed:", e)
@@ -253,6 +262,10 @@ def generate_proof_of_address(case_id: str, out: Path, only_individuals=None) ->
 
                     blocks = build_personal_blocks(ctx, known_salary=known_salary)
                     render_ocbc_personal(ctx, blocks, pa_path)
+                    truth.record(
+                        pa_path, "proof_of_address", truth.personal_bank_statement(ctx, blocks),
+                        derived={"entity_type"}, also_acceptable=["bank_statement"],
+                    )
                     print("Wrote", pa_path)
                 except Exception as e:
                     print("Personal bank statement (proof of address) generation failed:", e)
@@ -279,6 +292,8 @@ def generate_for_case(case_id: str) -> None:
                 persona = build_credit_persona(case_row, people_rows)
                 cr_path = out / str(r.get("Filename") or f"{case_id}_CreditReport.pdf")
                 generate_credit_bureau_report(str(cr_path), **persona)
+                truth.record(cr_path, "credit_report", truth.credit_report(persona),
+                             reference={"secured_credit_limit": persona["secured_credit_limit"]})
                 print("Wrote", cr_path)
             except Exception as e:
                 print("Credit report generation failed:", e)
@@ -353,11 +368,14 @@ def generate_for_case(case_id: str) -> None:
                         for side, region in card_regions().items():
                             side_path = out / f"{stem}_{side}.{ext}"
                             write_cropped_region(pdf_bytes, region, side_path)
+                            truth.record(side_path, "nric", truth.nric(persona, side),
+                                         derived={"document_side"}, check_pdf=scratch_pdf)
                             print("Wrote", side_path)
                         scratch_pdf.unlink(missing_ok=True)
                     else:
                         nric_path = out / nric_filename
                         generate_nric_card(str(nric_path), redact_photo=True, **persona)
+                        truth.record(nric_path, "nric", truth.nric(persona, "single"), derived={"document_side"})
                         print("Wrote", nric_path)
                 if "passport" in template:
                     pp_path = out / str(r.get("Filename") or f"{individual}_Passport.pdf")
@@ -367,6 +385,7 @@ def generate_for_case(case_id: str) -> None:
                     # of these the same way build_nric_persona() does.
                     persona = build_passport_persona(r)
                     generate_passport_page(str(pp_path), redact_photo=True, **persona)
+                    truth.record(pp_path, "passport", truth.passport(persona))
                     print("Wrote", pp_path)
             except Exception as e:
                 print("ID generation failed:", e)
@@ -416,7 +435,8 @@ def generate_for_case(case_id: str) -> None:
                     company_address=employer_address,
                     date_of_birth=_date_of_birth(case_id, individual),
                 )
-                builder(ps_path, data)
+                net_pay = builder(ps_path, data)
+                truth.record(ps_path, "payslip", truth.payslip(data, template, net_pay))
                 print("Wrote", ps_path)
             except Exception as e:
                 print("Payslip generation failed:", e)
@@ -472,6 +492,7 @@ def generate_for_case(case_id: str) -> None:
                 fatca_filename = str(fatca_row.get("Filename") or f"{case_id}_selfcert.pdf")
                 fatca_path = out / fatca_filename
                 fill_fatca_form(persona, out_pdf=fatca_path)
+                truth.record(fatca_path, "fatca_crs_declaration", truth.fatca(persona))
                 print("Wrote", fatca_path)
         except Exception as e:
             print("FATCA/CRS generation failed:", e)
@@ -510,14 +531,21 @@ def generate_for_case(case_id: str) -> None:
                 loan_path = out / str(r.get("Filename") or f"{case_id}_ListLoans.pdf")
 
                 loan_type_l = loan_type.lower()
+                loan_facts = dict(
+                    company_name=facts["company_name"], company_address_lines=company_address_lines,
+                    uen=facts["uen"], director_name=director_name, amount=amount, offer_date=offer_date,
+                )
                 if "term loan" in loan_type_l:
-                    generate_term_loan_letter(
+                    letter = generate_term_loan_letter(
                         str(loan_path), bank_name=bank_name, bank_address_lines=bank_address_lines,
                         company_name=facts["company_name"], company_address_lines=company_address_lines,
                         company_uen=facts["uen"], director_name=director_name, ref_no=ref_no,
                         offer_date=offer_date, principal_amount=amount,
                         tenure_months=tenure_months, interest_rate_pa=rate,
                     )
+                    truth.record(loan_path, "list_of_loans", truth.loan_letter(
+                        facility_type="Term Loan", interest_rate=rate, tenure=f"{tenure_months} months",
+                        monthly_instalment=(letter or {}).get("monthly_instalment"), **loan_facts))
                 elif "enterprise financing" in loan_type_l or "efs" in loan_type_l:
                     generate_efs_letter(
                         str(loan_path), bank_name=bank_name, bank_address_lines=bank_address_lines,
@@ -526,6 +554,9 @@ def generate_for_case(case_id: str) -> None:
                         offer_date=offer_date, facility_amount=amount,
                         tenure_years=max(round(tenure_months / 12), 1), interest_rate_pa=rate,
                     )
+                    truth.record(loan_path, "list_of_loans", truth.loan_letter(
+                        facility_type="Term Loan under Enterprise Financing Scheme", interest_rate=rate,
+                        tenure=f"{max(round(tenure_months / 12), 1)} years", **loan_facts))
                 elif "overdraft" in loan_type_l:
                     # generate_overdraft_letter has no flat interest_rate_pa param — it
                     # states rate as "reference rate + margin". Back reference_rate_pct
@@ -540,6 +571,9 @@ def generate_for_case(case_id: str) -> None:
                         margin_pct=margin_pct, reference_rate_pct=max(rate - margin_pct, 0.1),
                         review_date=offer_date + timedelta(days=365),
                     )
+                    truth.record(loan_path, "list_of_loans", truth.loan_letter(
+                        facility_type="Overdraft", interest_rate=rate,
+                        review_date=offer_date + timedelta(days=365), **loan_facts))
                 else:
                     print(f"Skipping unrecognised loan type {loan_type!r} for {case_id}")
                     continue
@@ -600,6 +634,7 @@ def generate_for_case(case_id: str) -> None:
         if not f.is_file():
             continue
         written = normalize_extension(f)
+        truth.follow_rename(f, written)
         if written != [f]:
             for p in written:
                 print("Wrote", p)
