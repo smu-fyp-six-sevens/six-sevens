@@ -472,3 +472,24 @@ def test_too_few_numbers_to_know_the_documents_typeface_flag_nothing() -> None:
             page.insert_text((40, 60 + i * 18), amount, fontsize=9, fontname=font)
 
     assert fc._foreign_font_deviations(_runs(_pdf_bytes(build))) == []
+
+
+def test_filled_form_field_values_are_not_compared_with_the_printed_form() -> None:
+    # Seen live on the FATCA form: the printed form is set in one font and its filled-in fields draw their values
+    # in the field's own (Helvetica), which was flagged against the form's font.
+    def build(doc):
+        page = doc.new_page(width=400, height=300)
+        for i, (label, amount) in enumerate(zip(_LABELS, _AMOUNTS)):
+            y = 80 + i * 18
+            page.insert_text((50, y), label, fontsize=9, fontname="tiro")
+            page.insert_text((250, y), amount, fontsize=9, fontname="tiro")
+        widget = pymupdf.Widget()
+        widget.field_type = pymupdf.PDF_WIDGET_TYPE_TEXT
+        widget.field_name = "declaration_date"
+        widget.rect = pymupdf.Rect(45, 70 + 2 * 18, 200, 84 + 2 * 18)
+        widget.field_value = "Other receivables"
+        widget.text_font = "Helv"
+        widget.text_fontsize = 9
+        page.add_widget(widget)
+
+    assert _flagged_texts(_pdf_bytes(build)) == []
