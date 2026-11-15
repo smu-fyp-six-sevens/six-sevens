@@ -27,7 +27,15 @@ def test_the_trail_is_read_for_the_case_or_document_asked_for() -> None:
 
     assert response.status_code == 200
     assert [(e["type"], e["actor"]) for e in response.json()] == [(types.DOCUMENT_APPROVED, "demo")]
-    list_events.assert_called_once_with(case_id="case-1", document_id="doc-1", limit=50, before=None)
+    list_events.assert_called_once_with(case_id="case-1", document_id="doc-1", event_type=None, limit=50, before=None)
+
+
+def test_the_trail_can_be_read_for_one_event_type() -> None:
+    with patch("app.routers.audit.audit.list_events", return_value=[]) as list_events:
+        response = client.get("/audit/events", params={"type": types.CASE_DELETED})
+
+    assert response.status_code == 200
+    list_events.assert_called_once_with(case_id=None, document_id=None, event_type=types.CASE_DELETED, limit=200, before=None)
 
 
 def test_the_trail_limit_is_bounded() -> None:
