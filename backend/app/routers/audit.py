@@ -14,11 +14,14 @@ router = APIRouter(prefix="/audit", tags=["audit"])
 @router.get("/events", response_model=list[Event])
 async def list_audit_events(
     case_id: str | None = None, document_id: str | None = None, limit: int = Query(200, ge=1, le=1000),
-    before: datetime | None = None,
+    before: datetime | None = None, event_type: str | None = Query(None, alias="type"),
 ) -> list[Event]:
-    """The audit trail, newest first, optionally for one case or document. `before`: only events older than this (the next page)."""
+    """
+    The audit trail, newest first, optionally for one case or document, or of one event type (`type`, such as
+    case.deleted). `before`: only events older than this (the next page).
+    """
     return await to_thread_or_502(
-        audit.list_events, case_id=case_id, document_id=document_id, limit=limit, before=before,
+        audit.list_events, case_id=case_id, document_id=document_id, event_type=event_type, limit=limit, before=before,
         detail="Failed to read the audit trail. Check Supabase table access.",
         log=("Failed to read audit events",),
     )

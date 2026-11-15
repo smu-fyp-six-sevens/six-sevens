@@ -145,7 +145,7 @@ test.describe('Compare a cross-document finding side by side', () => {
     await expect(third).toContainText("in this document, but couldn't pinpoint it on the page");
   });
 
-  test('a finding recorded before its values were kept falls back to the values quoted in its summary', async ({ page, backend }) => {
+  test('a finding that cites no plain value falls back to the values quoted in its summary', async ({ page, backend }) => {
     seed(backend, [finding({ document_ids: ['doc-a', 'doc-b'], cited_values: [] })]);
     const dialog = await openCompare(page, 'GLDB-7001');
 

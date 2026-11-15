@@ -167,11 +167,12 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     seedQueue(backend);
     await page.goto('/cases');
 
-    // One box per stage some case is at, in the order a case moves through them.
-    await expect((await openFilter(page, 'status')).getByRole('checkbox')).toHaveCount(3);
+    // One box per stage some case is at, in the order a case moves through them, then Deleted (unticked).
+    await expect((await openFilter(page, 'status')).getByRole('checkbox')).toHaveCount(4);
     await expect((await openFilter(page, 'status')).locator('label')).toContainText([
-      'Awaiting Documents', 'Processing Documents', 'Pending Review',
+      'Awaiting Documents', 'Processing Documents', 'Pending Review', 'Deleted',
     ]);
+    await expect((await openFilter(page, 'status')).getByRole('checkbox', { name: 'Deleted' })).not.toBeChecked();
 
     await showOnly(page, 'status', /Pending Review/);
     await expect(caseCards(page)).toHaveCount(1);

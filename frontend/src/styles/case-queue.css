@@ -596,6 +596,17 @@
   cursor: pointer;
 }
 
+/* A deleted case's row: nothing to open. */
+.case-row-open--static {
+  cursor: default;
+}
+
+.deleted-case-docs {
+  margin-left: 6px;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
 .case-row > .kebab-menu {
   margin: 0 8px;
 }
@@ -739,6 +750,13 @@
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
+}
+
+/* An option outside "everything" (the Status filter's Deleted), set off from the rest. */
+.header-filter-option--separate {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 6px 6px;
 }
 
 .header-filter-option:hover {

@@ -36,17 +36,13 @@ Measured 2026-11-07 (24 hours, 8 cases, 80 documents): 2,343 requests, 745 s of 
 
 ## 4b. Backwards compatibility
 
-Code kept only for old data, old links or the platform being retired. The database was wiped on 2026-10-31, so a shim for data older than that guards nothing.
+Code kept only for old data, old links or the platform being retired. The database (and the audit trail) was wiped on 2026-11-15, so a shim for data older than that guards nothing.
 
 | # | In plain words | Remove when | Where | Size |
 |---|---|---|---|---|
 | B1 | Cloud Run's half of the app: push delivery (`EVENT_DELIVERY=push`, the `/push/<role>` routes, `PUSH_AUDIENCE` and its check), the `none` mode and the chart's HTTP-only branch for a consumer not yet moved, the second frontend image, the Cloud Run Terraform and the Cloud Run deploy in CI | Phase 6 (`CLOUD_ARCHITECTURE_PLAN.md`). The local compose stack also uses push: switch it to pull first, or keep push for local runs only. The gateway key (`gateway.py`) is a separate call: keep it as a second guard or drop it | `events/push.py`, `main.py`, `config.py`, `deploy/helm/six-sevens/templates/backend.yaml`, `deploy/terraform/run.tf`, `.github/workflows/deploy.yml` | M |
-| B2 | A branch that shows an extracted field stored as a bare value; every field since the 2026-10-31 wipe has the full shape (probably dead) | Now, after checking one `GET /documents/{id}` | `frontend/src/pages/document-details/fieldDisplay.ts:40` | S |
-| B3 | Claude cost runs recorded before 2026-11-04 have no cache saving; the case's Claude Cost view counts them apart | Once the cases worked between 2026-10-31 and 2026-11-04 are deleted or no longer looked at | `audit.py` (`llm_cache_saved_usd`, `runs_without_saving`) and the Claude Cost section | S |
-| B4 | Case analyses from before 2026-11-09 have no `cited_values`, so the side-by-side view digs quoted values out of the finding's sentence instead | Once those cases are re-analysed or deleted | `case_pipeline/models.py:70`; `frontend/src/pages/upload/CrossDocCompareModal.tsx:24-29` | S |
-| B5 | The dashboard's compare-two-periods feature was removed from the page (2026-11-15), but each panel still takes an optional `compare` input and draws the difference: now never used | After the demo: drop the `compare`/`before`/`compareFilters` inputs, `CompareDelta.tsx`, the `compare-*` styles, and `compareFilters` on the two accuracy panels (they're passed `null`) | `frontend/src/pages/Dashboard*.tsx`, `CasePipeline.tsx`, `DetectionAccuracyPanel.tsx`, `frontend/src/components/CompareDelta.tsx`, `frontend/src/styles/dashboard.css` | M |
 
-Not debt, so kept: the cancel check's audit-trail fallback (it covers a failed flag write, not old data); the case queue ignoring unknown saved filters (it also guards against junk in `localStorage`); versioned password and eval formats (made to change).
+Not debt, so kept: the side-by-side view's quoted-value fallback (`CrossDocCompareModal.tsx`; a new finding whose citations are all tables or computed results still has no `cited_values`); the cancel check's audit-trail fallback (it covers a failed flag write, not old data); the case queue ignoring unknown saved filters (it also guards against junk in `localStorage`); versioned password and eval formats (made to change).
 
 ## 5. Bigger reorganisations (optional, in order)
 
@@ -78,4 +74,4 @@ None open.
 
 ## 9. Order
 
-`FRAUD_DETECTION_MAP.md` §8 bug 4 (quick), B2 (minutes), B5 after the demo, 4.4, 4.2 with the risk-card restyle; B1 with phase 6.
+`FRAUD_DETECTION_MAP.md` §8 bug 4 (quick), 4.4, 4.2 with the risk-card restyle; B1 with phase 6.

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import CaseRow from '../components/CaseRow';
+import DeletedCasesTable from '../components/DeletedCasesTable';
 import ConfirmDialog from '../components/ConfirmDialog';
 import HeaderFilter from '../components/HeaderFilter';
 import type { FilterOption } from '../components/HeaderFilter';
@@ -24,6 +25,8 @@ interface CaseQueuePageProps {
 
 const PREFS_STORAGE_KEY = 'caseQueue.prefs';
 const PAGE_SIZE = 25;
+// Not a stage: deleted cases have no row, so this option reads them from the audit trail.
+const DELETED = 'deleted';
 
 // One sort at a time, picked from a column header: the first click puts the newest or highest first (arrow down),
 // the second reverses it (arrow up). Equal risks are newest first.
@@ -169,6 +172,9 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletingCaseId, setDeletingCaseId] = useState<string | null>(null);
   const [caseToDelete, setCaseToDelete] = useState<CaseRecord | null>(null);
+  // The Status filter's "Deleted": the table then lists deleted cases (from the audit trail) instead.
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [deletedCount, setDeletedCount] = useState<number | null>(null);
   // Read localStorage once, on the first render; the settings start from it.
   const [initialPrefs] = useState(loadPrefs);
   const [savedStatuses, setSavedStatuses] = useState<Set<CaseStage>>(() => new Set(initialPrefs.statuses));
@@ -242,17 +248,20 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
     goToPage(1);
   }
 
-  const statusFilterOptions: FilterOption[] = statusOptions.map((status) => ({
-    value: status,
-    text: caseStageLabel(status),
-    count: counts?.get(status) ?? 0,
-    label: (
-      <>
-        <StageMark stage={status} />
-        {caseStageLabel(status)}
-      </>
-    ),
-  }));
+  const statusFilterOptions: FilterOption[] = [
+    ...statusOptions.map((status) => ({
+      value: status,
+      text: caseStageLabel(status),
+      count: counts?.get(status) ?? 0,
+      label: (
+        <>
+          <StageMark stage={status} />
+          {caseStageLabel(status)}
+        </>
+      ),
+    })),
+    { value: DELETED, text: 'Deleted', label: 'Deleted', separate: true },
+  ];
   const riskFilterOptions: FilterOption[] = RISK_OPTIONS.map((option) => ({
     value: option.value,
     text: option.label,
@@ -268,9 +277,12 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
       name="status"
       title="Status"
       options={statusFilterOptions}
-      selected={activeStatuses}
+      selected={showDeleted ? new Set([DELETED]) : activeStatuses}
       disabled={!counts}
-      onChange={(next) => changeStatuses(next as Set<CaseStage>)}
+      onChange={(next) => {
+        setShowDeleted(next.has(DELETED));
+        if (!next.has(DELETED)) changeStatuses(next as Set<CaseStage>);
+      }}
     />
   );
   // The header's own risk filter is just a funnel next to the sort arrows; the small-screen row has no header, so it is titled.
@@ -311,7 +323,11 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
 
       <section className="queue-view">
         <div className="queue-bar">
-          <h1 className="queue-title">{hasLoaded ? `Cases (${total})` : 'Cases'}</h1>
+          <h1 className="queue-title">
+            {showDeleted
+              ? deletedCount === null ? 'Deleted cases' : `Deleted cases (${deletedCount})`
+              : hasLoaded ? `Cases (${total})` : 'Cases'}
+          </h1>
 
           {search && (
             <span className="queue-search-chip">
@@ -331,7 +347,7 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
             </span>
           )}
 
-          {!error && (
+          {!error && !showDeleted && (
             <Pagination
               page={page}
               pageSize={PAGE_SIZE}
@@ -348,21 +364,27 @@ export default function CaseQueuePage({ onOpenCase }: CaseQueuePageProps) {
         {/* Where the table has no column headers (narrow screens), the same filters and the sort live here. */}
         <div className="queue-controls">
           {statusFilter}
-          {riskFilterWith('Risk')}
+          {!showDeleted && (
+            <>
+              {riskFilterWith('Risk')}
 
-          <label className="queue-sort-select">
-            <span className="sr-only">Sort cases</span>
-            <select value={sort} onChange={(event) => changeSort(event.target.value as CaseSort)}>
-              {SORT_CHOICES.map((choice) => (
-                <option key={choice.value} value={choice.value}>{choice.label}</option>
-              ))}
-            </select>
-          </label>
+              <label className="queue-sort-select">
+                <span className="sr-only">Sort cases</span>
+                <select value={sort} onChange={(event) => changeSort(event.target.value as CaseSort)}>
+                  {SORT_CHOICES.map((choice) => (
+                    <option key={choice.value} value={choice.value}>{choice.label}</option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
         </div>
 
         {deleteError && <ErrorMessage className="toast-error" message={deleteError} />}
 
-        {error ? (
+        {showDeleted ? (
+          <DeletedCasesTable search={search.trim()} statusFilter={statusFilter} onCount={setDeletedCount} />
+        ) : error ? (
           <LoadErrorState message={error} onRetry={queue.reload} />
         ) : !hasLoaded ? (
           <div className="case-table" aria-busy="true">

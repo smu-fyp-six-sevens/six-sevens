@@ -8,6 +8,8 @@ export interface FilterOption {
   // Plain text for the checkbox's accessible name.
   text: string;
   count?: number;
+  // Not part of "everything": unticked by default, and picking it clears the others (and the reverse).
+  separate?: boolean;
 }
 
 interface HeaderFilterProps {
@@ -31,16 +33,25 @@ export default function HeaderFilter({ name, title, options, selected, disabled 
   // Every box shown unticked after "Unselect all", while there is still no filter.
   const [cleared, setCleared] = useState(false);
   const everything = selected.size === 0;
+  const regular = options.filter((option) => !option.separate).map((option) => option.value);
+  const isSeparate = (value: string) => options.some((option) => option.value === value && option.separate);
 
   function toggle(value: string) {
-    const next = new Set(cleared ? [] : everything ? options.map((option) => option.value) : selected);
+    if (isSeparate(value)) {
+      setCleared(false);
+      onChange(selected.has(value) ? new Set() : new Set([value]));
+      return;
+    }
+
+    const kept = [...selected].filter((item) => !isSeparate(item));
+    const next = new Set(cleared ? [] : everything || kept.length === 0 ? regular : kept);
 
     if (next.has(value)) next.delete(value);
     else next.add(value);
 
     // Every box ticked again is the same as no filter; so is none, which then shows unticked.
     setCleared(next.size === 0);
-    onChange(next.size === options.length ? new Set() : next);
+    onChange(next.size === regular.length ? new Set() : next);
   }
 
   function selectAll() {
@@ -82,10 +93,13 @@ export default function HeaderFilter({ name, title, options, selected, disabled 
       {isOpen && (
         <div id={listId} className="header-filter-list" role="group" aria-label={`${name} filter`}>
           {options.map((option) => (
-            <label key={option.value} className="header-filter-option">
+            <label
+              key={option.value}
+              className={`header-filter-option${option.separate ? ' header-filter-option--separate' : ''}`}
+            >
               <input
                 type="checkbox"
-                checked={!cleared && (everything || selected.has(option.value))}
+                checked={!cleared && (selected.has(option.value) || (everything && !option.separate))}
                 onChange={() => toggle(option.value)}
                 aria-label={option.text}
               />

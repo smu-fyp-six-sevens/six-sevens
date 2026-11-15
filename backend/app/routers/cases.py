@@ -219,7 +219,9 @@ async def delete_case(case_id: str, case: CaseRecord = Depends(get_editable_case
     ))
     await events.record(officer_event(
         types.CASE_DELETED, case_id=case_id,
-        detail={"company_name": case.company_name, "documents": len(documents)},
+        detail={
+            "greenlink_case_id": case.greenlink_case_id, "company_name": case.company_name, "documents": len(documents),
+        },
     ))
 
 

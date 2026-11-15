@@ -176,8 +176,8 @@ class CaseCostRun(BaseModel):
     llm_output_tokens: int | None = None
     llm_cache_read_tokens: int | None = None
     llm_cache_write_tokens: int | None = None
-    # What the cache saved, net of the writes' extra cost; absent on runs recorded before it was.
-    llm_cache_saved_usd: float | None = None
+    # What the cache saved, net of the writes' extra cost.
+    llm_cache_saved_usd: float = 0.0
 
 
 class CacheUse(BaseModel):
@@ -189,8 +189,6 @@ class CacheUse(BaseModel):
     # Share of the input tokens read from the cache (0-1); None with no input.
     hit_rate: float | None = None
     saved_usd: float = 0.0
-    # Runs recorded before the saving was, so not in saved_usd.
-    runs_without_saving: int = 0
 
 
 def cache_use(runs: list[CaseCostRun]) -> CacheUse:
@@ -201,8 +199,7 @@ def cache_use(runs: list[CaseCostRun]) -> CacheUse:
         runs=len(counted), input_tokens=input_tokens, cache_read_tokens=read,
         cache_write_tokens=sum(r.llm_cache_write_tokens or 0 for r in counted),
         hit_rate=round(read / input_tokens, 4) if input_tokens else None,
-        saved_usd=round(sum(r.llm_cache_saved_usd or 0.0 for r in counted), 6),
-        runs_without_saving=sum(1 for r in counted if r.llm_cache_saved_usd is None),
+        saved_usd=round(sum(r.llm_cache_saved_usd for r in counted), 6),
     )
 
 
@@ -303,7 +300,7 @@ def case_cost(case_id: str, document_ids: list[str]) -> CaseCost:
             llm_output_tokens=event.detail.get("llm_output_tokens"),
             llm_cache_read_tokens=event.detail.get("llm_cache_read_tokens"),
             llm_cache_write_tokens=event.detail.get("llm_cache_write_tokens"),
-            llm_cache_saved_usd=event.detail.get("llm_cache_saved_usd"),
+            llm_cache_saved_usd=event.detail.get("llm_cache_saved_usd", 0.0),
         ))
         if event.document_id:
             per_document[event.document_id] = per_document.get(event.document_id, 0.0) + float(cost)

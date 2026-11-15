@@ -527,42 +527,42 @@ export class MockBackend {
         {
           id: 'document_classifier', name: 'Document classifier', group: 'Document processing',
           purpose: 'Identifies the uploaded document type.', limitations: 'OCR or unusual layouts can lead to a wrong type.',
-          model: 'claude-sonnet', prompt_version: null, tools: ['llm_classify_tool'],
+          model: 'claude-sonnet', prompt_version: 'v1', tools: ['llm_classify_tool'],
           access_summary: ['Read document text'], call_budget: 'Shared document run cap: 20 calls', owner: null,
           prompt_options: [],
         },
         {
           id: 'field_extractor', name: 'Field extractor', group: 'Document processing',
           purpose: 'Extracts document details into the fields for its document type.', limitations: 'Extracted fields need review.',
-          model: 'claude-sonnet', prompt_version: null, tools: [],
+          model: 'claude-sonnet', prompt_version: 'v1', tools: [],
           access_summary: ['Read document text and page images'], call_budget: 'Shared document run cap: 20 calls', owner: null,
           prompt_options: ['nric', 'fatca_crs'],
         },
         {
           id: 'detection_lead', name: 'Detection lead', group: 'Fraud detection',
           purpose: 'Plans and reviews specialist checks for one document.', limitations: 'Unavailable checks remain unassessed.',
-          model: 'claude-sonnet', prompt_version: null, tools: ['Specialist agents'],
+          model: 'claude-sonnet', prompt_version: 'v1', tools: ['Specialist agents'],
           access_summary: ['Read one document'], call_budget: 'Shared detection run cap: 30 calls', owner: null,
           prompt_options: [],
         },
         {
           id: 'layout_rendering', name: 'Layout & Rendering Analyst', group: 'Fraud detection specialists',
           purpose: 'Checks visual layout, typography, hidden text and image integrity.', limitations: 'Visual heuristics can raise false alarms.',
-          model: 'claude-haiku', prompt_version: null, tools: ['font_consistency_tool'],
+          model: 'claude-haiku', prompt_version: 'v1', tools: ['font_consistency_tool'],
           access_summary: ['Read one document'], call_budget: 'Shared detection run cap: 30 calls', owner: null,
           prompt_options: [],
         },
         {
           id: 'content_validation', name: 'Content Validation Analyst', group: 'Fraud detection specialists',
           purpose: 'Checks dates, figures, spelling, page consistency and relevant public records.', limitations: 'Some checks depend on available reference data.',
-          model: 'claude-haiku', prompt_version: null, tools: ['numerical_checks_tool'],
+          model: 'claude-haiku', prompt_version: 'v1', tools: ['numerical_checks_tool'],
           access_summary: ['Read one document'], call_budget: 'Shared detection run cap: 30 calls', owner: null,
           prompt_options: [],
         },
         {
           id: 'digital_authenticity', name: 'Digital Authenticity Analyst', group: 'Fraud detection specialists',
           purpose: 'Checks file metadata and signs of AI-generated or altered imagery.', limitations: 'Some file checks may be unavailable.',
-          model: 'claude-haiku', prompt_version: null, tools: ['metadata_tool'],
+          model: 'claude-haiku', prompt_version: 'v1', tools: ['metadata_tool'],
           access_summary: ['Read one document and file metadata'], call_budget: 'Shared detection run cap: 30 calls', owner: null,
           prompt_options: [],
         },
@@ -581,7 +581,10 @@ export class MockBackend {
           prompt_options: [],
         },
       ];
-      return json(agents);
+      return json(agents.map((agent) => ({
+        ...agent,
+        tool_details: agent.tools.map((name) => ({ name, description: `What ${name} does.` })),
+      })));
     }
 
     // --- cases ------------------------------------------------------------

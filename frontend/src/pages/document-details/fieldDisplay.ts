@@ -11,41 +11,17 @@ export function displayableFieldEntries(
     return [];
   }
 
-  return Object.entries(fields)
-    .map(([key, rawField]) => {
-      if (
-        rawField &&
-        typeof rawField === 'object' &&
-        'value' in rawField
-      ) {
-        const field = rawField as {
-          id?: unknown;
-          value?: unknown;
-          confidence?: unknown;
-        };
-
-        return [
-          key,
-          {
-            id: typeof field.id === 'string' ? field.id : undefined,
-            value: field.value ?? null,
-            confidence:
-              typeof field.confidence === 'number'
-                ? field.confidence
-                : null,
-          },
-        ];
-      }
-
-      // Fallback for older/simple extracted-field data.
-      return [
-        key,
-        {
-          value: rawField,
-          confidence: null,
-        },
-      ];
-    });
+  // Every document the API returns wraps each field as {id, value, confidence} (document_service.present,
+  // case_service's enrichment).
+  return Object.entries(fields).flatMap(([key, rawField]): [string, ExtractedField][] => {
+    if (!rawField || typeof rawField !== 'object' || !('value' in rawField)) return [];
+    const field = rawField as { id?: unknown; value?: unknown; confidence?: unknown };
+    return [[key, {
+      id: typeof field.id === 'string' ? field.id : undefined,
+      value: field.value ?? null,
+      confidence: typeof field.confidence === 'number' ? field.confidence : null,
+    }]];
+  });
 }
 
 export function valueToString(value: unknown): string {

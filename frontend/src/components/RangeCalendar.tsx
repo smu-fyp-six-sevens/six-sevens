@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { formatPeriod, inPeriod, isoDay, overlap, parseDay, today, type Period } from '../utils/dateRange';
+import { isoDay, parseDay, today, type Period } from '../utils/dateRange';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
@@ -14,18 +14,13 @@ function monthDays(year: number, month: number): (string | null)[] {
 interface RangeCalendarProps {
   // The range to start from, if any.
   initial?: Period | null;
-  // Days that can't be in the range, and what they are ("First period"), shown in a key under the months.
-  blocked?: { period: Period; label: string } | null;
-  // The buttons' words: "Apply" and "Cancel" unless a step needs others ("Next", "Back").
-  applyLabel?: string;
-  cancelLabel?: string;
   onApply: (period: Period & { from: string }) => void;
   onCancel: () => void;
 }
 
 // Two months side by side: the first click picks the start, the second the end (either order); hovering previews
-// the range. Days after today can't be picked, nor blocked ones; an end across the blocked days starts a new range.
-export default function RangeCalendar({ initial, blocked, applyLabel = 'Apply', cancelLabel = 'Cancel', onApply, onCancel }: RangeCalendarProps) {
+// the range. Days after today can't be picked.
+export default function RangeCalendar({ initial, onApply, onCancel }: RangeCalendarProps) {
   const latest = today();
   const [start, setStart] = useState<string | null>(initial?.from ?? null);
   const [end, setEnd] = useState<string | null>(initial?.from ? initial.to : null);
@@ -45,8 +40,7 @@ export default function RangeCalendar({ initial, blocked, applyLabel = 'Apply', 
   });
 
   function pick(day: string) {
-    const crosses = start && !end && blocked && overlap({ from: day < start ? day : start, to: day < start ? start : day }, blocked.period);
-    if (!start || end || crosses) {
+    if (!start || end) {
       setStart(day);
       setEnd(null);
     } else if (day < start) {
@@ -80,18 +74,16 @@ export default function RangeCalendar({ initial, blocked, applyLabel = 'Apply', 
               {WEEKDAYS.map((day) => <span key={day} className="range-calendar-weekday">{day}</span>)}
               {monthDays(year, month).map((day, cell) => {
                 if (!day) return <span key={`blank-${cell}`} />;
-                const isBlocked = Boolean(blocked && inPeriod(day, blocked.period));
                 const inRange = low && high && day >= low && day <= high;
                 const edge = day === low || day === high;
-                const classes = ['range-calendar-day', inRange && 'in-range', edge && 'edge', day === low && 'range-start', day === high && 'range-end', day === latest && 'today', isBlocked && 'blocked']
+                const classes = ['range-calendar-day', inRange && 'in-range', edge && 'edge', day === low && 'range-start', day === high && 'range-end', day === latest && 'today']
                   .filter(Boolean).join(' ');
                 return (
                   <button
                     key={day}
                     type="button"
                     className={classes}
-                    disabled={day > latest || isBlocked}
-                    title={isBlocked ? blocked!.label : undefined}
+                    disabled={day > latest}
                     aria-pressed={Boolean(edge)}
                     aria-label={parseDay(day).toLocaleDateString('en-SG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                     onMouseEnter={() => setHover(day)}
@@ -105,16 +97,10 @@ export default function RangeCalendar({ initial, blocked, applyLabel = 'Apply', 
           </div>
         ))}
       </div>
-      {blocked && (
-        <p className="range-calendar-key">
-          <i aria-hidden="true" />
-          {blocked.label}, {formatPeriod(blocked.period)}: can't be picked
-        </p>
-      )}
       <div className="range-calendar-foot">
         <span>{summary}</span>
-        <button type="button" className="range-calendar-cancel" onClick={onCancel}>{cancelLabel}</button>
-        <button type="button" className="range-calendar-apply" disabled={!start || !end} onClick={() => start && end && onApply({ from: start, to: end })}>{applyLabel}</button>
+        <button type="button" className="range-calendar-cancel" onClick={onCancel}>Cancel</button>
+        <button type="button" className="range-calendar-apply" disabled={!start || !end} onClick={() => start && end && onApply({ from: start, to: end })}>Apply</button>
       </div>
     </div>
   );

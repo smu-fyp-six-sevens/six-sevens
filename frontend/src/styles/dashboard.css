@@ -497,10 +497,6 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .flag-matrix td { height: 34px; padding: 0; border-radius: 5px; background: var(--slate-97); text-align: center; }
 .flag-matrix td > span { display: grid; place-items: center; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--steel) var(--level), var(--white)); color: var(--ink); font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .flag-matrix td > span.dark { color: var(--white); }
-/* Comparing: the count and its change side by side; a cell flagged only in the comparison shows the change alone. */
-.flag-matrix--compare td > span { display: flex; justify-content: center; align-items: center; gap: 5px; }
-.flag-matrix td > span.flag-matrix-gone { background: transparent; }
-.flag-matrix .compare-pill { padding: 0 5px; font-size: 11px; }
 
 /* Flags by risk level: a bar per level, the average flags a case of that level carries. */
 .flag-risk-list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
@@ -511,69 +507,17 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .flag-risk-list strong { color: var(--ink); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
 .flag-risk-list small { grid-column: 2 / -1; color: var(--text-muted); font-size: 11.5px; }
 
-/* Comparing two periods. This period keeps its own colours; the comparison is light grey everywhere: a swatch in
-   the banner, columns behind the bars, a thin bar or ring beside them, grey ticks on tracks, hollow dots. Each figure
-   gets "vs N" and a change pill; equal ones say so quietly. */
-.dashboard-app {
-  --compare-fill: var(--slate-84);
-  --compare-ink: var(--slate-60);
-  /* White stripes laid over a comparison mark's own colour: striped means the comparison period, everywhere. */
-  --compare-stripes: repeating-linear-gradient(135deg, rgba(255, 255, 255, .6) 0 2.5px, transparent 2.5px 5.5px);
-}
-.compare-swatch { flex: none; width: 14px; height: 26px; border-radius: 3px; background: var(--slate-48); }
-.compare-swatch--was { background: var(--compare-stripes), var(--slate-48); }
-.compare-banner-key { margin-left: auto; color: var(--text-muted); font-size: 12px; }
-/* The comparison's value on a track: a striped marker above it (a median or target is a line through it). */
-.compare-marker { position: absolute; top: -11px; width: 12px; height: 9px; margin-left: -6px; background: var(--compare-stripes), var(--slate-48); clip-path: polygon(0 0, 100% 0, 50% 100%); cursor: help; }
-.compare-marker--key { position: static; display: inline-block; margin: 0; }
-.scatter-dot-stripes { fill: url(#compare-stripes); pointer-events: none; }
-.compare-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 14px; padding: 10px 16px; border: 1px solid var(--slate-88); border-radius: 10px; background: var(--white); color: var(--ink-soft); font-size: 13px; }
-.compare-banner-period { display: inline-flex; align-items: center; gap: 9px; }
-.compare-banner-period > span { display: grid; line-height: 1.3; }
-.compare-banner-period small { color: var(--text-muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
-.compare-banner strong { color: var(--ink); font-weight: 650; }
-.compare-banner-vs { color: var(--text-muted); font-size: 12px; font-weight: 600; }
-.compare-banner-note { flex-basis: 100%; margin: 2px 0 0; padding-top: 8px; border-top: 1px solid var(--slate-94); color: var(--ink-soft); font-size: 12.5px; }
-.compare-banner-warning { flex-basis: 100%; margin: 2px 0 0; padding: 7px 10px; border-radius: 7px; background: var(--amber-bg); color: var(--orange-27); font-size: 12.5px; }
-.compare-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 22px; color: var(--ink-soft); font-size: 12.5px; }
-.compare-was { font-variant-numeric: tabular-nums; }
-.compare-line--same, .compare-line--none { color: var(--text-muted); }
-.compare-pill { display: inline-flex; align-items: center; justify-self: end; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.compare-pill--up { background: var(--blue-95); color: var(--blue-37); }
-.compare-pill--down { background: var(--slate-94); color: var(--slate-34); }
-.compare-pill--none { padding: 0; }
-.compare-pill-percent { margin-left: 2px; font-weight: 500; opacity: .85; }
-.stat-card--quiet { opacity: .5; }
-.stat-card--quiet .compare-line { visibility: hidden; }
-
-/* Light comparison marks. */
-.timeline-ghost { position: absolute; right: 0; bottom: 0; left: 0; border-radius: 4px 4px 0 0; background: var(--compare-stripes), var(--slate-60); pointer-events: none; }
+/* Positioning the dashboard's tracks and stacks. */
 .timeline-stack { position: relative; }
-.timeline-tip .timeline-tip-was { margin-top: 3px; padding-top: 4px; border-top: 1px solid rgba(255, 255, 255, .15); color: var(--slate-77); }
 .flag-risk-list .request-track { position: relative; overflow: visible; }
-.flag-pill-row--compare { grid-template-columns: 23px minmax(110px, 1fr) minmax(90px, 1.3fr) 22px 52px 58px; }
 .flag-pills-stack { display: grid; gap: 4px; min-width: 0; }
-.compare-bar { height: 4px; border-radius: 2px; background: var(--slate-97); }
-.compare-bar i { display: block; height: 100%; border-radius: inherit; background: var(--compare-stripes), var(--slate-60); }
-.coverage-ring-track--was { stroke: var(--slate-97); stroke-width: 4; }
-.coverage-ring-was-fill, .coverage-ring-was-stripes { fill: none; stroke: var(--slate-60); stroke-width: 4; }
-.coverage-ring-was-stripes { stroke: url(#compare-stripes); }
-.coverage-ring-was { color: var(--text-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .risk-overview-count { display: flex; align-items: center; gap: 8px; }
-.risk-overview-bar--was { height: 6px; margin-top: -6px; border-radius: 3px; }
-.risk-overview-bar--was i { background-image: var(--compare-stripes); }
-.risk-overview-dial .compare-line, .rate-ring-label .compare-line { justify-content: center; margin-top: 4px; }
-.request-row--compare { grid-template-columns: minmax(120px, 1fr) minmax(60px, 1fr) 62px 52px; }
-.stage-list .compare-pill { justify-self: end; }
-.check-panel--compare .check-row { grid-template-columns: minmax(170px, 1.1fr) 64px minmax(80px, 2fr) 128px 104px; }
-.check-figure .compare-pill { margin-left: 8px; }
 
 /* The date range and comparison menus: periods with their dates, then a two-month calendar for a custom range. */
 .dashboard-filters .header-filter-trigger[data-active] { border-color: var(--steel); color: var(--steel-dark); }
 .period-menu-list { min-width: 280px; }
 .period-menu-list .select-menu-option:disabled { opacity: .45; cursor: default; }
 .period-menu-list .select-menu-option:disabled:hover { background: transparent; }
-.period-menu-detail { margin-left: auto; padding-left: 12px; color: var(--text-muted); font-size: 12px; white-space: nowrap; }
 .period-menu-calendar-icon { width: 15px; height: 15px; margin-left: auto; fill: none; stroke: var(--slate-60); stroke-width: 1.4; stroke-linecap: round; }
 .period-menu-calendar { padding: 14px 16px 12px; }
 .range-calendar-months { display: grid; grid-template-columns: repeat(2, 238px); gap: 24px; }
@@ -624,7 +568,6 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
   .check-detail { grid-template-columns: 1fr; margin-left: 8px; }
   .range-calendar-months { grid-template-columns: 238px; }
   .range-calendar-month:first-child { display: none; }
-  .compare-banner-key { margin-left: 0; }
 }
 
 @media (max-width: 900px) {
@@ -657,65 +600,13 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
   .case-pipeline-step--apart { padding-top: 8px; border-top: 1px dashed var(--line); border-left: 0; }
 }
 
-/* Comparing: each slot pairs this period's column (left) with the comparison's (right). */
-.timeline--compare .timeline-stack { margin-right: 42%; }
-.timeline--compare .timeline-ghost { left: 60%; opacity: 1; }
-
 /* A SelectMenu inside a panel (a chart's sort): the toolbar buttons' look, a little smaller. */
 .dashboard-panel .select-menu .header-filter-trigger { height: 30px; padding: 0 10px; margin: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--white); color: var(--slate-34); font-size: 12.5px; white-space: nowrap; }
 .dashboard-panel .select-menu .header-filter-list { right: 0; left: auto; z-index: 25; }
 .dashboard-panel .panel-heading > .select-menu { flex: none; }
 
-/* Cases over time, comparing: the comparison period's totals as a dashed line, a dot on each day that had cases. */
-.timeline-columns { position: relative; }
-.timeline-was-line { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.timeline-was-line polyline { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 4 3; stroke-linejoin: round; vector-effect: non-scaling-stroke; opacity: .55; }
-.timeline-was-dot { position: absolute; left: 50%; z-index: 3; width: 7px; height: 7px; border: 1.5px solid var(--ink); border-radius: 50%; background: var(--white); transform: translate(-50%, 50%); opacity: .75; pointer-events: none; }
-.timeline-legend-line { width: 18px; height: 10px; }
-.timeline-legend-line path { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .55; }
-.timeline-legend-line circle { fill: var(--white); stroke: var(--ink); stroke-width: 1.5; opacity: .75; }
-
-/* Compare: the × beside the button that stops comparing, joined to it. */
-.period-menu-clear { display: inline-grid; place-items: center; width: 30px; height: 34px; margin-left: -1px; border: 1px solid var(--steel); border-radius: 0 7px 7px 0; background: var(--white); color: var(--steel-dark); cursor: pointer; }
-.period-menu-clear svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
-.period-menu-clear:hover { background: var(--steel-a08); }
-.period-menu-clear:focus-visible { outline: 2px solid var(--steel); outline-offset: 1px; }
-.dashboard-filters .period-menu:has(.period-menu-clear) .header-filter-trigger { border-radius: 7px 0 0 7px; }
-
-/* Compare: two steps on one calendar, the first period's days disabled for the second. */
-.compare-steps { display: grid; gap: 6px; margin: 0 0 14px; padding: 0 0 12px; border-bottom: 1px solid var(--line); list-style: none; color: var(--text-muted); font-size: 12.5px; }
-.compare-steps li { display: flex; align-items: center; gap: 8px; }
-.compare-steps li span { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--slate-86); border-radius: 50%; font-size: 11px; font-weight: 700; }
-.compare-steps li.current { color: var(--ink); font-weight: 650; }
-.compare-steps li.current span { border-color: var(--steel); background: var(--steel); color: var(--white); }
-.compare-steps li.done span { border-color: var(--steel); color: var(--steel); }
-.compare-steps strong { color: var(--ink); font-weight: 650; }
-.range-calendar-day.blocked { border-radius: 0; background: var(--slate-93); color: var(--slate-60); }
-.range-calendar-key { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; color: var(--ink-soft); font-size: 12px; }
-.range-calendar-key i { width: 16px; height: 12px; border-radius: 3px; background: var(--slate-93); }
-
-/* Each slot holds this period's bar and, on a shared axis, the comparison's (the same colours, striped), side by
-   side and narrow however few the slots. */
+/* Each slot's bar, narrow however few the slots. */
 .timeline-bars { display: flex; align-items: flex-end; justify-content: center; gap: 2px; height: 100%; }
 .timeline-bars .timeline-stack { flex: 1; max-width: 44px; }
-.timeline-stack.timeline-stack--was i { background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, .6) 0 2.5px, transparent 2.5px 5.5px); }
-.timeline-legend-was { background: var(--slate-48) repeating-linear-gradient(135deg, rgba(255, 255, 255, .6) 0 2px, transparent 2px 4.5px); }
 
-/* A change with a clear better direction: green when it improved, red when it got worse. */
-.compare-pill.compare-pill--good { background: var(--green-94); color: var(--green-23); }
-.compare-pill.compare-pill--bad { background: var(--red-97); color: var(--red-40); }
-
-/* Detection accuracy, comparing: a grey tick at each check's rate then, its change beside the bar, the review
-   counts' changes beside them. */
 .accuracy-check-meters { row-gap: 12px; }
-.accuracy-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 10px; color: var(--ink-soft); font-size: 12px; }
-.accuracy-key span { display: inline-flex; align-items: center; gap: 7px; }
-.accuracy-key-bar { width: 18px; height: 6px; border-radius: 3px; background: var(--green-40); }
-.accuracy-key-target { width: 2px; height: 12px; border-radius: 1px; background: var(--ink); opacity: .45; }
-.accuracy-check-meters .rate-meter--compare { grid-template-columns: 38px minmax(40px, 1fr) auto; }
-.rate-meter--compare.rate-meter--empty { display: flex; align-items: center; gap: 10px; }
-.rate-meter-new { color: var(--text-muted); font-size: 11.5px; white-space: nowrap; }
-.rate-change { display: block; margin-top: 4px; }
-.review-mix-total .compare-was { margin-left: 6px; color: var(--text-muted); font-size: 12px; }
-.review-mix-total .compare-pill, .review-mix-counts .compare-pill { margin-left: 5px; padding: 1px 6px; font-size: 11px; }
-.accuracy-card-change { display: block; margin-bottom: 4px; }

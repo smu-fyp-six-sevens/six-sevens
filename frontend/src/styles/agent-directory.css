@@ -194,6 +194,58 @@
 }
 .agent-directory-access ul { padding-left: 17px; }
 
+/* The agent's tools, set apart from the rest of the card: each one opens to what it does. */
+.agent-tools {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--slate-90);
+  border-radius: 8px;
+  background: var(--slate-97a);
+}
+.agent-tools h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: var(--steel);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.agent-tools-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--steel-a08);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+.agent-tools-empty { margin: 0; color: var(--ink-soft); font-size: 12px; }
+.agent-tool-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.agent-tool {
+  border: 1px solid var(--slate-90);
+  border-radius: 6px;
+  background: var(--white);
+}
+.agent-tool summary {
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--steel);
+  font-size: 12px;
+  font-weight: 600;
+}
+.agent-tool summary:hover { background: var(--steel-a08); }
+.agent-tool summary:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--steel-a20); }
+.agent-tool[open] summary { border-bottom: 1px solid var(--slate-90); }
+.agent-tool code { font-size: 12px; overflow-wrap: anywhere; }
+.agent-tool p {
+  margin: 0;
+  padding: 8px 10px 10px;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 .agent-directory-prompt-control { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .agent-directory-prompt-control > button {
   padding: 6px 10px;
@@ -407,6 +459,7 @@
   transition: stroke .2s, stroke-width .2s;
 }
 .agent-graph-edge.is-approval .agent-graph-edge-line { stroke-dasharray: 5 6; }
+.agent-graph-edge.is-sendback .agent-graph-edge-line { stroke-dasharray: 2 4; }
 .agent-graph-edge.is-active .agent-graph-edge-line { stroke: var(--steel); stroke-width: 2; }
 .agent-graph-edge.is-dim { opacity: .3; }
 .agent-graph-port { fill: var(--white); stroke: var(--slate-77); stroke-width: 1.25; }
@@ -561,6 +614,7 @@
 .agent-graph-legend li > span:not(.agent-graph-legend-badge) { width: 22px; height: 0; border-top: 1.5px solid var(--slate-77); }
 .agent-graph-legend .is-active { border-top: 2px solid var(--steel) !important; }
 .agent-graph-legend .is-approval { border-top-style: dashed !important; }
+.agent-graph-legend .is-sendback { border-top-style: dotted !important; }
 .agent-graph-legend-badge {
   display: grid;
   width: 14px;

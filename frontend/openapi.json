@@ -963,6 +963,14 @@
             "title": "Purpose",
             "type": "string"
           },
+          "tool_details": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ToolDetail"
+            },
+            "title": "Tool Details",
+            "type": "array"
+          },
           "tools": {
             "items": {
               "type": "string"
@@ -980,6 +988,7 @@
           "model",
           "prompt_version",
           "tools",
+          "tool_details",
           "access_summary",
           "call_budget",
           "owner",
@@ -1532,11 +1541,6 @@
             "title": "Runs",
             "type": "integer"
           },
-          "runs_without_saving": {
-            "default": 0,
-            "title": "Runs Without Saving",
-            "type": "integer"
-          },
           "saved_usd": {
             "default": 0.0,
             "title": "Saved Usd",
@@ -1549,8 +1553,7 @@
           "cache_read_tokens",
           "cache_write_tokens",
           "hit_rate",
-          "saved_usd",
-          "runs_without_saving"
+          "saved_usd"
         ],
         "title": "CacheUse",
         "type": "object"
@@ -1905,7 +1908,6 @@
               "cache_write_tokens": 0,
               "input_tokens": 0,
               "runs": 0,
-              "runs_without_saving": 0,
               "saved_usd": 0.0
             }
           },
@@ -2049,15 +2051,9 @@
             "title": "Llm Cache Read Tokens"
           },
           "llm_cache_saved_usd": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Llm Cache Saved Usd"
+            "default": 0.0,
+            "title": "Llm Cache Saved Usd",
+            "type": "number"
           },
           "llm_cache_write_tokens": {
             "anyOf": [
@@ -8130,6 +8126,24 @@
         "title": "Tolerances",
         "type": "object"
       },
+      "ToolDetail": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "ToolDetail",
+        "type": "object"
+      },
       "UnassessedCheck": {
         "properties": {
           "document_id": {
@@ -8826,7 +8840,7 @@
     },
     "/audit/events": {
       "get": {
-        "description": "The audit trail, newest first, optionally for one case or document. `before`: only events older than this (the next page).",
+        "description": "The audit trail, newest first, optionally for one case or document, or of one event type (`type`, such as\ncase.deleted). `before`: only events older than this (the next page).",
         "operationId": "list_audit_events_audit_events_get",
         "parameters": [
           {
@@ -8888,6 +8902,22 @@
                 }
               ],
               "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
             }
           },
           {

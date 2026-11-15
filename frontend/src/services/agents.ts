@@ -10,6 +10,8 @@ export interface AgentRecord {
   model: string;
   prompt_version: string | null;
   tools: string[];
+  // What each tool does: the description the model itself is given.
+  tool_details: { name: string; description: string }[];
   access_summary: string[];
   call_budget: string;
   owner: string | null;

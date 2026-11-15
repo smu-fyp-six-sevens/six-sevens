@@ -4,8 +4,6 @@ export interface Period {
   to: string;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 // A date as its local ISO day, so "today" is the user's today rather than UTC's.
 export function isoDay(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -25,10 +23,6 @@ export function addDays(day: string, days: number): string {
 }
 
 export const today = () => isoDay(new Date());
-
-export function daysBetween(from: string, to: string): number {
-  return Math.round((parseDay(to).getTime() - parseDay(from).getTime()) / DAY_MS);
-}
 
 export const PRESETS = ['Last 7 days', 'Last 30 days', 'Last 90 days', 'All time'] as const;
 
@@ -50,11 +44,4 @@ export function formatPeriod(period: Period): string {
   const format = (day: string) => parseDay(day).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', ...(showYear ? { year: 'numeric' } : {}) });
   if (!period.from) return `Until ${format(period.to)}`;
   return period.from === period.to ? format(period.from) : `${format(period.from)} – ${format(period.to)}`;
-}
-
-// The days two periods share, if any.
-export function overlap(a: Period, b: Period): Period | null {
-  const from = [a.from, b.from].reduce<string | null>((latest, day) => (day && (!latest || day > latest) ? day : latest), null);
-  const to = a.to < b.to ? a.to : b.to;
-  return !from || from <= to ? { from, to } : null;
 }

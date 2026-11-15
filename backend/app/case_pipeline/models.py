@@ -67,7 +67,7 @@ class CrossDocFinding(BaseModel):
     citations: list[str] = Field(default_factory=list)
     document_ids: list[str] = Field(default_factory=list)
     # Each cited document's field and value (from the ledger, unmasked), for the officer's side-by-side view.
-    # Empty on runs from before it was recorded.
+    # Empty when every citation is a table or a computed result (evidence.cited_values keeps plain values only).
     cited_values: list[CitedValue] = Field(default_factory=list)
     # What the refutation probe returned, in the investigator's words.
     probe_summary: str = ""

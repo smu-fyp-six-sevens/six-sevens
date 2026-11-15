@@ -32,10 +32,10 @@ const SHOW_ROLE_SWITCH = false;
 type DashboardTab = 'Overview' | 'Cases' | 'Flags' | 'Accuracy';
 const DASHBOARD_TABS: DashboardTab[] = ['Overview', 'Cases', 'Flags', 'Accuracy'];
 
-interface MockCase {
+interface DashboardCase {
   id: string;
   routeId?: string;
-  // A live case's id, for what the audit trail holds about it (its cost); absent for preview rows.
+  // The case's id, for what the audit trail holds about it (its cost).
   caseId?: string;
   // A document held up past its time limit.
   stuck?: boolean;
@@ -49,35 +49,18 @@ interface MockCase {
   recommendedDocs?: string[] | null;
   // Automated processing time in ms; null until the case has been analysed.
   processingMs?: number | null;
-  // Preview rows only: who the sample case is assigned to.
-  analyst?: string;
   documentTypes: string[];
   flags: string[];
-  // Per flag name: its worst severity in this case and the document types it's on; absent for preview rows.
+  // Per flag name: its worst severity in this case and the document types it's on.
   flagInfo?: Record<string, { severity: FlagSummary['severity']; count: number; documentTypes: string[] }>;
 }
 
 interface FlagSummary {
   name: string;
   severity: 'High' | 'Medium' | 'Low';
-  cases: MockCase[];
+  cases: DashboardCase[];
   documentTypes: string[];
 }
-
-const MOCK_CASES: MockCase[] = [
-  { id: 'GLDB-02481', applicant: 'Meridian Consulting Group', submitted: '2026-10-18', status: 'Ready to Finalise', risk: 'High', score: 82, analyst: 'J. Tan', documentTypes: ['Bank statement', 'Payslip'], flags: ['Identity mismatch', 'Balance inconsistency', 'Unverified address'] },
-  { id: 'GLDB-02480', applicant: 'Northstar Trading Pte Ltd', submitted: '2026-10-17', status: 'Processing Documents', risk: 'Medium', score: 58, analyst: 'A. Lim', documentTypes: ['Certificate', 'Bank statement'], flags: ['Company detail mismatch', 'Unusual transaction'] },
-  { id: 'GLDB-02479', applicant: 'Harbourlight Foods', submitted: '2026-10-16', status: 'Awaiting Documents', risk: 'High', score: 77, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Certificate'], flags: ['Invalid postal code', 'Identity mismatch'] },
-  { id: 'GLDB-02478', applicant: 'Cedar & Stone Pte Ltd', submitted: '2026-10-15', status: 'Failed', risk: 'Low', score: 18, analyst: 'M. Goh', documentTypes: ['Bank statement', 'Payslip'], flags: [] },
-  { id: 'GLDB-02477', applicant: 'Orchid Systems', submitted: '2026-10-13', status: 'Ready to Finalise', risk: 'High', score: 91, analyst: 'A. Lim', documentTypes: ['Certificate', 'Proof of address'], flags: ['Invalid registration number', 'Identity mismatch', 'Font anomaly'] },
-  { id: 'GLDB-02476', applicant: 'Brightpath Logistics', submitted: '2026-10-12', status: 'Processing Documents', risk: 'Medium', score: 49, analyst: 'J. Tan', documentTypes: ['Bank statement', 'Certificate'], flags: ['Balance inconsistency'] },
-  { id: 'GLDB-02475', applicant: 'Evergreen Medical Supplies', submitted: '2026-10-10', status: 'Processing Documents', risk: 'Low', score: 22, analyst: 'M. Goh', documentTypes: ['Payslip', 'Proof of address'], flags: [] },
-  { id: 'GLDB-02474', applicant: 'Silverline Manufacturing', submitted: '2026-10-08', status: 'Awaiting Documents', risk: 'Medium', score: 64, analyst: 'A. Lim', documentTypes: ['Certificate', 'Bank statement'], flags: ['Company detail mismatch', 'Unusual transaction'] },
-  { id: 'GLDB-02473', applicant: 'Bluepeak Design Studio', submitted: '2026-09-29', status: 'Ready to Finalise', risk: 'Medium', score: 61, analyst: 'J. Tan', documentTypes: ['Proof of address', 'Bank statement'], flags: ['Invalid postal code', 'Identity mismatch'] },
-  { id: 'GLDB-02472', applicant: 'Pioneer Green Energy', submitted: '2026-09-22', status: 'Processing Documents', risk: 'Low', score: 31, analyst: 'M. Goh', documentTypes: ['Certificate', 'Payslip'], flags: ['Company detail mismatch'] },
-];
-// Preview rows only: live cases carry their real time from the case list.
-const SAMPLE_PROCESSING_MS = [184_000, 170_000, 237_000, 125_000, 245_000, 160_000, 188_000, 264_000, 143_000, 179_000];
 
 const STATUSES: Status[] = CASE_STAGES.map((stage) => caseStageLabel(stage));
 // A stage's label back to the stage, for its colour and for the accuracy filter the backend applies.
@@ -94,37 +77,13 @@ const SEVERITY_RANK: Record<FlagSummary['severity'], number> = { High: 3, Medium
 function flagSeverity(value: string): FlagSummary['severity'] {
   return value === 'high' ? 'High' : value === 'low' ? 'Low' : 'Medium';
 }
-// Preview rows only: live flags carry their own severity.
-const FLAG_SEVERITY: Record<string, FlagSummary['severity']> = {
-  'Identity mismatch': 'High',
-  'Balance inconsistency': 'High',
-  'Invalid registration number': 'High',
-  'Invalid postal code': 'Medium',
-  'Company detail mismatch': 'Medium',
-  'Unverified address': 'Medium',
-  'Unusual transaction': 'Medium',
-  'Font anomaly': 'Medium',
-};
 
 // Rows in each Overview insight panel, so the side-by-side panels stay the same height.
 const INSIGHT_ROWS = 6;
 // Document types are rings, four to a row: two rows before "Show all".
 const DOCUMENT_TYPE_ROWS = 8;
 
-// Preview rows only: live cases carry their analysis's recommendations from the case list.
-function sampleRecommendedDocuments(item: MockCase): string[] {
-  const recommendations = new Set<string>();
-  item.flags.forEach((flag) => {
-    if (flag === 'Identity mismatch') recommendations.add('NRIC / passport');
-    if (flag === 'Balance inconsistency' || flag === 'Unusual transaction') recommendations.add('Updated bank statement');
-    if (flag === 'Invalid postal code' || flag === 'Unverified address') recommendations.add('Recent proof of address');
-    if (flag === 'Company detail mismatch' || flag === 'Invalid registration number') recommendations.add('Company registration documents');
-    if (flag === 'Font anomaly') recommendations.add('Original document copy');
-  });
-  return [...recommendations];
-}
-
-// Everything the panels read from a set of cases, worked out the same way for the period and the comparison.
+// Everything the panels read from the cases in view.
 function deriveView(cases: DashboardCase[], costs: Record<string, number> | null) {
   const statusCounts = Object.fromEntries(STATUSES.map((status) => [status, cases.filter((item) => item.status === status).length])) as Record<Status, number>;
 
@@ -138,7 +97,7 @@ function deriveView(cases: DashboardCase[], costs: Record<string, number> | null
     name,
     cases: flagged,
     // The worst severity any case has for this flag, and only the document types it was found on.
-    severity: flagged.map((item) => item.flagInfo?.[name]?.severity ?? FLAG_SEVERITY[name] ?? 'Medium')
+    severity: flagged.map((item) => item.flagInfo?.[name]?.severity ?? 'Medium')
       .sort((a, b) => SEVERITY_RANK[b] - SEVERITY_RANK[a])[0],
     documentTypes: [...new Set(flagged.flatMap((item) => item.flagInfo?.[name]?.documentTypes ?? item.documentTypes))],
   }));
@@ -148,7 +107,7 @@ function deriveView(cases: DashboardCase[], costs: Record<string, number> | null
     id: item.id, routeId: item.routeId, applicant: item.applicant, risk: item.risk,
     flags: item.flags.map((name) => ({
       name,
-      severity: item.flagInfo?.[name]?.severity ?? FLAG_SEVERITY[name] ?? 'Medium',
+      severity: item.flagInfo?.[name]?.severity ?? 'Medium',
       count: item.flagInfo?.[name]?.count ?? 1,
       documentTypes: item.flagInfo?.[name]?.documentTypes ?? item.documentTypes,
     })),
@@ -157,7 +116,7 @@ function deriveView(cases: DashboardCase[], costs: Record<string, number> | null
   // Each case as Needs attention shows it: why it waits, its most serious flag, and what to request.
   const attentionCases: AttentionCase[] = cases.map((item) => {
     const topFlag = item.flags
-      .map((name) => ({ name, severity: item.flagInfo?.[name]?.severity ?? FLAG_SEVERITY[name] ?? 'Medium' }))
+      .map((name) => ({ name, severity: item.flagInfo?.[name]?.severity ?? 'Medium' }))
       .sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity])[0] ?? null;
     return {
       id: item.id, routeId: item.routeId, applicant: item.applicant, status: item.status, tone: statusTone(item.status),
@@ -174,8 +133,6 @@ function deriveView(cases: DashboardCase[], costs: Record<string, number> | null
 
   return { cases, statusCounts, byDocumentType, flagRows, flagCases, attentionCases, analyticsCases };
 }
-
-type DashboardCase = MockCase;
 
 function dashboardStatus(label: string): Status {
   return STATUSES.includes(label) ? label : caseStageLabel('open');
@@ -212,39 +169,27 @@ export default function DashboardPage({
   const [statusFilter, setStatusFilter] = useState<Set<Status>>(new Set());
   const [showAllDocTypes, setShowAllDocTypes] = useState(false);
 
-  const dashboardCases = useMemo(() => caseRecords.length
-    ? caseRecords.map((record, index) => {
-      const example = MOCK_CASES[index % MOCK_CASES.length];
-      return {
-        ...example,
-        id: record.caseNumber || record.id,
-        routeId: record.caseNumber || record.id,
-        caseId: record.id,
-        stuck: record.stuck ?? false,
-        applicant: record.applicant,
-        // The day it was created in the officer's time zone, as the date range and calendar count days.
-        submitted: record.created_at ? isoDay(new Date(record.created_at)) : example.submitted,
-        status: dashboardStatus(record.status),
-        risk: record.riskLevel ?? null,
-        score: record.riskScore ?? null,
-        processingMs: record.processingMs ?? null,
-        recommendedDocs: record.recommendedDocuments ?? null,
-        analyst: undefined,
-        documentTypes: (record.documentTypes ?? []).map((type) => formatDocumentType(type)),
-        flags: (record.flags ?? []).map((flag) => formatCheck(flag.check)),
-        flagInfo: Object.fromEntries((record.flags ?? []).map((flag) => [formatCheck(flag.check), {
-          severity: flagSeverity(flag.severity),
-          count: flag.count,
-          documentTypes: flag.documentTypes.map((type) => formatDocumentType(type)),
-        }])),
-      };
-    })
-    : MOCK_CASES.map((item, index) => ({
-      ...item,
-      processingMs: SAMPLE_PROCESSING_MS[index],
-      recommendedDocs: sampleRecommendedDocuments(item),
-    })),
-  [caseRecords]);
+  const dashboardCases = useMemo<DashboardCase[]>(() => caseRecords.map((record) => ({
+    id: record.caseNumber || record.id,
+    routeId: record.caseNumber || record.id,
+    caseId: record.id,
+    stuck: record.stuck ?? false,
+    applicant: record.applicant,
+    // The day it was created in the officer's time zone, as the date range and calendar count days.
+    submitted: record.created_at ? isoDay(new Date(record.created_at)) : '',
+    status: dashboardStatus(record.status),
+    risk: record.riskLevel ?? null,
+    score: record.riskScore ?? null,
+    processingMs: record.processingMs ?? null,
+    recommendedDocs: record.recommendedDocuments ?? null,
+    documentTypes: (record.documentTypes ?? []).map((type) => formatDocumentType(type)),
+    flags: (record.flags ?? []).map((flag) => formatCheck(flag.check)),
+    flagInfo: Object.fromEntries((record.flags ?? []).map((flag) => [formatCheck(flag.check), {
+      severity: flagSeverity(flag.severity),
+      count: flag.count,
+      documentTypes: flag.documentTypes.map((type) => formatDocumentType(type)),
+    }])),
+  })), [caseRecords]);
 
   const period = useMemo(() => (rangeChoice === CUSTOM_RANGE && customPeriod ? customPeriod : presetPeriod(rangeChoice)), [rangeChoice, customPeriod]);
   const rangeLabel = rangeChoice === CUSTOM_RANGE && customPeriod ? formatPeriod(customPeriod) : rangeChoice;
@@ -297,7 +242,7 @@ export default function DashboardPage({
           <div className="dashboard-section-bar">
             <nav className="dashboard-tabs" aria-label="Dashboard sections">
               {DASHBOARD_TABS.map((item) => {
-                // No count until the real cases arrive: before that the list is the sample cases.
+                // No count until the cases arrive.
                 const count = isLoading ? null : item === 'Cases' ? visibleCases.length : item === 'Flags' ? flagRows.length : null;
                 return (
                   <button key={item} className={tab === item ? 'active' : ''} aria-current={tab === item ? 'page' : undefined} onClick={() => setTab(item)}>
@@ -331,12 +276,11 @@ export default function DashboardPage({
           </div>
         </div>
         <div className="dashboard-content dashboard-body-content">
-          {/* First load: placeholders in the dashboard's own layout, not the sample cases. The Accuracy tab loads its own figures. */}
+          {/* First load: placeholders in the dashboard's own layout. The Accuracy tab loads its own figures. */}
           {isLoading && tab !== 'Accuracy' ? <DashboardSkeleton /> : <>
           {error && <ErrorMessage className="dashboard-load-error" message={`${error} Use Refresh to try again.`} />}
           {tab === 'Overview' && <CasePipeline counts={stageCounts} total={visibleCases.length} period={rangeLabel} />}
-          {isLoading && !caseRecords.length && <p className="dashboard-data-note" role="status">Loading live case links; preview rows are temporarily not clickable.</p>}
-          {!isLoading && !caseRecords.length && !error && <p className="dashboard-data-note">No live cases are loaded. Preview rows are illustrative and cannot open a case record.</p>}
+          {!isLoading && !caseRecords.length && !error && <p className="dashboard-data-note">No cases yet. The dashboard fills in as cases are created.</p>}
 
           {tab === 'Overview' && <>
           <section className="dashboard-insight-grid">
@@ -363,9 +307,9 @@ export default function DashboardPage({
           </section>
           <section className="dashboard-pair-grid">
             <CasesOverTime cases={visibleCases} period={period} />
-            <ProcessingAndCost cases={visibleCases} costs={costs} costError={costError} isPreview={!caseRecords.length} />
+            <ProcessingAndCost cases={visibleCases} costs={costs} costError={costError} />
           </section>
-          <DetectionAccuracySummary filters={accuracyFilters} compareFilters={null} onViewAll={() => setTab('Accuracy')} />
+          <DetectionAccuracySummary filters={accuracyFilters} onViewAll={() => setTab('Accuracy')} />
           </>}
 
           {tab === 'Cases' && <>
@@ -378,7 +322,6 @@ export default function DashboardPage({
               <CostAgainstTime cases={analyticsCases} costState={costState} onOpen={openAnalyticsCase} />
               <RiskScoreSpread cases={analyticsCases} />
             </section>
-            {!caseRecords.length && <p className="dashboard-data-note">Sample cases: processing times are illustrative and Claude cost is recorded for live cases only.</p>}
           </>}
 
           {tab === 'Flags' && <>
@@ -389,7 +332,7 @@ export default function DashboardPage({
               <FlagsByRisk cases={flagCases} />
             </section>
           </>}
-          {tab === 'Accuracy' && <DetectionAccuracyPanel filters={accuracyFilters} compareFilters={null} />}
+          {tab === 'Accuracy' && <DetectionAccuracyPanel filters={accuracyFilters} />}
           </>}
         </div>
       </main>

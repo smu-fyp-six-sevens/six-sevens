@@ -14,8 +14,8 @@ const GROUP_SPECIALISTS = 'Fraud detection specialists';
 const GROUP_CASE = 'Case analysis';
 
 type LabelSide = 'above' | 'below';
-type EdgeKind = 'handoff' | 'delegate' | 'approval';
-type EdgeShape = 'x' | 'y' | 'bulge-left' | 'bulge-right';
+type EdgeKind = 'handoff' | 'delegate' | 'approval' | 'sendback';
+type EdgeShape = 'x' | 'y' | 'bulge-left' | 'bulge-right' | 'loop-left';
 
 interface GraphNode {
   agent: AgentRecord;
@@ -81,6 +81,10 @@ function buildGraph(agents: AgentRecord[]): { nodes: GraphNode[]; edges: GraphEd
     edges.push({ id: `${from.id}->${to.id}`, from: from.id, to: to.id, kind, shape });
   };
   docs.slice(1).forEach((agent, index) => link(docs[index], agent, 'handoff', 'bulge-left'));
+  // The extractor sends a document back to the classifier when its type looks wrong (graph.py's reclassify loop).
+  const classifier = docs.find((agent) => agent.id === 'document_classifier');
+  const extractor = docs.find((agent) => agent.id === 'field_extractor');
+  if (classifier && extractor) link(extractor, classifier, 'sendback', 'loop-left');
   if (hubAgent) {
     if (docs.length) link(docs[docs.length - 1], hubAgent, 'handoff', 'x');
     ring.forEach((agent) => link(hubAgent, agent, 'delegate', 'y'));
@@ -111,6 +115,12 @@ function edgeGeometry(a: GraphNode, b: GraphNode, shape: EdgeShape) {
     const k = (end.y - start.y) * 0.55;
     c1 = { x: start.x, y: start.y + k };
     c2 = { x: end.x, y: end.y - k };
+  } else if (shape === 'loop-left') {
+    // Wider than the forward link and off its ports, so the two read as separate paths.
+    start = { x: a.x - a.hw, y: a.y - 14 };
+    end = { x: b.x - b.hw, y: b.y + 14 };
+    c1 = { x: start.x - 140, y: start.y };
+    c2 = { x: end.x - 140, y: end.y };
   } else {
     const sign = shape === 'bulge-left' ? -1 : 1;
     start = { x: a.x + sign * a.hw, y: a.y };
@@ -127,6 +137,7 @@ const EDGE_TITLES: Record<EdgeKind, string> = {
   handoff: 'Hands work on',
   delegate: 'Assigns checks · reports back',
   approval: 'After officer approval',
+  sendback: 'Sends the document back to reclassify when its type looks wrong (a bounded number of times)',
 };
 
 export function AgentGlyph({ agent }: { agent: AgentRecord }) {
@@ -309,8 +320,11 @@ export default function AgentGraph({ agents, selectedId, onSelect }: AgentGraphP
       <ul className="agent-graph-legend" aria-label="Connection types">
         <li><span className="is-handoff" />Hands work on</li>
         <li><span className="is-approval" />After officer approval</li>
+        <li><span className="is-sendback" />Sent back to reclassify</li>
         <li><span className="is-active" />Selected agent&apos;s links</li>
-        <li><span className="agent-graph-legend-badge">!</span>Prompt not versioned</li>
+        {agents.some((agent) => agent.prompt_version == null) && (
+          <li><span className="agent-graph-legend-badge">!</span>Prompt not versioned</li>
+        )}
       </ul>
 
 

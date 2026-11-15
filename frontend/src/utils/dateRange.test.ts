@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { addDays, daysBetween, formatPeriod, inPeriod, overlap, presetPeriod } from './dateRange';
+import { addDays, formatPeriod, inPeriod, presetPeriod } from './dateRange';
 
-// The dashboard's date filter: which cases a period keeps, and how two compared periods relate.
+// The dashboard's date filter: which cases a period keeps.
 describe('dashboard periods', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -27,17 +27,8 @@ describe('dashboard periods', () => {
     expect(inPeriod('2001-01-01', { from: null, to: '2026-11-05' })).toBe(true);
   });
 
-  it('steps across a month end and counts the days between', () => {
+  it('steps across a month end', () => {
     expect(addDays('2026-10-30', 3)).toBe('2026-11-02');
-    expect(daysBetween('2026-10-30', '2026-11-05')).toBe(6);
-  });
-
-  it('finds the days two periods share, or none', () => {
-    const october = { from: '2026-10-01', to: '2026-10-31' };
-
-    expect(overlap(october, { from: '2026-10-20', to: '2026-11-05' })).toEqual({ from: '2026-10-20', to: '2026-10-31' });
-    expect(overlap(october, { from: '2026-11-01', to: '2026-11-05' })).toBeNull();
-    expect(overlap(october, { from: null, to: '2026-10-10' })).toEqual({ from: '2026-10-01', to: '2026-10-10' });
   });
 
   it('names a period without the year when it is this year, and with it otherwise', () => {

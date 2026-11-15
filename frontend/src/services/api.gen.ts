@@ -153,7 +153,8 @@ export interface paths {
         };
         /**
          * List Audit Events
-         * @description The audit trail, newest first, optionally for one case or document. `before`: only events older than this (the next page).
+         * @description The audit trail, newest first, optionally for one case or document, or of one event type (`type`, such as
+         *     case.deleted). `before`: only events older than this (the next page).
          */
         get: operations["list_audit_events_audit_events_get"];
         put?: never;
@@ -1958,6 +1959,11 @@ export interface components {
             prompt_version: string | null;
             /** Purpose */
             purpose: string;
+            /**
+             * Tool Details
+             * @default []
+             */
+            tool_details: components["schemas"]["ToolDetail"][];
             /** Tools */
             tools: string[];
         };
@@ -2161,11 +2167,6 @@ export interface components {
              */
             runs: number;
             /**
-             * Runs Without Saving
-             * @default 0
-             */
-            runs_without_saving: number;
-            /**
              * Saved Usd
              * @default 0
              */
@@ -2294,7 +2295,6 @@ export interface components {
              *       "cache_write_tokens": 0,
              *       "input_tokens": 0,
              *       "runs": 0,
-             *       "runs_without_saving": 0,
              *       "saved_usd": 0
              *     } */
             cache: components["schemas"]["CacheUse"];
@@ -2369,8 +2369,11 @@ export interface components {
             document_id: string | null;
             /** Llm Cache Read Tokens */
             llm_cache_read_tokens: number | null;
-            /** Llm Cache Saved Usd */
-            llm_cache_saved_usd: number | null;
+            /**
+             * Llm Cache Saved Usd
+             * @default 0
+             */
+            llm_cache_saved_usd: number;
             /** Llm Cache Write Tokens */
             llm_cache_write_tokens: number | null;
             /** Llm Calls */
@@ -4626,6 +4629,13 @@ export interface components {
              */
             min_step_isolation: number;
         };
+        /** ToolDetail */
+        ToolDetail: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+        };
         /** UnassessedCheck */
         UnassessedCheck: {
             /** Document Id */
@@ -4990,6 +5000,7 @@ export interface operations {
                 document_id?: string | null;
                 limit?: number;
                 before?: string | null;
+                type?: string | null;
             };
             header?: {
                 authorization?: string | null;

@@ -66,8 +66,6 @@ function PromptCaching({ cache, byRun }: { cache: CacheUse; byRun: Record<string
           </table>
           <p className="cache-use-note">
             Saved is what the cache reads would have cost as plain input, less what the cache writes cost above it.
-            {(cache.runs_without_saving ?? 0) > 0 &&
-              ` ${cache.runs_without_saving} earlier run(s) predate the saving being recorded, so their saving isn't counted.`}
           </p>
         </>
       )}

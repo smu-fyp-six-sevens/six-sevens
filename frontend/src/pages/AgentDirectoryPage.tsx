@@ -56,8 +56,26 @@ function AgentModelCard({ agent }: { agent: AgentRecord }) {
         <div><dt>Call budget</dt><dd>{agent.call_budget}</dd></div>
         <div><dt>Owner</dt><dd>{agent.owner ?? 'Not assigned'}</dd></div>
       </dl>
+      <section className="agent-tools" aria-labelledby={`agent-tools-${agent.id}`}>
+        <h4 id={`agent-tools-${agent.id}`}>
+          Tools <span className="agent-tools-count">{agent.tool_details.length}</span>
+        </h4>
+        {agent.tool_details.length ? (
+          <ul className="agent-tool-list">
+            {agent.tool_details.map((tool) => (
+              <li key={tool.name}>
+                <details className="agent-tool">
+                  <summary><code>{tool.name}</code></summary>
+                  <p>{tool.description}</p>
+                </details>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="agent-tools-empty">No agent tools configured</p>
+        )}
+      </section>
       <div className="agent-directory-access">
-        <div><h4>Allowed tools</h4><p>{agent.tools.length ? agent.tools.join(', ') : 'No agent tools configured'}</p></div>
         <div><h4>Current access</h4><ul>{agent.access_summary.map((permission) => <li key={permission}>{permission}</li>)}</ul></div>
         <div><h4>Limitations</h4><p>{agent.limitations}</p></div>
       </div>
@@ -226,7 +244,7 @@ export default function AgentDirectoryPage() {
 
         <aside className="agent-directory-note">
           <span aria-hidden="true">i</span>
-          <p><strong>How to read this page:</strong> “Not versioned” and “Not assigned” mark gaps in the current implementation. Tool access is described from code; it is not a separate per-agent permission policy. Pipeline caps are shared ceilings, not per-agent or dollar-cost budgets. Agent outputs support human review; they do not make the lending decision.</p>
+          <p><strong>How to read this page:</strong> “Not assigned” marks a gap in the current implementation. Select a tool to see what it does, in the words the agent itself is given. Tool access is described from code; it is not a separate per-agent permission policy. Pipeline caps are shared ceilings, not per-agent or dollar-cost budgets. Agent outputs support human review; they do not make the lending decision.</p>
         </aside>
       </div>
       {openAgent && <AgentDialog key={openAgent.id} agent={openAgent} onClose={() => setOpenId(null)} />}
