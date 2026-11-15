@@ -87,11 +87,32 @@ def test_nric_checksum_scans_any_field_containing_an_nric() -> None:
 
 
 def test_uen_format_accepts_real_shape_and_rejects_garbage() -> None:
-    result = _run([_field("uen", "202312345K")])
+    result = _run([_field("uen", "202312345K")], document_type="certificate_of_incumbency")
     assert _codes(result, "ID.UEN_FORMAT") == []
 
-    result = _run([_field("uen", "NOTAUEN")])
+    result = _run([_field("uen", "NOTAUEN")], document_type="certificate_of_incumbency")
     assert len(_codes(result, "ID.UEN_FORMAT")) == 1
+
+
+@pytest.mark.parametrize("document_type", ["nric", "proof_of_address", "payslip", "passport"])
+def test_uen_format_does_not_run_where_a_document_has_no_uen(document_type: str) -> None:
+    # Seen live: an NRIC number and a utility account number were each checked as a UEN and flagged high.
+    result = _run([_field("uen", "98892823")], document_type=document_type)
+    assert _codes(result, "ID.UEN_FORMAT") == []
+
+
+def test_an_nric_bound_as_a_uen_is_skipped_not_flagged() -> None:
+    result = _run([_field("uen", "S9798175B")], document_type="certificate_of_incumbency")
+    assert _codes(result, "ID.UEN_FORMAT") == []
+    assert any("NRIC" in s.reason for s in result.skipped_checks if s.check_code == "ID.UEN_FORMAT")
+
+
+def test_mrz_joined_by_a_space_with_a_misread_name_line_is_two_lines() -> None:
+    # Seen live: OCR dropped a letter of the name, so the space-joined MRZ was 87 characters without the space and
+    # was read as one line. The name line's filler run is fitted back to 44 as for a newline-separated MRZ.
+    mrz = "PASGPSIM<<TECK<HAT<<<<<<<<<<<<<<<<<<<<<<<<<< E2496105E9SGP8601230F3012246S8651228I<<<<<22"
+    result = _run([_field("mrz", mrz)], document_type="passport")
+    assert _codes(result, "ID.MRZ_FORMAT") == []
 
 
 def test_amount_parse_marks_unparseable_amount_as_needs_review() -> None:
@@ -1110,7 +1131,7 @@ def test_poa_balance_accepts_a_payment_printed_as_a_negative() -> None:
 
 _FLAGGED_ONCE = [
     pytest.param(
-        'ID.UEN_FORMAT', None, [_field("uen", "195012345K")],
+        'ID.UEN_FORMAT', "certificate_of_incumbency", [_field("uen", "195012345K")],
         id='uen_format_rejects_implausible_year_prefix',
     ),
     pytest.param(

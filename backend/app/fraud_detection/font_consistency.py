@@ -149,6 +149,10 @@ def _extract_spans(doc: pymupdf.Document) -> list[_Span]:
     spans: list[_Span] = []
     for page_index, page in enumerate(_pages(doc)):
         underline_rects = _underline_rects(page)
+        # A filled-in form field draws its value in the field's own font (a viewer's Helvetica, typically),
+        # whatever the printed form uses, so its text says nothing about the form's typesetting.
+        widgets = getattr(page, "widgets", None)
+        field_rects = [w.rect for w in (widgets() if widgets else None) or [] if w.rect.width > 0 and w.rect.height > 0]
         page_dict = cast(dict, page.get_text("dict"))
         for block in page_dict.get("blocks", []):
             if block.get("type") != 0:  # not a text block
@@ -166,6 +170,9 @@ def _extract_spans(doc: pymupdf.Document) -> list[_Span]:
                     if not bbox or len(bbox) != 4:
                         continue
                     bbox = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+                    centre = pymupdf.Point((bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2)
+                    if any(centre in rect for rect in field_rects):
+                        continue
                     flags = int(raw_span.get("flags") or 0)
                     spans.append(
                         _Span(

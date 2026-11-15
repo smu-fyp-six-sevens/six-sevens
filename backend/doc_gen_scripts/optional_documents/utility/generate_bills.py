@@ -188,7 +188,8 @@ def generate_utility_bill(
     consumption_trend: list[tuple[str, int]] | None = None,
     synthetic_tag: bool = True,
 ) -> dict:
-    contract_end_date = contract_end_date or date(2032, 3, 10)
+    # A fixed date drifted past five years from the bill (POA.CONTRACT_TERM); a typical retail contract runs two.
+    contract_end_date = contract_end_date or date(bill_date.year + 2, bill_date.month, min(bill_date.day, 28))
     payment_received_date = payment_received_date or date(billing_period_end.year, billing_period_end.month, 19)
     payment_received_amount = payment_received_amount if payment_received_amount is not None else previous_balance
     current_charges = current_charges if current_charges is not None else total_amount_payable
@@ -403,7 +404,8 @@ def synthesize_company_bill_data(case_id: str, filename: str, *, application_dat
         total_amount_payable=total_amount_payable,
         account_type="Commercial",
         deposit=rng.choice([400.00, 600.00, 800.00, 1000.00, 1500.00]),
-        contract_end_date=date(bill_date.year + rng.randint(2, 5), rng.randint(1, 12), rng.choice([1, 10, 15, 28])),
+        # Up to 4 years and 11 months from the bill: a contract ending more than 5 years out is flagged (POA.CONTRACT_TERM).
+        contract_end_date=date(bill_date.year + rng.randint(1, 4), rng.randint(1, 12), rng.choice([1, 10, 15, 28])),
         previous_balance=previous_balance,
         payment_received_date=period_end - timedelta(days=rng.randint(6, 12)) if scenario == "paid" else None,
         payment_received_amount=payment_received_amount,

@@ -162,7 +162,8 @@ def generate_utility_bill(
     usage_kwh: int = 689,
     consumption_trend: list[tuple[str, int]] | None = None,
 ) -> dict:
-    contract_end_date = contract_end_date or date(2032, 3, 10)
+    # A fixed date drifted past five years from the bill (POA.CONTRACT_TERM); a typical retail contract runs two.
+    contract_end_date = contract_end_date or date(bill_date.year + 2, bill_date.month, min(bill_date.day, 28))
     payment_received_date = payment_received_date or date(billing_period_end.year, billing_period_end.month, 19)
     payment_received_amount = payment_received_amount if payment_received_amount is not None else previous_balance
     current_charges = current_charges if current_charges is not None else total_amount_payable

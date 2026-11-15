@@ -168,6 +168,14 @@ _FLAGGED_ONCE = [
         id="cr_age_at_opening_flags_underage_card",
     ),
     pytest.param(
+        "CR.AGE_AT_OPENING", "credit_report",
+        [
+            ("accounts", [{"product_type": "Credit Card", "date_opened": "2007-01-22"}]),
+            ("date_of_birth", "1986-01-23"),
+        ],
+        id="cr_age_at_opening_flags_a_card_the_day_before_21",
+    ),
+    pytest.param(
         "CR.DATE_LOGIC", "credit_report",
         [("accounts", [{"date_opened": "2020-01-01", "date_closed": "2019-01-01"}])],
         id="cr_date_logic_flags_closing_before_opening",
@@ -394,3 +402,12 @@ def test_a_document_dated_today_is_not_future_dated_before_8am_singapore_time(mo
     monkeypatch.setattr(sg_time, "now_sg", lambda: datetime(2026, 11, 13, 1, 0, tzinfo=sg_time.SINGAPORE))
     assert _codes(_run([_field("declaration_date", "2026-11-13")]), "GEN.DATE_VALID") == []
     assert len(_codes(_run([_field("declaration_date", "2026-11-14")]), "GEN.DATE_VALID")) == 1
+
+
+def test_a_card_opened_on_the_21st_birthday_is_not_underage() -> None:
+    # Seen live: days / 365.25 put a card opened on the holder's 21st birthday at "age 21.0, below the minimum of 21".
+    result = _run([
+        _field("accounts", [{"product_type": "Unsecured Credit Card", "date_opened": "2007-01-23"}]),
+        _field("date_of_birth", "1986-01-23"),
+    ], document_type="credit_report")
+    assert _codes(result, "CR.AGE_AT_OPENING") == []
