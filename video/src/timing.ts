@@ -79,19 +79,19 @@ export const HOOK_VERSION: "v1" | "v2" | "v3" = "v3";
 
 /** Section 8b, "finalise": the officer locks the case. All times in seconds from the start of the section. */
 export const FINALISE = {
-  length: 5.6,
+  length: 8.2,
   headlineIn: 0.15,       // "Finalise the case,"
-  summaryClick: 0.35,     // from Additional Documents, the cursor clicks "Summary" in the sidebar
-  readyAt: 0.45,          // the case summary: "Ready to Finalise"
-  buttonClick: 1.0,       // the cursor clicks "Finalise Case"
-  confirmAt: 1.12,        // the confirmation: view-only, can't be undone
-  confirmClick: 1.7,      // it confirms
-  doneAt: 1.82,           // "Finalised": the case is locked, view-only
-  menuClick: 2.45,        // the cursor opens the case menu
-  menuAt: 2.57,
-  reportClick: 3.0,       // ...and clicks "Download report"
-  reportAt: 3.15,         // the case report (the backend's real PDF) slides up: "and send a report of findings..."
-  reportOut: 4.85,        // ...and slides away, back to the framing the dashboard opens on
+  summaryClick: 0.6,     // from Additional Documents, the cursor clicks "Summary" in the sidebar
+  readyAt: 0.75,          // the case summary: "Ready to Finalise"
+  buttonClick: 1.75,       // the cursor clicks "Finalise Case"
+  confirmAt: 1.9,        // the confirmation: view-only, can't be undone
+  confirmClick: 2.85,      // it confirms
+  doneAt: 3.0,           // "Finalised": the case is locked, view-only
+  menuClick: 3.95,        // the cursor opens the case menu
+  menuAt: 4.1,
+  reportClick: 4.8,       // ...and clicks "Download report"
+  reportAt: 4.95,         // the case report (the backend's real PDF) slides up: "and send a report of findings..."
+  reportOut: 7.45,        // ...and slides away, back to the framing the dashboard opens on
 };
 
 /** Section 9, "dashboard": a tour of the dashboard over a month of cases; the camera follows the page. */
