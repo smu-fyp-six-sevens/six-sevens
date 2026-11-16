@@ -112,7 +112,8 @@
       "enabled": true,
       "env": {
         "CPU_WORKER_PROCESSES": "2",
-        "DETECTION_CONCURRENCY": "2"
+        "DETECTION_CONCURRENCY": "2",
+        "SYNTHETIC_ACRA_REGISTRY": "true"
       },
       "max": 2,
       "memory": "4Gi",

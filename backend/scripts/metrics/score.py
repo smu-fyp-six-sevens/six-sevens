@@ -1,12 +1,18 @@
 """
-Scores the three success metrics from a dataset's truth files and the pipeline's saved results.
+Scores the success metrics from a dataset's truth files and the pipeline's saved results.
 
 From backend/:
     python -m scripts.metrics.score                 # every seed that has results
-    python -m scripts.metrics.score --seeds 1 2
+    python -m scripts.metrics.score --seeds 0
 
 Reads metrics-testing/seed-<n>/ (labels.json, each document's .truth.json, results/<case>.json) and writes
 metrics-testing/metrics_report.json and metrics_report.md. Offline: no Claude, no Supabase, free to re-run.
+
+Classification accuracy
+    Documents given the right type / documents uploaded. The right type is the one its generator made (a payslip
+    is a payslip), or a type the truth file also accepts (a personal bank statement filed as proof of address may
+    be called a bank statement). A document split into several files (an NRIC's front and back, a multi-page
+    image) is right only if every file is. The type is the classifier's own, read before any officer step.
 
 Extraction accuracy
     Correct fields / truth fields. A truth field is a value the generator printed on the document
@@ -68,8 +74,9 @@ KEY_EXTRA: dict[str, set[str]] = {
 }
 # Compared as identifiers: letters and digits only.
 _ID_FIELD = re.compile(r"(_number|_no|^uen|^tin|^mrz|identification_no|tax_reference_number)$")
-# An address is accepted with a part left off (no "Singapore"), as long as most of it is there.
-_ADDRESS = re.compile(r"address")
+# An address or a transaction's description is accepted with a part left off (no "Singapore", or the end of a
+# description the statement wrapped onto another line), as long as most of it is there.
+_ADDRESS = re.compile(r"address|description")
 # A label is accepted inside a longer wording of it ("84 months" in "84 months (7 years)").
 _LABEL = re.compile(r"(company_type|nationality|facility_type|loan_tenure|incorporating_act|share_class|country|"
                     r"place_of_birth|position|race|bank_name)")
@@ -253,7 +260,12 @@ def score_extraction(truth: dict[str, Any], documents: list[dict[str, Any]]) -> 
     acceptable = {truth["document_type"], *truth.get("also_acceptable", [])}
     predicted_types = [d.get("document_type") for d in documents]
     rows = []
+    # A list field an officer edited can't be put back as the agents left it (the audit keeps only the changed rows),
+    # so it isn't scored (scripts/metrics/fetch_cases.py).
+    officer_edited = {name for d in documents for name in d.get("officer_edited_fields") or []}
     for name, value in truth["fields"].items():
+        if name in officer_edited:
+            continue
         alternatives = [value, *(truth.get("accept_also") or {}).get(name, [])]
         strict, any_name, hit_rows, total_rows = False, False, 0, 0
         for document in documents:
@@ -278,8 +290,11 @@ def score_extraction(truth: dict[str, Any], documents: list[dict[str, Any]]) -> 
         "document_type": truth["document_type"],
         "classified_as": predicted_types,
         "classified_correctly": bool(predicted_types) and all(t in acceptable for t in predicted_types),
+        "acceptable_types": sorted(acceptable),
+        "classification_confidence": min((d.get("classification_confidence") or 0.0 for d in documents), default=None),
         "forged": truth["fraud_expected"],
         "uploaded": bool(documents),
+        "not_scored_officer_edited": sorted(officer_edited & set(truth["fields"])),
         "fields": rows,
     }
 
@@ -342,6 +357,13 @@ def score_detection(truth: dict[str, Any], documents: list[dict[str, Any]], anal
     }
 
 
+def _group(rows: list[dict[str, Any]], key: str) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[row[key]].append(row)
+    return grouped
+
+
 def _rate(hit: int, total: int) -> float | None:
     return round(hit / total, 4) if total else None
 
@@ -351,8 +373,12 @@ def score_seed(seed_dir: Path) -> dict[str, Any]:
     extraction, detection, risk, notes = [], [], [], []
     for case_id, result in results.items():
         by_name = {d["filename"]: d for d in result["documents"]}
+        # Uploaded, but not the dataset's file (fetch_cases.py): no truth describes it, so it isn't scored at all.
+        excluded = set(result.get("excluded_documents") or [])
         analysis = result.get("analysis")
         for truth in _truths(seed_dir / case_id):
+            if excluded & set(truth["files"]):
+                continue
             documents = [by_name[name] for name in truth["files"] if name in by_name]
             extraction.append({"case_id": case_id, **score_extraction(truth, documents)})
             detection.append({"seed": int(seed_dir.name.split("-")[-1]), "case_id": case_id,
@@ -390,10 +416,14 @@ def summarise(seeds: list[dict[str, Any]]) -> dict[str, Any]:
     by_type: dict[str, list] = defaultdict(list)
     for row in key_rows:
         by_type[row[1]["document_type"]].append(row)
-    documents = [d for s in seeds for d in s["extraction"]]
+    documents = [{"seed": s["seed"], **d} for s in seeds for d in s["extraction"]]
+    # A document that never reached the system has no type to judge; it's listed under documents_not_uploaded.
+    uploaded = [d for d in documents if d["uploaded"]]
 
     forged = [d for s in seeds for d in s["detection"] if d["forged"]]
-    clean = [d for s in seeds for d in s["detection"] if not d["forged"]]
+    # Only clean documents that were scanned can be falsely flagged; one never scanned is listed as a gap instead.
+    clean = [d for s in seeds for d in s["detection"] if not d["forged"] and d["scanned"]]
+    clean_unscanned = [d for s in seeds for d in s["detection"] if not d["forged"] and not d["scanned"]]
     entries = [e for d in forged for e in d["tampering"]]
     valued = [e for e in entries if e["names_value"] is not None]
     by_dimension: dict[str, list] = defaultdict(list)
@@ -413,8 +443,18 @@ def summarise(seeds: list[dict[str, Any]]) -> dict[str, Any]:
             "key_fields_by_seed": {str(s["seed"]): accuracy([r for r in key_rows if r[0] == s["seed"]]) for s in seeds},
             "key_fields_by_document_type": {t: accuracy(rows) for t, rows in sorted(by_type.items())},
             "key_fields_on_forged_documents": accuracy([r for r in key_rows if r[1]["forged"]]),
-            "classification": {"correct": sum(1 for d in documents if d["classified_correctly"]), "total": len(documents),
-                               "accuracy": _rate(sum(1 for d in documents if d["classified_correctly"]), len(documents))},
+            "classification": {"correct": sum(1 for d in uploaded if d["classified_correctly"]), "total": len(uploaded),
+                               "accuracy": _rate(sum(1 for d in uploaded if d["classified_correctly"]), len(uploaded))},
+            "classification_by_document_type": {
+                t: {"correct": sum(1 for d in rows if d["classified_correctly"]), "total": len(rows),
+                    "accuracy": _rate(sum(1 for d in rows if d["classified_correctly"]), len(rows))}
+                for t, rows in sorted(_group(uploaded, "document_type").items())
+            },
+            "misclassified": [
+                {"case_id": d["case_id"], "seed": d["seed"], "filename": d["filename"], "expected": d["document_type"],
+                 "classified_as": d["classified_as"], "confidence": d["classification_confidence"]}
+                for d in uploaded if not d["classified_correctly"]
+            ],
             "documents_not_uploaded": [f"{d['case_id']}/{d['filename']}" for d in documents if not d["uploaded"]],
         },
         "risk": {
@@ -453,6 +493,7 @@ def summarise(seeds: list[dict[str, Any]]) -> dict[str, Any]:
                 for d in clean if d["flagged"] for finding in d["own_findings"]
             ],
             "missed": [f"{d['seed']}: {d['case_id']}/{d['filename']}" for d in forged if not d["flagged"]],
+            "clean_documents_never_scanned": [f"{d['seed']}: {d['case_id']}/{d['filename']}" for d in clean_unscanned],
             "forged_documents_never_scanned": [f"{d['seed']}: {d['case_id']}/{d['filename']}" for d in forged if not d["scanned"]],
         },
     }
@@ -462,29 +503,56 @@ def summarise(seeds: list[dict[str, Any]]) -> dict[str, Any]:
 # Report
 # --------------------------------------------------------------------------
 
+def _confidence(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.2f}"
+
+
 def _pct(value: float | None) -> str:
     return "n/a" if value is None else f"{value * 100:.1f}%"
 
 
 def markdown(summary: dict[str, Any], seeds: list[dict[str, Any]]) -> str:
     e, r, d = summary["extraction"], summary["risk"], summary["detection"]
-    scored = sum(len(s["cases_scored"]) for s in seeds)
+    # Seed columns and the per-seed table only when more than one seed is scored; the unseeded set is one dataset.
+    multi = len(seeds) > 1
+    cases = [c for s in seeds for c in s["cases_scored"]]
+    seed_label = (lambda seed: f"seed {seed}: ") if multi else (lambda seed: "")
+
+    def seedless(name: str) -> str:
+        """The scorer lists documents as "<seed>: <case>/<file>"; drop the seed when there's only one."""
+        return name if multi else name.split(": ", 1)[-1]
+
     lines = [
         "# Success metrics",
         "",
-        f"Seeds {', '.join(str(s['seed']) for s in seeds)}; {scored} case run(s) scored.",
+        (f"Seeds {', '.join(str(s['seed']) for s in seeds)}; {len(cases)} case run(s) scored." if multi
+         else f"{len(cases)} case(s) scored: {', '.join(cases)}."),
         "",
         "| Metric | Result | Count |",
         "|---|---|---|",
+        f"| Classification accuracy | {_pct(e['classification']['accuracy'])} | "
+        f"{e['classification']['correct']} of {e['classification']['total']} documents |",
         f"| Extraction accuracy (key fields) | {_pct(e['key_fields']['accuracy'])} | "
         f"{e['key_fields']['correct']} of {e['key_fields']['total']} fields |",
         f"| Risk score accuracy | {_pct(r['accuracy'])} | {r['correct']} of {r['total']} cases |",
         f"| Anomaly detection accuracy | {_pct(d['forged_documents_flagged']['accuracy'])} | "
         f"{d['forged_documents_flagged']['flagged']} of {d['forged_documents_flagged']['total']} forged documents |",
         f"| False positive rate (clean documents flagged) | {_pct(d['clean_documents_flagged']['rate'])} | "
-        f"{d['clean_documents_flagged']['flagged']} of {d['clean_documents_flagged']['total']} clean documents |",
+        f"{d['clean_documents_flagged']['flagged']} of {d['clean_documents_flagged']['total']} scanned clean documents |",
         f"| False positive rate (clean cases rated above Low) | {_pct(r['clean_cases_rated_above_low']['rate'])} | "
         f"{r['clean_cases_rated_above_low']['count']} of {r['clean_cases_rated_above_low']['total']} clean cases |",
+        "",
+        "## Classification",
+        "",
+        "| Document type | Accuracy | Count |",
+        "|---|---|---|",
+        *[f"| {t} | {_pct(v['accuracy'])} | {v['correct']} of {v['total']} |"
+          for t, v in e["classification_by_document_type"].items()],
+        *(["", "| Case | Document | Expected | Classified as | Confidence |", "|---|---|---|---|---|",
+           *[f"| {seed_label(m['seed'])}{m['case_id']} | {m['filename']} | {m['expected']} | "
+             f"{', '.join(str(t) for t in m['classified_as']) or 'no type'} | "
+             f"{_confidence(m['confidence'])} |"
+             for m in e["misclassified"]]] if e["misclassified"] else ["", "Every document was given the right type."]),
         "",
         "## Extraction",
         "",
@@ -497,8 +565,6 @@ def markdown(summary: dict[str, Any], seeds: list[dict[str, Any]]) -> str:
         f"| Table rows found | {_pct(e['table_rows']['rate'])} | {e['table_rows']['found']} of {e['table_rows']['total']} |",
         f"| Key fields on forged documents | {_pct(e['key_fields_on_forged_documents']['accuracy'])} | "
         f"{e['key_fields_on_forged_documents']['correct']} of {e['key_fields_on_forged_documents']['total']} |",
-        f"| Documents classified as the right type | {_pct(e['classification']['accuracy'])} | "
-        f"{e['classification']['correct']} of {e['classification']['total']} |",
         "",
         "| Document type | Key-field accuracy | Count |",
         "|---|---|---|",
@@ -529,32 +595,36 @@ def markdown(summary: dict[str, Any], seeds: list[dict[str, Any]]) -> str:
         "| Forgery type | Caught by the right check |",
         "|---|---|",
         *[f"| {dim} | {v['caught']} of {v['total']} |" for dim, v in d["right_check_by_dimension"].items()],
-        "",
-        "## By seed",
-        "",
-        "| Seed | Extraction (key fields) | Risk | Anomaly detection |",
-        "|---|---|---|---|",
-        *[f"| {s['seed']} | {_pct(e['key_fields_by_seed'][str(s['seed'])]['accuracy'])} | "
-          f"{_pct(r['by_seed'][str(s['seed'])])} | {_pct(d['by_seed'][str(s['seed'])])} |" for s in seeds],
     ]
+    if multi:
+        lines += [
+            "", "## By seed", "",
+            "| Seed | Extraction (key fields) | Risk | Anomaly detection |",
+            "|---|---|---|---|",
+            *[f"| {s['seed']} | {_pct(e['key_fields_by_seed'][str(s['seed'])]['accuracy'])} | "
+              f"{_pct(r['by_seed'][str(s['seed'])])} | {_pct(d['by_seed'][str(s['seed'])])} |" for s in seeds],
+        ]
     if r["wrong"]:
-        lines += ["", "## Cases with the wrong risk level", "", "| Seed | Case | Expected | System |", "|---|---|---|---|",
-                  *[f"| {c['seed']} | {c['case_id']} | {c['expected']} | {c['system'] or 'not scored'} |" for c in r["wrong"]]]
+        lines += ["", "## Cases with the wrong risk level", "", "| Case | Expected | System |", "|---|---|---|",
+                  *[f"| {seed_label(c['seed'])}{c['case_id']} | {c['expected']} | {c['system'] or 'not scored'} |"
+                    for c in r["wrong"]]]
     if d["missed"]:
-        lines += ["", "## Forged documents not flagged", "", *[f"- seed {name}" for name in d["missed"]]]
+        lines += ["", "## Forged documents not flagged", "", *[f"- {seedless(name)}" for name in d["missed"]]]
     if d["false_positives"]:
         by_tool = Counter(f["tool"] for f in d["false_positives"])
         lines += ["", "## False positives", "",
                   "Findings above \"info\" on clean documents, from each document's own scan.", "",
                   "| Check | Findings |", "|---|---|", *[f"| {tool} | {n} |" for tool, n in by_tool.most_common()], "",
-                  "| Seed | Case | Document | Check | Severity | Finding |", "|---|---|---|---|---|---|",
-                  *[f"| {f['seed']} | {f['case_id']} | {f['filename']} | {f['tool']} | {f['severity']} | "
+                  "| Case | Document | Check | Severity | Finding |", "|---|---|---|---|---|",
+                  *[f"| {seed_label(f['seed'])}{f['case_id']} | {f['filename']} | {f['tool']} | {f['severity']} | "
                     f"{f['summary'].replace('|', '/')} |" for f in d["false_positives"]]]
-    gaps = [f"seed {s['seed']}: no results for {', '.join(s['cases_without_results'])}"
+    gaps = [f"{seed_label(s['seed'])}no results for {', '.join(s['cases_without_results'])}"
             for s in seeds if s["cases_without_results"]]
     notes = [n for s in seeds for n in s["run_notes"]]
-    if gaps or notes or e["documents_not_uploaded"]:
-        lines += ["", "## Gaps in the run", "", *[f"- {g}" for g in gaps],
+    unscanned = [f"not scanned, so not checked: {seedless(name)}" for name in
+                 d["clean_documents_never_scanned"] + d["forged_documents_never_scanned"]]
+    if gaps or notes or e["documents_not_uploaded"] or unscanned:
+        lines += ["", "## Gaps in the run", "", *[f"- {g}" for g in gaps], *[f"- {u}" for u in unscanned],
                   *[f"- no result for {name}" for name in e["documents_not_uploaded"]], *[f"- {n}" for n in notes]]
     return "\n".join(lines) + "\n"
 

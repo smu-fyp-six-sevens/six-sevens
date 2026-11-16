@@ -2,7 +2,8 @@
 Builds the success-metric dataset: for each seed, a sample of cases with their documents, truth files and labels.
 
 From backend/:
-    python -m scripts.metrics.build_dataset                       # seeds 1 and 2, 10 cases each
+    python -m scripts.metrics.build_dataset --case-ids C001 C011   # unseeded (seed-0): the FYP/Drive documents
+    python -m scripts.metrics.build_dataset                         # unseeded, a 10-case sample
     python -m scripts.metrics.build_dataset --seeds 3 --cases 10
     python -m scripts.metrics.build_dataset --seeds 1 --case-ids C002 C024 C001
 
@@ -155,9 +156,13 @@ def _documents(case_dir: Path) -> list[dict[str, Any]]:
 def build_seed(seed: int, case_ids: list[str], labels: dict[str, dict[str, Any]], mastersheet: Path,
                root: Path, jobs: int) -> Path:
     seed_dir = root / f"seed-{seed}"
-    if seed_dir.exists():
-        shutil.rmtree(seed_dir)  # a rebuild must not keep documents from an earlier sample
-    seed_dir.mkdir(parents=True)
+    seed_dir.mkdir(parents=True, exist_ok=True)
+    # Only the cases being built are replaced, with their now out-of-date results; every other case, its results and
+    # its labels stay, so building one more case never loses a run already fetched or scored.
+    for case_id in case_ids:
+        if (seed_dir / case_id).exists():
+            shutil.rmtree(seed_dir / case_id)
+        (seed_dir / "results" / f"{case_id}.json").unlink(missing_ok=True)
 
     print(f"Seed {seed}: generating {len(case_ids)} case(s): {', '.join(case_ids)}")
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -186,11 +191,13 @@ def build_seed(seed: int, case_ids: list[str], labels: dict[str, dict[str, Any]]
         }
         print(f"  {case_id}  {cases[case_id]['expected_risk']:<6}  {len(documents)} documents, {len(forged)} forged")
 
+    labels_file = seed_dir / "labels.json"
+    kept = json.loads(labels_file.read_text())["cases"] if labels_file.exists() else {}
     payload = {
         "seed": seed,
         "mastersheet": mastersheet.name,
         "risk_rubric": (expected_level.__doc__ or "").strip(),
-        "cases": cases,
+        "cases": dict(sorted({**kept, **cases}.items())),
         "problems": problems,
     }
     (seed_dir / "labels.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
@@ -201,7 +208,7 @@ def build_seed(seed: int, case_ids: list[str], labels: dict[str, dict[str, Any]]
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2],
+    parser.add_argument("--seeds", type=int, nargs="+", default=[0],
                         help="0 builds the unseeded documents (the values a plain generator run prints) as seed-0")
     parser.add_argument("--cases", type=int, default=10, help="cases sampled per seed")
     parser.add_argument("--case-ids", nargs="+", help="use exactly these cases instead of sampling")

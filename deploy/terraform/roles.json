@@ -77,7 +77,8 @@
       ],
       "env": {
         "DETECTION_CONCURRENCY": "2",
-        "CPU_WORKER_PROCESSES": "2"
+        "CPU_WORKER_PROCESSES": "2",
+        "SYNTHETIC_ACRA_REGISTRY": "true"
       },
       "gke": {
         "min": 1,
