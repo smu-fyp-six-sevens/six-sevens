@@ -60,7 +60,6 @@ resource "google_project_service" "apis" {
     "certificatemanager.googleapis.com",
     "binaryauthorization.googleapis.com",
     "containeranalysis.googleapis.com",
-    "containerscanning.googleapis.com",
     "clouddeploy.googleapis.com",
     "cloudbuild.googleapis.com",
     "cloudkms.googleapis.com",

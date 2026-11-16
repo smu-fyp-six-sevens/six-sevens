@@ -207,6 +207,55 @@ def test_a_document_route_returns_502_when_the_document_cannot_be_fetched(method
     assert not documents.mock_calls and not fields.mock_calls
 
 
+@pytest.mark.parametrize(("method", "path", "body"), DOCUMENT_ROUTES)
+def test_a_document_route_returns_404_for_a_malformed_document_id(method, path, body) -> None:
+    # documents.id is a uuid column: Postgres refuses any other id with 22P02.
+    invalid_uuid = APIError({"message": 'invalid input syntax for type uuid: "doc-1"', "code": "22P02"})
+    with (
+        patch("app.routers._dependencies.document_repository") as lookup,
+        patch("app.document_service.document_repository") as documents,
+        patch("app.document_service.extracted_fields_repository") as fields,
+    ):
+        lookup.get_document.side_effect = invalid_uuid
+        response = _call_document_route(method, path, body)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document not found"
+    assert not documents.mock_calls and not fields.mock_calls
+
+
+def test_another_database_error_on_the_lookup_is_still_a_502() -> None:
+    with patch("app.routers._dependencies.document_repository") as lookup:
+        lookup.get_document.side_effect = APIError({"message": "permission denied", "code": "42501"})
+        response = client.post("/documents/doc-1/retry")
+
+    assert response.status_code == 502
+
+
+FIELD_ROUTES = [route for route in DOCUMENT_ROUTES if "extracted-fields" in route[1]]
+
+
+@pytest.mark.parametrize("doc_status", [
+    DocumentStatus.UPLOADED, DocumentStatus.QUEUED, DocumentStatus.PROCESSING, DocumentStatus.EXTRACTING,
+])
+@pytest.mark.parametrize(("method", "path", "body"), FIELD_ROUTES)
+def test_fields_cannot_be_edited_while_the_document_is_being_processed(method, path, body, doc_status) -> None:
+    document = _make_document()
+    document.status = doc_status
+    with (
+        patch("app.routers._dependencies.document_repository") as lookup,
+        patch("app.document_service.document_repository") as documents,
+        patch("app.document_service.extracted_fields_repository") as fields,
+        patch("app.document_service.events") as events,
+    ):
+        lookup.get_document.return_value = document
+        response = _call_document_route(method, path, body)
+
+    assert response.status_code == 409
+    assert "still being processed" in response.json()["detail"]
+    assert not documents.mock_calls and not fields.mock_calls and not events.mock_calls
+
+
 def test_get_document_not_found() -> None:
     with patch("app.document_service.document_repository") as mock_repo:
         mock_repo.get_document.return_value = None
@@ -1921,3 +1970,39 @@ def test_approve_document_requires_some_extracted_information(fields) -> None:
     assert response.status_code == 400
     assert response.json()["detail"] == "Cannot approve document. No information was extracted from it."
     mock_repo.approve_document.assert_not_called()
+
+
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+_JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 16
+_PDF = b"%PDF-1.7\n" + b"\x00" * 16
+
+
+@pytest.mark.parametrize(("data", "content_type"), [
+    (_PNG, "application/pdf"), (_PDF, "image/png"), (_PDF, "image/jpeg"), (b"MZ\x90\x00", "application/pdf"),
+])
+async def test_a_file_whose_bytes_are_not_its_type_is_refused_and_not_stored(data, content_type) -> None:
+    upload = UploadFile(file=io.BytesIO(data), filename="file.pdf", headers=Headers({"content-type": content_type}))
+    with (
+        patch("app.routers.upload.storage_service") as storage,
+        patch("app.routers.upload.document_repository") as documents,
+    ):
+        with pytest.raises(HTTPException) as refused:
+            await _ingest_one("case-1", upload, case_verified=True)
+
+    assert refused.value.status_code == 415
+    assert not storage.mock_calls and not documents.mock_calls
+
+
+@pytest.mark.parametrize(("data", "content_type"), [
+    (_PDF, "application/pdf"), (b"junk\n" + _PDF, "application/pdf"), (_PNG, "image/png"), (_JPEG, "image/jpeg"),
+])
+def test_real_pdf_png_and_jpeg_headers_pass(data, content_type) -> None:
+    from app.routers.upload import _bytes_match_type
+
+    assert _bytes_match_type(data, content_type)
+
+
+@pytest.mark.parametrize("path", ["/documents/monitoring/stuck", "/documents/monitoring/issues"])
+def test_the_monitoring_endpoints_are_gone(path) -> None:
+    assert client.get(path).status_code == 404
+    assert not any("monitoring" in route for route in app.openapi()["paths"])

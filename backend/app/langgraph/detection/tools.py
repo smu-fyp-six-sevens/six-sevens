@@ -598,7 +598,7 @@ async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")
     if document is None:
         return _result("metadata_tool", [], unable="Document not found")
 
-    result = check_metadata_anomalies(document_id, document.metadata, document.document_type)
+    result = await asyncio.to_thread(check_metadata_anomalies, document_id, document.metadata, document.document_type)
     if result.unable_to_assess:
         return _result("metadata_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
 

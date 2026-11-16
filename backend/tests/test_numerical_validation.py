@@ -101,6 +101,19 @@ def test_uen_format_does_not_run_where_a_document_has_no_uen(document_type: str)
     assert _codes(result, "ID.UEN_FORMAT") == []
 
 
+def test_a_uen_from_this_year_is_not_future_dated_before_8am_singapore_time() -> None:
+    from datetime import datetime
+    from unittest.mock import patch
+
+    from app.sg_time import SINGAPORE
+
+    # 1am on New Year's Day in Singapore is still the old year in UTC.
+    with patch("app.sg_time.now_sg", return_value=datetime(2027, 1, 1, 1, 0, tzinfo=SINGAPORE)):
+        result = _run([_field("uen", "202712345K")], document_type="certificate_of_incumbency")
+
+    assert _codes(result, "ID.UEN_FORMAT") == []
+
+
 def test_an_nric_bound_as_a_uen_is_skipped_not_flagged() -> None:
     result = _run([_field("uen", "S9798175B")], document_type="certificate_of_incumbency")
     assert _codes(result, "ID.UEN_FORMAT") == []

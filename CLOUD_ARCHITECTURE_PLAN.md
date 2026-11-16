@@ -4,45 +4,40 @@ Open cloud work only: delete an item once it's done, and this file once it's emp
 
 ## Status and next steps (read this first)
 
-**Now:** the app runs on GKE at `sixsevens.me`. Every consumer pulls its events there. Cloud Run still exists as a fallback and its `run.app` URLs still work, but it takes no events.
+**Now:** the app runs on GKE at `sixsevens.me`; every consumer pulls its events there. Cloud Run still exists as a fallback, taking no events.
 
 **Next, in order:**
 
 | # | Step | Who | When |
 |---|---|---|---|
-| 1 | Cloud Armor now enforces: log in, upload, save a field on `sixsevens.me`. A 403 means a rule caught real traffic; send the request for an exclusion | You, me to propose the fix | Now |
-| 2 | After the demo (Friday 2026-11-20): put the workers back to scaling from zero. In `deploy/terraform/roles.json`, each worker's `gke` block has `min` 1 (always warm, about $5 a day, so teammates never wait on a cold start) and doc- and detection-worker `max` 2; set `min` back to 0, run `gen_values.py`, push. Warm them again the same way before the Cloud Native presentation | You | 2026-11-20 or 21 |
-| 3 | Delete Cloud Run (phase 6): its services, the push identity and its grants, the Cloud Run deploy in CI, the second frontend image, the Grafana panels moved to GKE (`build_dashboards.py` needs GKE versions of the `service_name`, `run_googleapis_com:*` and cost panels). Rollback: re-apply them from git history | Me to prepare, you to apply | About 2026-11-21, once GKE has been stable |
-| 4 | Failure tests (below) | Both | After step 3 |
+| 1 | Failure tests (below) | Both | 2026-11-17 or 18 |
+| 2 | Delete Cloud Run (phase 6), with `CODEBASE_AUDIT.md` B1: its services, the push identity and its grants, the Cloud Run deploy in CI, the second frontend image, the Grafana panels moved to GKE (`build_dashboards.py` needs GKE versions of the `service_name`, `run_googleapis_com:*` and cost panels). Rollback: re-apply them from git history | Me to prepare, you to apply | By 2026-11-18 |
+| 3 | After the demo: workers back to scaling from zero (`min` 0 in each worker's `gke` block in `roles.json`, `gen_values.py`, push) | You | 2026-11-20 or 21 |
+| 4 | Delete the cluster | You | Around 2026-12-20 |
 
 **If a worker breaks on GKE:** remove that role from `deploy/terraform/migration.json`, run `gen_values.py`, `terraform apply`, push. Cloud Run takes its work again.
 
-**Phases 2–4 still being watched:** every event stored; sweeps run; p95 and failures within 10% of Cloud Run; no more recoveries or dead letters (`PENDING_TESTS.md`, manual checks).
-
 ## Open decisions
 
-1. **Login:** keep `AUTH_USERS` (hashed now) as a stated limit, or move to Supabase Auth.
-2. **The budget's new amount** for GKE.
+1. **Argo CD:** replace Cloud Deploy or run beside it, and how image digests reach git (CI commits them to a values file, or Argo CD Image Updater).
 
 ## To do
 
-- **Failure tests** (a deliverable), on production after the GKE move, on synthetic cases at a quiet time: kill a worker pod mid-run; flood uploads; stop audit-metrics; a poison message; a lost publish (set a document to `queued` without publishing; the sweeper should recover it). The lost publish writes to the shared database.
-- **Argo CD (planned, after the demo):** releases pulled from git (GitOps) instead of pushed by Cloud Deploy. Open points: replace Cloud Deploy or run beside it (replace, so there is one deployer); how image digests reach git (CI commits them to a values file, or Argo CD Image Updater); its vCPU on the free trial's 8 (check the peak first, after step 2 lowers the workers); the verify step and one-step rollback moved over; Binary Authorization unchanged (it checks at admission, whoever deploys).
+- **Failure tests** (a deliverable), on production on synthetic cases at a quiet time: kill a worker pod mid-run; flood uploads; stop audit-metrics; a poison message; a lost publish (set a document to `queued` without publishing; the sweeper should recover it). The lost publish writes to the shared database.
+- **Argo CD:** releases pulled from git (GitOps) instead of pushed by Cloud Deploy. Check its vCPU on the free trial's 8 first; move the verify step and one-step rollback over.
 - **Shared Anthropic rate budget:** today each instance caps itself.
 - **Kong behaviour test in CI** (routes, CORS, rate limits, WebSocket upgrade): CI only checks the config parses.
-- **Delete the cluster** after the assessment if nobody takes it over.
-- **Optional:** ingestion out of api.
 
-## Stage 2 (after the supervisor's feedback, 2026-10-26; updated 2026-11-14)
+## Stage 2 (after the supervisor's feedback, 2026-10-26)
 
-Steps 1–6 before the final presentation; the rest after the demo, as time allows.
+Steps 1–6 before the final presentation (2026-11-20); the rest if time is left.
 
 1. **Load tests as code** (k6 or Locust) against the local compose stack, written up as a capacity report (uploads a minute, time for KEDA to add a worker, p95 per stage). **No Claude calls** (stubbed) and **no Supabase writes** (writes go to an in-memory store). For the presentation, a live run with the Workloads page and Grafana showing pods being added.
 2. **Tune autoscaling** (KEDA, pod sizes) from the results, recording before and after.
 3. **Failure tests** on production (above).
 4. **Accuracy from officer verdicts** (below).
 5. **Service-level objectives** with burn-rate alerts in Cloud Monitoring: for example 99% of API requests succeed, 95% of detection runs finish within 3 minutes; an alert when the error budget burns too fast.
-6. **Supply-chain extras:** build provenance (`actions/attest-build-provenance`, SLSA), CodeQL and gitleaks, and Trivy on each image with high findings blocking, beside the signing and Binary Authorization already in place.
+6. **Supply-chain extras:** build provenance (`actions/attest-build-provenance`, SLSA), CodeQL and gitleaks, and Trivy's high findings blocking (it reports only today), beside the signing and Binary Authorization already in place.
 7. **Argo CD** (above).
 8. **Event contracts:** every event type checked against a schema in CI, so no service can publish what another can't read.
 9. **Disaster recovery:** one Supabase backup-and-restore drill, timed, with stated recovery-time and data-loss targets (RTO, RPO); and the self-host kit (`docker compose up` install and the Helm chart).

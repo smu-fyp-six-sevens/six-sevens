@@ -1493,11 +1493,31 @@
     z-index: 900;
   }
 
+  /* One row, Menu first, that scrolls sideways when the sections don't fit (they spilled past the card). */
   .case-nav:not(.case-nav--open) {
-    display: block;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 4px;
     height: auto;
     padding: 6px;
-    overflow: visible;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .case-nav:not(.case-nav--open) .case-nav-toggle {
+    width: auto;
+    min-width: 56px;
+    margin-bottom: 0;
+  }
+
+  .case-nav:not(.case-nav--open) ul {
+    flex-direction: row;
+    gap: 4px;
+  }
+
+  .case-nav:not(.case-nav--open) .case-nav-item {
+    min-width: 56px;
   }
 
   .case-nav:not(.case-nav--open) .case-nav-item .case-nav-icon {

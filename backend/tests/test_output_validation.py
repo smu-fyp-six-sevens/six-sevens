@@ -178,7 +178,7 @@ def test_a_specialist_reply_that_is_unreadable_leaves_findings_unapproved(final)
     )
     assert report["uncertain"] is True
     [kept] = report["findings"]
-    assert kept["ai_accepted"] is False and kept["severity"] == "medium"
+    assert kept["ai_accepted"] is False and kept["severity"] == "low"
 
 
 def test_a_specialist_reply_with_unusable_assessments_approves_nothing() -> None:
@@ -188,7 +188,7 @@ def test_a_specialist_reply_with_unusable_assessments_approves_nothing() -> None
         final=AIMessage(content='{"assessments": "x"}'),
     )
     [kept] = report["findings"]
-    assert kept["ai_accepted"] is False and kept["severity"] == "medium"
+    assert kept["ai_accepted"] is False and kept["severity"] == "low"
 
 
 def test_a_specialist_reply_cut_off_keeps_the_assessments_that_finished() -> None:

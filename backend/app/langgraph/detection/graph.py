@@ -146,10 +146,11 @@ _REVIEW_SYSTEM_PROMPT = _REVIEW_PROMPT.format(catalogue=_catalogue())
 
 async def _ask_lead(
     system_prompt: str, user_payload: dict, contract: type[T], *, span_name: str, cache_key: str,
+    failures: list[str] | None = None,
 ) -> T | None:
     """
-    The lead's reply as `contract`, or None when the call fails or the reply is unusable. The lead only
-    plans and summarises, so the run carries on without it rather than failing.
+    The lead's reply as `contract`, or None when the call fails or the reply is unusable (why goes on `failures`,
+    for the trace). The lead only plans and summarises, so the run carries on without it rather than failing.
     """
     import json
 
@@ -168,9 +169,14 @@ async def _ask_lead(
             telemetry.record_usage(span, response)
     except Exception as exc:
         logger.warning("%s call failed: %s", span_name, exc)
+        if failures is not None:
+            failures.append(f"The call failed: {type(exc).__name__}: {exc}"[:300])
         return None
     text = message_text(response.content)
-    return validate(contract, parse_json_object(text), site=span_name, raw=text).value
+    value = validate(contract, parse_json_object(text), site=span_name, raw=text).value
+    if value is None and failures is not None:
+        failures.append("The reply could not be read.")
+    return value
 
 
 # --- nodes ------------------------------------------------------------------
@@ -241,14 +247,16 @@ def _normalise_plan(raw: LeadPlan | None) -> dict:
 
 
 async def lead_plan_node(state: DetectionState) -> dict:
+    failures: list[str] = []
     plan = _normalise_plan(await _ask_lead(
         _PLAN_SYSTEM_PROMPT, {"document": _context(state)}, LeadPlan,
-        span_name="detection.lead_plan", cache_key="detection_lead_plan",
+        span_name="detection.lead_plan", cache_key="detection_lead_plan", failures=failures,
     ))
     logger.info("Document %s: lead plan — briefs written for all specialists", state["document_id"])
     trace.record(
         state["document_id"], "detection_plan",
         detection_briefs=plan["briefs"], confidence=plan["confidence"], fallback_briefs=plan["fallback_briefs"],
+        **({"fallback_reason": failures[0]} if failures else {}),
     )
     return {
         "plan": plan,

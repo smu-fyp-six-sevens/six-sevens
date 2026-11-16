@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+_INVALID_TEXT_REPRESENTATION = "22P02"
+
 
 async def to_thread_or_502(fn: Callable[..., T], *args: Any, detail: str, log: tuple, **kwargs: Any) -> T:
     """Runs a blocking call off the event loop; on any error logs `log` (format, *args) and raises a 502."""
@@ -53,6 +55,9 @@ async def _load_document(document_id: str, include_fields: bool, include_metadat
             document_repository.get_document, document_id, include_fields=include_fields, include_metadata=include_metadata
         )
     except Exception as exc:
+        # documents.id is a uuid column: Postgres rejects any other id (22P02), so no such document exists.
+        if getattr(exc, "code", None) == _INVALID_TEXT_REPRESENTATION:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found") from exc
         logger.exception("Failed to fetch document %s", document_id)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

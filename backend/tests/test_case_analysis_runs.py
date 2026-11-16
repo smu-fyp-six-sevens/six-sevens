@@ -170,3 +170,25 @@ def test_a_stored_structured_summary_and_clean_checks_are_read_back() -> None:
     assert analysis is not None and analysis.structured_summary is not None
     assert (analysis.structured_summary.reasons[0].document_id, analysis.structured_summary.reasons[0].finding_id) == ("d", "x")
     assert analysis.clean_checks == ["metadata_tool"]
+
+
+def test_officer_reruns_are_capped_per_hour(published_events) -> None:
+    from app.config import settings
+
+    with (
+        patch("app.routers._dependencies.case_service") as cases,
+        patch.object(service.settings, "CASE_ANALYSIS_ENABLED", True),
+        patch.object(service.case_repository, "get_case", return_value=_case()),
+        patch.object(service.document_repository, "list_documents", return_value=[]),
+        patch.object(service, "unapproved_requirements", return_value=[]),
+        patch.object(service, "is_ready_for_analysis", return_value=True),
+        patch.object(service.repository, "latest_run_state", return_value=None),
+        patch.object(service.repository, "count_runs_since", return_value=settings.CASE_ANALYSIS_RUNS_PER_HOUR),
+        patch.object(service.repository, "insert_run") as insert_run,
+    ):
+        cases.get_case.return_value = _case()
+        response = client.post("/cases/case-1/analysis/run")
+
+    assert response.status_code == 429
+    insert_run.assert_not_called()
+    assert published_events == []

@@ -3,13 +3,15 @@ The specialist team. Each specialist is a small tool-calling subgraph
 (agent <-> tools -> collect) with private messages: it decides which of ITS OWN
 tools to call, then hands back one compact structured report. For each tool
 finding it either sets a severity or dismisses it as a false positive. A finding
-the specialist doesn't mention is kept (as "medium, not assessed"), never dropped.
+the specialist doesn't mention is kept (as "low, not assessed", or its floor), never dropped.
+A call identical to one that already succeeded is answered from the conversation, not run again.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated, Any, Required
 
@@ -492,6 +494,71 @@ def _feedback_node(state: SpecialistState) -> dict:
     return {"messages": results, "feedback_shown": shown}
 
 
+_REPEAT_KEY = "repeat_of"
+_REPEAT_NOTE = "Already run with these arguments; its result is above. Call it again only with different arguments."
+
+
+def _call_key(tool_call: Mapping[str, Any]) -> str:
+    return f"{tool_call.get('name')}:{json.dumps(tool_call.get('args') or {}, sort_keys=True, default=str)}"
+
+
+def _succeeded(message: ToolMessage) -> bool:
+    result = _read_tool_message(message)
+    return result is not None and not result.unable_to_assess and not message.additional_kwargs.get(_REPEAT_KEY)
+
+
+def _earlier_calls(messages: list, tool_call: dict) -> tuple[str | None, int]:
+    """(id of an earlier identical call that succeeded or is in this same turn, how many earlier calls of this tool
+    succeeded). A failed or timed-out call may be redone as it was."""
+    keys: dict[str, str] = {}
+    for message in messages:
+        if isinstance(message, AIMessage):
+            for call in message.tool_calls or []:
+                if call["id"] == tool_call["id"]:
+                    break
+                if call["id"]:
+                    keys[call["id"]] = _call_key(call)
+    pending = set(keys)
+    key, repeat_of, done = _call_key(tool_call), None, 0
+    for message in messages:
+        if isinstance(message, ToolMessage) and message.tool_call_id in keys:
+            pending.discard(message.tool_call_id)
+            if _succeeded(message) and keys[message.tool_call_id].split(":", 1)[0] == tool_call["name"]:
+                done += 1
+                if keys[message.tool_call_id] == key:
+                    repeat_of = message.tool_call_id
+    # An identical call earlier in the same turn has no result yet.
+    repeat_of = repeat_of or next((call_id for call_id in pending if keys[call_id] == key), None)
+    return repeat_of, done
+
+
+def _numbered(message: ToolMessage, call_number: int) -> ToolMessage:
+    """A later call's findings with ids of their own ("tool-1-call2"), so they can't replace an earlier call's."""
+    raw = parse_json_object(message_text(message.content))
+    findings = raw.get("findings") if raw else None
+    if not isinstance(findings, list):
+        return message
+    for finding in findings:
+        if isinstance(finding, dict) and finding.get("id"):
+            finding["id"] = f"{finding['id']}-call{call_number}"
+    return message.model_copy(update={"content": json.dumps(raw, default=str)})
+
+
+async def _refuse_repeats(request, execute):
+    """ToolNode's wrapper: the prompt asks for each tool once, and this holds it to that for identical calls."""
+    state = request.state if isinstance(request.state, dict) else {}
+    repeat_of, done = _earlier_calls(state.get("messages") or [], request.tool_call)
+    if repeat_of is not None:
+        return ToolMessage(
+            content=_REPEAT_NOTE, tool_call_id=request.tool_call["id"], name=request.tool_call["name"],
+            additional_kwargs={_REPEAT_KEY: repeat_of},
+        )
+    result = await execute(request)
+    if done and isinstance(result, ToolMessage) and getattr(result, "status", "success") != "error":
+        return _numbered(result, done + 1)
+    return result
+
+
 def _read_tool_message(message: ToolMessage) -> ToolResult | None:
     """A tool's result as the contract, or None when the message is an error or not a result at all."""
     if getattr(message, "status", "success") == "error":
@@ -548,7 +615,7 @@ def _collect_node(state: SpecialistState) -> dict:
         if isinstance(message, AIMessage):
             tools_called.extend(tc["name"] for tc in (message.tool_calls or []))
             tool_calls.extend({"name": tc["name"], "args": tc["args"]} for tc in (message.tool_calls or []))
-        if not isinstance(message, ToolMessage):
+        if not isinstance(message, ToolMessage) or message.additional_kwargs.get(_REPEAT_KEY):
             continue
         result = _read_tool_message(message)
         if result is None:
@@ -604,7 +671,8 @@ def _collect_node(state: SpecialistState) -> dict:
             })
             continue
         rated = assessed.severity.lower() if assessed is not None else ""
-        severity = rated if rated in SEVERITIES else "medium"
+        # Nobody judged an unassessed finding: it starts at low (a floor may still raise it) and stays flagged.
+        severity = rated if rated in SEVERITIES else "medium" if assessed is not None else "low"
         # The specialist's own rating, kept when a floor overrules it, so the review screen can say so.
         overruled: dict = {}
         if floor is not None and assessed is not None and (
@@ -667,7 +735,9 @@ def _collect_node(state: SpecialistState) -> dict:
 def build_specialist_graph(spec: Specialist):
     graph = StateGraph(SpecialistState)
     graph.add_node("agent", _make_agent_node(spec))
-    graph.add_node("tools", ToolNode([guard_tool(t) for t in spec.tools], handle_tool_errors=True))
+    graph.add_node(
+        "tools", ToolNode([guard_tool(t) for t in spec.tools], handle_tool_errors=True, awrap_tool_call=_refuse_repeats)
+    )
     graph.add_node("feedback", _feedback_node)
     graph.add_node("collect", _collect_node)
     graph.set_entry_point("agent")

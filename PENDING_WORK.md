@@ -8,8 +8,7 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 ## Security
 
-- **Lockout and revocation (if wanted).** *Issue:* passwords are hashed now, but nothing locks an account after repeated failures (only Kong's 20 logins a minute per address), and one leaked token can't be revoked before its 7 days. *Do:* a failure count per name in the audit trail with a short lockout; a token version per user in `AUTH_USERS`, checked in `_verify_token`.
-- **Login token in `localStorage`.** *Issue:* the 7-day token sits in `localStorage`, so an injected script could read it (the CSP now makes that much harder). *Do:* a shorter token, or an HttpOnly cookie (`frontend/src/lib/api.ts:11-19`; the WebSocket ticket flow and Kong's CORS would need to follow).
+- **Login token in `localStorage`.** *Issue:* the 7-day token sits in `localStorage`, so an injected script could read it (the CSP now makes that much harder). *Do:* a shorter token (`TOKEN_TTL_SECONDS` in `auth.py`, for example 12 hours).
 
 ## Product
 
@@ -26,7 +25,7 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 ## Detection and the document pipeline
 
-- **Cross-document category.** *Issue:* a share-capital conflict is labelled `unsupported_claim`. *Do:* a `cross_document_variance` label (schema change).
+- **Cross-document category.** *Issue:* two documents disagreeing (e.g. share capital) is labelled `unsupported_claim`. *Do:* a `cross_document_variance` label (schema change).
 - **Audit the "Other" checks:** `date_anomalies`, `metadata_analysis` and `image_manipulation` use the document type in places; mark each rule type-agnostic or type-keyed.
 - **Model output gaps.** *Issue:* nothing checks an extracted value's type (text in a number field), and the binder (`field_checks/binder.py`) and `llm_classify.py` skip `validate`, so repairs aren't traced.
 
@@ -38,7 +37,6 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 - **Dismissing a cross-document finding** (officer, with a reason; leaves the score, kept on record).
 - **No follow-up round** in plan-then-judge: add one if evals show low recall.
 - **Monitoring:** false-positive, dismissal and citation-discard rates, cost per case.
-- **Sponsor questions:** does GLDB's model risk policy need formal validation and a model owner? How long must the audit record be kept? Is sending masked data to an external LLM acceptable, or does it need zero-data-retention terms?
 - **Evidence requests need rethinking.** *Issue:* a document can only lower the score, so "ask for everything" always looks best. *Ideas:* the smallest set that reaches a target level (code); score documents that could go either way; an agent that checks existing documents first. The score stays deterministic.
 
 ## Evals and verification (all on demand: they spend tokens)

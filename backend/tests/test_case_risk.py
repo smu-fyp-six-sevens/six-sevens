@@ -574,6 +574,44 @@ def test_findings_without_a_stated_value_are_never_merged() -> None:
     assert risk.level == "Critical" and risk.points == 24
 
 
+def test_one_uen_spelt_two_ways_is_one_fact() -> None:
+    documents = [_document("a"), _document("b")]
+    reports = {"a": _report(_uen_finding(stated="2019-12345A")), "b": _report(_uen_finding(stated="201912345A"))}
+
+    risk = compute_case_risk(documents, reports, set())
+
+    assert risk.points == 8
+    assert sorted(f.points for f in risk.contributing_findings) == [0, 8]
+
+
+def _cross_finding(document_ids: list[str]):
+    from app.case_pipeline.models import CrossDocFinding, FindingCategory
+
+    return CrossDocFinding(
+        id="xd-det-1", hypothesis_id="deterministic", summary="The UEN differs.", rationale="", severity="high",
+        category=FindingCategory.IDENTITY_ENTITY_CONFLICT, document_ids=document_ids,
+    )
+
+
+def test_a_case_level_finding_does_not_count_as_a_high_document() -> None:
+    documents = [_document("a"), _document("b")]
+    reports = {"a": _report(_finding("high")), "b": _report(_finding("high"))}
+
+    risk = compute_case_risk(documents, reports, set(), cross_findings=[_cross_finding([])])
+
+    # Two documents with high findings, plus one with none: Critical needs three documents.
+    assert risk.level != "Critical"
+
+
+def test_a_cross_document_finding_drops_empty_document_ids() -> None:
+    from app.case_pipeline.risk.case_risk import contributing_from_cross_document
+
+    contributing = contributing_from_cross_document(_cross_finding(["", "doc-a"]), {"doc-a": _document("doc-a")})
+
+    assert contributing.document_ids == ["doc-a"]
+    assert contributing.document_id == "doc-a"
+
+
 def test_repeats_can_be_turned_off_for_comparison() -> None:
     documents = [_document(d) for d in ("a", "b", "c")]
     reports = {d.id: _report(_uen_finding()) for d in documents}

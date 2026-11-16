@@ -99,6 +99,26 @@ jobs:
             build frontend-gke frontend/Dockerfile --build-arg VITE_API_URL="https://api.${{ vars.GKE_DOMAIN || 'sixsevens.me' }}"
           fi
 
+      # Free scanning in place of Artifact Analysis's paid on-push scans. Report only for now (a scanner error
+      # can't stop a deploy either): add --exit-code 1 and drop continue-on-error once a run shows the findings.
+      - uses: aquasecurity/setup-trivy@v0.3.1
+        continue-on-error: true
+        with:
+          version: v0.76.1
+          cache: true
+
+      - name: Scan every image (Trivy)
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          images="$BACKEND_ROLES"
+          for entry in $OTHER_SERVICES; do images="$images ${entry%%=*}"; done
+          for image in $images; do
+            echo "::group::$image"
+            trivy image --quiet --scanners vuln --ignore-unfixed --severity HIGH,CRITICAL "$REGISTRY/$image:$GITHUB_SHA"
+            echo "::endgroup::"
+          done
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
