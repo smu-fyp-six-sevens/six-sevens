@@ -1,0 +1,25 @@
+{
+  "filename": "FacilityLetter_NPE_1.pdf",
+  "files": [
+    "FacilityLetter_NPE_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Northbridge Precision Engineering Pte Ltd",
+    "company_address": "3 Soon Lee Street, #01-13, Singapore 627606",
+    "individual_name": "Tan Kok Wai",
+    "loan_amount": 130000.0,
+    "uen": "201377812E",
+    "facility_type": "Overdraft",
+    "offer_date": "2026-09-11",
+    "interest_rate": 6.44,
+    "review_date": "2027-09-11"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

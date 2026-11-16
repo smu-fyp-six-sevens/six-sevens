@@ -1,0 +1,24 @@
+{
+  "filename": "NOA_YA2025_201857413H.pdf",
+  "files": [
+    "NOA_YA2025_201857413H.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Pearlgate Travel & Tours Pte Ltd",
+    "tax_reference_number": "201857413H",
+    "company_address": "1 George Street, #09-19, Singapore 049145",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-06-30",
+    "eci": 321800,
+    "tax_payable": 18640.5,
+    "previous_assessment_date": "2025-05-25"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

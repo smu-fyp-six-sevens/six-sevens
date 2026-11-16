@@ -1,0 +1,22 @@
+{
+  "filename": "SOW_Declaration_7362.pdf",
+  "files": [
+    "SOW_Declaration_7362.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "PRIYA D/O SUBRAMANIAM",
+    "individual_address": "427 BUKIT PANJANG RING ROAD,#03-20,Singapore,670427",
+    "account_number": "1008522298649595",
+    "net_asset_value": 21838.46,
+    "portfolio_value": 20198.24,
+    "cash_balance": 1640.22
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

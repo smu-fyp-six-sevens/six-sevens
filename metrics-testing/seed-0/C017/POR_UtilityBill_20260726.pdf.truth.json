@@ -1,0 +1,23 @@
+{
+  "filename": "POR_UtilityBill_20260726.pdf",
+  "files": [
+    "POR_UtilityBill_20260726.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Chong Kai Wen",
+    "individual_address": "100 Whampoa Drive, #13-283, Singapore 320100",
+    "entity_type": "individual",
+    "bill_date": "2026-07-27",
+    "billing_period_end": "2026-06-30",
+    "total_payable": 100.94,
+    "due_date": "2026-08-10"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

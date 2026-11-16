@@ -1,0 +1,28 @@
+{
+  "filename": "SP_Utilities_KFF.pdf",
+  "files": [
+    "SP_Utilities_KFF.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Kestrel Freight Forwarding Pte Ltd",
+    "company_address": "21 Bukit Batok Crescent #04-18, Singapore 658065",
+    "entity_type": "corporate",
+    "bill_date": "2026-11-07",
+    "billing_period_end": "2026-10-31",
+    "total_payable": 1244.47,
+    "due_date": "2026-11-21",
+    "previous_balance": 1232.02,
+    "payment_received": 1232.02,
+    "current_charges": 1244.47,
+    "contract_end_date": "2029-05-01",
+    "usage_this_period": 4151
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

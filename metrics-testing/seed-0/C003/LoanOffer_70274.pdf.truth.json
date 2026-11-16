@@ -1,0 +1,26 @@
+{
+  "filename": "LoanOffer_70274.pdf",
+  "files": [
+    "LoanOffer_70274.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Lumina Interior Studio Pte Ltd",
+    "company_address": "2A Boon Tiong Road, #12-27, Singapore 164002",
+    "individual_name": "Low Kok Wai",
+    "loan_amount": 300000.0,
+    "uen": "201063283R",
+    "facility_type": "Term Loan",
+    "offer_date": "2026-08-31",
+    "interest_rate": 5.07,
+    "loan_tenure": "60 months",
+    "monthly_instalment": 5671.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

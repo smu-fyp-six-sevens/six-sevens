@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_6972_front.jpeg",
+  "files": [
+    "NRIC_6972_front.jpeg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S6846972D",
+    "individual_name": "Ng Pei Shan",
+    "date_of_birth": "1968-01-21",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "F",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

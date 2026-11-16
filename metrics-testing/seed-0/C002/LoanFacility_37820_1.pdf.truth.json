@@ -1,0 +1,25 @@
+{
+  "filename": "LoanFacility_37820_1.pdf",
+  "files": [
+    "LoanFacility_37820_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Kestrel Freight Forwarding Pte Ltd",
+    "company_address": "21 Bukit Batok Crescent, #04-18, Singapore 658065",
+    "individual_name": "Ho Kok Wai",
+    "loan_amount": 425000.0,
+    "uen": "201156535W",
+    "facility_type": "Term Loan under Enterprise Financing Scheme",
+    "offer_date": "2026-09-03",
+    "interest_rate": 4.72,
+    "loan_tenure": "3 years"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

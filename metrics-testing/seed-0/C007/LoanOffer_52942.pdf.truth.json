@@ -1,0 +1,25 @@
+{
+  "filename": "LoanOffer_52942.pdf",
+  "files": [
+    "LoanOffer_52942.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Willowbrook Tuition Services Pte Ltd",
+    "company_address": "550 Serangoon North Avenue 3, #09-240, Singapore 550550",
+    "individual_name": "Koh Hwee Min",
+    "loan_amount": 125000.0,
+    "uen": "201830203N",
+    "facility_type": "Term Loan under Enterprise Financing Scheme",
+    "offer_date": "2026-09-25",
+    "interest_rate": 4.39,
+    "loan_tenure": "5 years"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

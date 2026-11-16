@@ -1,0 +1,38 @@
+{
+  "filename": "SummitPeakRecruitment_FATCA_CRS.pdf",
+  "files": [
+    "SummitPeakRecruitment_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Summit Peak Recruitment Pte Ltd",
+    "company_address": "9 Raffles Place, #09-28, Singapore 048619",
+    "tin": "201585653M",
+    "declaration_date": "2026-08-05",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201585653M"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Sim Siew Lan"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Foo Zhi Hao"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

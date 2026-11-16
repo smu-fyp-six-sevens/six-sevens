@@ -1,0 +1,25 @@
+{
+  "filename": "FacilityLetter_CCR_1.pdf",
+  "files": [
+    "FacilityLetter_CCR_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Cedar & Co Renovation Pte Ltd",
+    "company_address": "362 Clementi Avenue 2, #03-92, Singapore 120362",
+    "individual_name": "Teo Kok Wai",
+    "loan_amount": 200000.0,
+    "uen": "201521828G",
+    "facility_type": "Term Loan under Enterprise Financing Scheme",
+    "offer_date": "2026-09-21",
+    "interest_rate": 4.01,
+    "loan_tenure": "3 years"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,27 @@
+{
+  "filename": "Zuraidah_Salary_Slip_20260912.pdf",
+  "files": [
+    "Zuraidah_Salary_Slip_20260912.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Zuraidah binte Abdullah",
+    "company_name": "Cobalt Ridge Capital Advisory Pte Ltd",
+    "net_pay": 8400.81,
+    "basic_pay": 8980.0,
+    "total_earnings": 10080.0,
+    "total_deductions": 1679.19,
+    "employee_cpf": 1000.0,
+    "pay_date": "2026-08-31",
+    "pay_period_end": "2026-08-31"
+  },
+  "not_printed": {
+    "company_address": "302 Tiong Bahru Road, #10-24, Singapore 168732"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

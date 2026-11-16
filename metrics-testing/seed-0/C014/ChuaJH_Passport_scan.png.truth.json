@@ -1,0 +1,26 @@
+{
+  "filename": "ChuaJH_Passport_scan.png",
+  "files": [
+    "ChuaJH_Passport_scan.png"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Chua Jia Hui",
+    "passport_number": "K8776584B",
+    "date_of_birth": "1973-06-17",
+    "date_of_expiry": "2030-04-24",
+    "date_of_issue": "2020-04-24",
+    "place_of_birth": "Singapore",
+    "sex": "M",
+    "nric_number": "S7362222J"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

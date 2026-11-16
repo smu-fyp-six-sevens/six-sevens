@@ -1,0 +1,26 @@
+{
+  "filename": "SitiA_Passport_scan.jpeg",
+  "files": [
+    "SitiA_Passport_scan.jpeg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Siti Aishah binte Kamal",
+    "passport_number": "K5214940B",
+    "date_of_birth": "1970-07-01",
+    "date_of_expiry": "2032-08-27",
+    "date_of_issue": "2022-08-27",
+    "place_of_birth": "Singapore",
+    "sex": "M",
+    "nric_number": "S7070937F"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

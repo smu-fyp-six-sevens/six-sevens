@@ -1,0 +1,26 @@
+{
+  "filename": "TeoZH_Passport_scan.png",
+  "files": [
+    "TeoZH_Passport_scan.png"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Teo Zhi Hao",
+    "passport_number": "K8289407J",
+    "date_of_birth": "1954-11-28",
+    "date_of_expiry": "2031-10-25",
+    "date_of_issue": "2021-10-25",
+    "place_of_birth": "Singapore",
+    "sex": "F",
+    "nric_number": "S1384715J"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

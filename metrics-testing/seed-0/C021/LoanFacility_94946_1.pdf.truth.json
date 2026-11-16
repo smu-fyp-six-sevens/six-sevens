@@ -1,0 +1,25 @@
+{
+  "filename": "LoanFacility_94946_1.pdf",
+  "files": [
+    "LoanFacility_94946_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Silverpine Furniture Works Pte Ltd",
+    "company_address": "2 Bukit Batok Street 23, #05-21, Singapore 659554",
+    "individual_name": "Vikram s/o Chandran",
+    "loan_amount": 140000.0,
+    "uen": "200921425R",
+    "facility_type": "Overdraft",
+    "offer_date": "2026-08-31",
+    "interest_rate": 6.41,
+    "review_date": "2027-08-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

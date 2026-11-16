@@ -1,0 +1,55 @@
+{
+  "filename": "VantagePointITSolutions_BizFile_Officers_20260629.pdf",
+  "files": [
+    "VantagePointITSolutions_BizFile_Officers_20260629.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "VANTAGE POINT IT SOLUTIONS PTE LTD",
+    "uen": "201630706M",
+    "incorporation_date": "2016-10-21",
+    "company_type": "LIMITED EXEMPT PRIVATE COMPANY",
+    "company_address": "116 MARSILING RISE, #02-59, SINGAPORE 730116",
+    "share_capital": 1000000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "NG ZHEN YU",
+        "identification_no": "S8475358J",
+        "address": "116 MARSILING RISE, #02-59, SINGAPORE 730116",
+        "shares": 750000
+      },
+      {
+        "name": "CHAN SHU FEN",
+        "identification_no": "S8523729B",
+        "address": "243A TENGAH CENTRAL, #04-37, SINGAPORE 691243",
+        "shares": 250000
+      }
+    ],
+    "officers": [
+      {
+        "name": "NG ZHEN YU",
+        "identification_no": "S8475358J",
+        "position": "Director",
+        "date_of_appointment": "2016-10-21"
+      },
+      {
+        "name": "WONG KAH CHUN",
+        "identification_no": "S8324710Z",
+        "position": "Secretary",
+        "date_of_appointment": "2016-12-11"
+      }
+    ],
+    "document_date": "2026-06-26",
+    "last_agm_date": "2025-10-22",
+    "last_annual_return_date": "2025-11-18",
+    "financial_year_end": "2025-06-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

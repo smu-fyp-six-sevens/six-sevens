@@ -1,0 +1,24 @@
+{
+  "filename": "IRAS_NOA_Company_20250807.pdf",
+  "files": [
+    "IRAS_NOA_Company_20250807.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Ironleaf Building Services Pte Ltd",
+    "tax_reference_number": "201651600K",
+    "company_address": "31 Woodlands Close, #01-09, Singapore 737855",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-08-07",
+    "eci": 478300,
+    "tax_payable": 31943.0,
+    "previous_assessment_date": "2025-07-15"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

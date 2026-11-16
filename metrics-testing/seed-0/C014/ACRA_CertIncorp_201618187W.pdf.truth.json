@@ -1,0 +1,22 @@
+{
+  "filename": "ACRA_CertIncorp_201618187W.pdf",
+  "files": [
+    "ACRA_CertIncorp_201618187W.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Maplecrest Home Bakery Pte Ltd",
+    "uen": "201618187W",
+    "incorporation_date": "2016-02-04",
+    "company_type": "Private company limited by shares",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2016-02-04"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

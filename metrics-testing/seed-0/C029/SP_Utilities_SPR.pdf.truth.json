@@ -1,0 +1,28 @@
+{
+  "filename": "SP_Utilities_SPR.pdf",
+  "files": [
+    "SP_Utilities_SPR.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Summit Peak Recruitment Pte Ltd",
+    "company_address": "9 Raffles Place #09-28, Singapore 048619",
+    "entity_type": "corporate",
+    "bill_date": "2026-11-08",
+    "billing_period_end": "2026-10-31",
+    "total_payable": 483.84,
+    "due_date": "2026-11-22",
+    "previous_balance": 524.82,
+    "payment_received": 524.82,
+    "current_charges": 483.84,
+    "contract_end_date": "2027-02-28",
+    "usage_this_period": 1800
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

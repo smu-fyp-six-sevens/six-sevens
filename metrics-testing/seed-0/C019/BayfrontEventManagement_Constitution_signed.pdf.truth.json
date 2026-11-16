@@ -1,0 +1,38 @@
+{
+  "filename": "BayfrontEventManagement_Constitution_signed.pdf",
+  "files": [
+    "BayfrontEventManagement_Constitution_signed.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Bayfront Event Management Pte Ltd",
+    "uen": "201069884N",
+    "incorporation_date": "2010-11-15",
+    "company_address": "6 Eu Tong Sen Street, #05-26, Singapore 059817",
+    "share_capital": 200000.0,
+    "issued_shares": 200000,
+    "subscribers": [
+      {
+        "name": "Ong Ai Ling",
+        "address": "45 Marine Crescent, #16-31, Singapore 440045",
+        "id_number": "S7956540G",
+        "shares": 140000
+      },
+      {
+        "name": "Wong Teck Huat",
+        "address": "230G Tampines Street 21, #03-58, Singapore 521230",
+        "id_number": "S9313308J",
+        "shares": 60000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2010-11-15"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

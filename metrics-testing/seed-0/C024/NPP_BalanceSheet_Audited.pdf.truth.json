@@ -1,0 +1,36 @@
+{
+  "filename": "NPP_BalanceSheet_Audited.pdf",
+  "files": [
+    "NPP_BalanceSheet_Audited.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Ninefold Print & Packaging Pte Ltd",
+    "uen": "201065233R",
+    "financial_year_end": "2026-03-31",
+    "signing_date": "2026-08-01",
+    "revenue": 2678000.0,
+    "profit_for_the_year": 419100.0,
+    "profit_for_the_year_prior_year": 261100.0,
+    "total_assets": 2131100.0,
+    "total_liabilities": 945900.0,
+    "total_equity": 1185200.0,
+    "share_capital": 250000.0,
+    "total_current_assets": 1101500.0,
+    "total_non_current_assets": 1029600.0,
+    "total_current_liabilities": 652200.0,
+    "total_non_current_liabilities": 293700.0,
+    "retained_earnings_closing": 935200.0,
+    "retained_earnings_closing_prior_year": 516100.0,
+    "total_assets_prior_year": 1259700.0,
+    "total_liabilities_prior_year": 493600.0,
+    "total_equity_prior_year": 766100.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_1988_back.png",
+  "files": [
+    "NRIC_1988_back.png"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S9391988B",
+    "individual_address": "181 Bedok North Road, #02-53, Singapore 460181",
+    "date_of_issue": "2021-07-21",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

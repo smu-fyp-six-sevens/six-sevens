@@ -1,0 +1,38 @@
+{
+  "filename": "FATCA_CRS_Entity_12318.pdf",
+  "files": [
+    "FATCA_CRS_Entity_12318.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Stellar Arc Software Pte Ltd",
+    "company_address": "60 Paya Lebar Road, #03-12, Singapore 409051",
+    "tin": "200973418E",
+    "declaration_date": "2026-07-16",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "200973418E"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Muhammad Faizal bin Rahman"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Quek Zhi Hao"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

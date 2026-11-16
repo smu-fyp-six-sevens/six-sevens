@@ -1,0 +1,24 @@
+{
+  "filename": "IRAS_NOA_Company_20251114.pdf",
+  "files": [
+    "IRAS_NOA_Company_20251114.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Lumina Interior Studio Pte Ltd",
+    "tax_reference_number": "201063283R",
+    "company_address": "2A Boon Tiong Road, #12-27, Singapore 164002",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-11-14",
+    "eci": 260900,
+    "tax_payable": 13464.0,
+    "previous_assessment_date": "2025-07-05"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

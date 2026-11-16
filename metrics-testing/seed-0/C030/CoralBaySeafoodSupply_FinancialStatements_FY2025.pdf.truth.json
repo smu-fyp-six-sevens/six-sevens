@@ -1,0 +1,36 @@
+{
+  "filename": "CoralBaySeafoodSupply_FinancialStatements_FY2025.pdf",
+  "files": [
+    "CoralBaySeafoodSupply_FinancialStatements_FY2025.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Coral Bay Seafood Supply Pte Ltd",
+    "uen": "201078782M",
+    "financial_year_end": "2025-12-31",
+    "signing_date": "2026-05-14",
+    "revenue": 2284000.0,
+    "profit_for_the_year": 284500.0,
+    "profit_for_the_year_prior_year": 323200.0,
+    "total_assets": 2296500.0,
+    "total_liabilities": 1174800.0,
+    "total_equity": 1121700.0,
+    "share_capital": 250000.0,
+    "total_current_assets": 1431100.0,
+    "total_non_current_assets": 865400.0,
+    "total_current_liabilities": 1174800.0,
+    "total_non_current_liabilities": 0,
+    "retained_earnings_closing": 871700.0,
+    "retained_earnings_closing_prior_year": 587200.0,
+    "total_assets_prior_year": 1732400.0,
+    "total_liabilities_prior_year": 895200.0,
+    "total_equity_prior_year": 837200.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

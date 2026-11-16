@@ -1,0 +1,26 @@
+{
+  "filename": "ChanBK_Passport_scan.jpg",
+  "files": [
+    "ChanBK_Passport_scan.jpg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Chan Boon Keng",
+    "passport_number": "K6357359J",
+    "date_of_birth": "1980-03-19",
+    "date_of_expiry": "2030-07-06",
+    "date_of_issue": "2020-07-06",
+    "place_of_birth": "Singapore",
+    "sex": "F",
+    "nric_number": "S8042877D"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

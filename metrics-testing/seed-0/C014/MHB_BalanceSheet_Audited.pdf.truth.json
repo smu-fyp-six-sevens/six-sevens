@@ -1,0 +1,36 @@
+{
+  "filename": "MHB_BalanceSheet_Audited.pdf",
+  "files": [
+    "MHB_BalanceSheet_Audited.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Maplecrest Home Bakery Pte Ltd",
+    "uen": "201618187W",
+    "financial_year_end": "2026-06-30",
+    "signing_date": "2026-11-23",
+    "revenue": 1578000.0,
+    "profit_for_the_year": 158300.0,
+    "profit_for_the_year_prior_year": 190300.0,
+    "total_assets": 1586500.0,
+    "total_liabilities": 1002900.0,
+    "total_equity": 583600.0,
+    "share_capital": 100000.0,
+    "total_current_assets": 1087800.0,
+    "total_non_current_assets": 498700.0,
+    "total_current_liabilities": 617800.0,
+    "total_non_current_liabilities": 385100.0,
+    "retained_earnings_closing": 483600.0,
+    "retained_earnings_closing_prior_year": 325300.0,
+    "total_assets_prior_year": 1175000.0,
+    "total_liabilities_prior_year": 749700.0,
+    "total_equity_prior_year": 425300.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

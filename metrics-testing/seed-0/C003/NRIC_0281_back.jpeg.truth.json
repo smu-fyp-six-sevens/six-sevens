@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_0281_back.jpeg",
+  "files": [
+    "NRIC_0281_back.jpeg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S9780281E",
+    "individual_address": "112A Alkaff Crescent, #09-11, Singapore 341112",
+    "date_of_issue": "2024-11-04",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,38 @@
+{
+  "filename": "MaplecrestHomeBakery_FATCA_CRS.pdf",
+  "files": [
+    "MaplecrestHomeBakery_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Maplecrest Home Bakery Pte Ltd",
+    "company_address": "248 Pasir Ris Street 21, #08-69, Singapore 510248",
+    "tin": "201618187W",
+    "declaration_date": "2026-08-12",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201618187W"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Teo Kai Wen"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Chua Jia Hui"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

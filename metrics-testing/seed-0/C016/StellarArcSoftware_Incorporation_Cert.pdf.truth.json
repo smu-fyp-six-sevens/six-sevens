@@ -1,0 +1,24 @@
+{
+  "filename": "StellarArcSoftware_Incorporation_Cert.pdf",
+  "files": [
+    "StellarArcSoftware_Incorporation_Cert.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Stellar Arc Software Pte Ltd",
+    "uen": "200973418E",
+    "incorporation_date": "2009-08-23",
+    "company_type": "Limited Exempt Private Company",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2013-07-29",
+    "company_former_name": "Zenith Point Investments Pte. Ltd.",
+    "company_former_name_change_date": "2013-06-20"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

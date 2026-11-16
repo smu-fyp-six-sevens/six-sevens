@@ -1,0 +1,38 @@
+{
+  "filename": "FATCA_CRS_Entity_64022.pdf",
+  "files": [
+    "FATCA_CRS_Entity_64022.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Willowbrook Tuition Services Pte Ltd",
+    "company_address": "550 Serangoon North Avenue 3, #09-240, Singapore 550550",
+    "tin": "201830203N",
+    "declaration_date": "2026-09-25",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201830203N"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Koh Hwee Min"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Suresh s/o Nair"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

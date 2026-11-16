@@ -1,0 +1,26 @@
+{
+  "filename": "CRI_Telecom.pdf",
+  "files": [
+    "CRI_Telecom.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "CEDAR & CO RENOVATION PTE LTD",
+    "company_address": "362 Clementi Avenue 2, #03-92, Singapore 120362",
+    "entity_type": "corporate",
+    "bill_date": "2026-11-14",
+    "previous_balance": 138.41,
+    "current_charges": 155.14,
+    "total_payable": 283.55,
+    "gst_amount": 12.81
+  },
+  "not_printed": {
+    "due_date": "2026-11-28"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

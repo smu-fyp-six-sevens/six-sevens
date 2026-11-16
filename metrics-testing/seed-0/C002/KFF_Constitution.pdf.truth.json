@@ -1,0 +1,38 @@
+{
+  "filename": "KFF_Constitution.pdf",
+  "files": [
+    "KFF_Constitution.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Kestrel Freight Forwarding Pte Ltd",
+    "uen": "201156535W",
+    "incorporation_date": "2011-03-21",
+    "company_address": "21 Bukit Batok Crescent, #04-18, Singapore 658065",
+    "share_capital": 750000.0,
+    "issued_shares": 750000,
+    "subscribers": [
+      {
+        "name": "Ho Kok Wai",
+        "address": "333 Woodlands Street 32, #03-298, Singapore 730333",
+        "id_number": "S7143844I",
+        "shares": 675000
+      },
+      {
+        "name": "Toh Kai Wen",
+        "address": "513 Ang Mo Kio Avenue 8, #05-230, Singapore 560513",
+        "id_number": "S0899470F",
+        "shares": 75000
+      }
+    ],
+    "quorum": 3,
+    "adoption_date": "2011-03-21"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

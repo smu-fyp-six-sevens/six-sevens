@@ -1,0 +1,27 @@
+{
+  "filename": "Payslip_Jul2026_FooZH.pdf",
+  "files": [
+    "Payslip_Jul2026_FooZH.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Foo Zhi Hao",
+    "company_name": "Summit Peak Recruitment Pte Ltd",
+    "net_pay": 7584.13,
+    "basic_pay": 7920.0,
+    "employee_cpf": 1048.0
+  },
+  "not_printed": {
+    "company_address": "9 Raffles Place, #09-28, Singapore 048619",
+    "total_earnings": 8680.0,
+    "total_deductions": 1095.87,
+    "pay_date": "2026-07-31",
+    "pay_period_end": "2026-07-31"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

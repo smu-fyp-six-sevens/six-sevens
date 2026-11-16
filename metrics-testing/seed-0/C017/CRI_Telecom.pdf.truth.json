@@ -1,0 +1,26 @@
+{
+  "filename": "CRI_Telecom.pdf",
+  "files": [
+    "CRI_Telecom.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "JUNCTION NINE LOGISTICS PTE LTD",
+    "company_address": "8 Burn Road, #03-13, Singapore 369977",
+    "entity_type": "corporate",
+    "bill_date": "2026-11-12",
+    "previous_balance": 90.25,
+    "current_charges": 156.04,
+    "total_payable": 265.24,
+    "gst_amount": 12.88
+  },
+  "not_printed": {
+    "due_date": "2026-11-26"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,55 @@
+{
+  "filename": "ACRA_Incumbency_20260920.pdf",
+  "files": [
+    "ACRA_Incumbency_20260920.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "PRIMROSE FLORIST & GIFTS PTE LTD",
+    "uen": "201683387R",
+    "incorporation_date": "2016-02-10",
+    "company_type": "LIMITED EXEMPT PRIVATE COMPANY",
+    "company_address": "106D PUNGGOL FIELD, #02-71, SINGAPORE 824106",
+    "share_capital": 750000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "YEO CHEE KEONG",
+        "identification_no": "S7483338A",
+        "address": "106D PUNGGOL FIELD, #02-71, SINGAPORE 824106",
+        "shares": 382500
+      },
+      {
+        "name": "TOH ZHEN YU",
+        "identification_no": "S6938252E",
+        "address": "284 YISHUN AVENUE 6, #03-75, SINGAPORE 760284",
+        "shares": 367500
+      }
+    ],
+    "officers": [
+      {
+        "name": "YEO CHEE KEONG",
+        "identification_no": "S7483338A",
+        "position": "Director",
+        "date_of_appointment": "2016-02-10"
+      },
+      {
+        "name": "GOH MEI LING",
+        "identification_no": "S6624017G",
+        "position": "Secretary",
+        "date_of_appointment": "2016-02-15"
+      }
+    ],
+    "document_date": "2026-09-13",
+    "last_agm_date": "2026-01-23",
+    "last_annual_return_date": "2026-02-08",
+    "financial_year_end": "2025-09-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

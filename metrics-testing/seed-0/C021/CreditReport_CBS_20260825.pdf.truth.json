@@ -1,0 +1,26 @@
+{
+  "filename": "CreditReport_CBS_20260825.pdf",
+  "files": [
+    "CreditReport_CBS_20260825.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Vikram s/o Chandran",
+    "id_number": "S7983495E",
+    "date_of_birth": "1979-06-16",
+    "nationality": "Singaporean",
+    "individual_address": "335B Smith Street, #14-63, Singapore 052335",
+    "report_date": "2026-08-31",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 1000000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

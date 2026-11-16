@@ -1,0 +1,38 @@
+{
+  "filename": "CobaltRidgeCapitalAdvisory_FATCA_CRS.pdf",
+  "files": [
+    "CobaltRidgeCapitalAdvisory_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Cobalt Ridge Capital Advisory Pte Ltd",
+    "company_address": "302 Tiong Bahru Road, #10-24, Singapore 168732",
+    "tin": "201294420E",
+    "declaration_date": "2026-09-16",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201294420E"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Tan Wei Ming"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Zuraidah binte Abdullah"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

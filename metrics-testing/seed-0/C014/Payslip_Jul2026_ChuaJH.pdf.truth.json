@@ -1,0 +1,27 @@
+{
+  "filename": "Payslip_Jul2026_ChuaJH.pdf",
+  "files": [
+    "Payslip_Jul2026_ChuaJH.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Chua Jia Hui",
+    "company_name": "Maplecrest Home Bakery Pte Ltd",
+    "net_pay": 7095.61,
+    "basic_pay": 8410.0,
+    "employee_cpf": 1646.0
+  },
+  "not_printed": {
+    "company_address": "248 Pasir Ris Street 21, #08-69, Singapore 510248",
+    "total_earnings": 8770.0,
+    "total_deductions": 1674.39,
+    "pay_date": "2026-07-31",
+    "pay_period_end": "2026-07-31"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

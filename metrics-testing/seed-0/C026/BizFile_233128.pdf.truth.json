@@ -1,0 +1,22 @@
+{
+  "filename": "BizFile_233128.pdf",
+  "files": [
+    "BizFile_233128.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Cedar & Co Renovation Pte Ltd",
+    "uen": "201521828G",
+    "incorporation_date": "2015-06-21",
+    "company_type": "Private company limited by shares",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2015-06-21"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

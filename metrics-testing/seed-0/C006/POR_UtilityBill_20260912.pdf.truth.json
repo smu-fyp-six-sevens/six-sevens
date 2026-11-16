@@ -1,0 +1,23 @@
+{
+  "filename": "POR_UtilityBill_20260912.pdf",
+  "files": [
+    "POR_UtilityBill_20260912.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Tan Wei Ming",
+    "individual_address": "304 Bukit Batok Street 31, #02-84, Singapore 650304",
+    "entity_type": "individual",
+    "bill_date": "2026-09-12",
+    "billing_period_end": "2026-08-31",
+    "total_payable": 254.42,
+    "due_date": "2026-09-26"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

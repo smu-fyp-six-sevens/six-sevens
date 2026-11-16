@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_9177_back.jpeg",
+  "files": [
+    "NRIC_9177_back.jpeg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "T0019177E",
+    "individual_address": "108A Bidadari Park Drive, #13-158, Singapore 341108",
+    "date_of_issue": "2023-07-27",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

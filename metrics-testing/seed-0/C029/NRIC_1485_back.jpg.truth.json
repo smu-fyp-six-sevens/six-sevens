@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_1485_back.jpg",
+  "files": [
+    "NRIC_1485_back.jpg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S8271485E",
+    "individual_address": "106 Tampines Street 11, #05-24, Singapore 521106",
+    "date_of_issue": "2023-03-24",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

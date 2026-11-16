@@ -1,0 +1,56 @@
+{
+  "filename": "ACRA_Incumbency_20260712.pdf",
+  "files": [
+    "ACRA_Incumbency_20260712.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "STELLAR ARC SOFTWARE PTE LTD",
+    "uen": "200973418E",
+    "incorporation_date": "2009-08-23",
+    "company_type": "LIMITED EXEMPT PRIVATE COMPANY",
+    "company_address": "60 PAYA LEBAR ROAD, #03-12, SINGAPORE 409051",
+    "share_capital": 750000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "MUHAMMAD FAIZAL BIN RAHMAN",
+        "identification_no": "S9304247F",
+        "address": "244 SERANGOON AVENUE 2, #04-28, SINGAPORE 550244",
+        "shares": 487500
+      },
+      {
+        "name": "QUEK ZHI HAO",
+        "identification_no": "S0788664J",
+        "address": "339C KANG CHING ROAD, #06-136, SINGAPORE 613339",
+        "shares": 262500
+      }
+    ],
+    "officers": [
+      {
+        "name": "MUHAMMAD FAIZAL BIN RAHMAN",
+        "identification_no": "S9304247F",
+        "position": "Director",
+        "date_of_appointment": "2009-08-23"
+      },
+      {
+        "name": "NURUL AISYAH BINTE RAHMAN",
+        "identification_no": "S7764505E",
+        "position": "Secretary",
+        "date_of_appointment": "2009-10-10"
+      }
+    ],
+    "company_former_name": "ZENITH POINT INVESTMENTS PTE. LTD.",
+    "document_date": "2026-07-03",
+    "last_agm_date": "2026-02-08",
+    "last_annual_return_date": "2026-03-13",
+    "financial_year_end": "2025-09-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

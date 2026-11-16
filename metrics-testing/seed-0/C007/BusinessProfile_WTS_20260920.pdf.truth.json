@@ -1,0 +1,55 @@
+{
+  "filename": "BusinessProfile_WTS_20260920.pdf",
+  "files": [
+    "BusinessProfile_WTS_20260920.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "WILLOWBROOK TUITION SERVICES PTE LTD",
+    "uen": "201830203N",
+    "incorporation_date": "2018-07-25",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "550 SERANGOON NORTH AVENUE 3, #09-240, SINGAPORE 550550",
+    "share_capital": 750000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "KOH HWEE MIN",
+        "identification_no": "S7496277G",
+        "address": "550 SERANGOON NORTH AVENUE 3, #09-240, SINGAPORE 550550",
+        "shares": 412500
+      },
+      {
+        "name": "SURESH S/O NAIR",
+        "identification_no": "S8296399E",
+        "address": "304 CLEMENTI AVENUE 4, #09-304, SINGAPORE 120304",
+        "shares": 337500
+      }
+    ],
+    "officers": [
+      {
+        "name": "KOH HWEE MIN",
+        "identification_no": "S7496277G",
+        "position": "Director",
+        "date_of_appointment": "2018-07-25"
+      },
+      {
+        "name": "RAJESWARI D/O MUTHUSAMY",
+        "identification_no": "S7653729A",
+        "position": "Secretary",
+        "date_of_appointment": "2018-10-12"
+      }
+    ],
+    "document_date": "2026-09-23",
+    "last_agm_date": "2025-10-13",
+    "last_annual_return_date": "2025-11-01",
+    "financial_year_end": "2025-06-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

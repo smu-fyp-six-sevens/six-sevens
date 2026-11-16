@@ -1,0 +1,38 @@
+{
+  "filename": "ACRA_CertIncorp_201065233R.pdf",
+  "files": [
+    "ACRA_CertIncorp_201065233R.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Ninefold Print & Packaging Pte Ltd",
+    "uen": "201065233R",
+    "incorporation_date": "2010-11-23",
+    "company_type": "Private company limited by shares",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2010-11-23"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": true,
+  "tampering": [
+    {
+      "dimension": "Font/Size",
+      "defect_type": "font",
+      "expected_tools": [
+        "font_consistency_tool"
+      ],
+      "description": "Registrar's title under the signature set in Courier, unlike the lines around it. No company detail is changed.",
+      "edits": [
+        {
+          "printed_before": "ASST REGISTRAR OF COMPANIES & BUSINESS NAMES",
+          "printed_after": null,
+          "injector": "Changed field font from Helvetica to Courier"
+        }
+      ]
+    }
+  ]
+}

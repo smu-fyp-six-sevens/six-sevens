@@ -1,0 +1,26 @@
+{
+  "filename": "Zuraidah_Passport_scan.png",
+  "files": [
+    "Zuraidah_Passport_scan.png"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Zuraidah binte Abdullah",
+    "passport_number": "K5080982B",
+    "date_of_birth": "1964-10-09",
+    "date_of_expiry": "2030-02-15",
+    "date_of_issue": "2020-02-15",
+    "place_of_birth": "Singapore",
+    "sex": "M",
+    "nric_number": "S0760129H"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

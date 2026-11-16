@@ -1,0 +1,24 @@
+{
+  "filename": "IRAS_NOA_Company_20250728.pdf",
+  "files": [
+    "IRAS_NOA_Company_20250728.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Saffron Table Catering Pte Ltd",
+    "tax_reference_number": "201277971Z",
+    "company_address": "50 Gambas Crescent, #05-13, Singapore 757022",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-07-28",
+    "eci": 362200,
+    "tax_payable": 22074.5,
+    "previous_assessment_date": "2025-06-14"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

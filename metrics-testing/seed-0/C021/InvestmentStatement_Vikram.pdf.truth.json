@@ -1,0 +1,22 @@
+{
+  "filename": "InvestmentStatement_Vikram.pdf",
+  "files": [
+    "InvestmentStatement_Vikram.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "VIKRAM S/O CHANDRAN",
+    "individual_address": "335B SMITH STREET,#14-63,Singapore,052335",
+    "account_number": "1008734689179778",
+    "net_asset_value": 15782.93,
+    "portfolio_value": 14333.74,
+    "cash_balance": 1449.19
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

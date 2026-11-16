@@ -1,0 +1,24 @@
+{
+  "filename": "IRAS_NOA_Company_20251126.pdf",
+  "files": [
+    "IRAS_NOA_Company_20251126.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Bayfront Event Management Pte Ltd",
+    "tax_reference_number": "201069884N",
+    "company_address": "6 Eu Tong Sen Street, #05-26, Singapore 059817",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-11-26",
+    "eci": 516100,
+    "tax_payable": 35156.0,
+    "previous_assessment_date": "2025-07-12"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

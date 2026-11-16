@@ -1,0 +1,56 @@
+{
+  "filename": "JunctionNineLogistics_BizFile_Officers_20260726.pdf",
+  "files": [
+    "JunctionNineLogistics_BizFile_Officers_20260726.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "JUNCTION NINE LOGISTICS PTE LTD",
+    "uen": "201655475N",
+    "incorporation_date": "2016-04-11",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "8 BURN ROAD, #03-13, SINGAPORE 369977",
+    "share_capital": 250000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "ONG ZHI HAO",
+        "identification_no": "S9391988B",
+        "address": "181 BEDOK NORTH ROAD, #02-53, SINGAPORE 460181",
+        "shares": 200000
+      },
+      {
+        "name": "CHONG KAI WEN",
+        "identification_no": "S9888358D",
+        "address": "100 WHAMPOA DRIVE, #13-283, SINGAPORE 320100",
+        "shares": 50000
+      }
+    ],
+    "officers": [
+      {
+        "name": "ONG ZHI HAO",
+        "identification_no": "S9391988B",
+        "position": "Director",
+        "date_of_appointment": "2016-04-11"
+      },
+      {
+        "name": "WONG KAH CHUN",
+        "identification_no": "S7557414B",
+        "position": "Secretary",
+        "date_of_appointment": "2016-05-18"
+      }
+    ],
+    "company_former_name": "EMERALD FIELD ENGINEERING PTE. LTD.",
+    "document_date": "2026-07-18",
+    "last_agm_date": "2026-04-05",
+    "last_annual_return_date": "2026-04-29",
+    "financial_year_end": "2025-12-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

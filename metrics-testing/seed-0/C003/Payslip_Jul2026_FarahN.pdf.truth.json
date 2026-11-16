@@ -1,0 +1,27 @@
+{
+  "filename": "Payslip_Jul2026_FarahN.pdf",
+  "files": [
+    "Payslip_Jul2026_FarahN.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Farah Nadia binte Salleh",
+    "company_name": "Lumina Interior Studio Pte Ltd",
+    "net_pay": 6989.05,
+    "basic_pay": 8890.0,
+    "total_earnings": 9500.0,
+    "total_deductions": 2510.95,
+    "employee_cpf": 1600.0,
+    "pay_date": "2026-07-31",
+    "pay_period_end": "2026-07-31"
+  },
+  "not_printed": {
+    "company_address": "2A Boon Tiong Road, #12-27, Singapore 164002"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

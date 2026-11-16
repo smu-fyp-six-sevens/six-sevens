@@ -1,0 +1,38 @@
+{
+  "filename": "Company_Constitution_20260829.pdf",
+  "files": [
+    "Company_Constitution_20260829.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Copperfield Bookkeeping Services Pte Ltd",
+    "uen": "201587920G",
+    "incorporation_date": "2015-11-23",
+    "company_address": "288A Jurong East Street 21, #10-224, Singapore 601288",
+    "share_capital": 750000.0,
+    "issued_shares": 750000,
+    "subscribers": [
+      {
+        "name": "Lee Pei Shan",
+        "address": "288A Jurong East Street 21, #10-224, Singapore 601288",
+        "id_number": "S7766093C",
+        "shares": 382500
+      },
+      {
+        "name": "Yeo Eng Seng",
+        "address": "62 Marine Drive, #14-26, Singapore 440062",
+        "id_number": "S6928508B",
+        "shares": 367500
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2015-11-23"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

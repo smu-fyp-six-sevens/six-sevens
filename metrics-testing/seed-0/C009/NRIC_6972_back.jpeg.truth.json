@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_6972_back.jpeg",
+  "files": [
+    "NRIC_6972_back.jpeg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S6846972D",
+    "individual_address": "182 Jelebu Road, #04-199, Singapore 670182",
+    "date_of_issue": "2019-02-26",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,56 @@
+{
+  "filename": "ACRA_Incumbency_20260803.pdf",
+  "files": [
+    "ACRA_Incumbency_20260803.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "SUMMIT PEAK RECRUITMENT PTE LTD",
+    "uen": "201585653M",
+    "incorporation_date": "2015-07-07",
+    "company_type": "LIMITED EXEMPT PRIVATE COMPANY",
+    "company_address": "9 RAFFLES PLACE, #09-28, SINGAPORE 048619",
+    "share_capital": 300000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "SIM SIEW LAN",
+        "identification_no": "S8271485E",
+        "address": "106 TAMPINES STREET 11, #05-24, SINGAPORE 521106",
+        "shares": 165000
+      },
+      {
+        "name": "FOO ZHI HAO",
+        "identification_no": "S0118278A",
+        "address": "271 TOH GUAN ROAD, #03-160, SINGAPORE 600271",
+        "shares": 135000
+      }
+    ],
+    "officers": [
+      {
+        "name": "SIM SIEW LAN",
+        "identification_no": "S8271485E",
+        "position": "Director",
+        "date_of_appointment": "2015-07-07"
+      },
+      {
+        "name": "TEO LI XUAN",
+        "identification_no": "S6455982F",
+        "position": "Secretary",
+        "date_of_appointment": "2015-08-16"
+      }
+    ],
+    "company_former_name": "EMERALD BRIDGE TRADING PTE. LTD.",
+    "document_date": "2026-07-27",
+    "last_agm_date": "2025-08-26",
+    "last_annual_return_date": "2025-09-30",
+    "financial_year_end": "2025-03-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

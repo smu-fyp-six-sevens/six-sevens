@@ -1,0 +1,3721 @@
+{
+  "case_id": "C001",
+  "seed": 0,
+  "api_case_id": "35708381-f0b7-45ed-a8e6-be0fb311a784",
+  "greenlink_case_id": "GLDB-5",
+  "documents": [
+    {
+      "id": "8ac8f860-d240-4d5d-b908-6f29db0829eb",
+      "filename": "NRIC_7269_back.jpeg",
+      "document_type": "nric",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.85,
+      "extraction_confidence": 0.962,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "nric_number": "S8427269H",
+        "individual_address": "4 TOH YI DRIVE #04-11 SINGAPORE 590004",
+        "date_of_issue": "07-08-2020",
+        "document_side": "back"
+      },
+      "detection_report": {
+        "summary": "No specialist raised any findings on this back-of-NRIC JPEG. The layout, image manipulation, tampering, spelling, date and numeric checks all came back clean, and no prompt-injection text was found. The coverage gaps are real, though. Hidden-text checking does not apply to an image, the AI-generation check did not score the image (it was classed as a flat graphic), and the address and postal code were never verified against OneMap/HDB because no bindings applied. The file has no metadata, which is normal for an image like this. The document looks clean on the checks that ran, but the address remains unverified.",
+        "verdict": "inconclusive",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "This is a JPEG of an NRIC back, so skip the font check and run the layout check (address, postal code, date of issue and barcode positions against the standard back layout) plus the image manipulation and tampering checks for painted-over or pasted address text, and review the hidden_text_tool findings.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "The back-of-NRIC JPEG produced no findings from the layout, image manipulation, or image tampering checks, and the hidden-text check could not run because the file is an image with no text layer. The font check was skipped as the brief directed. Nothing in the rendering or image data suggests painted-over or pasted address, postal code, issue date, or barcode content.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "layout_anomalies_tool",
+              "image_manipulation_tool",
+              "image_tampering_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Check the NRIC back fields: the date of issue must not be in the future (today is 2026-11-15) or before the holder's plausible age, the address and postal code should be consistent and verifiable via OneMap/HDB, and the spelling of the printed labels and address should be correct; the NRIC number checksum applies only if the number is printed on the back, and the page-consistency and ACRA checks do not apply.",
+            "title": "Content Validation Analyst",
+            "summary": "The spelling, date-consistency and numerical checks ran and returned no findings. The external validation tool ran but applied no bindings (its menu for this document type has no roles), so OneMap/HDB address verification did not actually take place and the address and postal code remain unverified. No findings were raised, so there is nothing to dismiss or rate.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "numerical_checks_tool",
+              "external_validation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Run metadata_tool for editing software and creation versus modification timing on this JPEG, run ai_generation_tool since it is a photo-like card image, and assess the prompt_injection_tool findings.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt-injection check returned no findings (dictionary check only, guard risk none), so there is no instruction-like text to act on. The JPEG carries no authorship or editing metadata, so the metadata check had nothing to assess and missing metadata is not itself a sign of tampering. The AI-generation tool judged the image a flat graphic rather than a photograph or scan and did not score it, so the back of the NRIC was not tested for AI generation; a visual or second-opinion review of the card image may still be worthwhile.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool",
+              "ai_generation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.5,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.5,
+        "document_id": "8ac8f860-d240-4d5d-b908-6f29db0829eb",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:54:10.688830+00:00",
+        "document_type": "nric",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.6,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.5,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [
+          {
+            "tool": "metadata_tool",
+            "reason": "This JPEG image carries no authorship or editing metadata (no author, software, or creation/modification dates). That's normal for screenshots, scans, and images saved by phones, messaging apps or web tools, so there is nothing for this check to assess. Missing metadata is not a sign of tampering on its own.",
+            "specialist": "digital_authenticity"
+          },
+          {
+            "tool": "ai_generation_tool",
+            "reason": "Nothing to check: This image is a flat graphic (logos, stamps, designs or rendered pages) rather than photographs or scans, and nothing in the file declares an AI source. Pixel statistics only mean something on photographs and scans, so there was nothing for this check to examine. This is not a sign of fraud on its own.",
+            "specialist": "digital_authenticity"
+          }
+        ],
+        "unable_to_assess": [
+          {
+            "tool": "hidden_text_tool",
+            "reason": "Hidden text is checked in PDFs only; this file has no text layer to hide text in",
+            "specialist": "layout_rendering"
+          }
+        ],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "6d23ca5e-6c1d-4f9f-901a-3e4bf9ee62fc",
+      "filename": "BrightwaveAnalytics_Incorporation_Cert.pdf",
+      "document_type": "certificate_of_incorporation",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.967,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "company_name": "BRIGHTWAVE ANALYTICS PTE LTD",
+        "uen": "201298459R",
+        "incorporation_date": "12 Dec 2012",
+        "company_type": "Private company limited by shares",
+        "incorporating_act": "Companies Act 1967",
+        "certificate_date": "12 Dec 2012",
+        "receipt_number": "ACRA121212973342"
+      },
+      "detection_report": {
+        "summary": "No specialist raised any findings on this one-page certificate of incorporation. Layout, font, hidden-text, image and prompt-injection checks were clean. The metadata shows a ReportLab-generated PDF with identical creation and modification timestamps (2026-11-15, the same day as this review), and an anonymous author. The UEN passed the format check and the dates are consistent. The main gap is that the live ACRA lookup (company existence, name, status, incorporation date, address) did not run, so the company details are unverified and a manual ACRA check is advisable. The ReportLab producer and same-day creation are not proof of forgery, since many registries and generators use such tools, but they are worth noting given the unverified registry data.",
+        "verdict": "clean",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "Run the font check (native-text PDF) plus layout, hidden-text review and both image checks on the two embedded images (447x447 and 190x178, likely a crest/logo and a seal or stamp), looking for mismatched fonts or spacing in the company name, UEN, incorporation date and officer details, overlaid text, and resolution, halo or compression mismatches around the images.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "I ran the hidden-text, font-consistency, layout-anomaly, image-manipulation and image-tampering checks on this one-page certificate of incorporation. None returned any findings, so there is nothing to dismiss or rate. The two embedded images (447x447 and 190x178) showed no resolution, compression, halo or repainting anomalies, and the text shows no font or spacing mismatches around the company name, UEN, date or officer details.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "font_consistency_tool",
+              "layout_anomalies_tool",
+              "image_manipulation_tool",
+              "image_tampering_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Validate the UEN format and check it against live ACRA records (company name, status, incorporation date, registered address), check the spelling of the company name and the formal wording, and confirm the incorporation date is not in the future (today is 2026-11-15) and is consistent with any other dates on the certificate; skip the bank-statement, payslip and MRZ checks, and page consistency is trivial for a single page.",
+            "title": "Content Validation Analyst",
+            "summary": "The UEN passed the numerical format check, and the date consistency check found no problems. The two spelling flags are on the personal name 'Lim Bee Hoon', which is a proper name, not a misspelling. The external validation tool applied no bindings because its menu lists no roles, so the ACRA lookup (company name, status, incorporation date, registered address) did not run and remains unverified.",
+            "dismissed": [
+              {
+                "id": "spelling_tool-1",
+                "tool": "spelling_tool",
+                "word": "Lim",
+                "reason": "'Lim' is part of the personal name 'Lim Bee Hoon', presumably a signatory. The suggested correction 'him' is a false positive for a proper noun.",
+                "context": "Lim Bee Hoon",
+                "summary": "Possible misspelling \"Lim\" (suggested: \"him\").",
+                "locations": [
+                  {
+                    "bbox": [
+                      52.5,
+                      765.31,
+                      66.58,
+                      780.43
+                    ],
+                    "page": 1
+                  },
+                  {
+                    "bbox": [
+                      52.5,
+                      780.85,
+                      64.12,
+                      790.15
+                    ],
+                    "page": 1
+                  }
+                ],
+                "bbox_units": "pt",
+                "check_code": "SPELLING.lim",
+                "confidence": 0.9,
+                "fingerprint": "223da9700d917c2d41470f89",
+                "occurrences": 1,
+                "other_contexts": [],
+                "suggested_correction": "him"
+              },
+              {
+                "id": "spelling_tool-2",
+                "tool": "spelling_tool",
+                "word": "Hoon",
+                "reason": "'Hoon' is part of the personal name 'Lim Bee Hoon'. The suggested correction 'soon' is a false positive for a proper noun.",
+                "context": "Lim Bee Hoon",
+                "summary": "Possible misspelling \"Hoon\" (suggested: \"soon\").",
+                "locations": [
+                  {
+                    "bbox": [
+                      86.42,
+                      765.31,
+                      107.05,
+                      780.43
+                    ],
+                    "page": 1
+                  },
+                  {
+                    "bbox": [
+                      81.75,
+                      780.85,
+                      102.0,
+                      790.15
+                    ],
+                    "page": 1
+                  }
+                ],
+                "bbox_units": "pt",
+                "check_code": "SPELLING.hoon",
+                "confidence": 0.9,
+                "fingerprint": "712799f15352ccdd10c31c8d",
+                "occurrences": 1,
+                "other_contexts": [],
+                "suggested_correction": "soon"
+              }
+            ],
+            "uncertain": true,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "numerical_checks_tool",
+              "external_validation_tool",
+              "numerical_checks_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Review the prompt_injection_tool findings, inspect the metadata for producer software, and compare the creation and modification timestamps for signs of editing after issuance (for example consumer editors or PDF tools rather than a government issuing system), and run the AI-generation check on the two embedded images only if they prove to be photo or scan content rather than a plain logo or seal.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt-injection check returned no findings and no guard risk. Metadata shows a ReportLab PDF Library producer with anonymous author and creator, and creation and modification timestamps are identical (2026-11-15 23:52:30+08:00), so there is no sign of post-issuance editing in a consumer PDF editor. The AI-generation check ran on the two embedded images (447x447 and 190x178) and returned no findings, though the brief limited it to photo or scan content and I did not confirm that the images are photographs rather than a seal or logo. The tools raised no findings to assess.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool",
+              "ai_generation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.6,
+        "document_id": "6d23ca5e-6c1d-4f9f-901a-3e4bf9ee62fc",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:55:01.486509+00:00",
+        "document_type": "certificate_of_incorporation",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.6,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [],
+        "unable_to_assess": [],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "7dc1896e-5b96-44e3-9b86-da67b432ab2d",
+      "filename": "CBR_BA_2026-08-29.pdf",
+      "document_type": "credit_report",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.952,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "individual_name": "Lakshmi d/o Rajendran",
+        "id_number": "S8427269H",
+        "date_of_birth": "13/02/1984",
+        "nationality": "Singaporean",
+        "individual_address": "4 Toh Yi Drive, #04-11, Singapore 590004",
+        "defaults": [],
+        "bankruptcy_proceedings": [],
+        "accounts": [
+          {
+            "grantor": "Maybank",
+            "date_closed": null,
+            "date_opened": "11/09/2016",
+            "account_type": "Joint",
+            "product_type": "HDB Loan",
+            "current_balance": 147268.93,
+            "monthly_instalment": 2771.12
+          },
+          {
+            "grantor": "CIMB Bank",
+            "date_closed": null,
+            "date_opened": "27/11/2022",
+            "account_type": "Single",
+            "product_type": "Executive Condominium Purchase",
+            "current_balance": 953696.94,
+            "monthly_instalment": 4573.84
+          },
+          {
+            "grantor": "CIMB Bank",
+            "date_closed": null,
+            "date_opened": "13/09/2012",
+            "account_type": "Single",
+            "product_type": "Unsecured Personal Loan",
+            "current_balance": 7574.31,
+            "monthly_instalment": 304.08
+          },
+          {
+            "grantor": "OCBC Bank",
+            "date_closed": "16/06/2026",
+            "date_opened": "27/10/2006",
+            "account_type": "Single",
+            "product_type": "Private Residential Purchase",
+            "current_balance": 84991.66,
+            "monthly_instalment": null
+          }
+        ],
+        "account_count": 4,
+        "enquiry_count": 3,
+        "default_count": 0,
+        "earliest_account_date": "27/10/2006",
+        "total_outstanding_balance": 1100965.87,
+        "report_date": "01/09/2026",
+        "previous_enquiries": [
+          {
+            "date": "11/06/2026",
+            "grantor": "CIMB Bank",
+            "account_type": "Single",
+            "enquiry_type": "New Application",
+            "product_type": "Unsecured Personal Loan"
+          },
+          {
+            "date": "18/07/2026",
+            "grantor": "CIMB Bank",
+            "account_type": "Single",
+            "enquiry_type": "Review",
+            "product_type": "Unsecured Credit Card"
+          },
+          {
+            "date": "04/05/2026",
+            "grantor": "Maybank",
+            "account_type": "Joint",
+            "enquiry_type": "Review",
+            "product_type": "HDB Loan"
+          }
+        ],
+        "enquiry_number": "504450546",
+        "reference": "S8427269H_010926",
+        "postal_code": "590004",
+        "gender": "Female",
+        "marital_status": "Single",
+        "secured_credit_limit": 1500000,
+        "unsecured_credit_limit": 15000
+      },
+      "detection_report": {
+        "summary": "The three specialists found nothing to flag on this 4-page credit report. Layout, font, hidden-text and tampering checks were clean. Numerical, date and page-consistency checks passed, and the 'Shenton' spelling flag was dismissed because it is the bureau's real street address. Metadata shows a single producer (DocuSuite Enterprise 4.2) and a creation date of today with no modification, and there was no prompt-injection wording. Limits: only one distinct image (a header) existed to compare, the AI-generation check was skipped for lack of a photo or scan, and the bureau score check was skipped because no score field was extracted. These are gaps in coverage, not concerns.",
+        "verdict": "clean",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "Run hidden_text_tool assessment, the font check (native-text PDF) and layout check on the credit report's scores, account balances, limits and names for mismatched fonts, spacing or overlaid text, and run image checks on the single 1893x785 image (placed 4 times, likely a logo or header) for splicing or resolution mismatch.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "Hidden-text, font consistency, layout anomaly, and image tampering checks all ran on the credit report and returned no findings. The image manipulation check found only one distinct image asset (the 1893x785 header placed 4 times), so there was nothing to compare for resolution mismatch; this is a pass with nothing to report, not a full comparison. No rendering or splicing concerns were identified for the scores, balances, limits, or names.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "font_consistency_tool",
+              "layout_anomalies_tool",
+              "image_manipulation_tool",
+              "image_tampering_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Check the credit report's internal consistency (account balances against limits, totals, enquiry and delinquency counts, score band), date consistency against today 2026-11-15 (report date, account open and last-payment dates not in the future or contradictory), spelling of bureau and lender names, and page consistency across the 4 pages (page numbers, same subject name and ID on every page); skip ACRA and address lookups unless a company UEN or address field is present.",
+            "title": "Content Validation Analyst",
+            "summary": "The credit report's numerical checks (account and enquiry counts, default counts, total outstanding balance vs. account balances, limits) raised no findings; the bureau score check was skipped because no bureau_score field was extracted, and the secured/unsecured split was not bound because those fields do not exist. Date consistency and page consistency across the 4 pages passed with no findings. The only spelling flag, 'Shenton', is part of the bureau's real street address (2 Shenton Way, SGX Centre 1) printed in the footer and was dismissed as a false positive.",
+            "dismissed": [
+              {
+                "id": "spelling_tool-1",
+                "tool": "spelling_tool",
+                "word": "Shenton",
+                "reason": "'Shenton' is a genuine Singapore street name (Shenton Way) in the bureau's printed address, consistent across all four pages. The suggested 'shelton' is not a real correction. False positive.",
+                "context": "2 Shenton Way #20-02 SGX Centre 1 Singapore 068804 Tel: (65) 6565 6363 Fax: (65\u2026",
+                "summary": "Possible misspelling \"Shenton\" (suggested: \"shelton\"), appears 4 times.",
+                "locations": [
+                  {
+                    "bbox": [
+                      131.86,
+                      766.59,
+                      156.07,
+                      775.52
+                    ],
+                    "page": 1
+                  },
+                  {
+                    "bbox": [
+                      131.86,
+                      766.59,
+                      156.07,
+                      775.52
+                    ],
+                    "page": 2
+                  },
+                  {
+                    "bbox": [
+                      131.86,
+                      766.59,
+                      156.07,
+                      775.52
+                    ],
+                    "page": 3
+                  },
+                  {
+                    "bbox": [
+                      131.86,
+                      766.59,
+                      156.07,
+                      775.52
+                    ],
+                    "page": 4
+                  }
+                ],
+                "bbox_units": "pt",
+                "check_code": "SPELLING.shenton",
+                "confidence": 0.95,
+                "fingerprint": "a2083ad85d801015fcd7994a",
+                "occurrences": 4,
+                "other_contexts": [],
+                "suggested_correction": "shelton"
+              }
+            ],
+            "uncertain": false,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "page_consistency_tool",
+              "numerical_checks_tool",
+              "numerical_checks_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.85,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Assess prompt_injection_tool findings, and run metadata_tool for producer software, and creation versus modification dates that suggest editing of this bureau-issued PDF; ai_generation_tool is likely not applicable since the only embedded image appears to be a logo or header graphic rather than a photo or scan.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt-injection check returned no findings across hidden text, image text and dictionary checks, so there is no wording aimed at an AI to assess. The metadata shows producer and creator both set to DocuSuite Enterprise 4.2, a creation timestamp of 2026-11-15 23:52:23 (today), and no modification date, with no editing or post-creation signs. The AI-generation check was skipped because the only embedded image is a 1893x785 header/logo graphic, not a photo or scan, as the brief anticipated. No findings were raised, so none are dismissed or rated.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.85,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.8,
+        "document_id": "7dc1896e-5b96-44e3-9b86-da67b432ab2d",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:55:53.803771+00:00",
+        "document_type": "credit_report",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.85,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.85,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.85,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [
+          {
+            "tool": "image_manipulation_tool",
+            "reason": "Only 1 distinct image asset(s) large enough to compare (of 4 placement(s) found); at least 2 are needed to establish what the surrounding content looks like.",
+            "specialist": "layout_rendering"
+          }
+        ],
+        "unable_to_assess": [],
+        "dismissed": []
+      },
+      "officer_steps": [
+        "saved the fields unchanged (accounts, total_outstanding_balance, report_date low-confidence)"
+      ],
+      "status": "detected"
+    },
+    {
+      "id": "35c0bd3f-51c2-4a38-bcdf-0a1f95fb5f0b",
+      "filename": "NRIC_1500_front.png",
+      "document_type": "nric",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.961,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "nric_number": "S0801500G",
+        "individual_name": "HENG WAN TING",
+        "date_of_birth": "05-08-1963",
+        "country": "SINGAPORE",
+        "race": "CHINESE",
+        "sex": "M",
+        "document_side": "front"
+      },
+      "detection_report": {
+        "summary": "No specialist raised any findings on this NRIC front PNG. Layout/rendering (image manipulation and tampering checks), content validation (spelling, dates, NRIC check letter) and the prompt-injection scan all came back clean. Limits: the hidden-text check could not run on an image, and the AI-generation check did not score the file because it was classed as a flat graphic, so there was no photo-level AI or reworking analysis. The metadata check found no authorship or editing metadata, which is normal for a PNG and not a concern in itself.",
+        "verdict": "inconclusive",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "This is a PNG of an NRIC front, so skip the font check and run the layout check (OCR of each field against the standard NRIC front layout, looking for misaligned, overlapping or off-spec name, NRIC number, DOB, race, sex or photo fields) plus the image manipulation and image tampering checks on the photo, text areas and edges, and assess the hidden_text_tool findings.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "The NRIC front PNG was checked with the hidden-text, layout, image-manipulation and image-tampering tools. The hidden-text tool could not run because the file is an image with no text layer, so that is not a pass. The three other checks ran and returned no findings, so nothing is raised against the document from a rendering standpoint. The font check was skipped as the brief directed, since an image file has no selectable text.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "layout_anomalies_tool",
+              "image_manipulation_tool",
+              "image_tampering_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.7,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Validate the NRIC number format and checksum letter against the prefix and birth year, check that the date of birth and any dates shown are plausible relative to today (2026-11-15), and check spelling of the printed labels and name; skip address lookups, ACRA, and multi-page or financial checks since this is the front of an ID with no address.",
+            "title": "Content Validation Analyst",
+            "summary": "The NRIC front passed the spelling, date-consistency, and NRIC check-letter validation with no findings. The amount-parse check was skipped because the document has no amount fields, and ACRA, address, page, and image/font checks were not run as the brief directed (or do not apply to an ID front). No concerns were raised.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "numerical_checks_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Run the metadata check for editing software and creation-versus-modification anomalies in this PNG, run the AI-generation check on the card photo and the image as a whole for synthetic or reworked pixels, and assess the prompt_injection_tool findings.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt-injection scan returned no findings and a guard risk of none. The metadata check found no authorship or editing metadata to assess, which is normal for a PNG saved from a phone, messaging app or web tool, and it raised no anomalies. The AI-generation check did not score the image because it classed the whole PNG as a flat graphic, so no photo-level pixel analysis was performed on the card.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool",
+              "ai_generation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.6,
+        "document_id": "35c0bd3f-51c2-4a38-bcdf-0a1f95fb5f0b",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:55:35.832008+00:00",
+        "document_type": "nric",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.6,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.7,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [
+          {
+            "tool": "metadata_tool",
+            "reason": "This PNG image carries no authorship or editing metadata (no author, software, or creation/modification dates). That's normal for screenshots, scans, and images saved by phones, messaging apps or web tools, so there is nothing for this check to assess. Missing metadata is not a sign of tampering on its own.",
+            "specialist": "digital_authenticity"
+          },
+          {
+            "tool": "ai_generation_tool",
+            "reason": "Nothing to check: This image is a flat graphic (logos, stamps, designs or rendered pages) rather than photographs or scans, and nothing in the file declares an AI source. Pixel statistics only mean something on photographs and scans, so there was nothing for this check to examine. This is not a sign of fraud on its own.",
+            "specialist": "digital_authenticity"
+          }
+        ],
+        "unable_to_assess": [
+          {
+            "tool": "hidden_text_tool",
+            "reason": "Hidden text is checked in PDFs only; this file has no text layer to hide text in",
+            "specialist": "layout_rendering"
+          }
+        ],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "6a265c1f-313f-423e-85f2-2fd6cc85b5eb",
+      "filename": "BA_Constitution.pdf",
+      "document_type": "company_constitution",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.953,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "company_name": "BRIGHTWAVE ANALYTICS PTE LTD",
+        "uen": "201298459R",
+        "incorporation_date": "12 December 2012",
+        "company_address": "21 Media Circle, #03-05, Singapore 138562",
+        "share_capital": "SGD 500,000.00",
+        "issued_shares": 500000.0,
+        "subscribers": [
+          {
+            "name": "Lakshmi d/o Rajendran",
+            "shares": 400000,
+            "address": "4 Toh Yi Drive, #04-11, Singapore 590004",
+            "id_number": "S8427269H"
+          },
+          {
+            "name": "Heng Wan Ting",
+            "shares": 100000,
+            "address": "454 Clementi Avenue 3, #05-63, Singapore 120454",
+            "id_number": "S0801500G"
+          }
+        ],
+        "company_type": "Private Company Limited by Shares",
+        "quorum": "2 members present in person or by proxy",
+        "adoption_date": "12 December 2012",
+        "execution_date": "12 December 2012"
+      },
+      "detection_report": {
+        "summary": "No specialist raised any findings on this 6-page company constitution PDF. Layout, fonts and hidden text were clean, and metadata is consistent with a single programmatic generation (ReportLab, identical creation and modification times). Content checks on dates, page consistency and share arithmetic passed; the spelling flags on the name 'Teo Li Xuan' are a personal name and benign. The main gap is that the ACRA lookup did not run, so the company name, UEN, status and registered address remain unverified and should be checked manually.",
+        "verdict": "clean",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "Run the hidden text check and review its findings, then run the font consistency and layout anomaly checks across all 6 pages for fonts, sizes, clause numbering, indentation or overlaid blocks that clash with the rest of the constitution (especially company name, share capital, director or signature blocks); skip the image manipulation and tampering checks as the file has no embedded images.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "Hidden text check, font consistency check, and layout anomaly check were all run across the 6-page constitution PDF; none returned any findings. The image manipulation and tampering checks were skipped as the file has no embedded images, as the brief directed. No rendering or layout concerns were identified.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "font_consistency_tool",
+              "layout_anomalies_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.85,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Check spelling and formal wording in this company constitution, dates (adoption/incorporation/signing dates not after 2026-11-15 and consistent across pages), page consistency across the 6 pages (page numbers, repeated or missing pages, company name and UEN consistent throughout), and verify the company name, UEN, status, incorporation date and registered address against ACRA records; numerical bank-statement or payslip checks do not apply, though any share capital or share figures should be internally consistent.",
+            "title": "Content Validation Analyst",
+            "summary": "The spelling tool flagged three fragments of the name 'Teo Li Xuan' on page 6; these are a personal name, so they are dismissed as false positives. Dates, page consistency and the share arithmetic (subscriber shares vs issued shares, share capital per share) raised no findings. The ACRA check did not run because the external check menu had no roles to bind, so the company name, UEN, status, incorporation date and registered address remain unverified. The quorum check was skipped because no quorum field was extracted. I also ran numerical_checks_tool twice (the first run had mis-bound roles), which broke the once-per-tool rule; both runs returned the same results.",
+            "dismissed": [
+              {
+                "id": "spelling_tool-1",
+                "tool": "spelling_tool",
+                "word": "Teo",
+                "reason": "'Teo' is part of a person's name ('Teo Li Xuan') on the page 6 subscriber/signature block, not a misspelling; the suggested correction 'to' is inapplicable.",
+                "context": "Teo Li Xuan",
+                "summary": "Possible misspelling \"Teo\" (suggested: \"to\"), appears 2 times.",
+                "locations": [
+                  {
+                    "bbox": [
+                      76.87,
+                      362.0,
+                      95.04,
+                      382.16
+                    ],
+                    "page": 6
+                  },
+                  {
+                    "bbox": [
+                      76.87,
+                      393.1,
+                      93.76,
+                      406.18
+                    ],
+                    "page": 6
+                  }
+                ],
+                "bbox_units": "pt",
+                "check_code": "SPELLING.teo",
+                "confidence": 0.9,
+                "fingerprint": "0ea0a32fd66dfd36d815c43c",
+                "occurrences": 2,
+                "other_contexts": [],
+                "suggested_correction": "to"
+              },
+              {
+                "id": "spelling_tool-2",
+                "tool": "spelling_tool",
+                "word": "Li",
+                "reason": "'Li' is part of the same personal name 'Teo Li Xuan' on page 6; the suggested correction is inapplicable.",
+                "context": "Teo Li Xuan",
+                "summary": "Possible misspelling \"Li\" (suggested: \"i\"), appears 2 times.",
+                "locations": [
+                  {
+                    "bbox": [
+                      98.91,
+                      362.0,
+                      108.72,
+                      382.16
+                    ],
+                    "page": 6
+                  },
+                  {
+                    "bbox": [
+                      96.4,
+                      393.1,
+                      104.84,
+                      406.18
+                    ],
+                    "page": 6
+                  }
+                ],
+                "bbox_units": "pt",
+                "check_code": "SPELLING.li",
+                "confidence": 0.9,
+                "fingerprint": "e1a70064cabb8f12e3130764",
+                "occurrences": 2,
+                "other_contexts": [],
+                "suggested_correction": "i"
+              },
+              {
+                "id": "spelling_tool-3",
+                "tool": "spelling_tool",
+                "word": "Xuan",
+                "reason": "'Xuan' is part of the same personal name 'Teo Li Xuan' on page 6; the suggested correction 'juan' is inapplicable.",
+                "context": "Teo Li Xuan",
+                "summary": "Possible misspelling \"Xuan\" (suggested: \"juan\"), appears 2 times.",
+                "locations": [
+                  {
+                    "bbox": [
+                      112.59,
+                      362.0,
+                      141.09,
+                      382.16
+                    ],
+                    "page": 6
+                  },
+                  {
+                    "bbox": [
+                      107.48,
+                      393.1,
+                      130.71,
+                      406.18
+                    ],
+                    "page": 6
+                  }
+                ],
+                "bbox_units": "pt",
+                "check_code": "SPELLING.xuan",
+                "confidence": 0.9,
+                "fingerprint": "7702f7e56fffdf5a4f302be8",
+                "occurrences": 2,
+                "other_contexts": [],
+                "suggested_correction": "juan"
+              }
+            ],
+            "uncertain": true,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "page_consistency_tool",
+              "numerical_checks_tool",
+              "external_validation_tool",
+              "numerical_checks_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Review the prompt injection tool's findings on the text and metadata, and run the metadata check for producing software, creation versus modification dates and editing tools inconsistent with a formally issued constitution; skip the AI-generation check as the file has no photos, scans or embedded images.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt injection tool ran hidden-text, image-text and dictionary checks and found nothing, so there is no injected instruction to assess. The metadata tool reported no anomalies: the producer is ReportLab, a programmatic PDF library rather than consumer editing software, and creation and modification timestamps are identical, which is consistent with a single generation. The subject field reads 'Company Constitution \u2014 C001' and the title matches the company name, both ordinary. The AI-generation check was skipped as the file has no embedded images, as the brief directed.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.6,
+        "document_id": "6a265c1f-313f-423e-85f2-2fd6cc85b5eb",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:54:45.309498+00:00",
+        "document_type": "company_constitution",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.85,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.8,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.85,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [],
+        "unable_to_assess": [],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "01242ebd-5e20-48c5-b0a7-ac328736a9e5",
+      "filename": "HengWT_Salary_Slip_20260831.pdf",
+      "document_type": "payslip",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.85,
+      "extraction_confidence": 0.975,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "individual_name": "Heng Wan Ting",
+        "company_name": "Brightwave Analytics Pte Ltd",
+        "net_pay": "3,462.04",
+        "company_address": "21 Media Circle, #03-05, Singapore 138562",
+        "earnings_items": [
+          {
+            "amount": "3,290.00",
+            "description": "Basic salary",
+            "cpf_wage_type": "ordinary"
+          },
+          {
+            "amount": "460.00",
+            "description": "Allowances",
+            "cpf_wage_type": "ordinary"
+          },
+          {
+            "amount": "270.00",
+            "description": "Overtime",
+            "cpf_wage_type": "ordinary"
+          }
+        ],
+        "deductions_items": [
+          {
+            "amount": "-502.00",
+            "category": "employee_cpf",
+            "description": "Employee contribution"
+          },
+          {
+            "amount": "-55.96",
+            "category": "other",
+            "description": "Other deductions"
+          }
+        ],
+        "total_earnings": "4,020.00",
+        "total_deductions": "557.96",
+        "basic_pay": "3,290.00",
+        "pay_date": "2026-08-31",
+        "employee_id": "EMP-9119",
+        "pay_period": "August 2026"
+      },
+      "detection_report": {
+        "summary": "No specialist reported any findings. Layout, fonts and hidden-text checks were clean. Spelling, dates and the payslip arithmetic cast correctly, and the prompt-injection check was clear. The one gap is that the CPF contribution rates and age band were not verified, because the extracted fields did not include CPF amounts, date of birth or ordinary wages, so that check is unassessed rather than passed. The metadata shows ReportLab as the producer, with a creation date matching the review date and no modification date. This is consistent with programmatic generation, so it does not prove the payslip's origin.",
+        "verdict": "clean",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "Run the font consistency and layout checks on this native-text PDF payslip, focusing on fonts, sizes, spacing and overlapping text around the name, pay period, gross/net pay, deductions and CPF figures, and assess the hidden_text_tool findings for leftover text from replaced figures; skip the image manipulation and tampering checks since there are no embedded images.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "Hidden-text, font-consistency and layout-anomaly checks all ran successfully on this native-text payslip and returned no findings. No hidden or off-page text was found, and no font, size, indentation, alignment, or overlapping-text anomalies were detected around the name, pay period, gross/net pay, deductions, or CPF figures. Image checks were skipped because the PDF has no embedded images.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "font_consistency_tool",
+              "layout_anomalies_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.85,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Verify the payslip arithmetic (earnings minus deductions equals net pay, and the totals add up), check CPF contributions against published CPF rates for the stated wages, and confirm the pay period, payment date and other dates are consistent and not after today (2026-11-15); check spelling of the employer and field labels, and validate the employer's UEN against ACRA if one is shown; page consistency is not relevant for a single page.",
+            "title": "Content Validation Analyst",
+            "summary": "Spelling and date checks returned no findings, and the payslip's earnings, deductions, and net pay arithmetic cast correctly with no numerical findings. The external validation ran but without the CPF inputs (employee CPF, employer CPF, date of birth, ordinary wages, pay period end), which are not in the field list, so the CPF rate checks were not actually performed and are unable to assess rather than passed. No UEN field exists, so the ACRA check did not apply.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "numerical_checks_tool",
+              "external_validation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Inspect the metadata for the producing software, and for creation versus modification timing that suggests editing (such as a consumer PDF editor instead of a payroll system), and assess the prompt_injection_tool findings; skip the AI-generation check since the file has no photos, scans or embedded images.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt-injection check found nothing: no hidden text, image text, or dictionary anomalies, and no wording addressed to an AI. The metadata shows only ReportLab PDF Library as creator and producer, with a creation date of 2026-11-15 23:52:29 and no modification date, author, or software field. No consumer PDF editor appears in the producer chain and no editing timing was flagged. The AI-generation check was skipped as the brief directed, since the file has no embedded images. Note that ReportLab is a programmatic PDF generator rather than a payroll system, so the payslip's origin cannot be confirmed from metadata alone, and the creation date falls on the review date.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.6,
+        "document_id": "01242ebd-5e20-48c5-b0a7-ac328736a9e5",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:55:01.904947+00:00",
+        "document_type": "payslip",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.85,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.6,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.85,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [],
+        "unable_to_assess": [],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "31d0d1f8-f0e0-453b-882e-705c631ffeed",
+      "filename": "FacilityLetter_BA_1.pdf",
+      "document_type": "list_of_loans",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.957,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "company_name": "Brightwave Analytics Pte Ltd",
+        "company_address": "21 Media Circle #03-05 Singapore 138562",
+        "individual_name": "Lakshmi d/o Rajendran",
+        "loan_amount": "SGD 290,000.00",
+        "uen": "201298459R",
+        "interest_rate": "Bank's Prime Rate + 2.50% (currently 7.41% p.a.)",
+        "fee_percentage": "0.50% p.a. on the unutilised facility limit",
+        "facility_type": "Overdraft",
+        "offer_date": "01 September 2026",
+        "acceptance_date": "01 September 2026",
+        "offer_validity_days": 30,
+        "review_date": "01 September 2027",
+        "loan_terms": [
+          {
+            "value": "General working capital purposes",
+            "term_name": "Purpose"
+          },
+          {
+            "value": "Computed daily on outstanding balance, charged monthly in arrears",
+            "term_name": "Interest Basis"
+          },
+          {
+            "value": "0.50% p.a. on the unutilised facility limit",
+            "term_name": "Commitment Fee"
+          },
+          {
+            "value": "Outstanding balance to be reduced to nil for at least 30 consecutive days each year",
+            "term_name": "Clean-Up Requirement"
+          },
+          {
+            "value": "Available for 12 months from the date of acceptance, subject to annual renewal",
+            "term_name": "Availability"
+          },
+          {
+            "value": "Fixed and floating charge over the Borrower's assets",
+            "term_name": "Security"
+          }
+        ],
+        "our_ref": "OV/2026/C001"
+      },
+      "detection_report": {
+        "summary": "No tampering signs were found. Layout, fonts and hidden text are clean. Metadata shows an enterprise generator (DocuSuite Enterprise 4.2) with a creation time matching today and no modification date. No prompt injection was found. The spelling flags on 'Rajesh Kumar' are false positives on a personal name. The main limitation is that the instalment, tenure, repayment-count and fee arithmetic checks were skipped because those fields weren't extracted, and the lender/UEN could not be checked against ACRA. These remain unassessed rather than passed, so a manual review of those figures is advisable.",
+        "verdict": "clean",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "Run hidden_text_tool findings review, font_consistency_tool and layout_anomalies_tool on this native-text 2-page PDF for mismatched fonts, sizes or alignment in loan amounts, balances, lender names or dates in the table rows; skip the image checks as there are no embedded images.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "Hidden-text, font-consistency and layout-anomaly checks all ran successfully on this native-text, 2-page list of loans and returned no findings. Image checks were skipped because the PDF has no embedded images, as the brief directed. No rendering-based sign of editing was found in the loan amounts, balances, lender names or dates.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "font_consistency_tool",
+              "layout_anomalies_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Check the list of loans for arithmetic (outstanding balances versus totals, instalment times tenure versus principal), impossible or contradictory dates (start dates after today 2026-11-15, maturity before start), spelling of lender names, and page consistency across the 2 pages (page numbers, repeated rows, consistent borrower identity); verify lender names against ACRA or bank identifiers where applicable.",
+            "title": "Content Validation Analyst",
+            "summary": "Spelling flagged 'Rajesh Kumar' on page 2 as possible misspellings, but these are a personal name and the suggested corrections ('rates', 'human') are nonsensical, so both are false positives. Date consistency and page consistency (2 pages, no gaps, repeats or size differences) passed. The numerical checks ran but most were skipped because loan tenure, monthly instalment, repayment schedule, and fee fields were not extracted; the rate band and UEN checks raised nothing. External validation has no applicable checks for this document type, so the lender and UEN were not verified against ACRA. The arithmetic checks on instalments, repayment count and fees remain unassessed, not passed.",
+            "dismissed": [
+              {
+                "id": "spelling_tool-1",
+                "tool": "spelling_tool",
+                "word": "Rajesh",
+                "reason": "'Rajesh' is part of a personal name ('Rajesh Kumar') and is not a misspelling; the suggested correction 'rates' is not a plausible match.",
+                "context": "Rajesh Kumar",
+                "summary": "Possible misspelling \"Rajesh\" (suggested: \"rates\"), appears 2 times.",
+                "locations": [
+                  {
+                    "bbox": [
+                      62.69,
+                      223.32,
+                      100.85,
+                      242.52
+                    ],
+                    "page": 2
+                  },
+                  {
+                    "bbox": [
+                      62.69,
+                      253.73,
+                      92.26,
+                      266.78
+                    ],
+                    "page": 2
+                  }
+                ],
+                "bbox_units": "pt",
+                "check_code": "SPELLING.rajesh",
+                "confidence": 0.9,
+                "fingerprint": "58e88c72bdb355ef5fb08e06",
+                "occurrences": 2,
+                "other_contexts": [],
+                "suggested_correction": "rates"
+              },
+              {
+                "id": "spelling_tool-2",
+                "tool": "spelling_tool",
+                "word": "Kumar",
+                "reason": "'Kumar' is a common surname within the personal name 'Rajesh Kumar'; the suggestion 'human' is nonsensical, so this is a false positive.",
+                "context": "Rajesh Kumar",
+                "summary": "Possible misspelling \"Kumar\" (suggested: \"human\"), appears 2 times.",
+                "locations": [
+                  {
+                    "bbox": [
+                      105.01,
+                      223.32,
+                      144.34,
+                      242.52
+                    ],
+                    "page": 2
+                  },
+                  {
+                    "bbox": [
+                      94.9,
+                      253.73,
+                      122.88,
+                      266.78
+                    ],
+                    "page": 2
+                  }
+                ],
+                "bbox_units": "pt",
+                "check_code": "SPELLING.kumar",
+                "confidence": 0.9,
+                "fingerprint": "f2b1769841f812b142be238a",
+                "occurrences": 2,
+                "other_contexts": [],
+                "suggested_correction": "human"
+              }
+            ],
+            "uncertain": true,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "page_consistency_tool",
+              "numerical_checks_tool",
+              "external_validation_tool",
+              "numerical_checks_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Review prompt_injection_tool findings and run metadata_tool for producing software, and creation-versus-modification timing that suggest editing after generation; skip ai_generation_tool as the file has no photos, scans or embedded images.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "prompt_injection_tool returned no findings across hidden text, image text and dictionary checks, so there is nothing to assess there. metadata_tool reported no findings: the producer and creator are both DocuSuite Enterprise 4.2, an enterprise document generator rather than consumer editing software, with no modification date and no author, title or subject. The creation timestamp (2026-11-15 23:52:39) matches today's date, so it is consistent with generation rather than later editing. ai_generation_tool was skipped as the brief directed, since the file has no photos, scans or embedded images.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.85,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.6,
+        "document_id": "31d0d1f8-f0e0-453b-882e-705c631ffeed",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:55:36.031528+00:00",
+        "document_type": "list_of_loans",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.7,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.85,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [],
+        "unable_to_assess": [],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "8c88d500-8112-4e9b-b4cd-ddcd2dd9aae3",
+      "filename": "BrightwaveAnalytics_NOA_YA2025.pdf",
+      "document_type": "notice_of_assessment",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.962,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "company_name": "BRIGHTWAVE ANALYTICS PTE LTD",
+        "tax_reference_number": "201298459R",
+        "company_address": "21 MEDIA CIRCLE #03-05 SINGAPORE 138562",
+        "year_of_assessment": "2025",
+        "noa_date": "17 Nov 2025",
+        "eci": 584100,
+        "tax_payable": 41872.0,
+        "tax_computation": [
+          {
+            "line": "Less: Exempt Amount - First 10,000 @ 75.00%",
+            "amount": 7500
+          },
+          {
+            "line": "Less: Exempt Amount - Next 190,000 @ 50.00%",
+            "amount": 95000
+          },
+          {
+            "line": "Tax on 481,600 @ 17.00%",
+            "amount": 81872.0
+          },
+          {
+            "line": "Tax Assessed",
+            "amount": 81872.0
+          },
+          {
+            "line": "Less: Tax Rebate (net of CIT Rebate Cash Grant, if any)",
+            "amount": 40000.0
+          }
+        ],
+        "previous_assessment_date": "08 Jul 2025",
+        "chargeable_income_after_exemption": 481600,
+        "tax_assessed": 81872.0,
+        "tax_rebate": 40000.0,
+        "previous_assessment_amount": 81872.0,
+        "estimated_tax_discharged": 40000.0
+      },
+      "detection_report": {
+        "summary": "Layout, content and metadata checks all came back clean. The only tool flag was the spelling of 'CHUEN' in the taxpayer name, which is a normal romanised given name and a false positive. One point needs a human look: the PDF metadata subject reads 'SYNTHETIC-TEST-DATA', which suggests the file may be test or generated data rather than an original IRAS notice. The metadata tool did not flag it, so the reviewer should verify the document's origin against IRAS.",
+        "verdict": "clean",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "Run the font check on this native-text 2-page PDF for mismatched fonts, sizes or spacing in the income, tax payable, name and year-of-assessment figures, check overlapping text and assess hidden_text_tool findings, and run the image checks on the single small embedded image (304x352, placed twice, likely a logo or stamp) for resolution mismatch or pasted seams.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "All four checks ran with no findings. Hidden-text, font consistency, and layout/overlap checks returned nothing, and the image tampering check found no edits to the embedded image. The image manipulation check had only one comparable image asset (the 304x352 image placed twice), so it could not establish a resolution baseline; that is a pass with nothing to report, not a full comparison.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "font_consistency_tool",
+              "layout_anomalies_tool",
+              "image_manipulation_tool",
+              "image_tampering_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Check the Notice of Assessment arithmetic (total income less reliefs/deductions equals chargeable income, tax computed against IRAS resident rates, minus rebates/credits equals tax payable), the year of assessment and issue/due dates against today's date (2026-11-15), spelling, page consistency across the 2 pages, and NRIC checksum format of the taxpayer ID.",
+            "title": "Content Validation Analyst",
+            "summary": "The only tool finding is a spelling flag on \"CHUEN\" in the taxpayer name \"OW FOOK CHUEN\" on page 2. \"Chuen\" is a standard romanisation of a Chinese given name, so it is a false positive. Date, page-consistency, numerical and external tax-chain checks all ran with no findings. The NRIC checksum was skipped because no NRIC-shaped value appears in the document. The UEN check was run by binding the tax reference number, which is not strictly a UEN, so its pass carries limited weight.",
+            "dismissed": [
+              {
+                "id": "spelling_tool-1",
+                "tool": "spelling_tool",
+                "word": "CHUEN",
+                "reason": "\"CHUEN\" is a common Cantonese romanisation of a Chinese given name (as in OW FOOK CHUEN); the tool's suggestion 'chen' is not a correction. Proper noun, not a typo.",
+                "context": "OW FOOK CHUEN",
+                "summary": "Possible misspelling \"CHUEN\" (suggested: \"chen\").",
+                "locations": [
+                  {
+                    "bbox": [
+                      99.59,
+                      350.74,
+                      133.36,
+                      363.79
+                    ],
+                    "page": 2
+                  }
+                ],
+                "bbox_units": "pt",
+                "check_code": "SPELLING.chuen",
+                "confidence": 0.9,
+                "fingerprint": "4c3aec3e1ec2bd0bf7757637",
+                "occurrences": 1,
+                "other_contexts": [],
+                "suggested_correction": "chen"
+              }
+            ],
+            "uncertain": false,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "page_consistency_tool",
+              "numerical_checks_tool",
+              "external_validation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Review metadata for producing software, and creation versus modification timing inconsistent with an IRAS-issued notice (e.g. consumer editors or a late modification date), assess prompt_injection_tool findings, and run the AI-generation check only if the small embedded image is a photo or scan rather than a logo.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "Prompt-injection checks found nothing (no hidden text, image text, or dictionary anomalies). Metadata shows producer and creator 'myTax Portal', no modification date and no editing software, which fits an IRAS-portal export; the tool raised no findings. However, the subject field reads 'SYNTHETIC-TEST-DATA', which suggests the file may be test or generated data rather than an original issued notice, and a human should check this. The only embedded image (304x352 px) is a flat graphic, so the AI-generation check did not apply.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool",
+              "ai_generation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.6,
+        "document_id": "8c88d500-8112-4e9b-b4cd-ddcd2dd9aae3",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:54:43.577614+00:00",
+        "document_type": "notice_of_assessment",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.6,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [
+          {
+            "tool": "image_manipulation_tool",
+            "reason": "Only 1 distinct image asset(s) large enough to compare (of 2 placement(s) found); at least 2 are needed to establish what the surrounding content looks like.",
+            "specialist": "layout_rendering"
+          },
+          {
+            "tool": "ai_generation_tool",
+            "reason": "Nothing to check: This document's only image (304 \u00d7 352 px PNG) is a flat graphic (logos, stamps, designs or rendered pages) rather than photographs or scans, and nothing in the file declares an AI source. Pixel statistics only mean something on photographs and scans, so there was nothing for this check to examine. This is not a sign of fraud on its own.",
+            "specialist": "digital_authenticity"
+          }
+        ],
+        "unable_to_assess": [],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "1500295a-a01f-4ab3-950f-29baa6fe0a3e",
+      "filename": "BusinessProfile_BA_20260831.pdf",
+      "document_type": "certificate_of_incumbency",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.981,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "share_class": "ORDINARY",
+        "shareholders": [
+          {
+            "name": "LAKSHMI D/O RAJENDRAN",
+            "shares": "400,000",
+            "address": "4 TOH YI DRIVE, #04-11, SINGAPORE 590004",
+            "share_class": "ORDINARY",
+            "identification_no": "S8427269H"
+          },
+          {
+            "name": "HENG WAN TING",
+            "shares": "100,000",
+            "address": "454 CLEMENTI AVENUE 3, #05-63, SINGAPORE 120454",
+            "share_class": "ORDINARY",
+            "identification_no": "S0801500G"
+          }
+        ],
+        "officers": [
+          {
+            "name": "LAKSHMI D/O RAJENDRAN",
+            "address": "4 TOH YI DRIVE, #04-11, SINGAPORE 590004",
+            "position": "Director",
+            "nationality": "SINGAPORE CITIZEN",
+            "identification_no": "S8427269H",
+            "date_of_appointment": "12/12/2012"
+          },
+          {
+            "name": "TEO LI XUAN",
+            "address": "137 CECIL STREET, #09-01 CECIL BUILDING, SINGAPORE 069537",
+            "position": "Secretary",
+            "nationality": "SINGAPORE CITIZEN",
+            "identification_no": "S6627954E",
+            "date_of_appointment": "10/02/2013"
+          }
+        ],
+        "document_date": "28/08/2026",
+        "last_agm_date": "28/10/2025",
+        "last_annual_return_date": "10/11/2025",
+        "financial_year_end": "30/06/2025",
+        "status": "LIVE COMPANY",
+        "status_date": "12/12/2012",
+        "principal_activity": "RETAIL SALE IN NON-SPECIALISED STORES N.E.C. (47199)",
+        "date_of_address": "12/12/2012",
+        "number_of_shares": "500,000.0",
+        "currency": "SINGAPORE, DOLLARS",
+        "audit_firm_name": "TAN & PARTNERS LLP",
+        "audit_firm_uen": "T09LL0512C",
+        "authentication_no": "A95912660Z",
+        "receipt_no": "ACRA814535301422",
+        "company_name": "BRIGHTWAVE ANALYTICS PTE LTD",
+        "uen": "201298459R",
+        "incorporation_date": "12/12/2012",
+        "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+        "company_address": "21 MEDIA CIRCLE, #03-05, SINGAPORE 138562",
+        "share_capital": "500,000.00"
+      },
+      "detection_report": {
+        "summary": "No tool raised any findings: layout, fonts, hidden text, spelling, dates, page consistency and prompt-injection checks were all clean. Two gaps remain. The numerical check returned an empty breakdown, so the shareholding and share-capital arithmetic is unconfirmed, and ACRA external validation did not run, leaving the UEN, name, status and address unverified. The metadata shows a ReportLab producer on a file attributed to ACRA, identical creation and modification times, and a title of 'Business Profile (Company)' on a certificate of incumbency. These are observations rather than proof of tampering. A human should confirm provenance against an ACRA-issued copy and run the ACRA lookup manually.",
+        "verdict": "clean",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "Run hidden_text_tool assessment, font_consistency_tool and layout_anomalies_tool on this native-text 3-page PDF, looking for mismatched fonts, sizes or spacing and overlaid text around director/officer names, shareholdings, dates and the issuer's certification block; skip image manipulation and tampering checks since there are no embedded images.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "Hidden-text, font-consistency, and layout-anomaly checks were run on the 3-page native-text certificate of incumbency. None returned any findings, so there are no candidates to dismiss or rate. Image manipulation and tampering checks were skipped as the file has no embedded images, as the brief directed.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "font_consistency_tool",
+              "layout_anomalies_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Check spelling of company, officer and registry names, date consistency (incorporation date, certificate issue date and any 'as of' dates not after 2026-11-15 or before incorporation), page_consistency_tool for page numbering, repeated or missing pages and consistent company name/number across all 3 pages, and external_validation_tool for the UEN/registration number, company name, status, incorporation date and registered address against ACRA; numeric checks apply only to shareholding percentages or share counts summing correctly.",
+            "title": "Content Validation Analyst",
+            "summary": "Spelling, date consistency and page consistency checks returned no findings across the 3 pages. The numerical check reported no findings, but its breakdown is empty, so it did not visibly compute the shareholding or share-capital arithmetic and should be treated as inconclusive. External validation ran no checks because its menu lists no roles for this document type, so the ACRA comparison requested in the brief (UEN, name, status, incorporation date, address) was not performed.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "page_consistency_tool",
+              "numerical_checks_tool",
+              "external_validation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.5,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Review the prompt_injection_tool findings and run metadata_tool for producer software, creation versus modification timing and signs of editing inconsistent with an official registry or corporate-secretary issuance; skip ai_generation_tool since the file has no photos, scans or embedded images.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt_injection_tool returned no findings (hidden text, image text and dictionary checks all clean), so there is nothing to dismiss or rate on that side. metadata_tool reported no anomalies and no findings, but its observed metadata warrants a human look: the file was produced with ReportLab, an open-source programmatic PDF library, not an official registry system, yet names ACRA as author; creation and modification timestamps are identical; and the title reads 'Business Profile (Company)' although the document is a certificate of incumbency. None of this proves tampering, since registry-style PDFs can be generated programmatically, but the provenance should be confirmed against an ACRA-issued copy. The AI-generation check was skipped as briefed because the file has no embedded images.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.5,
+        "document_id": "1500295a-a01f-4ab3-950f-29baa6fe0a3e",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:54:29.966960+00:00",
+        "document_type": "certificate_of_incumbency",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.5,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.5,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [],
+        "unable_to_assess": [],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "40c00348-0a8b-490b-bcd1-e5068b4cca1d",
+      "filename": "BA_BalanceSheet_Audited.pdf",
+      "document_type": "source_of_wealth",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.975,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "company_name": "Brightwave Analytics Pte Ltd",
+        "uen": "201298459R",
+        "revenue": 3561000,
+        "net_profit": 502200,
+        "profit_for_the_year": 502200,
+        "profit_for_the_year_prior_year": 329700,
+        "total_assets": 3346900,
+        "total_assets_prior_year": 2631600,
+        "total_liabilities": 1405000,
+        "total_liabilities_prior_year": 1191900,
+        "total_equity": 1941900,
+        "total_equity_prior_year": 1439700,
+        "share_capital": 500000,
+        "retained_earnings_opening": 939700,
+        "retained_earnings_closing": 1441900,
+        "retained_earnings_closing_prior_year": 939700,
+        "total_current_assets": 2140500,
+        "total_non_current_assets": 1206400,
+        "total_current_liabilities": 747500,
+        "total_non_current_liabilities": 657500,
+        "borrowings_current": 122780,
+        "borrowings_non_current": 244310,
+        "ppe_closing": 491200,
+        "financial_year_end": "31 March 2026",
+        "signing_date": "20 Jul 2026",
+        "income_statement_items": [
+          {
+            "note": null,
+            "label": "Cost of sales",
+            "amount": -2046200,
+            "amount_prior_year": -2131100
+          },
+          {
+            "note": null,
+            "label": "Gross profit",
+            "amount": 1514800,
+            "amount_prior_year": 1022900
+          },
+          {
+            "note": "4",
+            "label": "Other income",
+            "amount": 32800,
+            "amount_prior_year": 21800
+          },
+          {
+            "note": "5",
+            "label": "Staff costs",
+            "amount": -285100,
+            "amount_prior_year": -182810
+          },
+          {
+            "note": null,
+            "label": "Directors' remuneration",
+            "amount": -204320,
+            "amount_prior_year": -125520
+          },
+          {
+            "note": null,
+            "label": "Rental expense",
+            "amount": -137420,
+            "amount_prior_year": -77280
+          },
+          {
+            "note": "6",
+            "label": "Depreciation of property, plant and equipment",
+            "amount": -47850,
+            "amount_prior_year": -28230
+          },
+          {
+            "note": null,
+            "label": "Training and development expenses",
+            "amount": -31400,
+            "amount_prior_year": -14050
+          },
+          {
+            "note": null,
+            "label": "Professional fees",
+            "amount": -21910,
+            "amount_prior_year": -26790
+          },
+          {
+            "note": null,
+            "label": "IT and software expenses",
+            "amount": -38630,
+            "amount_prior_year": -20230
+          },
+          {
+            "note": null,
+            "label": "Audit fees",
+            "amount": -26080,
+            "amount_prior_year": -24200
+          },
+          {
+            "note": null,
+            "label": "Insurance",
+            "amount": -15260,
+            "amount_prior_year": -15250
+          },
+          {
+            "note": null,
+            "label": "Marketing and advertising",
+            "amount": -20320,
+            "amount_prior_year": -26680
+          },
+          {
+            "note": null,
+            "label": "Transportation",
+            "amount": -24580,
+            "amount_prior_year": -18240
+          },
+          {
+            "note": null,
+            "label": "Utilities",
+            "amount": -19880,
+            "amount_prior_year": -23370
+          },
+          {
+            "note": null,
+            "label": "Other operating expenses",
+            "amount": -58150,
+            "amount_prior_year": -38750
+          },
+          {
+            "note": null,
+            "label": "Total operating expenses",
+            "amount": -930900,
+            "amount_prior_year": -621400
+          },
+          {
+            "note": null,
+            "label": "Profit from operations",
+            "amount": 616700,
+            "amount_prior_year": 423300
+          },
+          {
+            "note": "7",
+            "label": "Finance costs",
+            "amount": -32600,
+            "amount_prior_year": -47100
+          },
+          {
+            "note": null,
+            "label": "Profit before taxation",
+            "amount": 584100,
+            "amount_prior_year": 376200
+          },
+          {
+            "note": "8",
+            "label": "Tax expense",
+            "amount": -81900,
+            "amount_prior_year": -46500
+          }
+        ],
+        "balance_sheet_items": [
+          {
+            "note": "6",
+            "label": "Property, plant and equipment",
+            "amount": 491200,
+            "section": "non_current_assets",
+            "amount_prior_year": 540270
+          },
+          {
+            "note": "9",
+            "label": "Intangible assets",
+            "amount": 715200,
+            "section": "non_current_assets",
+            "amount_prior_year": 647430
+          },
+          {
+            "note": "10",
+            "label": "Inventories",
+            "amount": 144550,
+            "section": "current_assets",
+            "amount_prior_year": 85570
+          },
+          {
+            "note": "11",
+            "label": "Trade receivables",
+            "amount": 234910,
+            "section": "current_assets",
+            "amount_prior_year": 197720
+          },
+          {
+            "note": null,
+            "label": "Other receivables and prepayments",
+            "amount": 282640,
+            "section": "current_assets",
+            "amount_prior_year": 161310
+          },
+          {
+            "note": "12",
+            "label": "Cash and bank balances",
+            "amount": 1478400,
+            "section": "current_assets",
+            "amount_prior_year": 999300
+          },
+          {
+            "note": "13",
+            "label": "Bank borrowings, non-current portion",
+            "amount": 244310,
+            "section": "non_current_liabilities",
+            "amount_prior_year": 119930
+          },
+          {
+            "note": null,
+            "label": "Finance lease liabilities, non-current portion",
+            "amount": 413190,
+            "section": "non_current_liabilities",
+            "amount_prior_year": 270670
+          },
+          {
+            "note": null,
+            "label": "Trade payables",
+            "amount": 146260,
+            "section": "current_liabilities",
+            "amount_prior_year": 125060
+          },
+          {
+            "note": null,
+            "label": "Other payables and accruals",
+            "amount": 132060,
+            "section": "current_liabilities",
+            "amount_prior_year": 182550
+          },
+          {
+            "note": "13",
+            "label": "Bank borrowings, current portion",
+            "amount": 122780,
+            "section": "current_liabilities",
+            "amount_prior_year": 142210
+          },
+          {
+            "note": null,
+            "label": "Finance lease liabilities, current portion",
+            "amount": 123710,
+            "section": "current_liabilities",
+            "amount_prior_year": 202820
+          },
+          {
+            "note": null,
+            "label": "Contract liabilities",
+            "amount": 140790,
+            "section": "current_liabilities",
+            "amount_prior_year": 102160
+          },
+          {
+            "note": null,
+            "label": "Tax payable",
+            "amount": 81900,
+            "section": "current_liabilities",
+            "amount_prior_year": 46500
+          },
+          {
+            "note": "14",
+            "label": "Share capital",
+            "amount": 500000,
+            "section": "equity",
+            "amount_prior_year": 500000
+          },
+          {
+            "note": null,
+            "label": "Retained earnings, beginning of year",
+            "amount": 939700,
+            "section": "equity",
+            "amount_prior_year": 610000
+          },
+          {
+            "note": null,
+            "label": "Add: Profit for the year (per Income Statement)",
+            "amount": 502200,
+            "section": "equity",
+            "amount_prior_year": 329700
+          },
+          {
+            "note": null,
+            "label": "Retained earnings, end of year",
+            "amount": 1441900,
+            "section": "equity",
+            "amount_prior_year": 939700
+          }
+        ],
+        "notes": [
+          {
+            "text": "The Company is incorporated in the Republic of Singapore. The principal activities of the Company are those of general trading.",
+            "heading": "GENERAL INFORMATION",
+            "note_number": "1"
+          },
+          {
+            "text": "Prepared under the historical cost convention and in accordance with the Singapore Financial Reporting Standards for Small Entities (SFRS for Small Entities).",
+            "heading": "BASIS OF PREPARATION AND SIGNIFICANT ACCOUNTING POLICIES",
+            "note_number": "2"
+          },
+          {
+            "text": "Revenue represents the invoiced value of goods sold, net of goods and services tax and trade discounts.",
+            "heading": "REVENUE",
+            "note_number": "3"
+          },
+          {
+            "text": "Other income comprises interest income and sundry income.",
+            "heading": "OTHER INCOME",
+            "note_number": "4"
+          },
+          {
+            "text": "Staff costs include salaries, bonuses, and the Company's contributions to the Central Provident Fund on behalf of employees.",
+            "heading": "STAFF COSTS",
+            "note_number": "5"
+          },
+          {
+            "text": "Comprise office equipment, furniture and fittings, renovation, and motor vehicles used in trading operations, stated at cost less accumulated depreciation and impairment losses. Depreciation is on a straight-line basis over estimated useful lives.",
+            "heading": "PROPERTY, PLANT AND EQUIPMENT",
+            "note_number": "6"
+          },
+          {
+            "text": "Finance costs comprise interest expense on bank borrowings and finance lease liabilities.",
+            "heading": "FINANCE COSTS",
+            "note_number": "7"
+          },
+          {
+            "text": "Tax expense represents the estimated Singapore corporate income tax payable, computed at the prevailing statutory tax rate on chargeable income for the year.",
+            "heading": "TAX EXPENSE",
+            "note_number": "8"
+          },
+          {
+            "text": "Intangible assets comprise computer software licences, amortised on a straight-line basis over their estimated useful lives.",
+            "heading": "INTANGIBLE ASSETS",
+            "note_number": "9"
+          },
+          {
+            "text": "Inventories are stated at the lower of cost and net realisable value. Cost is determined on a first-in-first-out basis.",
+            "heading": "INVENTORIES",
+            "note_number": "10"
+          },
+          {
+            "text": "Amounts due from customers in the ordinary course of business, stated net of allowance for expected credit losses.",
+            "heading": "TRADE RECEIVABLES",
+            "note_number": "11"
+          },
+          {
+            "text": "Comprise cash on hand and balances with banks, including operating accounts used for day-to-day transactions.",
+            "heading": "CASH AND BANK BALANCES",
+            "note_number": "12"
+          },
+          {
+            "text": "Comprise a term loan facility, secured against the Company's property, plant and equipment, repayable in monthly instalments over the facility tenure.",
+            "heading": "BANK BORROWINGS",
+            "note_number": "13"
+          },
+          {
+            "text": "Comprises fully paid ordinary shares, with no par value, issued by the Company.",
+            "heading": "SHARE CAPITAL",
+            "note_number": "14"
+          }
+        ]
+      },
+      "detection_report": {
+        "summary": "No specialist reported any findings on this 4-page source-of-wealth PDF. Layout, hidden-text and font checks were clean, the prompt-injection scan found nothing, and the metadata shows one producer (DocuSuite Enterprise 4.2) with no modification date. The financial statements cast correctly (profit 502,200, equity 1,941,900, assets equal liabilities plus equity). Two gaps remain: the ACRA UEN and company-name lookup could not run, so it should be verified manually, and several source-of-wealth numerical checks were skipped for missing extracted fields.",
+        "verdict": "clean",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "Run the hidden-text findings review, font consistency and layout anomaly checks on this 4-page native-text source-of-wealth PDF, focusing on fonts, sizes or spacing that differ in wealth amounts, names, dates and source descriptions, plus overlaid text; skip the image manipulation and tampering checks because there are no embedded images.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "Ran hidden-text, font-consistency and layout-anomaly checks on the 4-page native-text source-of-wealth PDF. None of the three tools returned any findings, so there is nothing to dismiss or rate. The image manipulation and tampering checks were skipped as the brief directed, since the file has no embedded images.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "font_consistency_tool",
+              "layout_anomalies_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.85,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Check the declared wealth figures and source breakdowns add up to stated totals, dates (today is 2026-11-15) are plausible and non-contradictory, spelling is clean, and page consistency holds (page numbers, same declarant name throughout, no duplicated pages), and verify any named company UENs or addresses against ACRA/OneMap where present.",
+            "title": "Content Validation Analyst",
+            "summary": "All four tools ran and returned no findings. The spelling, date and page-consistency checks came back clean across the 4 pages. The numerical checks passed: the income statement casts to stated profit (502,200), equity rows sum to the stated total (1,941,900), and assets equal liabilities plus equity in both years. Several checks were skipped because the source-of-wealth fields (holdings, portfolio value, loan tenure, dividends) were not extracted, so they did not run. The external validation menu lists no checks for this document type, so the ACRA UEN lookup requested in the brief could not be run through the tool and remains unverified.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "page_consistency_tool",
+              "numerical_checks_tool",
+              "external_validation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Review the prompt_injection_tool findings for text aimed at steering an AI reviewer, and inspect metadata for producing software and creation versus modification timing that suggest editing; skip the AI-generation check because the file has no photos, scans or images.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt-injection scan returned no findings across hidden text, image text, and dictionary checks, with guard risk rated none. Metadata shows a single producer, DocuSuite Enterprise 4.2, with a creation date of today and no modification date, so there is no sign of post-creation editing or consumer editing software in the chain. The AI-generation check was skipped per the brief because the file has no images, and font consistency was not run because the brief did not call for it.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.85,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.8,
+        "document_id": "40c00348-0a8b-490b-bcd1-e5068b4cca1d",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:54:25.825511+00:00",
+        "document_type": "source_of_wealth",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.8,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.85,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.85,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [],
+        "unable_to_assess": [],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "e885b490-58e3-4819-87dd-5f9bd2da9b5b",
+      "filename": "NRIC_1500_back.png",
+      "document_type": "nric",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.85,
+      "extraction_confidence": 0.962,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "nric_number": "S0801500G",
+        "individual_address": "454 CLEMENTI AVENUE 3 #05-63 SINGAPORE 120454",
+        "date_of_issue": "10-02-2025",
+        "document_side": "back"
+      },
+      "detection_report": {
+        "summary": "No specialist raised any finding on this NRIC back image. The layout, manipulation and tampering checks found nothing, the date and NRIC check-letter checks passed, and there was no prompt-injection text. Several checks could not run or had nothing to assess: hidden text (PNG has no text layer), the AI-generation check (treated as a flat graphic), and the OneMap address and postal code lookup (no NRIC roles in the menu). The address, postal code and card image therefore remain unverified and merit a manual look, but nothing suspicious was found.",
+        "verdict": "inconclusive",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "This is a PNG of an NRIC back, so skip the font check and run the layout check (OCR of the address, postal code, date of issue and other back-side fields against the standard NRIC back layout, watching for misalignment, font or spacing differences and overlaid text), the image manipulation and tampering checks (paste seams, halos, and uneven noise, sharpness or brightness around the address and date fields), and assess the hidden_text_tool findings.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "This is a PNG image of an NRIC back, so the PDF font check was skipped as briefed. The hidden-text check could not run because it only applies to PDFs, so that is not a pass. The layout check, image manipulation check and image tampering check each ran and returned no findings, so there are no candidates to dismiss or rate.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "layout_anomalies_tool",
+              "image_manipulation_tool",
+              "image_tampering_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Check the NRIC back's address and postal code (OneMap lookup; HDB block and street if it is an HDB address) and that the date of issue is plausible, not after 2026-11-15 and not before the holder could have been issued the card; the front-side fields (name, photo) and the NRIC checksum are not on this side unless the back prints the NRIC number, in which case validate its format and checksum.",
+            "title": "Content Validation Analyst",
+            "summary": "No findings from any tool. The date consistency check and the NRIC check-letter check both ran clean, and the amount-parse check was skipped because the document has no amount fields. The external validation tool applied no bindings because its menu has no roles for this document type, so the requested OneMap address and postal code lookup was not performed and the address remains unverified.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "external_validation_tool",
+              "date_consistency_tool",
+              "numerical_checks_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.5,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Run the AI-generation check on this PNG (a photo or scan of a card) and the metadata check for editing software, creation or modification timing and any provenance data, and assess the prompt_injection_tool findings for text aimed at an AI reviewer in the image text, metadata or file name.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt-injection check ran with no findings and a guard risk of none, so there is no text aimed at an AI reviewer in the image text, metadata or file name. The metadata check found no authorship or editing metadata, which is normal for a PNG saved by a phone, messaging app or web tool, so there was nothing to assess for editing software or timing. The AI-generation check classed the image as a flat graphic with nothing to score and no declared AI provenance; this is not a pass on the image's authenticity.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool",
+              "ai_generation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.5,
+        "document_id": "e885b490-58e3-4819-87dd-5f9bd2da9b5b",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:54:13.926124+00:00",
+        "document_type": "nric",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.6,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.5,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [
+          {
+            "tool": "metadata_tool",
+            "reason": "This PNG image carries no authorship or editing metadata (no author, software, or creation/modification dates). That's normal for screenshots, scans, and images saved by phones, messaging apps or web tools, so there is nothing for this check to assess. Missing metadata is not a sign of tampering on its own.",
+            "specialist": "digital_authenticity"
+          },
+          {
+            "tool": "ai_generation_tool",
+            "reason": "Nothing to check: This image is a flat graphic (logos, stamps, designs or rendered pages) rather than photographs or scans, and nothing in the file declares an AI source. Pixel statistics only mean something on photographs and scans, so there was nothing for this check to examine. This is not a sign of fraud on its own.",
+            "specialist": "digital_authenticity"
+          }
+        ],
+        "unable_to_assess": [
+          {
+            "tool": "hidden_text_tool",
+            "reason": "Hidden text is checked in PDFs only; this file has no text layer to hide text in",
+            "specialist": "layout_rendering"
+          }
+        ],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "85573c42-2913-4353-9c3a-9b68a39d7700",
+      "filename": "NRIC_7269_front.jpeg",
+      "document_type": "nric",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.96,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "nric_number": "S8427269H",
+        "individual_name": "LAKSHMI D/O RAJENDRAN",
+        "date_of_birth": "13-02-1984",
+        "country": "SINGAPORE",
+        "race": "INDIAN",
+        "sex": "F",
+        "document_side": "front"
+      },
+      "detection_report": {
+        "summary": "No specialist raised any findings on this NRIC front JPEG. Layout, manipulation, tampering, spelling, date and check-letter checks were all clean, and the metadata check found no authorship or editing metadata, which is normal for an image like this. The one gap is that the AI-generation check classed the image as a flat graphic and never scored the ID photo, so synthetic or swapped photos were not tested. A second look at the photo region could close that gap.",
+        "verdict": "inconclusive",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "This is a JPEG of an NRIC front, so skip the font check; run the layout check (OCR of each field's position against the standard NRIC front layout), both image checks (manipulation and tampering) on the photo, name, NRIC number and other fields for paste seams, halos or mismatched sharpness/noise, and review the hidden_text_tool findings.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "The NRIC front JPEG was checked with the layout anomaly check (OCR against the standard NRIC front layout), the image manipulation check, and the image tampering check; none returned any findings. The hidden text check was not applicable because the file is an image with no text layer, and the font check was skipped per the brief. No layout, paste-seam, halo, or resolution concerns were raised.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "layout_anomalies_tool",
+              "image_manipulation_tool",
+              "image_tampering_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Check the NRIC number format and checksum against the printed name and details, and check that the date of birth and any issue or expiry dates are plausible against today's date of 2026-11-15, plus spelling of the field labels and name; skip address lookups, since the front side has no address, and skip the bank-statement, multi-page and company checks.",
+            "title": "Content Validation Analyst",
+            "summary": "Spelling and date-consistency checks on the NRIC front returned no findings. The numerical checks found no NRIC-like value with an invalid check letter and no amount fields to parse, so there were no findings to rate. External validation had nothing to check on the front side, since the address is printed on the back, which is consistent with the brief.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "numerical_checks_tool",
+              "external_validation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Examine the JPEG's metadata for editing software and creation-versus-modification timing, run the AI-generation check on the ID photo and card image for synthetic or reworked pixel statistics, and assess the prompt_injection_tool findings.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt-injection check returned no findings, and the metadata check found no authorship or editing metadata, so there was no editing software or timing to assess. The AI-generation check classed the JPEG as a flat graphic and did not score it, even though an NRIC front normally carries a photograph, so the ID photo was not actually tested for synthetic pixel statistics.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool",
+              "ai_generation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.6,
+        "document_id": "85573c42-2913-4353-9c3a-9b68a39d7700",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:55:19.515237+00:00",
+        "document_type": "nric",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.85,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.6,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [
+          {
+            "tool": "external_validation_tool",
+            "reason": "Nothing to check: the front of an NRIC has no address; it is printed on the back",
+            "specialist": "content_validation"
+          },
+          {
+            "tool": "metadata_tool",
+            "reason": "This JPEG image carries no authorship or editing metadata (no author, software, or creation/modification dates). That's normal for screenshots, scans, and images saved by phones, messaging apps or web tools, so there is nothing for this check to assess. Missing metadata is not a sign of tampering on its own.",
+            "specialist": "digital_authenticity"
+          },
+          {
+            "tool": "ai_generation_tool",
+            "reason": "Nothing to check: This image is a flat graphic (logos, stamps, designs or rendered pages) rather than photographs or scans, and nothing in the file declares an AI source. Pixel statistics only mean something on photographs and scans, so there was nothing for this check to examine. This is not a sign of fraud on its own.",
+            "specialist": "digital_authenticity"
+          }
+        ],
+        "unable_to_assess": [
+          {
+            "tool": "hidden_text_tool",
+            "reason": "Hidden text is checked in PDFs only; this file has no text layer to hide text in",
+            "specialist": "layout_rendering"
+          }
+        ],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "92784ed0-df5b-45c9-8a79-1d5461fcf0dd",
+      "filename": "BrightwaveAnalytics_FATCA_CRS.pdf",
+      "document_type": "fatca_crs_declaration",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.949,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "company_name": "Brightwave Analytics Pte Ltd",
+        "company_address": "Block 21 Media Circle, Floor 03, Unit 05, Singapore 138562, Singapore",
+        "tin": "201298459R",
+        "declaration_date": "01/09/2026",
+        "country_of_incorporation": "Singapore",
+        "tax_residences": [
+          "Singapore"
+        ],
+        "form_version_date": "November 2025"
+      },
+      "detection_report": {
+        "summary": "No tampering signs were found. The hidden-text, font, layout and image tampering checks were clean. The prompt-injection scan was clean. The metadata shows a Word for Microsoft 365 file created and modified within about an hour on 2025-11-05, which looks like normal authoring. Two gaps remain: the numerical checks may not have fully covered the tax-residence and Singapore-TIN rules because of a binding error, and the only embedded image is a small 264x83 graphic that could not be compared or assessed for AI generation. Neither gap is a finding, and overall the document looks clean.",
+        "verdict": "clean",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "Run the font check on this native-text 6-page PDF, plus layout and hidden-text review, looking for mismatched fonts, sizes or alignment in names, TIN, dates, tick-boxes and signature areas; the single small image (264x83, placed 6 times, likely a logo or signature) merits the image manipulation/tampering checks for resolution mismatch or pasted seams.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "Hidden-text, font consistency, layout anomaly, and image tampering checks all ran and returned no findings. The image manipulation check had only one distinct image asset to compare (the 264x83 image placed six times), so a cross-image resolution comparison could not be established; this is a nothing-to-check result, not a clean bill for that check. Overall, no evidence of tampering in the file as rendered.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "font_consistency_tool",
+              "layout_anomalies_tool",
+              "image_manipulation_tool",
+              "image_tampering_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Validate FATCA/CRS fields: TIN format per stated jurisdiction, tax residency and country consistency, date logic (signature date not after 2026-11-15, birth date plausibility), consistent name and address across all 6 pages, and page numbering and duplicate-page checks; skip bank-statement balance checks and ACRA lookups unless an entity UEN appears.",
+            "title": "Content Validation Analyst",
+            "summary": "Spelling, date consistency and page consistency checks all returned no findings across the 6 pages. The numerical checks returned no findings, but the tool reported a binding issue ('tax_residences' is not a row role), so the tax-residence and Singapore-TIN checks may not have run fully. Other numerical checks were skipped because their fields were not extracted (no NRIC-shaped value, no UEN, no amount fields, no entity_type or specified_us_person). External validation was not run: the brief says to skip ACRA lookups unless a UEN appears, and the field list has no UEN and no external-check menu entries.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "page_consistency_tool",
+              "numerical_checks_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.6,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Review metadata (producer software, creation vs modification dates, editing tools) for signs of post-issuance editing, and assess prompt_injection_tool findings including hidden text and metadata; the AI-generation check has little to work with since the only embedded image is a tiny logo/signature-sized graphic.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt-injection scan returned no findings across hidden text, image text and dictionary checks, and the guard risk is none. The metadata shows a Word for Microsoft 365 file by Evonne Seow, created 2025-11-05 08:47 and modified 09:45 the same morning, with no title or subject; this is a normal single-session authoring pattern and gives no sign of post-issuance editing. The AI-generation check was skipped because the only embedded image is a 264x83 px logo or signature-sized graphic, which the scorer does not assess, as the lead's brief anticipated.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.85,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.6,
+        "document_id": "92784ed0-df5b-45c9-8a79-1d5461fcf0dd",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:55:18.467132+00:00",
+        "document_type": "fatca_crs_declaration",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.8,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.6,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.85,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [
+          {
+            "tool": "image_manipulation_tool",
+            "reason": "Only 1 distinct image asset(s) large enough to compare (of 6 placement(s) found); at least 2 are needed to establish what the surrounding content looks like.",
+            "specialist": "layout_rendering"
+          }
+        ],
+        "unable_to_assess": [],
+        "dismissed": []
+      },
+      "status": "detected"
+    },
+    {
+      "id": "de979bac-d050-44d0-b45e-210d1f49cd16",
+      "filename": "POR_BankStmt_20260831.pdf",
+      "document_type": "bank_statement",
+      "status_after_extraction": "analyzed",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.938,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "bank_name": "Oversea-Chinese Banking Corporation Limited",
+        "account_number": "839-828201-417",
+        "statement_period_start": "01 MAY 2026",
+        "statement_period_end": "31 AUG 2026",
+        "opening_balance": "3,535.16",
+        "ledger_balance": "35,589.24",
+        "bank_registration_no": "193200032W",
+        "account_type": "MONTHLY SAVINGS ACCOUNT",
+        "branch": "Orchard Road Branch",
+        "total_interest_paid_this_year": "113.94",
+        "average_balance": "19,301.48",
+        "transactions": [
+          {
+            "date": null,
+            "amount": null,
+            "balance": 3535.16,
+            "description": "BALANCE B/F",
+            "counterparty": null
+          },
+          {
+            "date": "02 MAY",
+            "amount": -220.0,
+            "balance": 3315.16,
+            "description": "ATM WITHDRAWAL",
+            "counterparty": null
+          },
+          {
+            "date": "02 MAY",
+            "amount": -110.29,
+            "balance": 3204.87,
+            "description": "PHARMACY CARD PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "08 MAY",
+            "amount": -30.91,
+            "balance": 3173.96,
+            "description": "PHARMACY CARD PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "08 MAY",
+            "amount": -160.44,
+            "balance": 3013.52,
+            "description": "UTILITY BILL PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "15 MAY",
+            "amount": 8994.51,
+            "balance": 12008.03,
+            "description": "PAYROLL CREDIT",
+            "counterparty": null
+          },
+          {
+            "date": "31 MAY",
+            "amount": -130.0,
+            "balance": 11878.03,
+            "description": "ATM WITHDRAWAL",
+            "counterparty": null
+          },
+          {
+            "date": "31 MAY",
+            "amount": 3.73,
+            "balance": 11881.76,
+            "description": "INTEREST CREDIT",
+            "counterparty": null
+          },
+          {
+            "date": "05 JUN",
+            "amount": -100.9,
+            "balance": 11780.86,
+            "description": "UTILITY BILL PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "09 JUN",
+            "amount": -240.0,
+            "balance": 11540.86,
+            "description": "ATM WITHDRAWAL",
+            "counterparty": null
+          },
+          {
+            "date": "15 JUN",
+            "amount": -59.27,
+            "balance": 11481.59,
+            "description": "RESTAURANT CARD PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "16 JUN",
+            "amount": 8994.51,
+            "balance": 20476.1,
+            "description": "PAYROLL CREDIT",
+            "counterparty": null
+          },
+          {
+            "date": "18 JUN",
+            "amount": -218.75,
+            "balance": 20257.35,
+            "description": "SUPERMARKET CARD PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "26 JUN",
+            "amount": -90.0,
+            "balance": 20167.35,
+            "description": "ATM WITHDRAWAL",
+            "counterparty": null
+          },
+          {
+            "date": "30 JUN",
+            "amount": -501.91,
+            "balance": 19665.44,
+            "description": "PHARMACY CARD PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "30 JUN",
+            "amount": 15.4,
+            "balance": 19680.84,
+            "description": "INTEREST CREDIT",
+            "counterparty": null
+          },
+          {
+            "date": "05 JUL",
+            "amount": -15.44,
+            "balance": 19665.4,
+            "description": "RETAIL CARD PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "07 JUL",
+            "amount": -270.0,
+            "balance": 19395.4,
+            "description": "ATM WITHDRAWAL",
+            "counterparty": null
+          },
+          {
+            "date": "09 JUL",
+            "amount": -140.0,
+            "balance": 19255.4,
+            "description": "ATM WITHDRAWAL",
+            "counterparty": null
+          },
+          {
+            "date": "09 JUL",
+            "amount": -79.3,
+            "balance": 19176.1,
+            "description": "UTILITY BILL PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "16 JUL",
+            "amount": 819.76,
+            "balance": 19995.86,
+            "description": "ONLINE TRANSFER",
+            "counterparty": null
+          },
+          {
+            "date": "17 JUL",
+            "amount": -280.0,
+            "balance": 19715.86,
+            "description": "ATM WITHDRAWAL",
+            "counterparty": null
+          },
+          {
+            "date": "25 JUL",
+            "amount": 8994.51,
+            "balance": 28710.37,
+            "description": "PAYROLL CREDIT",
+            "counterparty": null
+          },
+          {
+            "date": "31 JUL",
+            "amount": -209.02,
+            "balance": 28501.35,
+            "description": "PETROL CARD PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "31 JUL",
+            "amount": 33.35,
+            "balance": 28534.7,
+            "description": "INTEREST CREDIT",
+            "counterparty": null
+          },
+          {
+            "date": "02 AUG",
+            "amount": -175.57,
+            "balance": 28359.13,
+            "description": "RESTAURANT CARD PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "05 AUG",
+            "amount": -226.12,
+            "balance": 28133.01,
+            "description": "RESTAURANT CARD PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "08 AUG",
+            "amount": -94.48,
+            "balance": 28038.53,
+            "description": "UTILITY BILL PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "17 AUG",
+            "amount": -90.0,
+            "balance": 27948.53,
+            "description": "ATM WITHDRAWAL",
+            "counterparty": null
+          },
+          {
+            "date": "19 AUG",
+            "amount": -290.0,
+            "balance": 27658.53,
+            "description": "ATM WITHDRAWAL",
+            "counterparty": null
+          },
+          {
+            "date": "19 AUG",
+            "amount": 8994.51,
+            "balance": 36653.04,
+            "description": "PAYROLL CREDIT",
+            "counterparty": null
+          },
+          {
+            "date": "25 AUG",
+            "amount": -339.88,
+            "balance": 36313.16,
+            "description": "ONLINE TRANSFER",
+            "counterparty": null
+          },
+          {
+            "date": "26 AUG",
+            "amount": -250.0,
+            "balance": 36063.16,
+            "description": "ATM WITHDRAWAL",
+            "counterparty": null
+          },
+          {
+            "date": "30 AUG",
+            "amount": -514.7,
+            "balance": 35548.46,
+            "description": "RESTAURANT CARD PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "31 AUG",
+            "amount": 40.78,
+            "balance": 35589.24,
+            "description": "INTEREST CREDIT",
+            "counterparty": null
+          },
+          {
+            "date": null,
+            "amount": null,
+            "balance": 35589.24,
+            "description": "BALANCE C/F",
+            "counterparty": null
+          }
+        ],
+        "individual_name": "LAKSHMI D/O RAJENDRAN",
+        "individual_address": "4 TOH YI DRIVE #04-11 SINGAPORE 590004",
+        "entity_type": "individual"
+      },
+      "detection_report": {
+        "summary": "No tool raised a finding on this 2-page native-text bank statement. Layout, font, hidden-text and image-tampering checks were clean. Running-balance, date, page-consistency and bank-identifier checks passed, and the 'Chulia Street' spelling flag is a real Singapore street. Coverage is partial: several totals and distribution checks (Benford, round amounts) did not run, and the digital authenticity summary was truncated. Its metadata shows a ReportLab producer with identical creation and modification times, which is common for system-generated statements but is not proof of genuineness. Nothing suspicious was found, but a human could spot-check the transaction figures.",
+        "verdict": "clean",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "Run the font check on this native-text 2-page PDF for font, size or spacing deviations in transaction rows, balances and the account holder name, assess the hidden_text_tool findings, and run the image checks on the single embedded 738x414 image (placed twice, likely a logo) for splicing or edits.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "Hidden-text, font-consistency, and image-tampering checks returned no findings on this 2-page native-text bank statement. The image-manipulation check reported nothing to compare, since only one distinct image asset (the logo placed twice) is large enough to compare, so it is not a pass on splicing but a non-applicable result. Nothing in the rendering or embedded image suggests editing.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "font_consistency_tool",
+              "image_manipulation_tool",
+              "image_tampering_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Verify the running balance arithmetic and Benford distribution on the transactions, check that dates are plausible and not after 2026-11-15, run page consistency across both pages (page numbers, balance carried forward, account number and holder, duplicates), and validate any bank identifiers against published references.",
+            "title": "Content Validation Analyst",
+            "summary": "Spelling, date, page-consistency, running-balance and bank-identifier checks all ran with no substantive findings. The only spelling flag is 'Chulia Street', a real Singapore street name (OCBC Centre, 65 Chulia Street), so it is dismissed. Several numerical checks were skipped because their inputs were not extracted, and no Benford or round-amount analysis ran on this 36-row statement. I accidentally called numerical_checks_tool twice; both calls returned identical results.",
+            "dismissed": [
+              {
+                "id": "spelling_tool-1",
+                "tool": "spelling_tool",
+                "word": "Chulia",
+                "reason": "'Chulia' is a correct proper noun (Chulia Street, Raffles Place, Singapore) appearing identically on both pages in the address block. The suggested 'julia' is not a valid correction for an address.",
+                "context": "65 Chulia Street, OCBC Centre",
+                "summary": "Possible misspelling \"Chulia\" (suggested: \"julia\"), appears 2 times.",
+                "locations": [
+                  {
+                    "bbox": [
+                      450.48,
+                      52.46,
+                      471.73,
+                      62.76
+                    ],
+                    "page": 1
+                  },
+                  {
+                    "bbox": [
+                      450.48,
+                      52.46,
+                      471.73,
+                      62.76
+                    ],
+                    "page": 2
+                  }
+                ],
+                "bbox_units": "pt",
+                "check_code": "SPELLING.chulia",
+                "confidence": 0.95,
+                "fingerprint": "ceb8e91a95885671ad22b31f",
+                "occurrences": 2,
+                "other_contexts": [],
+                "suggested_correction": "julia"
+              }
+            ],
+            "uncertain": true,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "page_consistency_tool",
+              "numerical_checks_tool",
+              "external_validation_tool",
+              "numerical_checks_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Assess the prompt_injection_tool findings, inspect metadata for editing software and creation-versus-modification timing inconsistent with a bank-issued statement, and run the AI-generation check only if the embedded 738x414 image is a photo or scan rather than a logo.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "{\"summary\": \"The prompt-injection scan returned no findings across hidden text, image text and dictionary checks, so there was nothing to assess. Metadata shows a ReportLab producer with creation and modification timestamps identical, and no consumer editing software in the chain, which is consisten",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool",
+              "ai_generation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.0,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.0,
+        "document_id": "de979bac-d050-44d0-b45e-210d1f49cd16",
+        "second_look": null,
+        "generated_at": "2026-11-15T15:55:52.390574+00:00",
+        "document_type": "bank_statement",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.7,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.0,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [
+          {
+            "tool": "image_manipulation_tool",
+            "reason": "Only 0 distinct image asset(s) large enough to compare (of 2 placement(s) found); at least 2 are needed to establish what the surrounding content looks like.",
+            "specialist": "layout_rendering"
+          },
+          {
+            "tool": "ai_generation_tool",
+            "reason": "Nothing to check: This document's only image (738 \u00d7 414 px PNG) is a flat graphic (logos, stamps, designs or rendered pages) rather than photographs or scans, and nothing in the file declares an AI source. Pixel statistics only mean something on photographs and scans, so there was nothing for this check to examine. This is not a sign of fraud on its own.",
+            "specialist": "digital_authenticity"
+          }
+        ],
+        "unable_to_assess": [],
+        "dismissed": []
+      },
+      "officer_steps": [
+        "saved the fields unchanged (ledger_balance low-confidence)"
+      ],
+      "status": "detected"
+    },
+    {
+      "id": "5f540fba-ec71-437c-b52e-c992be6925ea",
+      "filename": "BankStmt_BA_2026-05to08.pdf",
+      "document_type": "bank_statement",
+      "status_after_extraction": "analyzed",
+      "status": "detected",
+      "classification_confidence": 0.97,
+      "extraction_confidence": 0.938,
+      "missing_required_fields": [],
+      "failure_reason": null,
+      "extracted_fields": {
+        "bank_name": "DBS Bank Ltd",
+        "account_number": "725-556619-6",
+        "statement_period_start": "01-May-2026",
+        "statement_period_end": "31-Aug-2026",
+        "opening_balance": "59,122.78",
+        "bank_registration_no": "196800306E",
+        "bank_gst_no": "MR-8500180-3",
+        "account_type": "DBS Corporate Multi-Currency Account",
+        "currency": "SGD",
+        "transactions": [
+          {
+            "date": null,
+            "amount": null,
+            "balance": 59122.78,
+            "description": "Balance Brought Forward",
+            "counterparty": null
+          },
+          {
+            "date": "02-May-26",
+            "amount": -6300.0,
+            "balance": 52822.78,
+            "description": "GIRO PAYMENT PREMISES RENTAL MAY26",
+            "counterparty": null
+          },
+          {
+            "date": "07-May-26",
+            "amount": 12120.41,
+            "balance": 64943.19,
+            "description": "Inward PayNow PAYMENT SG3P132671851026 C316837328698 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD",
+            "counterparty": null
+          },
+          {
+            "date": "08-May-26",
+            "amount": 15339.52,
+            "balance": 80282.71,
+            "description": "Inward PayNow PAYMENT SG3P767785240635 C513684671174 OTHER SUNRISE PROVISIONS PTE LTD SGD 15,340",
+            "counterparty": null
+          },
+          {
+            "date": "13-May-26",
+            "amount": -6741.14,
+            "balance": 73541.57,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT27809694803 0016RF8324550 TAN HENG PACKAGING PTE LTD SGD 6,741",
+            "counterparty": null
+          },
+          {
+            "date": "13-May-26",
+            "amount": -747.01,
+            "balance": 72794.56,
+            "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+            "counterparty": null
+          },
+          {
+            "date": "14-May-26",
+            "amount": -745.19,
+            "balance": 72049.37,
+            "description": "BUSINESS ADVANCE CARD TRANSACTION BAT COURTS MEGASTORE SI NG 14MAY 4931-XXXX-XXXX-7254",
+            "counterparty": null
+          },
+          {
+            "date": "15-May-26",
+            "amount": -8234.67,
+            "balance": 63814.7,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT40561015497 0016RF3705168 UNITED PAPER SUPPLY PTE. LTD. SGD 8,235",
+            "counterparty": null
+          },
+          {
+            "date": "20-May-26",
+            "amount": 11255.1,
+            "balance": 75069.8,
+            "description": "Inward PayNow PAYMENT SG3P527178562994 C334828249599 OTHER HARBOURFRONT DISTRIBUTORS PTE LTD 11,255",
+            "counterparty": null
+          },
+          {
+            "date": "23-May-26",
+            "amount": -8487.64,
+            "balance": 66582.16,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT90258939692 0016RF9994987 MERIDIAN LOGISTICS SERVICES SGD 8,488",
+            "counterparty": null
+          },
+          {
+            "date": "25-May-26",
+            "amount": -6344.94,
+            "balance": 60237.22,
+            "description": "FAST PAYMENT SALARY EBGPP79507811118770C100000000000 M:+6583717241 SALARY PAYMENT SGD 6,345",
+            "counterparty": null
+          },
+          {
+            "date": "25-May-26",
+            "amount": -0.5,
+            "balance": 60236.72,
+            "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP24327635057211C100000000000 M:IDEAL SALARY PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "31-May-26",
+            "amount": -35.0,
+            "balance": 60201.72,
+            "description": "SERVICE CHARGE",
+            "counterparty": null
+          },
+          {
+            "date": null,
+            "amount": null,
+            "balance": 60201.72,
+            "description": "Balance Carried Forward",
+            "counterparty": null
+          },
+          {
+            "date": null,
+            "amount": null,
+            "balance": 60201.72,
+            "description": "Balance Brought Forward",
+            "counterparty": null
+          },
+          {
+            "date": "01-Jun-26",
+            "amount": -288.73,
+            "balance": 59912.99,
+            "description": "BUSINESS ADVANCE CARD TRANSACTION BAT FAIRPRICE FINEST SI NG 01JUN 4079-XXXX-XXXX-9461",
+            "counterparty": null
+          },
+          {
+            "date": "02-Jun-26",
+            "amount": -6300.0,
+            "balance": 53612.99,
+            "description": "GIRO PAYMENT PREMISES RENTAL JUN26",
+            "counterparty": null
+          },
+          {
+            "date": "07-Jun-26",
+            "amount": 12519.98,
+            "balance": 66132.97,
+            "description": "Inward PayNow PAYMENT SG3P740341968521 C216714957625 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD",
+            "counterparty": null
+          },
+          {
+            "date": "07-Jun-26",
+            "amount": 18141.55,
+            "balance": 84274.52,
+            "description": "Inward PayNow PAYMENT SG3P714656138975 C870360218541 OTHER SUNRISE PROVISIONS PTE LTD SGD 18,142",
+            "counterparty": null
+          },
+          {
+            "date": "13-Jun-26",
+            "amount": -6834.29,
+            "balance": 77440.23,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT10539715136 0016RF2361282 TAN HENG PACKAGING PTE LTD SGD 6,834",
+            "counterparty": null
+          },
+          {
+            "date": "15-Jun-26",
+            "amount": -9686.34,
+            "balance": 67753.89,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT49666038499 0016RF6886339 UNITED PAPER SUPPLY PTE. LTD. SGD 9,686",
+            "counterparty": null
+          },
+          {
+            "date": "16-Jun-26",
+            "amount": -731.82,
+            "balance": 67022.07,
+            "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+            "counterparty": null
+          },
+          {
+            "date": "17-Jun-26",
+            "amount": -280.14,
+            "balance": 66741.93,
+            "description": "BUSINESS ADVANCE CARD TRANSACTION BAT COURTS MEGASTORE SI NG 17JUN 4306-XXXX-XXXX-9923",
+            "counterparty": null
+          },
+          {
+            "date": "22-Jun-26",
+            "amount": 11833.42,
+            "balance": 78575.35,
+            "description": "Inward PayNow PAYMENT SG3P783913183762 C922939333396 OTHER HARBOURFRONT DISTRIBUTORS PTE LTD 11,833",
+            "counterparty": null
+          },
+          {
+            "date": "22-Jun-26",
+            "amount": -9859.45,
+            "balance": 68715.9,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT86470045118 0016RF9300626 MERIDIAN LOGISTICS SERVICES SGD 9,859",
+            "counterparty": null
+          },
+          {
+            "date": "25-Jun-26",
+            "amount": -6344.94,
+            "balance": 62370.96,
+            "description": "FAST PAYMENT SALARY EBGPP23962318084191C100000000000 M:+6590966391 SALARY PAYMENT SGD 6,345",
+            "counterparty": null
+          },
+          {
+            "date": "25-Jun-26",
+            "amount": -0.5,
+            "balance": 62370.46,
+            "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP89561824144922C100000000000 M:IDEAL SALARY PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "30-Jun-26",
+            "amount": -35.0,
+            "balance": 62335.46,
+            "description": "SERVICE CHARGE",
+            "counterparty": null
+          },
+          {
+            "date": null,
+            "amount": null,
+            "balance": 62335.46,
+            "description": "Balance Carried Forward",
+            "counterparty": null
+          },
+          {
+            "date": null,
+            "amount": null,
+            "balance": 62335.46,
+            "description": "Balance Brought Forward",
+            "counterparty": null
+          },
+          {
+            "date": "01-Jul-26",
+            "amount": -6300.0,
+            "balance": 56035.46,
+            "description": "GIRO PAYMENT PREMISES RENTAL JUL26",
+            "counterparty": null
+          },
+          {
+            "date": "06-Jul-26",
+            "amount": 11575.83,
+            "balance": 67611.29,
+            "description": "Inward PayNow PAYMENT SG3P375333163361 C241899261179 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD",
+            "counterparty": null
+          },
+          {
+            "date": "07-Jul-26",
+            "amount": 16711.13,
+            "balance": 84322.42,
+            "description": "Inward PayNow PAYMENT SG3P920672456516 C759237604983 OTHER SUNRISE PROVISIONS PTE LTD SGD 16,711",
+            "counterparty": null
+          },
+          {
+            "date": "13-Jul-26",
+            "amount": -8570.71,
+            "balance": 75751.71,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT34167744242 0016RF3578136 UNITED PAPER SUPPLY PTE. LTD. SGD 8,571",
+            "counterparty": null
+          },
+          {
+            "date": "13-Jul-26",
+            "amount": -624.35,
+            "balance": 75127.36,
+            "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+            "counterparty": null
+          },
+          {
+            "date": "14-Jul-26",
+            "amount": -642.42,
+            "balance": 74484.94,
+            "description": "BUSINESS ADVANCE CARD TRANSACTION BAT SP SERVICES LTD SI NG 14JUL 4353-XXXX-XXXX-3068",
+            "counterparty": null
+          },
+          {
+            "date": "15-Jul-26",
+            "amount": -6720.73,
+            "balance": 67764.21,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT19986584711 0016RF3304717 TAN HENG PACKAGING PTE LTD SGD 6,721",
+            "counterparty": null
+          },
+          {
+            "date": "21-Jul-26",
+            "amount": -8628.26,
+            "balance": 59135.95,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT20697879967 0016RF1527210 MERIDIAN LOGISTICS SERVICES SGD 8,628",
+            "counterparty": null
+          },
+          {
+            "date": "24-Jul-26",
+            "amount": 11472.14,
+            "balance": 70608.09,
+            "description": "Inward PayNow PAYMENT SG3P249561144706 C538652714725 OTHER HARBOURFRONT DISTRIBUTORS PTE LTD 11,472",
+            "counterparty": null
+          },
+          {
+            "date": "25-Jul-26",
+            "amount": -6344.94,
+            "balance": 64263.15,
+            "description": "FAST PAYMENT SALARY EBGPP30290865083077C100000000000 M:+6585322198 SALARY PAYMENT SGD 6,345",
+            "counterparty": null
+          },
+          {
+            "date": "25-Jul-26",
+            "amount": -0.5,
+            "balance": 64262.65,
+            "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP30389874392161C100000000000 M:IDEAL SALARY PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "31-Jul-26",
+            "amount": -35.0,
+            "balance": 64227.65,
+            "description": "SERVICE CHARGE",
+            "counterparty": null
+          },
+          {
+            "date": null,
+            "amount": null,
+            "balance": 64227.65,
+            "description": "Balance Carried Forward",
+            "counterparty": null
+          },
+          {
+            "date": null,
+            "amount": null,
+            "balance": 64227.65,
+            "description": "Balance Brought Forward",
+            "counterparty": null
+          },
+          {
+            "date": "01-Aug-26",
+            "amount": -6300.0,
+            "balance": 57927.65,
+            "description": "GIRO PAYMENT PREMISES RENTAL AUG26",
+            "counterparty": null
+          },
+          {
+            "date": "02-Aug-26",
+            "amount": -557.44,
+            "balance": 57370.21,
+            "description": "BUSINESS ADVANCE CARD TRANSACTION BAT COURTS MEGASTORE SI NG 02AUG 4457-XXXX-XXXX-2755",
+            "counterparty": null
+          },
+          {
+            "date": "03-Aug-26",
+            "amount": 11584.9,
+            "balance": 68955.11,
+            "description": "Inward PayNow PAYMENT SG3P721486427738 C753119026330 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD",
+            "counterparty": null
+          },
+          {
+            "date": "11-Aug-26",
+            "amount": 14195.78,
+            "balance": 83150.89,
+            "description": "Inward PayNow PAYMENT SG3P969894621884 C709285692410 OTHER SUNRISE PROVISIONS PTE LTD SGD 14,196",
+            "counterparty": null
+          },
+          {
+            "date": "11-Aug-26",
+            "amount": -10155.87,
+            "balance": 72995.02,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT17966977437 0016RF1212792 UNITED PAPER SUPPLY PTE. LTD. SGD 10,156",
+            "counterparty": null
+          },
+          {
+            "date": "12-Aug-26",
+            "amount": -7243.36,
+            "balance": 65751.66,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT48471506672 0016RF7545728 TAN HENG PACKAGING PTE LTD SGD 7,243",
+            "counterparty": null
+          },
+          {
+            "date": "15-Aug-26",
+            "amount": -644.42,
+            "balance": 65107.24,
+            "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+            "counterparty": null
+          },
+          {
+            "date": "17-Aug-26",
+            "amount": -694.89,
+            "balance": 64412.35,
+            "description": "BUSINESS ADVANCE CARD TRANSACTION BAT GRAB* TRIP SI NG 17AUG 4273-XXXX-XXXX-3944",
+            "counterparty": null
+          },
+          {
+            "date": "23-Aug-26",
+            "amount": 9276.25,
+            "balance": 73688.6,
+            "description": "Inward PayNow PAYMENT SG3P384818737237 C735977653262 OTHER HARBOURFRONT DISTRIBUTORS PTE LTD 9,276",
+            "counterparty": null
+          },
+          {
+            "date": "24-Aug-26",
+            "amount": -9750.4,
+            "balance": 63938.2,
+            "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT84039419113 0016RF2953691 MERIDIAN LOGISTICS SERVICES SGD 9,750",
+            "counterparty": null
+          },
+          {
+            "date": "25-Aug-26",
+            "amount": -6344.94,
+            "balance": 57593.26,
+            "description": "FAST PAYMENT SALARY EBGPP47477479670026C100000000000 M:+6598154552 SALARY PAYMENT SGD 6,345",
+            "counterparty": null
+          },
+          {
+            "date": "25-Aug-26",
+            "amount": -0.5,
+            "balance": 57592.76,
+            "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP52577668836324C100000000000 M:IDEAL SALARY PAYMENT",
+            "counterparty": null
+          },
+          {
+            "date": "31-Aug-26",
+            "amount": -35.0,
+            "balance": 57557.76,
+            "description": "SERVICE CHARGE",
+            "counterparty": null
+          },
+          {
+            "date": null,
+            "amount": null,
+            "balance": 57557.76,
+            "description": "Balance Carried Forward",
+            "counterparty": null
+          }
+        ],
+        "company_name": "BRIGHTWAVE ANALYTICS PTE LTD",
+        "company_address": "21 MEDIA CIRCLE #03-05 SINGAPORE 138562",
+        "entity_type": "corporate"
+      },
+      "detection_report": {
+        "summary": "None of the specialists' tools flagged a finding. Layout, fonts, hidden text, dates, spelling, page consistency, running-balance arithmetic and bank identifier checks all passed, and the prompt-injection scan was clean. The one soft point is that the PDF was produced by ReportLab, a programmatic library, with the author field set to DBS Bank Ltd. Creation and modification timestamps are identical. Several checks could not run, including the Benford/round-amount distribution checks (fewer than 100 amounts), BIC and the overdraft/totals checks (no fields), and the AI-generation check (the only image is a flat banner). A human could compare the file against a known-genuine DBS statement from the same period to confirm the generator chain is plausible.",
+        "verdict": "clean",
+        "findings": [],
+        "consulted": [
+          {
+            "brief": "Run all checks on this 5-page native-text bank statement: assess hidden_text_tool findings, check font consistency on balances, amounts, dates and names, and look for overlapping text; the single 1280x382 image (likely a logo/header repeated on each page) should get image checks for mismatched resolution or paste seams.",
+            "title": "Layout & Rendering Analyst",
+            "summary": "All five checks on the 5-page native-text bank statement returned no findings: no hidden text, no font inconsistencies, no layout anomalies, and no image tampering. The image manipulation check had only one distinct image asset to compare, so it could not run a cross-image comparison (nothing_to_check, a pass with nothing to report, not an assessment of the image's resolution consistency). Overall the document shows no rendering-level signs of editing.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "layout_rendering",
+            "second_look": false,
+            "tools_called": [
+              "hidden_text_tool",
+              "font_consistency_tool",
+              "layout_anomalies_tool",
+              "image_manipulation_tool",
+              "image_tampering_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Verify the running balance arithmetic and Benford distribution on transactions, check for impossible dates or dates after today (2026-11-16), run page consistency across all 5 pages (page numbering, balance carried forward, account number/holder consistency, duplicates), and validate the bank's published identifiers and any public-holiday or GIRO dates; spelling check on issuer text.",
+            "title": "Content Validation Analyst",
+            "summary": "All tools ran and returned no findings: spelling, dates, page consistency across 5 pages, the running-balance arithmetic, and the bank identifier and account-digit checks all passed. The round-amount and last-two-digit distribution checks were skipped because there are fewer than 100 amounts, and the BIC check could not run because no BIC field was extracted. The overdraft, available-vs-ledger and totals checks were skipped for lack of fields, and no Benford distribution check appears in the menu, so those are not covered.",
+            "dismissed": [],
+            "uncertain": false,
+            "specialist": "content_validation",
+            "second_look": false,
+            "tools_called": [
+              "spelling_tool",
+              "date_consistency_tool",
+              "page_consistency_tool",
+              "numerical_checks_tool",
+              "external_validation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.7,
+                "second_look": false
+              }
+            ]
+          },
+          {
+            "brief": "Assess prompt_injection_tool findings, and inspect metadata for editing software, creation-versus-modification timing gaps, and producer mismatch with a genuine bank statement generator; AI-generation check has little to work on since the only image is a logo-like banner, so apply it only if it appears to be a photo or scan.",
+            "title": "Digital Authenticity Analyst",
+            "summary": "The prompt-injection scan found nothing: no hidden text, no image text, and no wording addressed to an AI. Metadata shows no consumer editing software, and created and modified timestamps are identical (2026-11-15 23:10:21+08:00), with no gap. The AI-generation check did not apply because the only image is a flat 1280x382 banner graphic. The file was produced by ReportLab, an open-source programmatic PDF library, while the author field says DBS Bank Ltd; the tools raised no finding on this, but a human could compare it against a genuine DBS statement.",
+            "dismissed": [],
+            "uncertain": true,
+            "specialist": "digital_authenticity",
+            "second_look": false,
+            "tools_called": [
+              "prompt_injection_tool",
+              "metadata_tool",
+              "ai_generation_tool"
+            ],
+            "decision_confidences": [
+              {
+                "confidence": 0.8,
+                "second_look": false
+              }
+            ]
+          }
+        ],
+        "confidence": 0.7,
+        "document_id": "5f540fba-ec71-437c-b52e-c992be6925ea",
+        "second_look": null,
+        "generated_at": "2026-11-15T16:03:27.370473+00:00",
+        "document_type": "bank_statement",
+        "schema_version": 2,
+        "agent_decisions": [
+          {
+            "agent": "lead_planner",
+            "decision": "assigned review briefs",
+            "confidence": 0.8,
+            "decision_id": "specialist_briefs"
+          },
+          {
+            "agent": "lead_reviewer",
+            "decision": "no second look requested",
+            "confidence": 0.7,
+            "decision_id": "review_1"
+          },
+          {
+            "agent": "layout_rendering",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "content_validation",
+            "decision": "completed specialist assessment",
+            "confidence": 0.7,
+            "decision_id": "specialist_review"
+          },
+          {
+            "agent": "digital_authenticity",
+            "decision": "completed specialist assessment",
+            "confidence": 0.8,
+            "decision_id": "specialist_review"
+          }
+        ],
+        "nothing_to_check": [
+          {
+            "tool": "image_manipulation_tool",
+            "reason": "Only 1 distinct image asset(s) large enough to compare (of 5 placement(s) found); at least 2 are needed to establish what the surrounding content looks like.",
+            "specialist": "layout_rendering"
+          },
+          {
+            "tool": "ai_generation_tool",
+            "reason": "Nothing to check: This document's only image (1280 \u00d7 382 px PNG) is a flat graphic (logos, stamps, designs or rendered pages) rather than photographs or scans, and nothing in the file declares an AI source. Pixel statistics only mean something on photographs and scans, so there was nothing for this check to examine. This is not a sign of fraud on its own.",
+            "specialist": "digital_authenticity"
+          }
+        ],
+        "unable_to_assess": [],
+        "dismissed": []
+      },
+      "officer_steps": [
+        "re-uploaded by hand after the first upload was extracted with the generic schema"
+      ]
+    }
+  ],
+  "analysis": {
+    "run_id": "9dff3426-193a-4098-96e5-dbc77ac71d87",
+    "status": "complete",
+    "error": null,
+    "risk": {
+      "state": "scored",
+      "level": "Low",
+      "score": 0,
+      "points": 0.0,
+      "reasons": [
+        "Rated Low: detection found nothing worth flagging."
+      ],
+      "contributing_findings": []
+    },
+    "cross_document_findings": []
+  },
+  "notes": [
+    "officer step on CBR_BA_2026-08-29.pdf: saved the fields unchanged (accounts, total_outstanding_balance, report_date low-confidence)",
+    "officer step on POR_BankStmt_20260831.pdf: saved the fields unchanged (ledger_balance low-confidence)",
+    "BankStmt_BA_2026-05to08.pdf re-uploaded by hand (document 5f540fba-ec71-437c-b52e-c992be6925ea): the first upload was extracted with the generic schema, so its transactions were never read and it couldn't be approved. The re-upload's extraction and scan are scored; the case analysis is the one that ran after it."
+  ]
+}

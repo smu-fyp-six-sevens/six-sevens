@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_0281_front.jpeg",
+  "files": [
+    "NRIC_0281_front.jpeg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S9780281E",
+    "individual_name": "Farah Nadia binte Salleh",
+    "date_of_birth": "1997-04-05",
+    "country": "Singapore",
+    "race": "Malay",
+    "sex": "F",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

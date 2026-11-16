@@ -1,0 +1,26 @@
+{
+  "filename": "HengWT_Salary_Slip_20260831.pdf",
+  "files": [
+    "HengWT_Salary_Slip_20260831.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Heng Wan Ting",
+    "company_name": "Brightwave Analytics Pte Ltd",
+    "company_address": "21 Media Circle, #03-05, Singapore 138562",
+    "net_pay": 3462.04,
+    "basic_pay": 3290.0,
+    "total_earnings": 4020.0,
+    "total_deductions": 557.96,
+    "employee_cpf": 502.0,
+    "pay_date": "2026-08-31",
+    "pay_period_end": "2026-08-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

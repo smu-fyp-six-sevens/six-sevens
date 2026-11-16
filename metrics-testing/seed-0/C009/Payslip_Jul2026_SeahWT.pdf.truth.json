@@ -1,0 +1,27 @@
+{
+  "filename": "Payslip_Jul2026_SeahWT.pdf",
+  "files": [
+    "Payslip_Jul2026_SeahWT.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Seah Wan Ting",
+    "company_name": "Pearlgate Travel & Tours Pte Ltd",
+    "net_pay": 5114.35,
+    "basic_pay": 6440.0,
+    "total_earnings": 7480.0,
+    "total_deductions": 2365.65,
+    "employee_cpf": 1496.0,
+    "pay_date": "2026-07-31",
+    "pay_period_end": "2026-07-31"
+  },
+  "not_printed": {
+    "company_address": "1 George Street, #09-19, Singapore 049145"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

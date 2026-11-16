@@ -1,0 +1,38 @@
+{
+  "filename": "CedarCoRenovation_FATCA_CRS.pdf",
+  "files": [
+    "CedarCoRenovation_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Cedar & Co Renovation Pte Ltd",
+    "company_address": "362 Clementi Avenue 2, #03-92, Singapore 120362",
+    "tin": "201521828G",
+    "declaration_date": "2026-09-21",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201521828G"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Teo Kok Wai"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Ong Su Min"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

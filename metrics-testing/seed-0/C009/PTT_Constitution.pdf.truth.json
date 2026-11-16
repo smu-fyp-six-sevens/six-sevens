@@ -1,0 +1,38 @@
+{
+  "filename": "PTT_Constitution.pdf",
+  "files": [
+    "PTT_Constitution.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Pearlgate Travel & Tours Pte Ltd",
+    "uen": "201857413H",
+    "incorporation_date": "2018-09-28",
+    "company_address": "1 George Street, #09-19, Singapore 049145",
+    "share_capital": 500000.0,
+    "issued_shares": 500000,
+    "subscribers": [
+      {
+        "name": "Ng Pei Shan",
+        "address": "182 Jelebu Road, #04-199, Singapore 670182",
+        "id_number": "S6846972D",
+        "shares": 300000
+      },
+      {
+        "name": "Seah Wan Ting",
+        "address": "104 Commonwealth Crescent, #10-58, Singapore 140104",
+        "id_number": "S8134834J",
+        "shares": 200000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2018-09-28"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

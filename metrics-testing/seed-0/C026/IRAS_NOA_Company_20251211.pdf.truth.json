@@ -1,0 +1,24 @@
+{
+  "filename": "IRAS_NOA_Company_20251211.pdf",
+  "files": [
+    "IRAS_NOA_Company_20251211.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Cedar & Co Renovation Pte Ltd",
+    "tax_reference_number": "201521828G",
+    "company_address": "362 Clementi Avenue 2, #03-92, Singapore 120362",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-12-11",
+    "eci": 373000,
+    "tax_payable": 22992.5,
+    "previous_assessment_date": "2025-07-12"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

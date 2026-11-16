@@ -1,0 +1,36 @@
+{
+  "filename": "QCS_BalanceSheet_Audited.pdf",
+  "files": [
+    "QCS_BalanceSheet_Audited.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Quillstone Corporate Services Pte Ltd",
+    "uen": "201324905W",
+    "financial_year_end": "2026-03-31",
+    "signing_date": "2026-08-10",
+    "revenue": 5490000.0,
+    "profit_for_the_year": 749200.0,
+    "profit_for_the_year_prior_year": 415800.0,
+    "total_assets": 5463700.0,
+    "total_liabilities": 2699700.0,
+    "total_equity": 2764000.0,
+    "share_capital": 1000000.0,
+    "total_current_assets": 2898500.0,
+    "total_non_current_assets": 2565200.0,
+    "total_current_liabilities": 1498100.0,
+    "total_non_current_liabilities": 1201600.0,
+    "retained_earnings_closing": 1764000.0,
+    "retained_earnings_closing_prior_year": 1014800.0,
+    "total_assets_prior_year": 4286400.0,
+    "total_liabilities_prior_year": 2271600.0,
+    "total_equity_prior_year": 2014800.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

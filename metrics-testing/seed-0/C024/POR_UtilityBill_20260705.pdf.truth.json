@@ -1,0 +1,23 @@
+{
+  "filename": "POR_UtilityBill_20260705.pdf",
+  "files": [
+    "POR_UtilityBill_20260705.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Priya d/o Subramaniam",
+    "individual_address": "427 Bukit Panjang Ring Road, #03-20, Singapore 670427",
+    "entity_type": "individual",
+    "bill_date": "2026-06-30",
+    "billing_period_end": "2026-05-31",
+    "total_payable": 187.41,
+    "due_date": "2026-07-14"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,55 @@
+{
+  "filename": "MaplecrestHomeBakery_BizFile_Officers_20260810.pdf",
+  "files": [
+    "MaplecrestHomeBakery_BizFile_Officers_20260810.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "MAPLECREST HOME BAKERY PTE LTD",
+    "uen": "201618187W",
+    "incorporation_date": "2016-02-04",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "248 PASIR RIS STREET 21, #08-69, SINGAPORE 510248",
+    "share_capital": 100000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "TEO KAI WEN",
+        "identification_no": "S7141634H",
+        "address": "248 PASIR RIS STREET 21, #08-69, SINGAPORE 510248",
+        "shares": 60000
+      },
+      {
+        "name": "CHUA JIA HUI",
+        "identification_no": "S7362222J",
+        "address": "247 BISHAN STREET 22, #02-98, SINGAPORE 570247",
+        "shares": 40000
+      }
+    ],
+    "officers": [
+      {
+        "name": "TEO KAI WEN",
+        "identification_no": "S7141634H",
+        "position": "Director",
+        "date_of_appointment": "2016-02-04"
+      },
+      {
+        "name": "GOH MEI LING",
+        "identification_no": "S8081681B",
+        "position": "Secretary",
+        "date_of_appointment": "2016-04-09"
+      }
+    ],
+    "document_date": "2026-08-04",
+    "last_agm_date": "2026-05-21",
+    "last_annual_return_date": "2026-05-30",
+    "financial_year_end": "2025-12-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

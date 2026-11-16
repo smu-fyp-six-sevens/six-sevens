@@ -1,0 +1,38 @@
+{
+  "filename": "CoralBaySeafoodSupply_FATCA_CRS.pdf",
+  "files": [
+    "CoralBaySeafoodSupply_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Coral Bay Seafood Supply Pte Ltd",
+    "company_address": "50 Tuas Avenue 11, #01-30, Singapore 639107",
+    "tin": "201078782M",
+    "declaration_date": "2026-08-25",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201078782M"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Tan Hui Ling"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Chong Hui Ling"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

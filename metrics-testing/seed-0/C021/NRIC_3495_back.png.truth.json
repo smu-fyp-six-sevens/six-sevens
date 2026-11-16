@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_3495_back.png",
+  "files": [
+    "NRIC_3495_back.png"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7983495E",
+    "individual_address": "335B Smith Street, #14-63, Singapore 052335",
+    "date_of_issue": "2023-10-15",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

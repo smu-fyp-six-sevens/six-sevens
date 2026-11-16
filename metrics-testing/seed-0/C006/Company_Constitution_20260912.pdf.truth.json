@@ -1,0 +1,38 @@
+{
+  "filename": "Company_Constitution_20260912.pdf",
+  "files": [
+    "Company_Constitution_20260912.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Cobalt Ridge Capital Advisory Pte Ltd",
+    "uen": "201294420E",
+    "incorporation_date": "2012-06-19",
+    "company_address": "302 Tiong Bahru Road, #10-24, Singapore 168732",
+    "share_capital": 100000.0,
+    "issued_shares": 100000,
+    "subscribers": [
+      {
+        "name": "Tan Wei Ming",
+        "address": "304 Bukit Batok Street 31, #02-84, Singapore 650304",
+        "id_number": "S8012207A",
+        "shares": 55000
+      },
+      {
+        "name": "Zuraidah binte Abdullah",
+        "address": "131B Canberra Crescent, #11-140, Singapore 752131",
+        "id_number": "S0760129H",
+        "shares": 45000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2012-06-19"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

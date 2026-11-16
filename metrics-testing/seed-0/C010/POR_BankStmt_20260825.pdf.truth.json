@@ -1,0 +1,271 @@
+{
+  "filename": "POR_BankStmt_20260825.pdf",
+  "files": [
+    "POR_BankStmt_20260825.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [
+    "bank_statement"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "MOHAMED HAFIZ BIN YUSOF",
+    "individual_address": "471 ANG MO KIO AVENUE 10, #05-87, SINGAPORE 560471",
+    "entity_type": "individual",
+    "account_number": "184-790722-977",
+    "statement_period_start": "2026-04-01",
+    "statement_period_end": "2026-07-31",
+    "opening_balance": 2607.5,
+    "ledger_balance": 26458.84,
+    "transactions": [
+      {
+        "description": "ONLINE TRANSFER",
+        "amount": 651.69,
+        "balance": 3259.19
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -70,
+        "balance": 3189.19
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -119.87,
+        "balance": 3069.32
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 7078.52,
+        "balance": 10147.84
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -170,
+        "balance": 9977.84
+      },
+      {
+        "description": "PHARMACY CARD PAYMENT",
+        "amount": -103.01,
+        "balance": 9874.83
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -90,
+        "balance": 9784.83
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 5.17,
+        "balance": 9790.0
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -175.26,
+        "balance": 9614.74
+      },
+      {
+        "description": "RETAIL CARD PAYMENT",
+        "amount": -242.46,
+        "balance": 9372.28
+      },
+      {
+        "description": "SUPERMARKET CARD PAYMENT",
+        "amount": -254.03,
+        "balance": 9118.25
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 7078.52,
+        "balance": 16196.77
+      },
+      {
+        "date": "2026-05-26",
+        "description": "ONLINE TRANSFER",
+        "amount": -303.19,
+        "balance": 15893.58
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -190,
+        "balance": 15703.58
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 9.02,
+        "balance": 15712.6
+      },
+      {
+        "description": "RETAIL CARD PAYMENT",
+        "amount": -648.72,
+        "balance": 15063.88
+      },
+      {
+        "description": "SUPERMARKET CARD PAYMENT",
+        "amount": -634.29,
+        "balance": 14429.59
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -248.22,
+        "balance": 14181.37
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 7078.52,
+        "balance": 21259.89
+      },
+      {
+        "description": "ONLINE TRANSFER",
+        "amount": 473.25,
+        "balance": 21733.14
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -210,
+        "balance": 21523.14
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 16.74,
+        "balance": 21539.88
+      },
+      {
+        "date": "2026-07-01",
+        "description": "ATM WITHDRAWAL",
+        "amount": -230,
+        "balance": 21309.88
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -136.1,
+        "balance": 21173.78
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -260,
+        "balance": 20913.78
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 7078.52,
+        "balance": 27992.3
+      },
+      {
+        "description": "RETAIL CARD PAYMENT",
+        "amount": -621.0,
+        "balance": 27371.3
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -180,
+        "balance": 27191.3
+      },
+      {
+        "description": "PHARMACY CARD PAYMENT",
+        "amount": -296.84,
+        "balance": 26894.46
+      },
+      {
+        "date": "2026-07-31",
+        "description": "RETAIL CARD PAYMENT",
+        "amount": -462.55,
+        "balance": 26431.91
+      },
+      {
+        "date": "2026-07-31",
+        "description": "INTEREST CREDIT",
+        "amount": 26.93,
+        "balance": 26458.84
+      }
+    ]
+  },
+  "not_printed": {
+    "transactions": [
+      {
+        "date": "2026-04-07"
+      },
+      {
+        "date": "2026-04-10"
+      },
+      {
+        "date": "2026-04-10"
+      },
+      {
+        "date": "2026-04-16"
+      },
+      {
+        "date": "2026-04-20"
+      },
+      {
+        "date": "2026-04-28"
+      },
+      {
+        "date": "2026-04-30"
+      },
+      {
+        "date": "2026-04-30"
+      },
+      {
+        "date": "2026-05-06"
+      },
+      {
+        "date": "2026-05-11"
+      },
+      {
+        "date": "2026-05-14"
+      },
+      {
+        "date": "2026-05-22"
+      },
+      {
+        "date": "2026-05-31"
+      },
+      {
+        "date": "2026-05-31"
+      },
+      {
+        "date": "2026-06-03"
+      },
+      {
+        "date": "2026-06-05"
+      },
+      {
+        "date": "2026-06-11"
+      },
+      {
+        "date": "2026-06-15"
+      },
+      {
+        "date": "2026-06-16"
+      },
+      {
+        "date": "2026-06-22"
+      },
+      {
+        "date": "2026-06-30"
+      },
+      {
+        "date": "2026-07-08"
+      },
+      {
+        "date": "2026-07-17"
+      },
+      {
+        "date": "2026-07-18"
+      },
+      {
+        "date": "2026-07-22"
+      },
+      {
+        "date": "2026-07-23"
+      },
+      {
+        "date": "2026-07-28"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

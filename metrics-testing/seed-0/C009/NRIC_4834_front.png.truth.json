@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_4834_front.png",
+  "files": [
+    "NRIC_4834_front.png"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S8134834J",
+    "individual_name": "Seah Wan Ting",
+    "date_of_birth": "1981-10-01",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "F",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

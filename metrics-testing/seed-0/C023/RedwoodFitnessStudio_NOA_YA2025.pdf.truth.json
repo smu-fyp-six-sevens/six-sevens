@@ -1,0 +1,24 @@
+{
+  "filename": "RedwoodFitnessStudio_NOA_YA2025.pdf",
+  "files": [
+    "RedwoodFitnessStudio_NOA_YA2025.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Redwood Fitness Studio Pte Ltd",
+    "tax_reference_number": "201877625H",
+    "company_address": "1 Changi Business Park Crescent, #11-05, Singapore 486025",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-06-16",
+    "eci": 538800,
+    "tax_payable": 37085.5,
+    "previous_assessment_date": "2025-04-29"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,24 @@
+{
+  "filename": "BizFile_589676.pdf",
+  "files": [
+    "BizFile_589676.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Summit Peak Recruitment Pte Ltd",
+    "uen": "201585653M",
+    "incorporation_date": "2015-07-07",
+    "company_type": "Limited Exempt Private Company",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2019-01-28",
+    "company_former_name": "Emerald Bridge Trading Pte. Ltd.",
+    "company_former_name_change_date": "2019-01-18"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,24 @@
+{
+  "filename": "BizFile_666830.pdf",
+  "files": [
+    "BizFile_666830.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Azure Coast Trading Pte Ltd",
+    "uen": "201648605K",
+    "incorporation_date": "2016-08-05",
+    "company_type": "Private company limited by shares",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2019-04-19",
+    "company_former_name": "Orchid Ridge Distribution Pte. Ltd.",
+    "company_former_name_change_date": "2019-03-15"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

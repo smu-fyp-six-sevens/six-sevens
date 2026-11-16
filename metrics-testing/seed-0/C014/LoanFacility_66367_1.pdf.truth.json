@@ -1,0 +1,25 @@
+{
+  "filename": "LoanFacility_66367_1.pdf",
+  "files": [
+    "LoanFacility_66367_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Maplecrest Home Bakery Pte Ltd",
+    "company_address": "248 Pasir Ris Street 21, #08-69, Singapore 510248",
+    "individual_name": "Teo Kai Wen",
+    "loan_amount": 175000.0,
+    "uen": "201618187W",
+    "facility_type": "Term Loan under Enterprise Financing Scheme",
+    "offer_date": "2026-08-12",
+    "interest_rate": 4.4,
+    "loan_tenure": "3 years"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

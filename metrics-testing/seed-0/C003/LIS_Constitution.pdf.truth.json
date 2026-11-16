@@ -1,0 +1,54 @@
+{
+  "filename": "LIS_Constitution.pdf",
+  "files": [
+    "LIS_Constitution.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Lumina Interior Studio Pte Ltd",
+    "uen": "201063283R",
+    "incorporation_date": "2010-02-06",
+    "company_address": "2A Boon Tiong Road, #12-27, Singapore 164002",
+    "share_capital": 300000.0,
+    "issued_shares": 300000,
+    "subscribers": [
+      {
+        "name": "Low Kok Wai",
+        "address": "2A Boon Tiong Road, #12-27, Singapore 164002",
+        "id_number": "S7057816F",
+        "shares": 180000
+      },
+      {
+        "name": "Farah Nadia binte Salleh",
+        "address": "112A Alkaff Crescent, #09-11, Singapore 341112",
+        "id_number": "S9780281E",
+        "shares": 120000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2010-02-06"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": true,
+  "tampering": [
+    {
+      "dimension": "Font/Size",
+      "defect_type": "font",
+      "expected_tools": [
+        "font_consistency_tool"
+      ],
+      "description": "Cover-page company name changed from Helvetica-Bold to Times Roman.",
+      "edits": [
+        {
+          "printed_before": "LUMINA INTERIOR STUDIO PTE LTD",
+          "printed_after": null,
+          "injector": "Changed field font from Helvetica-Bold to Times Roman"
+        }
+      ]
+    }
+  ]
+}

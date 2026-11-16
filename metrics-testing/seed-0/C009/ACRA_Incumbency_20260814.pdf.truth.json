@@ -1,0 +1,55 @@
+{
+  "filename": "ACRA_Incumbency_20260814.pdf",
+  "files": [
+    "ACRA_Incumbency_20260814.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "PEARLGATE TRAVEL & TOURS PTE LTD",
+    "uen": "201857413H",
+    "incorporation_date": "2018-09-28",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "1 GEORGE STREET, #09-19, SINGAPORE 049145",
+    "share_capital": 500000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "NG PEI SHAN",
+        "identification_no": "S6846972D",
+        "address": "182 JELEBU ROAD, #04-199, SINGAPORE 670182",
+        "shares": 300000
+      },
+      {
+        "name": "SEAH WAN TING",
+        "identification_no": "S8134834J",
+        "address": "104 COMMONWEALTH CRESCENT, #10-58, SINGAPORE 140104",
+        "shares": 200000
+      }
+    ],
+    "officers": [
+      {
+        "name": "NG PEI SHAN",
+        "identification_no": "S6846972D",
+        "position": "Director",
+        "date_of_appointment": "2018-09-28"
+      },
+      {
+        "name": "CHAN SIEW PENG",
+        "identification_no": "S7920631H",
+        "position": "Secretary",
+        "date_of_appointment": "2018-11-11"
+      }
+    ],
+    "document_date": "2026-08-16",
+    "last_agm_date": "2026-04-17",
+    "last_annual_return_date": "2026-05-02",
+    "financial_year_end": "2025-12-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

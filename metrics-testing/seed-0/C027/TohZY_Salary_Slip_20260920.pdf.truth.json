@@ -1,0 +1,27 @@
+{
+  "filename": "TohZY_Salary_Slip_20260920.pdf",
+  "files": [
+    "TohZY_Salary_Slip_20260920.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Toh Zhen Yu",
+    "company_name": "Primrose Florist & Gifts Pte Ltd",
+    "net_pay": 4072.4,
+    "basic_pay": 4260.0,
+    "total_earnings": 5530.0,
+    "total_deductions": 1457.6,
+    "employee_cpf": 995.0,
+    "pay_date": "2026-08-31",
+    "pay_period_end": "2026-08-31"
+  },
+  "not_printed": {
+    "company_address": "106D Punggol Field, #02-71, Singapore 824106"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

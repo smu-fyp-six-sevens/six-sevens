@@ -1,0 +1,40 @@
+{
+  "filename": "NRIC_3844_front.jpg",
+  "files": [
+    "NRIC_3844_front.jpg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7143844I",
+    "individual_name": "Ho Kok Wai",
+    "date_of_birth": "1971-08-11",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "M",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": true,
+  "tampering": [
+    {
+      "dimension": "Image Manipulation",
+      "defect_type": "image_manipulation",
+      "expected_tools": [
+        "image_manipulation_tool",
+        "image_tampering_tool"
+      ],
+      "description": "State crest on the NRIC front stretched to 1.6x wide, 0.55x tall.",
+      "edits": [
+        {
+          "printed_before": "[image 168x138]",
+          "printed_after": null,
+          "injector": "Applied image manipulation: Scaling Anomaly (1.6× wide, 0.55× tall)"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "filename": "FacilityLetter_WTS_1.pdf",
+  "files": [
+    "FacilityLetter_WTS_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Willowbrook Tuition Services Pte Ltd",
+    "company_address": "550 Serangoon North Avenue 3, #09-240, Singapore 550550",
+    "individual_name": "Koh Hwee Min",
+    "loan_amount": 290000.0,
+    "uen": "201830203N",
+    "facility_type": "Overdraft",
+    "offer_date": "2026-09-25",
+    "interest_rate": 6.57,
+    "review_date": "2027-09-25"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

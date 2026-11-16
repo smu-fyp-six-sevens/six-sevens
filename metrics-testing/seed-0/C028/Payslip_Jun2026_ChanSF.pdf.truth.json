@@ -1,0 +1,26 @@
+{
+  "filename": "Payslip_Jun2026_ChanSF.pdf",
+  "files": [
+    "Payslip_Jun2026_ChanSF.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Chan Shu Fen",
+    "company_name": "Vantage Point IT Solutions Pte Ltd",
+    "company_address": "116 Marsiling Rise, #02-59, Singapore 730116",
+    "net_pay": 3837.14,
+    "basic_pay": 4210.0,
+    "total_earnings": 4850.0,
+    "total_deductions": 1012.86,
+    "employee_cpf": 970.0,
+    "pay_date": "2026-06-30",
+    "pay_period_end": "2026-06-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

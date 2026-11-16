@@ -1,0 +1,26 @@
+{
+  "filename": "ChanBK_Salary_Slip_20260825.pdf",
+  "files": [
+    "ChanBK_Salary_Slip_20260825.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Chan Boon Keng",
+    "company_name": "Evergreen Botanics Trading Pte Ltd",
+    "company_address": "3 Irving Road, #04-10, Singapore 369522",
+    "net_pay": 4243.93,
+    "basic_pay": 4630.0,
+    "total_earnings": 5430.0,
+    "total_deductions": 1186.07,
+    "employee_cpf": 1086.0,
+    "pay_date": "2026-07-31",
+    "pay_period_end": "2026-07-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

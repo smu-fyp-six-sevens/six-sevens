@@ -1,0 +1,38 @@
+{
+  "filename": "SilverpineFurnitureWorks_Constitution_signed.pdf",
+  "files": [
+    "SilverpineFurnitureWorks_Constitution_signed.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Silverpine Furniture Works Pte Ltd",
+    "uen": "200921425R",
+    "incorporation_date": "2009-12-15",
+    "company_address": "2 Bukit Batok Street 23, #05-21, Singapore 659554",
+    "share_capital": 300000.0,
+    "issued_shares": 300000,
+    "subscribers": [
+      {
+        "name": "Vikram s/o Chandran",
+        "address": "335B Smith Street, #14-63, Singapore 052335",
+        "id_number": "S7983495E",
+        "shares": 165000
+      },
+      {
+        "name": "Deepa d/o Govindasamy",
+        "address": "265 Bishan Street 24, #04-15, Singapore 570265",
+        "id_number": "S7402285E",
+        "shares": 135000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2009-12-15"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

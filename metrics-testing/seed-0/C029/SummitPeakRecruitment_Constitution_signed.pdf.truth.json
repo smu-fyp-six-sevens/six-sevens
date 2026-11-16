@@ -1,0 +1,38 @@
+{
+  "filename": "SummitPeakRecruitment_Constitution_signed.pdf",
+  "files": [
+    "SummitPeakRecruitment_Constitution_signed.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Summit Peak Recruitment Pte Ltd",
+    "uen": "201585653M",
+    "incorporation_date": "2015-07-07",
+    "company_address": "9 Raffles Place, #09-28, Singapore 048619",
+    "share_capital": 300000.0,
+    "issued_shares": 300000,
+    "subscribers": [
+      {
+        "name": "Sim Siew Lan",
+        "address": "106 Tampines Street 11, #05-24, Singapore 521106",
+        "id_number": "S8271485E",
+        "shares": 165000
+      },
+      {
+        "name": "Foo Zhi Hao",
+        "address": "271 Toh Guan Road, #03-160, Singapore 600271",
+        "id_number": "S0118278A",
+        "shares": 135000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2015-07-07"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

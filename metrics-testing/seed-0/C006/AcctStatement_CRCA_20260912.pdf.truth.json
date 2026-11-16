@@ -1,0 +1,408 @@
+{
+  "filename": "AcctStatement_CRCA_20260912.pdf",
+  "files": [
+    "AcctStatement_CRCA_20260912.pdf"
+  ],
+  "document_type": "bank_statement",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_number": "4675161211",
+    "company_name": "COBALT RIDGE CAPITAL ADVISORY PTE LTD",
+    "entity_type": "corporate",
+    "statement_period_start": "2026-05-01",
+    "statement_period_end": "2026-08-31",
+    "ledger_balance": 85194.58,
+    "total_credits": 195535.56,
+    "total_debits": 193804.17,
+    "transactions": [
+      {
+        "date": "2026-05-02",
+        "description": "GIRO PAYMENT PREMISES RENTAL MAY26",
+        "amount": -7170.0,
+        "balance": 76293.19
+      },
+      {
+        "date": "2026-05-09",
+        "amount": -10708.48,
+        "balance": 65584.71
+      },
+      {
+        "date": "2026-05-13",
+        "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+        "amount": -932.94,
+        "balance": 64651.77
+      },
+      {
+        "date": "2026-05-17",
+        "amount": -690.92,
+        "balance": 63960.85
+      },
+      {
+        "date": "2026-05-17",
+        "amount": -775.67,
+        "balance": 63185.18
+      },
+      {
+        "date": "2026-05-18",
+        "amount": -11190.56,
+        "balance": 51994.62
+      },
+      {
+        "date": "2026-05-19",
+        "amount": -10554.43,
+        "balance": 41440.19
+      },
+      {
+        "date": "2026-05-21",
+        "amount": 17110.79,
+        "balance": 58550.98
+      },
+      {
+        "date": "2026-05-23",
+        "amount": 15063.38,
+        "balance": 73614.36
+      },
+      {
+        "date": "2026-05-25",
+        "description": "FAST PAYMENT SALARY EBGPP88074684041331C100000000000 M:+6595151180 SALARY PAYMENT SGD 5,132",
+        "amount": -5131.94,
+        "balance": 68482.42
+      },
+      {
+        "date": "2026-05-25",
+        "amount": -0.5,
+        "balance": 68481.92
+      },
+      {
+        "date": "2026-05-26",
+        "amount": 15497.48,
+        "balance": 83979.4
+      },
+      {
+        "date": "2026-05-31",
+        "description": "SERVICE CHARGE",
+        "amount": -35.0,
+        "balance": 83944.4
+      },
+      {
+        "date": "2026-06-02",
+        "description": "GIRO PAYMENT PREMISES RENTAL JUN26",
+        "amount": -7170.0,
+        "balance": 76774.4
+      },
+      {
+        "date": "2026-06-08",
+        "amount": -13481.54,
+        "balance": 63292.86
+      },
+      {
+        "date": "2026-06-12",
+        "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+        "amount": -979.44,
+        "balance": 62313.42
+      },
+      {
+        "date": "2026-06-17",
+        "amount": -11013.36,
+        "balance": 51300.06
+      },
+      {
+        "date": "2026-06-20",
+        "amount": -201.95,
+        "balance": 51098.11
+      },
+      {
+        "date": "2026-06-22",
+        "amount": 18742.1,
+        "balance": 69840.21
+      },
+      {
+        "date": "2026-06-22",
+        "amount": -13014.82,
+        "balance": 56825.39
+      },
+      {
+        "date": "2026-06-23",
+        "amount": 14390.63,
+        "balance": 71216.02
+      },
+      {
+        "date": "2026-06-25",
+        "description": "FAST PAYMENT SALARY EBGPP20821112778184C100000000000 M:+6595120414 SALARY PAYMENT SGD 5,132",
+        "amount": -5131.94,
+        "balance": 66084.08
+      },
+      {
+        "date": "2026-06-25",
+        "amount": -0.5,
+        "balance": 66083.58
+      },
+      {
+        "date": "2026-06-26",
+        "amount": 17619.32,
+        "balance": 83702.9
+      },
+      {
+        "date": "2026-06-30",
+        "description": "SERVICE CHARGE",
+        "amount": -35.0,
+        "balance": 83667.9
+      },
+      {
+        "date": "2026-07-01",
+        "description": "GIRO PAYMENT PREMISES RENTAL JUL26",
+        "amount": -7170.0,
+        "balance": 76497.9
+      },
+      {
+        "date": "2026-07-06",
+        "amount": -14169.92,
+        "balance": 62327.98
+      },
+      {
+        "date": "2026-07-13",
+        "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+        "amount": -1121.33,
+        "balance": 61206.65
+      },
+      {
+        "date": "2026-07-16",
+        "amount": -9854.02,
+        "balance": 51352.63
+      },
+      {
+        "date": "2026-07-19",
+        "amount": 16469.94,
+        "balance": 67822.57
+      },
+      {
+        "date": "2026-07-22",
+        "amount": -11830.74,
+        "balance": 55991.83
+      },
+      {
+        "date": "2026-07-24",
+        "amount": 12966.76,
+        "balance": 68958.59
+      },
+      {
+        "date": "2026-07-24",
+        "amount": 17705.58,
+        "balance": 86664.17
+      },
+      {
+        "date": "2026-07-24",
+        "amount": -23.24,
+        "balance": 86640.93
+      },
+      {
+        "date": "2026-07-24",
+        "amount": -64.82,
+        "balance": 86576.11
+      },
+      {
+        "date": "2026-07-25",
+        "description": "FAST PAYMENT SALARY EBGPP73128104322240C100000000000 M:+6581717170 SALARY PAYMENT SGD 5,132",
+        "amount": -5131.94,
+        "balance": 81444.17
+      },
+      {
+        "date": "2026-07-25",
+        "amount": -0.5,
+        "balance": 81443.67
+      },
+      {
+        "date": "2026-07-31",
+        "description": "SERVICE CHARGE",
+        "amount": -35.0,
+        "balance": 81408.67
+      },
+      {
+        "date": "2026-08-01",
+        "description": "GIRO PAYMENT PREMISES RENTAL AUG26",
+        "amount": -7170.0,
+        "balance": 74238.67
+      },
+      {
+        "date": "2026-08-03",
+        "amount": -140.43,
+        "balance": 74098.24
+      },
+      {
+        "date": "2026-08-07",
+        "amount": -12149.87,
+        "balance": 61948.37
+      },
+      {
+        "date": "2026-08-13",
+        "description": "GIRO PAYMENT SP SERVICES LTD UTILITIES",
+        "amount": -954.67,
+        "balance": 60993.7
+      },
+      {
+        "date": "2026-08-15",
+        "amount": -9783.32,
+        "balance": 51210.38
+      },
+      {
+        "date": "2026-08-21",
+        "amount": 18684.01,
+        "balance": 69894.39
+      },
+      {
+        "date": "2026-08-22",
+        "amount": -10165.78,
+        "balance": 59728.61
+      },
+      {
+        "date": "2026-08-24",
+        "amount": 13964.42,
+        "balance": 73693.03
+      },
+      {
+        "date": "2026-08-24",
+        "amount": -652.16,
+        "balance": 73040.87
+      },
+      {
+        "date": "2026-08-25",
+        "amount": 17321.15,
+        "balance": 90362.02
+      },
+      {
+        "date": "2026-08-25",
+        "description": "FAST PAYMENT SALARY EBGPP22757758497258C100000000000 M:+6590101011 SALARY PAYMENT SGD 5,132",
+        "amount": -5131.94,
+        "balance": 85230.08
+      },
+      {
+        "date": "2026-08-25",
+        "amount": -0.5,
+        "balance": 85229.58
+      },
+      {
+        "date": "2026-08-31",
+        "description": "SERVICE CHARGE",
+        "amount": -35.0,
+        "balance": 85194.58
+      }
+    ]
+  },
+  "not_printed": {
+    "bank_name": "United Overseas Bank Limited",
+    "company_address": "302 TIONG BAHRU ROAD, #10-24, SINGAPORE 168732",
+    "opening_balance": 83463.19,
+    "transactions": [
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT53550719191 0016RF3002167 SEAWAY FREIGHT (S) PTE LTD SGD 10,708"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT GRAB* TRIP SI NG 17MAY 4460-XXXX-XXXX-2323"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT FAIRPRICE FINEST SI NG 17MAY 4537-XXXX-XXXX-4315"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT18217664453 0016RF1127984 UNITED PAPER SUPPLY PTE. LTD. SGD 11,191"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT71086793318 0016RF5893873 MERIDIAN LOGISTICS SERVICES SGD 10,554"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P521445875720 C367452022178 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 17,111"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P888048288961 C532774508841 OTHER ASIA LINK COMMODITIES PTE. LTD. SGD 15,063"
+      },
+      {
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP94286219588507C100000000000 M:IDEAL SALARY PAYMENT"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P970996836753 C114431548484 OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 15,497"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT99246757094 0016RF6370017 SEAWAY FREIGHT (S) PTE LTD SGD 13,482"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT49540008784 0016RF2125660 UNITED PAPER SUPPLY PTE. LTD. SGD 11,013"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT FAIRPRICE FINEST SI NG 20JUN 4531-XXXX-XXXX-2029"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P609339930701 C559351500348 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 18,742"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT10698825084 0016RF1657478 MERIDIAN LOGISTICS SERVICES SGD 13,015"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P422653315759 C745356827374 OTHER ASIA LINK COMMODITIES PTE. LTD. SGD 14,391"
+      },
+      {
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP90945593722158C100000000000 M:IDEAL SALARY PAYMENT"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P931258812961 C837188195025 OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 17,619"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT24544088113 0016RF2543969 SEAWAY FREIGHT (S) PTE LTD SGD 14,170"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT57969791111 0016RF2713809 UNITED PAPER SUPPLY PTE. LTD. SGD 9,854"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P385413797011 C939912009906 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 16,470"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT80165023822 0016RF3665876 MERIDIAN LOGISTICS SERVICES SGD 11,831"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P928196606005 C998711319290 OTHER ASIA LINK COMMODITIES PTE. LTD. SGD 12,967"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P284033392264 C126263139579 OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 17,706"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT SP SERVICES LTD SI NG 24JUL 4835-XXXX-XXXX-5192"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT FAIRPRICE FINEST SI NG 24JUL 4133-XXXX-XXXX-2083"
+      },
+      {
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP29865950105703C100000000000 M:IDEAL SALARY PAYMENT"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT SHELL SERVICE STN SI NG 03AUG 4349-XXXX-XXXX-9504"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT83161398134 0016RF3204944 SEAWAY FREIGHT (S) PTE LTD SGD 12,150"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT56127702069 0016RF1672340 UNITED PAPER SUPPLY PTE. LTD. SGD 9,783"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P636972780269 C186364574614 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 18,684"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT71321997430 0016RF9122136 MERIDIAN LOGISTICS SERVICES SGD 10,166"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P961881849249 C626444063713 OTHER ASIA LINK COMMODITIES PTE. LTD. SGD 13,964"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT FAIRPRICE FINEST SI NG 24AUG 4343-XXXX-XXXX-2258"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P380885607058 C937326410792 OTHER ORIENT PACIFIC SUPPLIES PTE LTD SGD 17,321"
+      },
+      {
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP83894685530529C100000000000 M:IDEAL SALARY PAYMENT"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

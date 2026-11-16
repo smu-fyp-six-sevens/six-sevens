@@ -1,0 +1,26 @@
+{
+  "filename": "ChuaZY_Passport_scan.png",
+  "files": [
+    "ChuaZY_Passport_scan.png"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Chua Zhen Yu",
+    "passport_number": "E8811377H",
+    "date_of_birth": "1975-06-20",
+    "date_of_expiry": "2029-10-10",
+    "date_of_issue": "2019-10-10",
+    "place_of_birth": "Singapore",
+    "sex": "M",
+    "nric_number": "S7580953J"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

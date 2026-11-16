@@ -1,0 +1,81 @@
+{
+  "filename": "ACRA_Incumbency_20260808.pdf",
+  "files": [
+    "ACRA_Incumbency_20260808.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "REDWOOD FITNESS STUDIO PTE LTD",
+    "uen": "201877625H",
+    "incorporation_date": "2018-10-05",
+    "company_type": "LIMITED EXEMPT PRIVATE COMPANY",
+    "company_address": "1 CHANGI BUSINESS PARK CRESCENT, #11-05, SINGAPORE 486025",
+    "share_capital": 500000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "ARUN S/O PILLAI",
+        "identification_no": "S6848680G",
+        "address": "329 BUKIT BATOK STREET 33, #09-395, SINGAPORE 650329",
+        "shares": 150000
+      },
+      {
+        "name": "KAVITHA D/O RAMASAMY",
+        "identification_no": "T0019177E",
+        "address": "108A BIDADARI PARK DRIVE, #13-158, SINGAPORE 341108",
+        "shares": 50000
+      }
+    ],
+    "officers": [
+      {
+        "name": "ARUN S/O PILLAI",
+        "identification_no": "S6848680G",
+        "position": "Director",
+        "date_of_appointment": "2018-10-05"
+      },
+      {
+        "name": "RAJESWARI D/O MUTHUSAMY",
+        "identification_no": "S7999362Z",
+        "position": "Secretary",
+        "date_of_appointment": "2018-11-25"
+      }
+    ],
+    "company_former_name": "ORCHID HARVEST ENTERPRISES PTE. LTD.",
+    "document_date": "2026-08-02",
+    "last_agm_date": "2025-08-02",
+    "last_annual_return_date": "2025-09-10",
+    "financial_year_end": "2025-03-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": true,
+  "tampering": [
+    {
+      "dimension": "Text Overlay",
+      "defect_type": "text_overlay",
+      "expected_tools": [
+        "layout_anomalies_tool",
+        "hidden_text_tool"
+      ],
+      "description": "Issued share capital raised by 300,000, drawn over the original; the number of shares is unchanged.",
+      "edits": [
+        {
+          "printed_before": "200,000.00",
+          "printed_after": "500,000.00",
+          "injector": "Overlaid matching text on existing field: '500,000.00'"
+        }
+      ],
+      "field": "share_capital",
+      "original": 200000.0,
+      "forged": 500000.0
+    }
+  ],
+  "accept_also": {
+    "share_capital": [
+      200000.0
+    ]
+  }
+}

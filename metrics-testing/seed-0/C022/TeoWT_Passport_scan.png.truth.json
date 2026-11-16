@@ -1,0 +1,26 @@
+{
+  "filename": "TeoWT_Passport_scan.png",
+  "files": [
+    "TeoWT_Passport_scan.png"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Teo Wan Ting",
+    "passport_number": "K4138172E",
+    "date_of_birth": "1973-09-28",
+    "date_of_expiry": "2035-08-24",
+    "date_of_issue": "2025-08-24",
+    "place_of_birth": "Singapore",
+    "sex": "F",
+    "nric_number": "S7389497B"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,22 @@
+{
+  "filename": "InvestmentStatement_TanWM.pdf",
+  "files": [
+    "InvestmentStatement_TanWM.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "TAN WEI MING",
+    "individual_address": "304 BUKIT BATOK STREET 31,#02-84,Singapore,650304",
+    "account_number": "1008617631143531",
+    "net_asset_value": 12621.41,
+    "portfolio_value": 11554.9,
+    "cash_balance": 1066.51
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

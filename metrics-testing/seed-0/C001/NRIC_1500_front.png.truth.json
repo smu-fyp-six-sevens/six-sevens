@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_1500_front.png",
+  "files": [
+    "NRIC_1500_front.png"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S0801500G",
+    "individual_name": "Heng Wan Ting",
+    "date_of_birth": "1963-08-05",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "M",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

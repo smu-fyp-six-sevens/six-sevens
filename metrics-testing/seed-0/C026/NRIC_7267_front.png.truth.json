@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_7267_front.png",
+  "files": [
+    "NRIC_7267_front.png"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7567267E",
+    "individual_name": "Teo Kok Wai",
+    "date_of_birth": "1975-03-15",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "M",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

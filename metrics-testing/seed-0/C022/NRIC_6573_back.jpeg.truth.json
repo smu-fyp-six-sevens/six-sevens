@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_6573_back.jpeg",
+  "files": [
+    "NRIC_6573_back.jpeg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S8306573G",
+    "individual_address": "545 Serangoon North Avenue 3, #03-70, Singapore 550545",
+    "date_of_issue": "2025-11-05",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

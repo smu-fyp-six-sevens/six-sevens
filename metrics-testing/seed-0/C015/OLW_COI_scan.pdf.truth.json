@@ -1,0 +1,24 @@
+{
+  "filename": "OLW_COI_scan.pdf",
+  "files": [
+    "OLW_COI_scan.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Orchid Lane Wellness Pte Ltd",
+    "uen": "200941250Z",
+    "incorporation_date": "2009-05-02",
+    "company_type": "Limited Exempt Private Company",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2014-06-02",
+    "company_former_name": "Ivory Grove Logistics Pte. Ltd.",
+    "company_former_name_change_date": "2014-05-21"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

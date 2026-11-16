@@ -1,0 +1,36 @@
+{
+  "filename": "SummitPeakRecruitment_FinancialStatements_FY2025.pdf",
+  "files": [
+    "SummitPeakRecruitment_FinancialStatements_FY2025.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Summit Peak Recruitment Pte Ltd",
+    "uen": "201585653M",
+    "financial_year_end": "2026-06-30",
+    "signing_date": "2026-10-10",
+    "revenue": 5244000.0,
+    "profit_for_the_year": 459700.0,
+    "profit_for_the_year_prior_year": 429500.0,
+    "total_assets": 4774300.0,
+    "total_liabilities": 2985100.0,
+    "total_equity": 1789200.0,
+    "share_capital": 300000.0,
+    "total_current_assets": 2962100.0,
+    "total_non_current_assets": 1812200.0,
+    "total_current_liabilities": 1695300.0,
+    "total_non_current_liabilities": 1289800.0,
+    "retained_earnings_closing": 1489200.0,
+    "retained_earnings_closing_prior_year": 1029500.0,
+    "total_assets_prior_year": 3128900.0,
+    "total_liabilities_prior_year": 1799400.0,
+    "total_equity_prior_year": 1329500.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

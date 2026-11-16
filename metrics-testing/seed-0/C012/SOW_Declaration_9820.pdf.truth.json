@@ -1,0 +1,22 @@
+{
+  "filename": "SOW_Declaration_9820.pdf",
+  "files": [
+    "SOW_Declaration_9820.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "SITI AISHAH BINTE KAMAL",
+    "individual_address": "105 HENDERSON CRESCENT,#21-333,Singapore,150105",
+    "account_number": "1008983680832445",
+    "net_asset_value": 12826.1,
+    "portfolio_value": 11844.77,
+    "cash_balance": 981.33
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

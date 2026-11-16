@@ -1,0 +1,26 @@
+{
+  "filename": "LowKW_Passport_scan.png",
+  "files": [
+    "LowKW_Passport_scan.png"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Low Kok Wai",
+    "passport_number": "E5553378E",
+    "date_of_birth": "1970-06-18",
+    "date_of_expiry": "2031-08-06",
+    "date_of_issue": "2021-08-06",
+    "place_of_birth": "Singapore",
+    "sex": "F",
+    "nric_number": "S7057816F"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

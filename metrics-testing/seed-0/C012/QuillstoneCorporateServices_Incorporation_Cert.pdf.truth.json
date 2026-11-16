@@ -1,0 +1,24 @@
+{
+  "filename": "QuillstoneCorporateServices_Incorporation_Cert.pdf",
+  "files": [
+    "QuillstoneCorporateServices_Incorporation_Cert.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Quillstone Corporate Services Pte Ltd",
+    "uen": "201324905W",
+    "incorporation_date": "2013-01-04",
+    "company_type": "Private company limited by shares",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2018-01-04",
+    "company_former_name": "Golden Light Engineering Pte. Ltd.",
+    "company_former_name_change_date": "2017-12-04"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

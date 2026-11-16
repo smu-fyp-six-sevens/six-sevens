@@ -1,0 +1,55 @@
+{
+  "filename": "BusinessProfile_BA_20260831.pdf",
+  "files": [
+    "BusinessProfile_BA_20260831.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "BRIGHTWAVE ANALYTICS PTE LTD",
+    "uen": "201298459R",
+    "incorporation_date": "2012-12-12",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "21 MEDIA CIRCLE, #03-05, SINGAPORE 138562",
+    "share_capital": 500000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "LAKSHMI D/O RAJENDRAN",
+        "identification_no": "S8427269H",
+        "address": "4 TOH YI DRIVE, #04-11, SINGAPORE 590004",
+        "shares": 400000
+      },
+      {
+        "name": "HENG WAN TING",
+        "identification_no": "S0801500G",
+        "address": "454 CLEMENTI AVENUE 3, #05-63, SINGAPORE 120454",
+        "shares": 100000
+      }
+    ],
+    "officers": [
+      {
+        "name": "LAKSHMI D/O RAJENDRAN",
+        "identification_no": "S8427269H",
+        "position": "Director",
+        "date_of_appointment": "2012-12-12"
+      },
+      {
+        "name": "TEO LI XUAN",
+        "identification_no": "S6627954E",
+        "position": "Secretary",
+        "date_of_appointment": "2013-02-10"
+      }
+    ],
+    "document_date": "2026-08-28",
+    "last_agm_date": "2025-10-28",
+    "last_annual_return_date": "2025-11-10",
+    "financial_year_end": "2025-06-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,28 @@
+{
+  "filename": "RFS_Company_ProofAddr.pdf",
+  "files": [
+    "RFS_Company_ProofAddr.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Redwood Fitness Studio Pte Ltd",
+    "company_address": "1 Changi Business Park Crescent #11-05, Singapore 486025",
+    "entity_type": "corporate",
+    "bill_date": "2026-11-14",
+    "billing_period_end": "2026-10-31",
+    "total_payable": 760.47,
+    "due_date": "2026-11-28",
+    "previous_balance": 757.66,
+    "payment_received": 757.66,
+    "current_charges": 760.47,
+    "contract_end_date": "2029-03-28",
+    "usage_this_period": 2926
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

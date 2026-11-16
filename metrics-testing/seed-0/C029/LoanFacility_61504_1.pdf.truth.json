@@ -1,0 +1,25 @@
+{
+  "filename": "LoanFacility_61504_1.pdf",
+  "files": [
+    "LoanFacility_61504_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Summit Peak Recruitment Pte Ltd",
+    "company_address": "9 Raffles Place, #09-28, Singapore 048619",
+    "individual_name": "Sim Siew Lan",
+    "loan_amount": 120000.0,
+    "uen": "201585653M",
+    "facility_type": "Overdraft",
+    "offer_date": "2026-08-05",
+    "interest_rate": 7.21,
+    "review_date": "2027-08-05"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

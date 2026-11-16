@@ -1,0 +1,27 @@
+{
+  "filename": "Payslip_Jun2026_ChongKW.pdf",
+  "files": [
+    "Payslip_Jun2026_ChongKW.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Chong Kai Wen",
+    "company_name": "Junction Nine Logistics Pte Ltd",
+    "net_pay": 5816.86,
+    "basic_pay": 6930.0,
+    "employee_cpf": 1436.0
+  },
+  "not_printed": {
+    "company_address": "8 Burn Road, #03-13, Singapore 369977",
+    "total_earnings": 7280.0,
+    "total_deductions": 1463.14,
+    "pay_date": "2026-06-30",
+    "pay_period_end": "2026-06-30"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

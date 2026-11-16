@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_8915_front.jpeg",
+  "files": [
+    "NRIC_8915_front.jpeg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S8388915B",
+    "individual_name": "Ahmad Syafiq bin Osman",
+    "date_of_birth": "1983-02-24",
+    "country": "Singapore",
+    "race": "Malay",
+    "sex": "F",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

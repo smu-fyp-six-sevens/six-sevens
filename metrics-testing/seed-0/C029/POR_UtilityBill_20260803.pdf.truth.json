@@ -1,0 +1,23 @@
+{
+  "filename": "POR_UtilityBill_20260803.pdf",
+  "files": [
+    "POR_UtilityBill_20260803.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Foo Zhi Hao",
+    "individual_address": "271 Toh Guan Road, #03-160, Singapore 600271",
+    "entity_type": "individual",
+    "bill_date": "2026-07-26",
+    "billing_period_end": "2026-06-30",
+    "total_payable": 140.53,
+    "due_date": "2026-08-09"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

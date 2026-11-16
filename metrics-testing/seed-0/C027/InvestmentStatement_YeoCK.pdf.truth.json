@@ -1,0 +1,22 @@
+{
+  "filename": "InvestmentStatement_YeoCK.pdf",
+  "files": [
+    "InvestmentStatement_YeoCK.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "YEO CHEE KEONG",
+    "individual_address": "106D PUNGGOL FIELD,#02-71,Singapore,824106",
+    "account_number": "1008406290682786",
+    "net_asset_value": 13896.48,
+    "portfolio_value": 9541.74,
+    "cash_balance": 4354.74
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

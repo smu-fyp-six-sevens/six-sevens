@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_1988_front.png",
+  "files": [
+    "NRIC_1988_front.png"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S9391988B",
+    "individual_name": "Ong Zhi Hao",
+    "date_of_birth": "1993-02-03",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "F",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

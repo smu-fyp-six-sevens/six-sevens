@@ -1,0 +1,24 @@
+{
+  "filename": "JunctionNineLogistics_Incorporation_Cert.pdf",
+  "files": [
+    "JunctionNineLogistics_Incorporation_Cert.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Junction Nine Logistics Pte Ltd",
+    "uen": "201655475N",
+    "incorporation_date": "2016-04-11",
+    "company_type": "Private company limited by shares",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2017-06-15",
+    "company_former_name": "Emerald Field Engineering Pte. Ltd.",
+    "company_former_name_change_date": "2017-05-07"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

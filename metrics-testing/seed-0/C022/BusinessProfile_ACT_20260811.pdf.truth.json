@@ -1,0 +1,56 @@
+{
+  "filename": "BusinessProfile_ACT_20260811.pdf",
+  "files": [
+    "BusinessProfile_ACT_20260811.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "AZURE COAST TRADING PTE LTD",
+    "uen": "201648605K",
+    "incorporation_date": "2016-08-05",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "545 SERANGOON NORTH AVENUE 3, #03-70, SINGAPORE 550545",
+    "share_capital": 300000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "ONG SHU FEN",
+        "identification_no": "S8306573G",
+        "address": "545 SERANGOON NORTH AVENUE 3, #03-70, SINGAPORE 550545",
+        "shares": 240000
+      },
+      {
+        "name": "TEO WAN TING",
+        "identification_no": "S7389497B",
+        "address": "1E CANTONMENT ROAD, #16-62, SINGAPORE 085501",
+        "shares": 60000
+      }
+    ],
+    "officers": [
+      {
+        "name": "ONG SHU FEN",
+        "identification_no": "S8306573G",
+        "position": "Director",
+        "date_of_appointment": "2016-08-05"
+      },
+      {
+        "name": "CHAN SIEW PENG",
+        "identification_no": "S6183453B",
+        "position": "Secretary",
+        "date_of_appointment": "2016-10-16"
+      }
+    ],
+    "company_former_name": "ORCHID RIDGE DISTRIBUTION PTE. LTD.",
+    "document_date": "2026-08-05",
+    "last_agm_date": "2025-10-16",
+    "last_annual_return_date": "2025-11-21",
+    "financial_year_end": "2025-06-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

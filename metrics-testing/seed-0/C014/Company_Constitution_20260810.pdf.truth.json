@@ -1,0 +1,38 @@
+{
+  "filename": "Company_Constitution_20260810.pdf",
+  "files": [
+    "Company_Constitution_20260810.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Maplecrest Home Bakery Pte Ltd",
+    "uen": "201618187W",
+    "incorporation_date": "2016-02-04",
+    "company_address": "248 Pasir Ris Street 21, #08-69, Singapore 510248",
+    "share_capital": 100000.0,
+    "issued_shares": 100000,
+    "subscribers": [
+      {
+        "name": "Teo Kai Wen",
+        "address": "248 Pasir Ris Street 21, #08-69, Singapore 510248",
+        "id_number": "S7141634H",
+        "shares": 60000
+      },
+      {
+        "name": "Chua Jia Hui",
+        "address": "247 Bishan Street 22, #02-98, Singapore 570247",
+        "id_number": "S7362222J",
+        "shares": 40000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2016-02-04"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

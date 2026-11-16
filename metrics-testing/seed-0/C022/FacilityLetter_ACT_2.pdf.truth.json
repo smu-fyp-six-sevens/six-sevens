@@ -1,0 +1,26 @@
+{
+  "filename": "FacilityLetter_ACT_2.pdf",
+  "files": [
+    "FacilityLetter_ACT_2.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Azure Coast Trading Pte Ltd",
+    "company_address": "545 Serangoon North Avenue 3, #03-70, Singapore 550545",
+    "individual_name": "Ong Shu Fen",
+    "loan_amount": 425000.0,
+    "uen": "201648605K",
+    "facility_type": "Term Loan",
+    "offer_date": "2026-08-17",
+    "interest_rate": 5.2,
+    "loan_tenure": "84 months",
+    "monthly_instalment": 6046.93
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

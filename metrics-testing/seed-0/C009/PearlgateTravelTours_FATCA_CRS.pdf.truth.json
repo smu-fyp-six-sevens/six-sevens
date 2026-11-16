@@ -1,0 +1,38 @@
+{
+  "filename": "PearlgateTravelTours_FATCA_CRS.pdf",
+  "files": [
+    "PearlgateTravelTours_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Pearlgate Travel & Tours Pte Ltd",
+    "company_address": "1 George Street, #09-19, Singapore 049145",
+    "tin": "201857413H",
+    "declaration_date": "2026-08-19",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201857413H"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Ng Pei Shan"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Seah Wan Ting"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

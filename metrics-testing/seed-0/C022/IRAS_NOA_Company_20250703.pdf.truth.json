@@ -1,0 +1,24 @@
+{
+  "filename": "IRAS_NOA_Company_20250703.pdf",
+  "files": [
+    "IRAS_NOA_Company_20250703.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Azure Coast Trading Pte Ltd",
+    "tax_reference_number": "201648605K",
+    "company_address": "545 Serangoon North Avenue 3, #03-70, Singapore 550545",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-07-03",
+    "eci": 354900,
+    "tax_payable": 21454.0,
+    "previous_assessment_date": "2025-05-19"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

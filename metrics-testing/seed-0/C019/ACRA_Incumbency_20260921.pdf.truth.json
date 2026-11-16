@@ -1,0 +1,56 @@
+{
+  "filename": "ACRA_Incumbency_20260921.pdf",
+  "files": [
+    "ACRA_Incumbency_20260921.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "BAYFRONT EVENT MANAGEMENT PTE LTD",
+    "uen": "201069884N",
+    "incorporation_date": "2010-11-15",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "6 EU TONG SEN STREET, #05-26, SINGAPORE 059817",
+    "share_capital": 200000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "ONG AI LING",
+        "identification_no": "S7956540G",
+        "address": "45 MARINE CRESCENT, #16-31, SINGAPORE 440045",
+        "shares": 140000
+      },
+      {
+        "name": "WONG TECK HUAT",
+        "identification_no": "S9313308J",
+        "address": "230G TAMPINES STREET 21, #03-58, SINGAPORE 521230",
+        "shares": 60000
+      }
+    ],
+    "officers": [
+      {
+        "name": "ONG AI LING",
+        "identification_no": "S7956540G",
+        "position": "Director",
+        "date_of_appointment": "2010-11-15"
+      },
+      {
+        "name": "NURUL AISYAH BINTE RAHMAN",
+        "identification_no": "S6609017E",
+        "position": "Secretary",
+        "date_of_appointment": "2011-02-01"
+      }
+    ],
+    "company_former_name": "NEXUS GROVE LOGISTICS PTE. LTD.",
+    "document_date": "2026-09-17",
+    "last_agm_date": "2025-11-08",
+    "last_annual_return_date": "2025-11-16",
+    "financial_year_end": "2025-06-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

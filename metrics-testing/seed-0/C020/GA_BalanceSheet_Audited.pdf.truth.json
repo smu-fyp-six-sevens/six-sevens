@@ -1,0 +1,36 @@
+{
+  "filename": "GA_BalanceSheet_Audited.pdf",
+  "files": [
+    "GA_BalanceSheet_Audited.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Greenfield Agri-Tech Pte Ltd",
+    "uen": "201425482H",
+    "financial_year_end": "2026-03-31",
+    "signing_date": "2026-07-19",
+    "revenue": 1551000.0,
+    "profit_for_the_year": 168300.0,
+    "profit_for_the_year_prior_year": 205000.0,
+    "total_assets": 3168100.0,
+    "total_liabilities": 1498800.0,
+    "total_equity": 1669300.0,
+    "share_capital": 1000000.0,
+    "total_current_assets": 1650400.0,
+    "total_non_current_assets": 1517700.0,
+    "total_current_liabilities": 992500.0,
+    "total_non_current_liabilities": 506300.0,
+    "retained_earnings_closing": 669300.0,
+    "retained_earnings_closing_prior_year": 501000.0,
+    "total_assets_prior_year": 2731100.0,
+    "total_liabilities_prior_year": 1230100.0,
+    "total_equity_prior_year": 1501000.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

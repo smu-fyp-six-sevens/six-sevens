@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_2285_front.jpg",
+  "files": [
+    "NRIC_2285_front.jpg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7402285E",
+    "individual_name": "Deepa d/o Govindasamy",
+    "date_of_birth": "1974-11-19",
+    "country": "Singapore",
+    "race": "Indian",
+    "sex": "M",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

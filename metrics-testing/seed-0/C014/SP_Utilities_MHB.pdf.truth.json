@@ -1,0 +1,28 @@
+{
+  "filename": "SP_Utilities_MHB.pdf",
+  "files": [
+    "SP_Utilities_MHB.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Maplecrest Home Bakery Pte Ltd",
+    "company_address": "248 Pasir Ris Street 21 #08-69, Singapore 510248",
+    "entity_type": "corporate",
+    "bill_date": "2026-11-10",
+    "billing_period_end": "2026-10-31",
+    "total_payable": 415.72,
+    "due_date": "2026-11-24",
+    "previous_balance": 443.61,
+    "payment_received": 443.61,
+    "current_charges": 415.72,
+    "contract_end_date": "2030-03-10",
+    "usage_this_period": 1434
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

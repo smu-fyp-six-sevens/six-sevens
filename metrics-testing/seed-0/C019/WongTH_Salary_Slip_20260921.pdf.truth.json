@@ -1,0 +1,26 @@
+{
+  "filename": "WongTH_Salary_Slip_20260921.pdf",
+  "files": [
+    "WongTH_Salary_Slip_20260921.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Wong Teck Huat",
+    "company_name": "Bayfront Event Management Pte Ltd",
+    "company_address": "6 Eu Tong Sen Street, #05-26, Singapore 059817",
+    "net_pay": 5987.82,
+    "basic_pay": 6770.0,
+    "total_earnings": 7540.0,
+    "total_deductions": 1552.18,
+    "employee_cpf": 1508.0,
+    "pay_date": "2026-08-31",
+    "pay_period_end": "2026-08-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

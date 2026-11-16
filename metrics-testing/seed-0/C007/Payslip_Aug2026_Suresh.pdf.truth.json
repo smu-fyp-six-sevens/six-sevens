@@ -1,0 +1,26 @@
+{
+  "filename": "Payslip_Aug2026_Suresh.pdf",
+  "files": [
+    "Payslip_Aug2026_Suresh.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Suresh s/o Nair",
+    "company_name": "Willowbrook Tuition Services Pte Ltd",
+    "company_address": "550 Serangoon North Avenue 3, #09-240, Singapore 550550",
+    "net_pay": 4705.46,
+    "basic_pay": 5170.0,
+    "total_earnings": 5910.0,
+    "total_deductions": 1204.54,
+    "employee_cpf": 1182.0,
+    "pay_date": "2026-08-31",
+    "pay_period_end": "2026-08-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

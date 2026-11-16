@@ -1,0 +1,38 @@
+{
+  "filename": "BayfrontEventManagement_FATCA_CRS.pdf",
+  "files": [
+    "BayfrontEventManagement_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Bayfront Event Management Pte Ltd",
+    "company_address": "6 Eu Tong Sen Street, #05-26, Singapore 059817",
+    "tin": "201069884N",
+    "declaration_date": "2026-09-22",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201069884N"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Ong Ai Ling"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Wong Teck Huat"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

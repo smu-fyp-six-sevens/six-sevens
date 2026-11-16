@@ -1,0 +1,38 @@
+{
+  "filename": "FATCA_SelfCert_EBT_2026.pdf",
+  "files": [
+    "FATCA_SelfCert_EBT_2026.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Evergreen Botanics Trading Pte Ltd",
+    "company_address": "3 Irving Road, #04-10, Singapore 369522",
+    "tin": "201013127C",
+    "declaration_date": "2026-08-28",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201013127C"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Mohamed Hafiz bin Yusof"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Chan Boon Keng"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

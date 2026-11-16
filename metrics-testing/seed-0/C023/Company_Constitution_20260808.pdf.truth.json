@@ -1,0 +1,38 @@
+{
+  "filename": "Company_Constitution_20260808.pdf",
+  "files": [
+    "Company_Constitution_20260808.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Redwood Fitness Studio Pte Ltd",
+    "uen": "201877625H",
+    "incorporation_date": "2018-10-05",
+    "company_address": "1 Changi Business Park Crescent, #11-05, Singapore 486025",
+    "share_capital": 200000.0,
+    "issued_shares": 200000,
+    "subscribers": [
+      {
+        "name": "Arun s/o Pillai",
+        "address": "329 Bukit Batok Street 33, #09-395, Singapore 650329",
+        "id_number": "S6848680G",
+        "shares": 150000
+      },
+      {
+        "name": "Kavitha d/o Ramasamy",
+        "address": "108A Bidadari Park Drive, #13-158, Singapore 341108",
+        "id_number": "T0019177E",
+        "shares": 50000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2018-10-05"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

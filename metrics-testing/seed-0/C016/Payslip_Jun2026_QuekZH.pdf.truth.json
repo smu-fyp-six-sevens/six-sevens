@@ -1,0 +1,26 @@
+{
+  "filename": "Payslip_Jun2026_QuekZH.pdf",
+  "files": [
+    "Payslip_Jun2026_QuekZH.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Quek Zhi Hao",
+    "company_name": "Stellar Arc Software Pte Ltd",
+    "company_address": "60 Paya Lebar Road, #03-12, Singapore 409051",
+    "net_pay": 5934.58,
+    "basic_pay": 5980.0,
+    "total_earnings": 6540.0,
+    "total_deductions": 605.42,
+    "employee_cpf": 490.0,
+    "pay_date": "2026-06-30",
+    "pay_period_end": "2026-06-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

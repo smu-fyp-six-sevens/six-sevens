@@ -1,0 +1,26 @@
+{
+  "filename": "OngSM_Passport_scan.jpeg",
+  "files": [
+    "OngSM_Passport_scan.jpeg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Ong Su Min",
+    "passport_number": "E5224759G",
+    "date_of_birth": "1982-06-17",
+    "date_of_expiry": "2029-12-28",
+    "date_of_issue": "2019-12-28",
+    "place_of_birth": "Singapore",
+    "sex": "M",
+    "nric_number": "S8229919Z"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

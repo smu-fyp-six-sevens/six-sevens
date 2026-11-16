@@ -1,0 +1,22 @@
+{
+  "filename": "InvestmentStatement_ChongHL.pdf",
+  "files": [
+    "InvestmentStatement_ChongHL.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "CHONG HUI LING",
+    "individual_address": "41A MARGARET DRIVE,#04-43,Singapore,143041",
+    "account_number": "1008494343098669",
+    "net_asset_value": 29625.95,
+    "portfolio_value": 28809.53,
+    "cash_balance": 816.42
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

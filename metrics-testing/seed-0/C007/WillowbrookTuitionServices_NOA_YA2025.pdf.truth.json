@@ -1,0 +1,24 @@
+{
+  "filename": "WillowbrookTuitionServices_NOA_YA2025.pdf",
+  "files": [
+    "WillowbrookTuitionServices_NOA_YA2025.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Willowbrook Tuition Services Pte Ltd",
+    "tax_reference_number": "201830203N",
+    "company_address": "550 Serangoon North Avenue 3, #09-240, Singapore 550550",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-07-31",
+    "eci": 485100,
+    "tax_payable": 32521.0,
+    "previous_assessment_date": "2025-06-12"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

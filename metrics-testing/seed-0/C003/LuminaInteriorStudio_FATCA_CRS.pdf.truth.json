@@ -1,0 +1,38 @@
+{
+  "filename": "LuminaInteriorStudio_FATCA_CRS.pdf",
+  "files": [
+    "LuminaInteriorStudio_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Lumina Interior Studio Pte Ltd",
+    "company_address": "2A Boon Tiong Road, #12-27, Singapore 164002",
+    "tin": "201063283R",
+    "declaration_date": "2026-08-31",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201063283R"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Low Kok Wai"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Farah Nadia binte Salleh"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

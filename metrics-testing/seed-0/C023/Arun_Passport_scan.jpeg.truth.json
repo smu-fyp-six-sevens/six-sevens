@@ -1,0 +1,26 @@
+{
+  "filename": "Arun_Passport_scan.jpeg",
+  "files": [
+    "Arun_Passport_scan.jpeg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Arun s/o Pillai",
+    "passport_number": "E8107721J",
+    "date_of_birth": "1968-10-01",
+    "date_of_expiry": "2030-04-26",
+    "date_of_issue": "2020-04-26",
+    "place_of_birth": "Singapore",
+    "sex": "M",
+    "nric_number": "S6848680G"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

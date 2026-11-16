@@ -1,0 +1,26 @@
+{
+  "filename": "LoanFacility_21791_2.pdf",
+  "files": [
+    "LoanFacility_21791_2.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Summit Peak Recruitment Pte Ltd",
+    "company_address": "9 Raffles Place, #09-28, Singapore 048619",
+    "individual_name": "Sim Siew Lan",
+    "loan_amount": 750000.0,
+    "uen": "201585653M",
+    "facility_type": "Term Loan",
+    "offer_date": "2026-08-05",
+    "interest_rate": 4.87,
+    "loan_tenure": "84 months",
+    "monthly_instalment": 10554.68
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

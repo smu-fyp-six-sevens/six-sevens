@@ -1,0 +1,28 @@
+{
+  "filename": "SP_Utilities_IBS.pdf",
+  "files": [
+    "SP_Utilities_IBS.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Ironleaf Building Services Pte Ltd",
+    "company_address": "31 Woodlands Close #01-09, Singapore 737855",
+    "entity_type": "corporate",
+    "bill_date": "2026-11-08",
+    "billing_period_end": "2026-10-31",
+    "total_payable": 711.6,
+    "due_date": "2026-11-22",
+    "previous_balance": 592.65,
+    "payment_received": 454.13,
+    "current_charges": 573.08,
+    "contract_end_date": "2030-06-01",
+    "usage_this_period": 2205
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,38 @@
+{
+  "filename": "StellarArcSoftware_Constitution_signed.pdf",
+  "files": [
+    "StellarArcSoftware_Constitution_signed.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Stellar Arc Software Pte Ltd",
+    "uen": "200973418E",
+    "incorporation_date": "2009-08-23",
+    "company_address": "60 Paya Lebar Road, #03-12, Singapore 409051",
+    "share_capital": 750000.0,
+    "issued_shares": 750000,
+    "subscribers": [
+      {
+        "name": "Muhammad Faizal bin Rahman",
+        "address": "244 Serangoon Avenue 2, #04-28, Singapore 550244",
+        "id_number": "S9304247F",
+        "shares": 487500
+      },
+      {
+        "name": "Quek Zhi Hao",
+        "address": "339C Kang Ching Road, #06-136, Singapore 613339",
+        "id_number": "S0788664J",
+        "shares": 262500
+      }
+    ],
+    "quorum": 3,
+    "adoption_date": "2009-08-23"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

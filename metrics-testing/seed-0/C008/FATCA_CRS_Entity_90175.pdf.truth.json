@@ -1,0 +1,38 @@
+{
+  "filename": "FATCA_CRS_Entity_90175.pdf",
+  "files": [
+    "FATCA_CRS_Entity_90175.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Ironleaf Building Services Pte Ltd",
+    "company_address": "31 Woodlands Close, #01-09, Singapore 737855",
+    "tin": "201651600K",
+    "declaration_date": "2026-08-10",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201651600K"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Chua Zhen Yu"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Iskandar bin Hamzah"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

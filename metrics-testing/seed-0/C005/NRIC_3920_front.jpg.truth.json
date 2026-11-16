@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_3920_front.jpg",
+  "files": [
+    "NRIC_3920_front.jpg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7813920Z",
+    "individual_name": "Nurul Huda binte Ismail",
+    "date_of_birth": "1978-02-28",
+    "country": "Singapore",
+    "race": "Malay",
+    "sex": "F",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

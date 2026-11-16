@@ -1,0 +1,24 @@
+{
+  "filename": "NOA_YA2025_201585653M.pdf",
+  "files": [
+    "NOA_YA2025_201585653M.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Summit Peak Recruitment Pte Ltd",
+    "tax_reference_number": "201585653M",
+    "company_address": "9 Raffles Place, #09-28, Singapore 048619",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-12-04",
+    "eci": 532900,
+    "tax_payable": 36584.0,
+    "previous_assessment_date": "2025-07-03"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

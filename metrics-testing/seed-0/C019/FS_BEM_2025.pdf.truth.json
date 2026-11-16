@@ -1,0 +1,36 @@
+{
+  "filename": "FS_BEM_2025.pdf",
+  "files": [
+    "FS_BEM_2025.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Bayfront Event Management Pte Ltd",
+    "uen": "201069884N",
+    "financial_year_end": "2026-06-30",
+    "signing_date": "2026-11-16",
+    "revenue": 4440000.0,
+    "profit_for_the_year": 445800.0,
+    "profit_for_the_year_prior_year": 390300.0,
+    "total_assets": 3469000.0,
+    "total_liabilities": 2049900.0,
+    "total_equity": 1419100.0,
+    "share_capital": 200000.0,
+    "total_current_assets": 2002800.0,
+    "total_non_current_assets": 1466200.0,
+    "total_current_liabilities": 1096900.0,
+    "total_non_current_liabilities": 953000.0,
+    "retained_earnings_closing": 1219100.0,
+    "retained_earnings_closing_prior_year": 773300.0,
+    "total_assets_prior_year": 2303300.0,
+    "total_liabilities_prior_year": 1330000.0,
+    "total_equity_prior_year": 973300.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

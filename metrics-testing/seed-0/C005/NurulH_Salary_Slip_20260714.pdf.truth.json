@@ -1,0 +1,27 @@
+{
+  "filename": "NurulH_Salary_Slip_20260714.pdf",
+  "files": [
+    "NurulH_Salary_Slip_20260714.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Nurul Huda binte Ismail",
+    "company_name": "Saffron Table Catering Pte Ltd",
+    "net_pay": 7238.01,
+    "basic_pay": 8480.0,
+    "employee_cpf": 1656.0
+  },
+  "not_printed": {
+    "company_address": "50 Gambas Crescent, #05-13, Singapore 757022",
+    "total_earnings": 8920.0,
+    "total_deductions": 1681.99,
+    "pay_date": "2026-06-30",
+    "pay_period_end": "2026-06-30"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

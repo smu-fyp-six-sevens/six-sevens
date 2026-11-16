@@ -1,0 +1,26 @@
+{
+  "filename": "HoML_Passport_scan.jpg",
+  "files": [
+    "HoML_Passport_scan.jpg"
+  ],
+  "document_type": "passport",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Ho Mei Ling",
+    "passport_number": "K1994041Z",
+    "date_of_birth": "1974-09-02",
+    "date_of_expiry": "2034-10-12",
+    "date_of_issue": "2024-10-12",
+    "place_of_birth": "Singapore",
+    "sex": "M",
+    "nric_number": "S7434568I"
+  },
+  "not_printed": {
+    "nationality": "Singaporean"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

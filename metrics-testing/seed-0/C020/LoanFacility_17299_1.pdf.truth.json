@@ -1,0 +1,50 @@
+{
+  "filename": "LoanFacility_17299_1.pdf",
+  "files": [
+    "LoanFacility_17299_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Greenfield Agri-Tech Pte Ltd",
+    "company_address": "9 Temasek Boulevard, #02-04, Singapore 038989",
+    "individual_name": "Teo Jia Hui",
+    "loan_amount": 250000.0,
+    "uen": "201425482H",
+    "facility_type": "Overdraft",
+    "offer_date": "2026-08-28",
+    "interest_rate": 6.92,
+    "review_date": "2027-08-28"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": true,
+  "tampering": [
+    {
+      "dimension": "Text Overlay",
+      "defect_type": "text_overlay",
+      "expected_tools": [
+        "layout_anomalies_tool",
+        "hidden_text_tool"
+      ],
+      "description": "Facility amount raised by 100,000, drawn over the original figure.",
+      "edits": [
+        {
+          "printed_before": "SGD 150,000.00",
+          "printed_after": "SGD 250,000.00",
+          "injector": "Overlaid matching text on existing field: 'SGD 250,000.00'"
+        }
+      ],
+      "field": "loan_amount",
+      "original": 150000.0,
+      "forged": 250000.0
+    }
+  ],
+  "accept_also": {
+    "loan_amount": [
+      150000.0
+    ]
+  }
+}

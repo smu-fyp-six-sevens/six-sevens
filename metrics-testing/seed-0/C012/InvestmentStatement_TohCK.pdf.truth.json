@@ -1,0 +1,22 @@
+{
+  "filename": "InvestmentStatement_TohCK.pdf",
+  "files": [
+    "InvestmentStatement_TohCK.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "TOH CHEE KEONG",
+    "individual_address": "313 SHUNFU ROAD,#07-108,Singapore,570313",
+    "account_number": "1008937891793731",
+    "net_asset_value": 26711.05,
+    "portfolio_value": 23761.83,
+    "cash_balance": 2949.22
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

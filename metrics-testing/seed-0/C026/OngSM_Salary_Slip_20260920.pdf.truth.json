@@ -1,0 +1,27 @@
+{
+  "filename": "OngSM_Salary_Slip_20260920.pdf",
+  "files": [
+    "OngSM_Salary_Slip_20260920.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Ong Su Min",
+    "company_name": "Cedar & Co Renovation Pte Ltd",
+    "net_pay": 4907.08,
+    "basic_pay": 5670.0,
+    "employee_cpf": 1204.0
+  },
+  "not_printed": {
+    "company_address": "362 Clementi Avenue 2, #03-92, Singapore 120362",
+    "total_earnings": 6210.0,
+    "total_deductions": 1302.92,
+    "pay_date": "2026-08-31",
+    "pay_period_end": "2026-08-31"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

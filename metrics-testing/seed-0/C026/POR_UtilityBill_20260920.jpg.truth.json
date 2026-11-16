@@ -1,0 +1,23 @@
+{
+  "filename": "POR_UtilityBill_20260920.jpg",
+  "files": [
+    "POR_UtilityBill_20260920.jpg"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Ong Su Min",
+    "individual_address": "33 Margaret Drive, #43-229, Singapore 140033",
+    "entity_type": "individual",
+    "bill_date": "2026-09-12",
+    "billing_period_end": "2026-08-31",
+    "total_payable": 169.99,
+    "due_date": "2026-09-26"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

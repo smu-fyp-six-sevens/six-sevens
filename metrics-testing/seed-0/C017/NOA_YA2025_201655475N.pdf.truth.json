@@ -1,0 +1,24 @@
+{
+  "filename": "NOA_YA2025_201655475N.pdf",
+  "files": [
+    "NOA_YA2025_201655475N.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Junction Nine Logistics Pte Ltd",
+    "tax_reference_number": "201655475N",
+    "company_address": "8 Burn Road, #03-13, Singapore 369977",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-06-24",
+    "eci": 385000,
+    "tax_payable": 24012.5,
+    "previous_assessment_date": "2025-05-14"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

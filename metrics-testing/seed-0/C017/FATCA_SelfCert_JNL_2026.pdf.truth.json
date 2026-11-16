@@ -1,0 +1,38 @@
+{
+  "filename": "FATCA_SelfCert_JNL_2026.pdf",
+  "files": [
+    "FATCA_SelfCert_JNL_2026.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Junction Nine Logistics Pte Ltd",
+    "company_address": "8 Burn Road, #03-13, Singapore 369977",
+    "tin": "201655475N",
+    "declaration_date": "2026-07-29",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201655475N"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Ong Zhi Hao"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Chong Kai Wen"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

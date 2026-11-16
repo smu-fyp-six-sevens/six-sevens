@@ -1,0 +1,38 @@
+{
+  "filename": "KestrelFreightForwarding_FATCA_CRS.pdf",
+  "files": [
+    "KestrelFreightForwarding_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Kestrel Freight Forwarding Pte Ltd",
+    "company_address": "21 Bukit Batok Crescent, #04-18, Singapore 658065",
+    "tin": "201156535W",
+    "declaration_date": "2026-09-03",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201156535W"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Ho Kok Wai"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Toh Kai Wen"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

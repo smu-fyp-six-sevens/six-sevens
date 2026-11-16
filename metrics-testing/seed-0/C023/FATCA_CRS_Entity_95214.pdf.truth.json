@@ -1,0 +1,38 @@
+{
+  "filename": "FATCA_CRS_Entity_95214.pdf",
+  "files": [
+    "FATCA_CRS_Entity_95214.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Redwood Fitness Studio Pte Ltd",
+    "company_address": "1 Changi Business Park Crescent, #11-05, Singapore 486025",
+    "tin": "201877625H",
+    "declaration_date": "2026-08-10",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201877625H"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Arun s/o Pillai"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Kavitha d/o Ramasamy"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

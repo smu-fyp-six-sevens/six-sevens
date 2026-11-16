@@ -1,0 +1,24 @@
+{
+  "filename": "TidewaterMarineSupplies_NOA_YA2025.pdf",
+  "files": [
+    "TidewaterMarineSupplies_NOA_YA2025.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Tidewater Marine Supplies Pte Ltd",
+    "tax_reference_number": "201657409E",
+    "company_address": "5012 Ang Mo Kio Avenue 5, #01-21, Singapore 569876",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-06-10",
+    "eci": 568300,
+    "tax_payable": 39593.0,
+    "previous_assessment_date": "2025-04-15"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

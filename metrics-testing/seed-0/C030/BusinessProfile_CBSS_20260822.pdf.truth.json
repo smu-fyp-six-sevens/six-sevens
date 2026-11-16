@@ -1,0 +1,56 @@
+{
+  "filename": "BusinessProfile_CBSS_20260822.pdf",
+  "files": [
+    "BusinessProfile_CBSS_20260822.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "CORAL BAY SEAFOOD SUPPLY PTE LTD",
+    "uen": "201078782M",
+    "incorporation_date": "2010-01-15",
+    "company_type": "LIMITED EXEMPT PRIVATE COMPANY",
+    "company_address": "50 TUAS AVENUE 11, #01-30, SINGAPORE 639107",
+    "share_capital": 250000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "TAN HUI LING",
+        "identification_no": "S7729098B",
+        "address": "122E RIVERVALE DRIVE, #08-140, SINGAPORE 545122",
+        "shares": 162500
+      },
+      {
+        "name": "CHONG HUI LING",
+        "identification_no": "S7641659A",
+        "address": "41A MARGARET DRIVE, #04-43, SINGAPORE 143041",
+        "shares": 87500
+      }
+    ],
+    "officers": [
+      {
+        "name": "TAN HUI LING",
+        "identification_no": "S7729098B",
+        "position": "Director",
+        "date_of_appointment": "2010-01-15"
+      },
+      {
+        "name": "TEO LI XUAN",
+        "identification_no": "S6368854A",
+        "position": "Secretary",
+        "date_of_appointment": "2010-01-24"
+      }
+    ],
+    "company_former_name": "VANTAGE HARVEST DISTRIBUTION PTE. LTD.",
+    "document_date": "2026-08-14",
+    "last_agm_date": "2025-11-12",
+    "last_annual_return_date": "2025-12-10",
+    "financial_year_end": "2025-06-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

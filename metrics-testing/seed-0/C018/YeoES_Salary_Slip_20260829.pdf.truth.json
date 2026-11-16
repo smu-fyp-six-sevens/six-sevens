@@ -1,0 +1,27 @@
+{
+  "filename": "YeoES_Salary_Slip_20260829.pdf",
+  "files": [
+    "YeoES_Salary_Slip_20260829.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Yeo Eng Seng",
+    "company_name": "Copperfield Bookkeeping Services Pte Ltd",
+    "net_pay": 5383.32,
+    "basic_pay": 6210.0,
+    "total_earnings": 7450.0,
+    "total_deductions": 2066.68,
+    "employee_cpf": 1341.0,
+    "pay_date": "2026-08-31",
+    "pay_period_end": "2026-08-31"
+  },
+  "not_printed": {
+    "company_address": "288A Jurong East Street 21, #10-224, Singapore 601288"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

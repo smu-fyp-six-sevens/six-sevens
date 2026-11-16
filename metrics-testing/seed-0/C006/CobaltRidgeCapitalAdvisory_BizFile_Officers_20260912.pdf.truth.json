@@ -1,0 +1,56 @@
+{
+  "filename": "CobaltRidgeCapitalAdvisory_BizFile_Officers_20260912.pdf",
+  "files": [
+    "CobaltRidgeCapitalAdvisory_BizFile_Officers_20260912.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "COBALT RIDGE CAPITAL ADVISORY PTE LTD",
+    "uen": "201294420E",
+    "incorporation_date": "2012-06-19",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "302 TIONG BAHRU ROAD, #10-24, SINGAPORE 168732",
+    "share_capital": 100000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "TAN WEI MING",
+        "identification_no": "S8012207A",
+        "address": "304 BUKIT BATOK STREET 31, #02-84, SINGAPORE 650304",
+        "shares": 55000
+      },
+      {
+        "name": "ZURAIDAH BINTE ABDULLAH",
+        "identification_no": "S0760129H",
+        "address": "131B CANBERRA CRESCENT, #11-140, SINGAPORE 752131",
+        "shares": 45000
+      }
+    ],
+    "officers": [
+      {
+        "name": "TAN WEI MING",
+        "identification_no": "S8012207A",
+        "position": "Director",
+        "date_of_appointment": "2012-06-19"
+      },
+      {
+        "name": "NURUL AISYAH BINTE RAHMAN",
+        "identification_no": "S7974026H",
+        "position": "Secretary",
+        "date_of_appointment": "2012-09-06"
+      }
+    ],
+    "company_former_name": "AZURE PEAK INVESTMENTS PTE. LTD.",
+    "document_date": "2026-09-12",
+    "last_agm_date": "2026-01-30",
+    "last_annual_return_date": "2026-03-07",
+    "financial_year_end": "2025-09-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

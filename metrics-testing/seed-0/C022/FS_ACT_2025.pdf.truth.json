@@ -1,0 +1,36 @@
+{
+  "filename": "FS_ACT_2025.pdf",
+  "files": [
+    "FS_ACT_2025.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Azure Coast Trading Pte Ltd",
+    "uen": "201648605K",
+    "financial_year_end": "2026-06-30",
+    "signing_date": "2026-11-17",
+    "revenue": 3147000.0,
+    "profit_for_the_year": 312000.0,
+    "profit_for_the_year_prior_year": 304100.0,
+    "total_assets": 2333500.0,
+    "total_liabilities": 1070400.0,
+    "total_equity": 1263100.0,
+    "share_capital": 300000.0,
+    "total_current_assets": 1291300.0,
+    "total_non_current_assets": 1042200.0,
+    "total_current_liabilities": 714500.0,
+    "total_non_current_liabilities": 355900.0,
+    "retained_earnings_closing": 963100.0,
+    "retained_earnings_closing_prior_year": 651100.0,
+    "total_assets_prior_year": 1735700.0,
+    "total_liabilities_prior_year": 784600.0,
+    "total_equity_prior_year": 951100.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

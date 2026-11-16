@@ -1,0 +1,26 @@
+{
+  "filename": "LuminaInteriorStudio_CreditBureau.pdf",
+  "files": [
+    "LuminaInteriorStudio_CreditBureau.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Low Kok Wai",
+    "id_number": "S7057816F",
+    "date_of_birth": "1970-06-18",
+    "nationality": "Singaporean",
+    "individual_address": "2A Boon Tiong Road, #12-27, Singapore 164002",
+    "report_date": "2026-08-31",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 0
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

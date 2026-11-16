@@ -1,0 +1,26 @@
+{
+  "filename": "FacilityLetter_BEM_1.pdf",
+  "files": [
+    "FacilityLetter_BEM_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Bayfront Event Management Pte Ltd",
+    "company_address": "6 Eu Tong Sen Street, #05-26, Singapore 059817",
+    "individual_name": "Ong Ai Ling",
+    "loan_amount": 775000.0,
+    "uen": "201069884N",
+    "facility_type": "Term Loan",
+    "offer_date": "2026-09-22",
+    "interest_rate": 5.2,
+    "loan_tenure": "84 months",
+    "monthly_instalment": 11026.76
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

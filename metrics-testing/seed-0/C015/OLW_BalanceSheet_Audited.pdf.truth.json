@@ -1,0 +1,36 @@
+{
+  "filename": "OLW_BalanceSheet_Audited.pdf",
+  "files": [
+    "OLW_BalanceSheet_Audited.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Orchid Lane Wellness Pte Ltd",
+    "uen": "200941250Z",
+    "financial_year_end": "2026-06-30",
+    "signing_date": "2026-10-26",
+    "revenue": 2236000.0,
+    "profit_for_the_year": 301800.0,
+    "profit_for_the_year_prior_year": 247900.0,
+    "total_assets": 2482500.0,
+    "total_liabilities": 1018800.0,
+    "total_equity": 1463700.0,
+    "share_capital": 750000.0,
+    "total_current_assets": 1711300.0,
+    "total_non_current_assets": 771200.0,
+    "total_current_liabilities": 549900.0,
+    "total_non_current_liabilities": 468900.0,
+    "retained_earnings_closing": 713700.0,
+    "retained_earnings_closing_prior_year": 411900.0,
+    "total_assets_prior_year": 1865000.0,
+    "total_liabilities_prior_year": 703100.0,
+    "total_equity_prior_year": 1161900.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

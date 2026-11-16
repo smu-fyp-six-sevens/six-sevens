@@ -1,0 +1,26 @@
+{
+  "filename": "PearlgateTravelTours_CreditBureau.pdf",
+  "files": [
+    "PearlgateTravelTours_CreditBureau.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Ng Pei Shan",
+    "id_number": "S6846972D",
+    "date_of_birth": "1968-01-21",
+    "nationality": "Singaporean",
+    "individual_address": "182 Jelebu Road, #04-199, Singapore 670182",
+    "report_date": "2026-08-19",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 500000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

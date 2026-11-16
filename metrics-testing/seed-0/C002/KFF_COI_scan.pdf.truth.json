@@ -1,0 +1,61 @@
+{
+  "filename": "KFF_COI_scan.pdf",
+  "files": [
+    "KFF_COI_scan.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Kestrel Freight Forwarding Pte Ltd",
+    "uen": "201156535W",
+    "incorporation_date": "2001-03-21",
+    "company_type": "Private company limited by shares",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2016-10-31",
+    "company_former_name": "Titan Oak Distribution Pte. Ltd.",
+    "company_former_name_change_date": "2016-10-08"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": true,
+  "tampering": [
+    {
+      "dimension": "Metadata",
+      "defect_type": "metadata",
+      "expected_tools": [
+        "metadata_tool"
+      ],
+      "description": "Creator/Producer set to Adobe Photoshop, inconsistent with an ACRA-issued certificate.",
+      "edits": [
+        {
+          "printed_before": "Certificate Confirming Incorporation of Company",
+          "printed_after": null,
+          "injector": "Tampered document metadata: creator='Adobe Photoshop 25.0', producer='Adobe Photoshop 25.0'"
+        }
+      ]
+    },
+    {
+      "dimension": "Date Anomalies",
+      "defect_type": "numerical",
+      "expected_tools": [
+        "date_consistency_tool",
+        "numerical_checks_tool",
+        "external_validation_tool"
+      ],
+      "description": "Incorporation date moved ten years back, so it predates the year in the UEN.",
+      "edits": [
+        {
+          "printed_before": "21 Mar 2011",
+          "printed_after": "21 Mar 2001",
+          "injector": "Tampered numeric value from 21 to 21 Mar 2001"
+        }
+      ],
+      "field": "incorporation_date",
+      "original": "2011-03-21",
+      "forged": "2001-03-21"
+    }
+  ],
+  "accept_also": {}
+}

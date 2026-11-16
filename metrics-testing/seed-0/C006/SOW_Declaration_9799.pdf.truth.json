@@ -1,0 +1,22 @@
+{
+  "filename": "SOW_Declaration_9799.pdf",
+  "files": [
+    "SOW_Declaration_9799.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "ZURAIDAH BINTE ABDULLAH",
+    "individual_address": "131B CANBERRA CRESCENT,#11-140,Singapore,752131",
+    "account_number": "1008580127953907",
+    "net_asset_value": 22830.18,
+    "portfolio_value": 20778.01,
+    "cash_balance": 2052.17
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

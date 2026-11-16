@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_9177_front.jpeg",
+  "files": [
+    "NRIC_9177_front.jpeg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "T0019177E",
+    "individual_name": "Kavitha d/o Ramasamy",
+    "date_of_birth": "2000-05-05",
+    "country": "Singapore",
+    "race": "Indian",
+    "sex": "M",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,38 @@
+{
+  "filename": "EvergreenBotanicsTrading_Constitution_signed.pdf",
+  "files": [
+    "EvergreenBotanicsTrading_Constitution_signed.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Evergreen Botanics Trading Pte Ltd",
+    "uen": "201013127C",
+    "incorporation_date": "2010-06-10",
+    "company_address": "3 Irving Road, #04-10, Singapore 369522",
+    "share_capital": 500000.0,
+    "issued_shares": 500000,
+    "subscribers": [
+      {
+        "name": "Mohamed Hafiz bin Yusof",
+        "address": "471 Ang Mo Kio Avenue 10, #05-87, Singapore 560471",
+        "id_number": "S8818442D",
+        "shares": 300000
+      },
+      {
+        "name": "Chan Boon Keng",
+        "address": "133 Simei Street 1, #06-34, Singapore 520133",
+        "id_number": "S8042877D",
+        "shares": 200000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2010-06-10"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

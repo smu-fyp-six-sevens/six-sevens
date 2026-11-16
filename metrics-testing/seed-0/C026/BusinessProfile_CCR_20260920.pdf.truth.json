@@ -1,0 +1,55 @@
+{
+  "filename": "BusinessProfile_CCR_20260920.pdf",
+  "files": [
+    "BusinessProfile_CCR_20260920.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "CEDAR & CO RENOVATION PTE LTD",
+    "uen": "201521828G",
+    "incorporation_date": "2015-06-21",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "362 CLEMENTI AVENUE 2, #03-92, SINGAPORE 120362",
+    "share_capital": 1000000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "TEO KOK WAI",
+        "identification_no": "S7567267E",
+        "address": "362 CLEMENTI AVENUE 2, #03-92, SINGAPORE 120362",
+        "shares": 600000
+      },
+      {
+        "name": "ONG SU MIN",
+        "identification_no": "S8229919Z",
+        "address": "33 MARGARET DRIVE, #43-229, SINGAPORE 140033",
+        "shares": 400000
+      }
+    ],
+    "officers": [
+      {
+        "name": "TEO KOK WAI",
+        "identification_no": "S7567267E",
+        "position": "Director",
+        "date_of_appointment": "2015-06-21"
+      },
+      {
+        "name": "CHAN SIEW PENG",
+        "identification_no": "S7207221I",
+        "position": "Secretary",
+        "date_of_appointment": "2015-09-11"
+      }
+    ],
+    "document_date": "2026-09-15",
+    "last_agm_date": "2025-07-08",
+    "last_annual_return_date": "2025-08-13",
+    "financial_year_end": "2025-03-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,22 @@
+{
+  "filename": "BizFile_554761.pdf",
+  "files": [
+    "BizFile_554761.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Vantage Point IT Solutions Pte Ltd",
+    "uen": "201630706M",
+    "incorporation_date": "2016-10-21",
+    "company_type": "Limited Exempt Private Company",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2016-10-21"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

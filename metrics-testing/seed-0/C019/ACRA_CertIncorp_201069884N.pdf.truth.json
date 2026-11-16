@@ -1,0 +1,24 @@
+{
+  "filename": "ACRA_CertIncorp_201069884N.pdf",
+  "files": [
+    "ACRA_CertIncorp_201069884N.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Bayfront Event Management Pte Ltd",
+    "uen": "201069884N",
+    "incorporation_date": "2010-11-15",
+    "company_type": "Private company limited by shares",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2015-02-23",
+    "company_former_name": "Nexus Grove Logistics Pte. Ltd.",
+    "company_former_name_change_date": "2015-01-14"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

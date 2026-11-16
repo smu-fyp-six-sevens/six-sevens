@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_3308_back.jpeg",
+  "files": [
+    "NRIC_3308_back.jpeg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S9313308J",
+    "individual_address": "230G Tampines Street 21, #03-58, Singapore 521230",
+    "date_of_issue": "2021-06-28",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,38 @@
+{
+  "filename": "SilverpineFurnitureWorks_FATCA_CRS.pdf",
+  "files": [
+    "SilverpineFurnitureWorks_FATCA_CRS.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Silverpine Furniture Works Pte Ltd",
+    "company_address": "2 Bukit Batok Street 23, #05-21, Singapore 659554",
+    "tin": "200921425R",
+    "declaration_date": "2026-08-31",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "200921425R"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Vikram s/o Chandran"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Deepa d/o Govindasamy"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

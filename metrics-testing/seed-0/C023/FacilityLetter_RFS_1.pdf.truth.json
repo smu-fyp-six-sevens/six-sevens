@@ -1,0 +1,25 @@
+{
+  "filename": "FacilityLetter_RFS_1.pdf",
+  "files": [
+    "FacilityLetter_RFS_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Redwood Fitness Studio Pte Ltd",
+    "company_address": "1 Changi Business Park Crescent, #11-05, Singapore 486025",
+    "individual_name": "Arun s/o Pillai",
+    "loan_amount": 110000.0,
+    "uen": "201877625H",
+    "facility_type": "Overdraft",
+    "offer_date": "2026-08-10",
+    "interest_rate": 6.52,
+    "review_date": "2027-08-10"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,22 @@
+{
+  "filename": "InvestmentStatement_TanHL.pdf",
+  "files": [
+    "InvestmentStatement_TanHL.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "TAN HUI LING",
+    "individual_address": "122E RIVERVALE DRIVE,#08-140,Singapore,545122",
+    "account_number": "1008701042811528",
+    "net_asset_value": 11612.77,
+    "portfolio_value": 10164.19,
+    "cash_balance": 1448.58
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

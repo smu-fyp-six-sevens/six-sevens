@@ -1,0 +1,22 @@
+{
+  "filename": "SOW_Declaration_8522.pdf",
+  "files": [
+    "SOW_Declaration_8522.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "LOW KOK WAI",
+    "individual_address": "2A BOON TIONG ROAD,#12-27,Singapore,164002",
+    "account_number": "1008635361456229",
+    "net_asset_value": 18051.96,
+    "portfolio_value": 15369.97,
+    "cash_balance": 2681.99
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

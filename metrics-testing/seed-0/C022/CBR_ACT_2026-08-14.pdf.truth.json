@@ -1,0 +1,26 @@
+{
+  "filename": "CBR_ACT_2026-08-14.pdf",
+  "files": [
+    "CBR_ACT_2026-08-14.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Ong Shu Fen",
+    "id_number": "S8306573G",
+    "date_of_birth": "1983-12-03",
+    "nationality": "Singaporean",
+    "individual_address": "545 Serangoon North Avenue 3, #03-70, Singapore 550545",
+    "report_date": "2026-08-17",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 1500000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

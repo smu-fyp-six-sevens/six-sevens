@@ -1,0 +1,36 @@
+{
+  "filename": "FS_RFS_2025.pdf",
+  "files": [
+    "FS_RFS_2025.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Redwood Fitness Studio Pte Ltd",
+    "uen": "201877625H",
+    "financial_year_end": "2026-03-31",
+    "signing_date": "2026-08-15",
+    "revenue": 2948000.0,
+    "profit_for_the_year": 464600.0,
+    "profit_for_the_year_prior_year": 328600.0,
+    "total_assets": 2221800.0,
+    "total_liabilities": 888600.0,
+    "total_equity": 1333200.0,
+    "share_capital": 200000.0,
+    "total_current_assets": 1475800.0,
+    "total_non_current_assets": 746000.0,
+    "total_current_liabilities": 578400.0,
+    "total_non_current_liabilities": 310200.0,
+    "retained_earnings_closing": 1133200.0,
+    "retained_earnings_closing_prior_year": 668600.0,
+    "total_assets_prior_year": 1439300.0,
+    "total_liabilities_prior_year": 570700.0,
+    "total_equity_prior_year": 868600.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

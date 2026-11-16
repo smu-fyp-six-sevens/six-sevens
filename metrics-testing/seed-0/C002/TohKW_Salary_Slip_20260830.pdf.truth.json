@@ -1,0 +1,27 @@
+{
+  "filename": "TohKW_Salary_Slip_20260830.pdf",
+  "files": [
+    "TohKW_Salary_Slip_20260830.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Toh Kai Wen",
+    "company_name": "Kestrel Freight Forwarding Pte Ltd",
+    "net_pay": 5565.51,
+    "basic_pay": 5960.0,
+    "employee_cpf": 1177.0
+  },
+  "not_printed": {
+    "company_address": "21 Bukit Batok Crescent, #04-18, Singapore 658065",
+    "total_earnings": 6820.0,
+    "total_deductions": 1254.49,
+    "pay_date": "2026-08-31",
+    "pay_period_end": "2026-08-31"
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

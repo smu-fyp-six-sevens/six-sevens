@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_8252_back.png",
+  "files": [
+    "NRIC_8252_back.png"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S6938252E",
+    "individual_address": "284 Yishun Avenue 6, #03-75, Singapore 760284",
+    "date_of_issue": "2019-05-23",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

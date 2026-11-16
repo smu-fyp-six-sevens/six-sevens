@@ -1,0 +1,26 @@
+{
+  "filename": "KohCK_Salary_Slip_20260803.pdf",
+  "files": [
+    "KohCK_Salary_Slip_20260803.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Koh Chee Keong",
+    "company_name": "Harbourview Digital Media Pte Ltd",
+    "company_address": "1 Gateway Drive, #06-04, Singapore 608531",
+    "net_pay": 3633.32,
+    "basic_pay": 4390.0,
+    "total_earnings": 4670.0,
+    "total_deductions": 1036.68,
+    "employee_cpf": 934.0,
+    "pay_date": "2026-07-31",
+    "pay_period_end": "2026-07-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

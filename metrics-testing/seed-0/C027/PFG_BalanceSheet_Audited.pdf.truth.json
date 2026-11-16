@@ -1,0 +1,36 @@
+{
+  "filename": "PFG_BalanceSheet_Audited.pdf",
+  "files": [
+    "PFG_BalanceSheet_Audited.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Primrose Florist & Gifts Pte Ltd",
+    "uen": "201683387R",
+    "financial_year_end": "2026-03-31",
+    "signing_date": "2026-08-07",
+    "revenue": 2374000.0,
+    "profit_for_the_year": 305100.0,
+    "profit_for_the_year_prior_year": 253200.0,
+    "total_assets": 3839500.0,
+    "total_liabilities": 2152200.0,
+    "total_equity": 1687300.0,
+    "share_capital": 750000.0,
+    "total_current_assets": 2351600.0,
+    "total_non_current_assets": 1487900.0,
+    "total_current_liabilities": 1335400.0,
+    "total_non_current_liabilities": 816800.0,
+    "retained_earnings_closing": 937300.0,
+    "retained_earnings_closing_prior_year": 632200.0,
+    "total_assets_prior_year": 2706100.0,
+    "total_liabilities_prior_year": 1323900.0,
+    "total_equity_prior_year": 1382200.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

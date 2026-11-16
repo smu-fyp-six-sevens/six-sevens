@@ -1,0 +1,24 @@
+{
+  "filename": "NOA_YA2025_201618187W.pdf",
+  "files": [
+    "NOA_YA2025_201618187W.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Maplecrest Home Bakery Pte Ltd",
+    "tax_reference_number": "201618187W",
+    "company_address": "248 Pasir Ris Street 21, #08-69, Singapore 510248",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-09-17",
+    "eci": 172500,
+    "tax_payable": 7118.75,
+    "previous_assessment_date": "2025-07-08"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

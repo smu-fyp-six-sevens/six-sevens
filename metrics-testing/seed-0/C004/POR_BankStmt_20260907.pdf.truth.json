@@ -1,0 +1,275 @@
+{
+  "filename": "POR_BankStmt_20260907.pdf",
+  "files": [
+    "POR_BankStmt_20260907.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [
+    "bank_statement"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "TAN KOK WAI",
+    "individual_address": "20 TECK WHYE LANE, #05-46, SINGAPORE 680020",
+    "entity_type": "individual",
+    "account_number": "990-018210-879",
+    "statement_period_start": "2026-05-01",
+    "statement_period_end": "2026-08-31",
+    "opening_balance": 5425.02,
+    "ledger_balance": 18418.68,
+    "transactions": [
+      {
+        "date": "2026-05-01",
+        "description": "ONLINE TRANSFER",
+        "amount": -807.93,
+        "balance": 4617.09
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -250,
+        "balance": 4367.09
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -60,
+        "balance": 4307.09
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -240.04,
+        "balance": 4067.05
+      },
+      {
+        "description": "SUPERMARKET CARD PAYMENT",
+        "amount": -376.36,
+        "balance": 3690.69
+      },
+      {
+        "description": "PHARMACY CARD PAYMENT",
+        "amount": -198.99,
+        "balance": 3491.7
+      },
+      {
+        "description": "SUPERMARKET CARD PAYMENT",
+        "amount": -563.54,
+        "balance": 2928.16
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 5136.75,
+        "balance": 8064.91
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 8.1,
+        "balance": 8073.01
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -80,
+        "balance": 7993.01
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -249.57,
+        "balance": 7743.44
+      },
+      {
+        "description": "RETAIL CARD PAYMENT",
+        "amount": -286.11,
+        "balance": 7457.33
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -290,
+        "balance": 7167.33
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 5136.75,
+        "balance": 12304.08
+      },
+      {
+        "description": "SUPERMARKET CARD PAYMENT",
+        "amount": -572.66,
+        "balance": 11731.42
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 8.96,
+        "balance": 11740.38
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -288.03,
+        "balance": 11452.35
+      },
+      {
+        "description": "RETAIL CARD PAYMENT",
+        "amount": -139.65,
+        "balance": 11312.7
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 5136.75,
+        "balance": 16449.45
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -100,
+        "balance": 16349.45
+      },
+      {
+        "description": "PETROL CARD PAYMENT",
+        "amount": -620.77,
+        "balance": 15728.68
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 14.08,
+        "balance": 15742.76
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -140,
+        "balance": 15602.76
+      },
+      {
+        "description": "SUPERMARKET CARD PAYMENT",
+        "amount": -243.54,
+        "balance": 15359.22
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -137.57,
+        "balance": 15221.65
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -100,
+        "balance": 15121.65
+      },
+      {
+        "description": "ONLINE TRANSFER",
+        "amount": -766.41,
+        "balance": 14355.24
+      },
+      {
+        "description": "PHARMACY CARD PAYMENT",
+        "amount": -443.66,
+        "balance": 13911.58
+      },
+      {
+        "description": "PHARMACY CARD PAYMENT",
+        "amount": -652.42,
+        "balance": 13259.16
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 5136.75,
+        "balance": 18395.91
+      },
+      {
+        "date": "2026-08-31",
+        "description": "INTEREST CREDIT",
+        "amount": 22.77,
+        "balance": 18418.68
+      }
+    ]
+  },
+  "not_printed": {
+    "transactions": [
+      {
+        "date": "2026-05-06"
+      },
+      {
+        "date": "2026-05-09"
+      },
+      {
+        "date": "2026-05-09"
+      },
+      {
+        "date": "2026-05-18"
+      },
+      {
+        "date": "2026-05-22"
+      },
+      {
+        "date": "2026-05-24"
+      },
+      {
+        "date": "2026-05-25"
+      },
+      {
+        "date": "2026-05-31"
+      },
+      {
+        "date": "2026-06-09"
+      },
+      {
+        "date": "2026-06-09"
+      },
+      {
+        "date": "2026-06-10"
+      },
+      {
+        "date": "2026-06-19"
+      },
+      {
+        "date": "2026-06-25"
+      },
+      {
+        "date": "2026-06-29"
+      },
+      {
+        "date": "2026-06-30"
+      },
+      {
+        "date": "2026-07-06"
+      },
+      {
+        "date": "2026-07-14"
+      },
+      {
+        "date": "2026-07-19"
+      },
+      {
+        "date": "2026-07-23"
+      },
+      {
+        "date": "2026-07-27"
+      },
+      {
+        "date": "2026-07-31"
+      },
+      {
+        "date": "2026-08-02"
+      },
+      {
+        "date": "2026-08-05"
+      },
+      {
+        "date": "2026-08-05"
+      },
+      {
+        "date": "2026-08-11"
+      },
+      {
+        "date": "2026-08-12"
+      },
+      {
+        "date": "2026-08-13"
+      },
+      {
+        "date": "2026-08-18"
+      },
+      {
+        "date": "2026-08-18"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

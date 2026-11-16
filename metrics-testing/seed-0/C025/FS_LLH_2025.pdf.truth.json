@@ -1,0 +1,36 @@
+{
+  "filename": "FS_LLH_2025.pdf",
+  "files": [
+    "FS_LLH_2025.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Lighthouse Learning Hub Pte Ltd",
+    "uen": "201013138R",
+    "financial_year_end": "2026-03-31",
+    "signing_date": "2026-07-10",
+    "revenue": 5486000.0,
+    "profit_for_the_year": 795400.0,
+    "profit_for_the_year_prior_year": 605200.0,
+    "total_assets": 5907100.0,
+    "total_liabilities": 3206500.0,
+    "total_equity": 2700600.0,
+    "share_capital": 500000.0,
+    "total_current_assets": 3764500.0,
+    "total_non_current_assets": 2142600.0,
+    "total_current_liabilities": 1899900.0,
+    "total_non_current_liabilities": 1306600.0,
+    "retained_earnings_closing": 2200600.0,
+    "retained_earnings_closing_prior_year": 1405200.0,
+    "total_assets_prior_year": 3624800.0,
+    "total_liabilities_prior_year": 1719600.0,
+    "total_equity_prior_year": 1905200.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

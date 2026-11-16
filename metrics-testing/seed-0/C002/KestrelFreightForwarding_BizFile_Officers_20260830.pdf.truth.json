@@ -1,0 +1,56 @@
+{
+  "filename": "KestrelFreightForwarding_BizFile_Officers_20260830.pdf",
+  "files": [
+    "KestrelFreightForwarding_BizFile_Officers_20260830.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "KESTREL FREIGHT FORWARDING PTE LTD",
+    "uen": "201156535W",
+    "incorporation_date": "2011-03-21",
+    "company_type": "PRIVATE COMPANY LIMITED BY SHARES",
+    "company_address": "21 BUKIT BATOK CRESCENT, #04-18, SINGAPORE 658065",
+    "share_capital": 750000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "HO KOK WAI",
+        "identification_no": "S7143844I",
+        "address": "333 WOODLANDS STREET 32, #03-298, SINGAPORE 730333",
+        "shares": 675000
+      },
+      {
+        "name": "TOH KAI WEN",
+        "identification_no": "S0899470F",
+        "address": "513 ANG MO KIO AVENUE 8, #05-230, SINGAPORE 560513",
+        "shares": 75000
+      }
+    ],
+    "officers": [
+      {
+        "name": "HO KOK WAI",
+        "identification_no": "S7143844I",
+        "position": "Director",
+        "date_of_appointment": "2011-03-21"
+      },
+      {
+        "name": "GOH MEI LING",
+        "identification_no": "S7840696H",
+        "position": "Secretary",
+        "date_of_appointment": "2011-04-07"
+      }
+    ],
+    "company_former_name": "TITAN OAK DISTRIBUTION PTE. LTD.",
+    "document_date": "2026-08-25",
+    "last_agm_date": "2025-10-28",
+    "last_annual_return_date": "2025-12-07",
+    "financial_year_end": "2025-06-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

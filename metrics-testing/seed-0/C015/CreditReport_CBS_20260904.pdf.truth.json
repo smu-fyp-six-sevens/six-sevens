@@ -1,0 +1,26 @@
+{
+  "filename": "CreditReport_CBS_20260904.pdf",
+  "files": [
+    "CreditReport_CBS_20260904.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Ho Mei Ling",
+    "id_number": "S7434568I",
+    "date_of_birth": "1974-09-02",
+    "nationality": "Singaporean",
+    "individual_address": "120 Bedok Reservoir Road, #07-136, Singapore 470120",
+    "report_date": "2026-09-09",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 1500000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

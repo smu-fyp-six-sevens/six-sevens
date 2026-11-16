@@ -1,0 +1,285 @@
+{
+  "filename": "POR_BankStmt_20260822.pdf",
+  "files": [
+    "POR_BankStmt_20260822.pdf"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [
+    "bank_statement"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "CHONG HUI LING",
+    "individual_address": "41A MARGARET DRIVE, #04-43, SINGAPORE 143041",
+    "entity_type": "individual",
+    "account_number": "951-139467-045",
+    "statement_period_start": "2026-04-01",
+    "statement_period_end": "2026-07-31",
+    "opening_balance": 4595.49,
+    "ledger_balance": 28194.94,
+    "transactions": [
+      {
+        "description": "ONLINE TRANSFER",
+        "amount": -627.5,
+        "balance": 3967.99
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -160,
+        "balance": 3807.99
+      },
+      {
+        "description": "RETAIL CARD PAYMENT",
+        "amount": -605.8,
+        "balance": 3202.19
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -106.29,
+        "balance": 3095.9
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -100,
+        "balance": 2995.9
+      },
+      {
+        "description": "SUPERMARKET CARD PAYMENT",
+        "amount": -400.3,
+        "balance": 2595.6
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 7589.19,
+        "balance": 10184.79
+      },
+      {
+        "description": "PHARMACY CARD PAYMENT",
+        "amount": -528.79,
+        "balance": 9656.0
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 7.03,
+        "balance": 9663.03
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -95.01,
+        "balance": 9568.02
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -220,
+        "balance": 9348.02
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 7589.19,
+        "balance": 16937.21
+      },
+      {
+        "description": "SUPERMARKET CARD PAYMENT",
+        "amount": -287.67,
+        "balance": 16649.54
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 12.49,
+        "balance": 16662.03
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -160,
+        "balance": 16502.03
+      },
+      {
+        "description": "RESTAURANT CARD PAYMENT",
+        "amount": -479.81,
+        "balance": 16022.22
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -270,
+        "balance": 15752.22
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -129.96,
+        "balance": 15622.26
+      },
+      {
+        "description": "RESTAURANT CARD PAYMENT",
+        "amount": -265.04,
+        "balance": 15357.22
+      },
+      {
+        "description": "RETAIL CARD PAYMENT",
+        "amount": -628.0,
+        "balance": 14729.22
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 7589.19,
+        "balance": 22318.41
+      },
+      {
+        "description": "ONLINE TRANSFER",
+        "amount": 767.01,
+        "balance": 23085.42
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -210,
+        "balance": 22875.42
+      },
+      {
+        "description": "INTEREST CREDIT",
+        "amount": 15.04,
+        "balance": 22890.46
+      },
+      {
+        "description": "PHARMACY CARD PAYMENT",
+        "amount": -592.49,
+        "balance": 22297.97
+      },
+      {
+        "description": "UTILITY BILL PAYMENT",
+        "amount": -217.15,
+        "balance": 22080.82
+      },
+      {
+        "description": "ONLINE TRANSFER",
+        "amount": -729.43,
+        "balance": 21351.39
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -200,
+        "balance": 21151.39
+      },
+      {
+        "description": "PHARMACY CARD PAYMENT",
+        "amount": -495.11,
+        "balance": 20656.28
+      },
+      {
+        "description": "ATM WITHDRAWAL",
+        "amount": -70,
+        "balance": 20586.28
+      },
+      {
+        "description": "PAYROLL CREDIT",
+        "amount": 7589.19,
+        "balance": 28175.47
+      },
+      {
+        "date": "2026-07-31",
+        "description": "INTEREST CREDIT",
+        "amount": 19.47,
+        "balance": 28194.94
+      }
+    ]
+  },
+  "not_printed": {
+    "transactions": [
+      {
+        "date": "2026-04-02"
+      },
+      {
+        "date": "2026-04-06"
+      },
+      {
+        "date": "2026-04-06"
+      },
+      {
+        "date": "2026-04-10"
+      },
+      {
+        "date": "2026-04-11"
+      },
+      {
+        "date": "2026-04-17"
+      },
+      {
+        "date": "2026-04-22"
+      },
+      {
+        "date": "2026-04-27"
+      },
+      {
+        "date": "2026-04-30"
+      },
+      {
+        "date": "2026-05-06"
+      },
+      {
+        "date": "2026-05-14"
+      },
+      {
+        "date": "2026-05-23"
+      },
+      {
+        "date": "2026-05-25"
+      },
+      {
+        "date": "2026-05-31"
+      },
+      {
+        "date": "2026-06-03"
+      },
+      {
+        "date": "2026-06-03"
+      },
+      {
+        "date": "2026-06-07"
+      },
+      {
+        "date": "2026-06-10"
+      },
+      {
+        "date": "2026-06-16"
+      },
+      {
+        "date": "2026-06-19"
+      },
+      {
+        "date": "2026-06-22"
+      },
+      {
+        "date": "2026-06-23"
+      },
+      {
+        "date": "2026-06-25"
+      },
+      {
+        "date": "2026-06-30"
+      },
+      {
+        "date": "2026-07-02"
+      },
+      {
+        "date": "2026-07-06"
+      },
+      {
+        "date": "2026-07-13"
+      },
+      {
+        "date": "2026-07-17"
+      },
+      {
+        "date": "2026-07-17"
+      },
+      {
+        "date": "2026-07-23"
+      },
+      {
+        "date": "2026-07-23"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,38 @@
+{
+  "filename": "CCR_Constitution.pdf",
+  "files": [
+    "CCR_Constitution.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Cedar & Co Renovation Pte Ltd",
+    "uen": "201521828G",
+    "incorporation_date": "2015-06-21",
+    "company_address": "362 Clementi Avenue 2, #03-92, Singapore 120362",
+    "share_capital": 1000000.0,
+    "issued_shares": 1000000,
+    "subscribers": [
+      {
+        "name": "Teo Kok Wai",
+        "address": "362 Clementi Avenue 2, #03-92, Singapore 120362",
+        "id_number": "S7567267E",
+        "shares": 600000
+      },
+      {
+        "name": "Ong Su Min",
+        "address": "33 Margaret Drive, #43-229, Singapore 140033",
+        "id_number": "S8229919Z",
+        "shares": 400000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2015-06-21"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

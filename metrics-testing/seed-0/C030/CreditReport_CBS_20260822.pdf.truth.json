@@ -1,0 +1,26 @@
+{
+  "filename": "CreditReport_CBS_20260822.pdf",
+  "files": [
+    "CreditReport_CBS_20260822.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Tan Hui Ling",
+    "id_number": "S7729098B",
+    "date_of_birth": "1977-08-23",
+    "nationality": "Singaporean",
+    "individual_address": "122E Rivervale Drive, #08-140, Singapore 545122",
+    "report_date": "2026-08-25",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 1500000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

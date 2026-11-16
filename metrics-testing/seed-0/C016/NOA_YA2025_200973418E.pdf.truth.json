@@ -1,0 +1,24 @@
+{
+  "filename": "NOA_YA2025_200973418E.pdf",
+  "files": [
+    "NOA_YA2025_200973418E.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Stellar Arc Software Pte Ltd",
+    "tax_reference_number": "200973418E",
+    "company_address": "60 Paya Lebar Road, #03-12, Singapore 409051",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-09-10",
+    "eci": 252600,
+    "tax_payable": 12758.5,
+    "previous_assessment_date": "2025-07-15"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

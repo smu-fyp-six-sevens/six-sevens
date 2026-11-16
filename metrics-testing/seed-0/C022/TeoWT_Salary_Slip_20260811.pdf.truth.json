@@ -1,0 +1,26 @@
+{
+  "filename": "TeoWT_Salary_Slip_20260811.pdf",
+  "files": [
+    "TeoWT_Salary_Slip_20260811.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Teo Wan Ting",
+    "company_name": "Azure Coast Trading Pte Ltd",
+    "company_address": "545 Serangoon North Avenue 3, #03-70, Singapore 550545",
+    "net_pay": 3376.63,
+    "basic_pay": 3780.0,
+    "total_earnings": 4260.0,
+    "total_deductions": 883.37,
+    "employee_cpf": 852.0,
+    "pay_date": "2026-07-31",
+    "pay_period_end": "2026-07-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

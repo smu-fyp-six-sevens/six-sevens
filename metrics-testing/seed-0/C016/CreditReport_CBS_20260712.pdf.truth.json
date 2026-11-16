@@ -1,0 +1,26 @@
+{
+  "filename": "CreditReport_CBS_20260712.pdf",
+  "files": [
+    "CreditReport_CBS_20260712.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Muhammad Faizal bin Rahman",
+    "id_number": "S9304247F",
+    "date_of_birth": "1993-07-13",
+    "nationality": "Singaporean",
+    "individual_address": "244 Serangoon Avenue 2, #04-28, Singapore 550244",
+    "report_date": "2026-07-16",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 1500000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

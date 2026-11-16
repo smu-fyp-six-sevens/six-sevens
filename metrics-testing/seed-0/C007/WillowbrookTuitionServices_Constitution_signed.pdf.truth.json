@@ -1,0 +1,38 @@
+{
+  "filename": "WillowbrookTuitionServices_Constitution_signed.pdf",
+  "files": [
+    "WillowbrookTuitionServices_Constitution_signed.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Willowbrook Tuition Services Pte Ltd",
+    "uen": "201830203N",
+    "incorporation_date": "2018-07-25",
+    "company_address": "550 Serangoon North Avenue 3, #09-240, Singapore 550550",
+    "share_capital": 750000.0,
+    "issued_shares": 750000,
+    "subscribers": [
+      {
+        "name": "Koh Hwee Min",
+        "address": "550 Serangoon North Avenue 3, #09-240, Singapore 550550",
+        "id_number": "S7496277G",
+        "shares": 412500
+      },
+      {
+        "name": "Suresh s/o Nair",
+        "address": "304 Clementi Avenue 4, #09-304, Singapore 120304",
+        "id_number": "S8296399E",
+        "shares": 337500
+      }
+    ],
+    "quorum": 3,
+    "adoption_date": "2018-07-25"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

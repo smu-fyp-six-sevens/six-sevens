@@ -1,0 +1,26 @@
+{
+  "filename": "CreditReport_CBS_20260912.pdf",
+  "files": [
+    "CreditReport_CBS_20260912.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Tan Wei Ming",
+    "id_number": "S8012207A",
+    "date_of_birth": "1980-11-01",
+    "nationality": "Singaporean",
+    "individual_address": "304 Bukit Batok Street 31, #02-84, Singapore 650304",
+    "report_date": "2026-09-16",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 1500000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

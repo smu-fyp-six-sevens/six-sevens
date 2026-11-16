@@ -1,0 +1,38 @@
+{
+  "filename": "FATCA_CRS_Entity_54441.pdf",
+  "files": [
+    "FATCA_CRS_Entity_54441.pdf"
+  ],
+  "document_type": "fatca_crs_declaration",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Azure Coast Trading Pte Ltd",
+    "company_address": "545 Serangoon North Avenue 3, #03-70, Singapore 550545",
+    "tin": "201648605K",
+    "declaration_date": "2026-08-17",
+    "country_of_incorporation": "Singapore",
+    "tax_residences": [
+      {
+        "country": "Singapore",
+        "tin": "201648605K"
+      }
+    ],
+    "controlling_persons": [
+      {
+        "name": "Ong Shu Fen"
+      }
+    ]
+  },
+  "not_printed": {
+    "controlling_persons": [
+      {
+        "name": "Teo Wan Ting"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,38 @@
+{
+  "filename": "QCS_Constitution.pdf",
+  "files": [
+    "QCS_Constitution.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Quillstone Corporate Services Pte Ltd",
+    "uen": "201324905W",
+    "incorporation_date": "2013-01-04",
+    "company_address": "20 Pasir Panjang Road, #06-09, Singapore 117439",
+    "share_capital": 1000000.0,
+    "issued_shares": 1000000,
+    "subscribers": [
+      {
+        "name": "Toh Chee Keong",
+        "address": "313 Shunfu Road, #07-108, Singapore 570313",
+        "id_number": "S7453862B",
+        "shares": 650000
+      },
+      {
+        "name": "Siti Aishah binte Kamal",
+        "address": "105 Henderson Crescent, #21-333, Singapore 150105",
+        "id_number": "S7070937F",
+        "shares": 350000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2013-01-04"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

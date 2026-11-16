@@ -1,0 +1,26 @@
+{
+  "filename": "FacilityLetter_CRCA_2.pdf",
+  "files": [
+    "FacilityLetter_CRCA_2.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Cobalt Ridge Capital Advisory Pte Ltd",
+    "company_address": "302 Tiong Bahru Road, #10-24, Singapore 168732",
+    "individual_name": "Tan Wei Ming",
+    "loan_amount": 575000.0,
+    "uen": "201294420E",
+    "facility_type": "Term Loan",
+    "offer_date": "2026-09-16",
+    "interest_rate": 6.08,
+    "loan_tenure": "84 months",
+    "monthly_instalment": 8421.99
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

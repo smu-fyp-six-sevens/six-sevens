@@ -1,0 +1,38 @@
+{
+  "filename": "AzureCoastTrading_Constitution_signed.pdf",
+  "files": [
+    "AzureCoastTrading_Constitution_signed.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Azure Coast Trading Pte Ltd",
+    "uen": "201648605K",
+    "incorporation_date": "2016-08-05",
+    "company_address": "545 Serangoon North Avenue 3, #03-70, Singapore 550545",
+    "share_capital": 300000.0,
+    "issued_shares": 300000,
+    "subscribers": [
+      {
+        "name": "Ong Shu Fen",
+        "address": "545 Serangoon North Avenue 3, #03-70, Singapore 550545",
+        "id_number": "S8306573G",
+        "shares": 240000
+      },
+      {
+        "name": "Teo Wan Ting",
+        "address": "1E Cantonment Road, #16-62, Singapore 085501",
+        "id_number": "S7389497B",
+        "shares": 60000
+      }
+    ],
+    "quorum": 2,
+    "adoption_date": "2016-08-05"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

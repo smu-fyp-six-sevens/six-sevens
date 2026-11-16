@@ -1,0 +1,55 @@
+{
+  "filename": "ACRA_Incumbency_20260829.pdf",
+  "files": [
+    "ACRA_Incumbency_20260829.pdf"
+  ],
+  "document_type": "certificate_of_incumbency",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "LUMINA INTERIOR STUDIO PTE LTD",
+    "uen": "201063283R",
+    "incorporation_date": "2010-02-06",
+    "company_type": "LIMITED EXEMPT PRIVATE COMPANY",
+    "company_address": "2A BOON TIONG ROAD, #12-27, SINGAPORE 164002",
+    "share_capital": 300000.0,
+    "share_class": "ORDINARY",
+    "shareholders": [
+      {
+        "name": "LOW KOK WAI",
+        "identification_no": "S7057816F",
+        "address": "2A BOON TIONG ROAD, #12-27, SINGAPORE 164002",
+        "shares": 180000
+      },
+      {
+        "name": "FARAH NADIA BINTE SALLEH",
+        "identification_no": "S9780281E",
+        "address": "112A ALKAFF CRESCENT, #09-11, SINGAPORE 341112",
+        "shares": 120000
+      }
+    ],
+    "officers": [
+      {
+        "name": "LOW KOK WAI",
+        "identification_no": "S7057816F",
+        "position": "Director",
+        "date_of_appointment": "2010-02-06"
+      },
+      {
+        "name": "GOH MEI LING",
+        "identification_no": "S7280190C",
+        "position": "Secretary",
+        "date_of_appointment": "2010-03-29"
+      }
+    ],
+    "document_date": "2026-08-25",
+    "last_agm_date": "2026-01-28",
+    "last_annual_return_date": "2026-02-07",
+    "financial_year_end": "2025-09-30"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

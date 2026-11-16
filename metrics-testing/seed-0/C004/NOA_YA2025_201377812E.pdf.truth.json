@@ -1,0 +1,24 @@
+{
+  "filename": "NOA_YA2025_201377812E.pdf",
+  "files": [
+    "NOA_YA2025_201377812E.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Northbridge Precision Engineering Pte Ltd",
+    "tax_reference_number": "201377812E",
+    "company_address": "3 Soon Lee Street, #01-13, Singapore 627606",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-07-01",
+    "eci": 473400,
+    "tax_payable": 31526.5,
+    "previous_assessment_date": "2025-05-08"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

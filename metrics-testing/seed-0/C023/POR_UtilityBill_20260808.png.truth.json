@@ -1,0 +1,23 @@
+{
+  "filename": "POR_UtilityBill_20260808.png",
+  "files": [
+    "POR_UtilityBill_20260808.png"
+  ],
+  "document_type": "proof_of_address",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Kavitha d/o Ramasamy",
+    "individual_address": "108A Bidadari Park Drive, #13-158, Singapore 341108",
+    "entity_type": "individual",
+    "bill_date": "2026-08-06",
+    "billing_period_end": "2026-07-31",
+    "total_payable": 168.01,
+    "due_date": "2026-08-20"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

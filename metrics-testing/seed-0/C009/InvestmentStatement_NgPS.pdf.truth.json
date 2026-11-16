@@ -1,0 +1,22 @@
+{
+  "filename": "InvestmentStatement_NgPS.pdf",
+  "files": [
+    "InvestmentStatement_NgPS.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "NG PEI SHAN",
+    "individual_address": "182 JELEBU ROAD,#04-199,Singapore,670182",
+    "account_number": "1008478597179796",
+    "net_asset_value": 23343.86,
+    "portfolio_value": 18399.72,
+    "cash_balance": 4944.14
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

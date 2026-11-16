@@ -1,0 +1,26 @@
+{
+  "filename": "SummitPeakRecruitment_CreditBureau.pdf",
+  "files": [
+    "SummitPeakRecruitment_CreditBureau.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Sim Siew Lan",
+    "id_number": "S8271485E",
+    "date_of_birth": "1982-02-02",
+    "nationality": "Singaporean",
+    "individual_address": "106 Tampines Street 11, #05-24, Singapore 521106",
+    "report_date": "2026-08-05",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 1500000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

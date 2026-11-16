@@ -1,0 +1,24 @@
+{
+  "filename": "IRAS_NOA_Company_20250611.pdf",
+  "files": [
+    "IRAS_NOA_Company_20250611.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Cobalt Ridge Capital Advisory Pte Ltd",
+    "tax_reference_number": "201294420E",
+    "company_address": "302 Tiong Bahru Road, #10-24, Singapore 168732",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-06-11",
+    "eci": 366800,
+    "tax_payable": 22465.5,
+    "previous_assessment_date": "2025-05-06"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

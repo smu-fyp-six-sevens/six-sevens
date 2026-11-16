@@ -1,0 +1,26 @@
+{
+  "filename": "CBR_BEM_2026-09-19.pdf",
+  "files": [
+    "CBR_BEM_2026-09-19.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Ong Ai Ling",
+    "id_number": "S7956540G",
+    "date_of_birth": "1979-09-30",
+    "nationality": "Singaporean",
+    "individual_address": "45 Marine Crescent, #16-31, Singapore 440045",
+    "report_date": "2026-09-22",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 1500000
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

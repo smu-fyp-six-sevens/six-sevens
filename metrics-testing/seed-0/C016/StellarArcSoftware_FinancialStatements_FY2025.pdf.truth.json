@@ -1,0 +1,36 @@
+{
+  "filename": "StellarArcSoftware_FinancialStatements_FY2025.pdf",
+  "files": [
+    "StellarArcSoftware_FinancialStatements_FY2025.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Stellar Arc Software Pte Ltd",
+    "uen": "200973418E",
+    "financial_year_end": "2026-06-30",
+    "signing_date": "2026-10-27",
+    "revenue": 1745000.0,
+    "profit_for_the_year": 227100.0,
+    "profit_for_the_year_prior_year": 230100.0,
+    "total_assets": 3259000.0,
+    "total_liabilities": 1935800.0,
+    "total_equity": 1323200.0,
+    "share_capital": 750000.0,
+    "total_current_assets": 1904200.0,
+    "total_non_current_assets": 1354800.0,
+    "total_current_liabilities": 1151800.0,
+    "total_non_current_liabilities": 784000.0,
+    "retained_earnings_closing": 573200.0,
+    "retained_earnings_closing_prior_year": 346100.0,
+    "total_assets_prior_year": 2859200.0,
+    "total_liabilities_prior_year": 1763100.0,
+    "total_equity_prior_year": 1096100.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

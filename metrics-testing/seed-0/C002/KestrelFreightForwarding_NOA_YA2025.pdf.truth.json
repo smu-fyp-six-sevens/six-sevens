@@ -1,0 +1,56 @@
+{
+  "filename": "KestrelFreightForwarding_NOA_YA2025.pdf",
+  "files": [
+    "KestrelFreightForwarding_NOA_YA2025.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Kestrel Freight Forwarding Pte Ltd",
+    "tax_reference_number": "201156535W",
+    "company_address": "21 Bukit Batok Crescent, #04-18, Singapore 658065",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-10-01",
+    "eci": 727900,
+    "tax_payable": 66318.0,
+    "previous_assessment_date": "2025-07-03"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": true,
+  "tampering": [
+    {
+      "dimension": "Image Manipulation",
+      "defect_type": "image_manipulation",
+      "expected_tools": [
+        "image_manipulation_tool",
+        "image_tampering_tool"
+      ],
+      "description": "The IRAS logo recompressed at a different quality from the page.",
+      "edits": [
+        {
+          "printed_before": "[image 304x352]",
+          "printed_after": null,
+          "injector": "Applied image manipulation: Compression Mismatch"
+        }
+      ]
+    },
+    {
+      "dimension": "Metadata",
+      "defect_type": "metadata",
+      "expected_tools": [
+        "metadata_tool"
+      ],
+      "description": "Creator/Producer set to Adobe Photoshop, inconsistent with an IRAS-issued notice.",
+      "edits": [
+        {
+          "printed_before": "Tax Reference Number :",
+          "printed_after": null,
+          "injector": "Tampered document metadata: creator='Adobe Photoshop 25.0', producer='Adobe Photoshop 25.0'"
+        }
+      ]
+    }
+  ]
+}

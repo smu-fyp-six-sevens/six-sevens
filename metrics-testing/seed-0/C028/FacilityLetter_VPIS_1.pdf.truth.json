@@ -1,0 +1,25 @@
+{
+  "filename": "FacilityLetter_VPIS_1.pdf",
+  "files": [
+    "FacilityLetter_VPIS_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Vantage Point IT Solutions Pte Ltd",
+    "company_address": "116 Marsiling Rise, #02-59, Singapore 730116",
+    "individual_name": "Ng Zhen Yu",
+    "loan_amount": 160000.0,
+    "uen": "201630706M",
+    "facility_type": "Overdraft",
+    "offer_date": "2026-07-03",
+    "interest_rate": 6.53,
+    "review_date": "2027-07-03"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

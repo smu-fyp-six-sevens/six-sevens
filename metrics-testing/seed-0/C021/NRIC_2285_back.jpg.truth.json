@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_2285_back.jpg",
+  "files": [
+    "NRIC_2285_back.jpg"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7402285E",
+    "individual_address": "265 Bishan Street 24, #04-15, Singapore 570265",
+    "date_of_issue": "2019-02-06",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

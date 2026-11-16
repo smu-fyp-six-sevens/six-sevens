@@ -1,0 +1,24 @@
+{
+  "filename": "BizFile_186240.pdf",
+  "files": [
+    "BizFile_186240.pdf"
+  ],
+  "document_type": "certificate_of_incorporation",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Redwood Fitness Studio Pte Ltd",
+    "uen": "201877625H",
+    "incorporation_date": "2018-10-05",
+    "company_type": "Limited Exempt Private Company",
+    "incorporating_act": "Companies Act 1967",
+    "certificate_date": "2019-08-24",
+    "company_former_name": "Orchid Harvest Enterprises Pte. Ltd.",
+    "company_former_name_change_date": "2019-07-27"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

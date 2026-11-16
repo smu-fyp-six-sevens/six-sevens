@@ -1,0 +1,26 @@
+{
+  "filename": "CreditReport_CBS_20260920.pdf",
+  "files": [
+    "CreditReport_CBS_20260920.pdf"
+  ],
+  "document_type": "credit_report",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Koh Hwee Min",
+    "id_number": "S7496277G",
+    "date_of_birth": "1974-12-27",
+    "nationality": "Singaporean",
+    "individual_address": "550 Serangoon North Avenue 3, #09-240, Singapore 550550",
+    "report_date": "2026-09-25",
+    "defaults": [],
+    "bankruptcy_proceedings": []
+  },
+  "not_printed": {},
+  "reference": {
+    "secured_credit_limit": 0
+  },
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,25 @@
+{
+  "filename": "FacilityLetter_BA_1.pdf",
+  "files": [
+    "FacilityLetter_BA_1.pdf"
+  ],
+  "document_type": "list_of_loans",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Brightwave Analytics Pte Ltd",
+    "company_address": "21 Media Circle, #03-05, Singapore 138562",
+    "individual_name": "Lakshmi d/o Rajendran",
+    "loan_amount": 290000.0,
+    "uen": "201298459R",
+    "facility_type": "Overdraft",
+    "offer_date": "2026-09-01",
+    "interest_rate": 7.41,
+    "review_date": "2027-09-01"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

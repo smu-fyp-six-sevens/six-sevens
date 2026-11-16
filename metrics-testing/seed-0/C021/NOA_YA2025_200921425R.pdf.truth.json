@@ -1,0 +1,24 @@
+{
+  "filename": "NOA_YA2025_200921425R.pdf",
+  "files": [
+    "NOA_YA2025_200921425R.pdf"
+  ],
+  "document_type": "notice_of_assessment",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Silverpine Furniture Works Pte Ltd",
+    "tax_reference_number": "200921425R",
+    "company_address": "2 Bukit Batok Street 23, #05-21, Singapore 659554",
+    "year_of_assessment": "2025",
+    "noa_date": "2025-09-01",
+    "eci": 226800,
+    "tax_payable": 10565.5,
+    "previous_assessment_date": "2025-07-12"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

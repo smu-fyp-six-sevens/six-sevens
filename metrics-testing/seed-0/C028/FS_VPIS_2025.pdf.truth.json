@@ -1,0 +1,52 @@
+{
+  "filename": "FS_VPIS_2025.pdf",
+  "files": [
+    "FS_VPIS_2025.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Vantage Point IT Solutions Pte Ltd",
+    "uen": "201630706M",
+    "financial_year_end": "2026-03-31",
+    "signing_date": "2026-08-22",
+    "revenue": 2729000.0,
+    "profit_for_the_year": 440200.0,
+    "profit_for_the_year_prior_year": 295300.0,
+    "total_assets": 3663200.0,
+    "total_liabilities": 1682700.0,
+    "total_equity": 1980500.0,
+    "share_capital": 1000000.0,
+    "total_current_assets": 2316800.0,
+    "total_non_current_assets": 1346400.0,
+    "total_current_liabilities": 1051200.0,
+    "total_non_current_liabilities": 631500.0,
+    "retained_earnings_closing": 980500.0,
+    "retained_earnings_closing_prior_year": 540300.0,
+    "total_assets_prior_year": 2652900.0,
+    "total_liabilities_prior_year": 1112600.0,
+    "total_equity_prior_year": 1540300.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": true,
+  "tampering": [
+    {
+      "dimension": "Metadata",
+      "defect_type": "metadata",
+      "expected_tools": [
+        "metadata_tool"
+      ],
+      "description": "Producer/Creator show the statements were re-saved through a PDF editing tool.",
+      "edits": [
+        {
+          "printed_before": "Vantage Point IT Solutions Pte Ltd",
+          "printed_after": null,
+          "injector": "Tampered document metadata: producer='iLovePDF', creator='Microsoft Word'"
+        }
+      ]
+    }
+  ]
+}

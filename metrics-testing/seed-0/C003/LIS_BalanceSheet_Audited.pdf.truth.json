@@ -1,0 +1,56 @@
+{
+  "filename": "LIS_BalanceSheet_Audited.pdf",
+  "files": [
+    "LIS_BalanceSheet_Audited.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Lumina Interior Studio Pte Ltd",
+    "uen": "201063283R",
+    "financial_year_end": "2026-03-31",
+    "signing_date": "2026-08-20",
+    "revenue": 2450000.0,
+    "profit_for_the_year": 234000.0,
+    "profit_for_the_year_prior_year": 200700.0,
+    "total_assets": 1945800.0,
+    "total_liabilities": 918100.0,
+    "total_equity": 977700.0,
+    "share_capital": 300000.0,
+    "total_current_assets": 977100.0,
+    "total_non_current_assets": 918700.0,
+    "total_current_liabilities": 478000.0,
+    "total_non_current_liabilities": 440100.0,
+    "retained_earnings_closing": 677700.0,
+    "retained_earnings_closing_prior_year": 443700.0,
+    "total_assets_prior_year": 1608400.0,
+    "total_liabilities_prior_year": 864700.0,
+    "total_equity_prior_year": 743700.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": true,
+  "tampering": [
+    {
+      "dimension": "Numerical",
+      "defect_type": "numerical",
+      "expected_tools": [
+        "numerical_checks_tool"
+      ],
+      "description": "Total assets raised by 50,000, so it no longer equals total equity and liabilities.",
+      "edits": [
+        {
+          "printed_before": "$1,895,800",
+          "printed_after": "$1,945,800",
+          "injector": "Tampered numeric value from 1 to $1,945,800"
+        }
+      ],
+      "field": "total_assets",
+      "original": 1895800.0,
+      "forged": 1945800.0
+    }
+  ],
+  "accept_also": {}
+}

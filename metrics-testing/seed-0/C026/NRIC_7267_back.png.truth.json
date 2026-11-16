@@ -1,0 +1,20 @@
+{
+  "filename": "NRIC_7267_back.png",
+  "files": [
+    "NRIC_7267_back.png"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7567267E",
+    "individual_address": "362 Clementi Avenue 2, #03-92, Singapore 120362",
+    "date_of_issue": "2020-06-23",
+    "document_side": "back"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

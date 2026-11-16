@@ -1,0 +1,26 @@
+{
+  "filename": "LeeLT_Salary_Slip_20260805.pdf",
+  "files": [
+    "LeeLT_Salary_Slip_20260805.pdf"
+  ],
+  "document_type": "payslip",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "individual_name": "Lee Li Ting",
+    "company_name": "Lighthouse Learning Hub Pte Ltd",
+    "company_address": "10 Anson Road, #09-30, Singapore 079903",
+    "net_pay": 5347.11,
+    "basic_pay": 4890.0,
+    "total_earnings": 5830.0,
+    "total_deductions": 482.89,
+    "employee_cpf": 437.0,
+    "pay_date": "2026-07-31",
+    "pay_period_end": "2026-07-31"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,23 @@
+{
+  "filename": "NRIC_3495_front.png",
+  "files": [
+    "NRIC_3495_front.png"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7983495E",
+    "individual_name": "Vikram s/o Chandran",
+    "date_of_birth": "1979-06-16",
+    "country": "Singapore",
+    "race": "Indian",
+    "sex": "M",
+    "document_side": "front"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

@@ -1,0 +1,38 @@
+{
+  "filename": "Company_Constitution_20260726.pdf",
+  "files": [
+    "Company_Constitution_20260726.pdf"
+  ],
+  "document_type": "company_constitution",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "company_name": "Junction Nine Logistics Pte Ltd",
+    "uen": "201655475N",
+    "incorporation_date": "2016-04-11",
+    "company_address": "8 Burn Road, #03-13, Singapore 369977",
+    "share_capital": 250000.0,
+    "issued_shares": 250000,
+    "subscribers": [
+      {
+        "name": "Ong Zhi Hao",
+        "address": "181 Bedok North Road, #02-53, Singapore 460181",
+        "id_number": "S9391988B",
+        "shares": 200000
+      },
+      {
+        "name": "Chong Kai Wen",
+        "address": "100 Whampoa Drive, #13-283, Singapore 320100",
+        "id_number": "S9888358D",
+        "shares": 50000
+      }
+    ],
+    "quorum": 3,
+    "adoption_date": "2016-04-11"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

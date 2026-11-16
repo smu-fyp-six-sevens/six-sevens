@@ -1,0 +1,416 @@
+{
+  "filename": "AcctStatement_GA_20260825.pdf",
+  "files": [
+    "AcctStatement_GA_20260825.pdf"
+  ],
+  "document_type": "bank_statement",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "bank_name": "Oversea-Chinese Banking Corporation Limited",
+    "account_number": "498954045",
+    "company_name": "GREENFIELD AGRI-TECH PTE LTD",
+    "entity_type": "corporate",
+    "statement_period_start": "2026-04-01",
+    "statement_period_end": "2026-07-31",
+    "opening_balance": 59311.62,
+    "ledger_balance": 57454.71,
+    "total_credits": 106838.76,
+    "total_debits": 108695.67,
+    "transactions": [
+      {
+        "date": "2026-04-01",
+        "description": "GIRO PAYMENT PREMISES RENTAL APR26",
+        "amount": -3930.0,
+        "balance": 55381.62
+      },
+      {
+        "date": "2026-04-04",
+        "amount": 10615.54,
+        "balance": 65997.16
+      },
+      {
+        "date": "2026-04-04",
+        "amount": -5907.58,
+        "balance": 60089.58
+      },
+      {
+        "date": "2026-04-04",
+        "amount": -5119.06,
+        "balance": 54970.52
+      },
+      {
+        "date": "2026-04-05",
+        "amount": -664.6,
+        "balance": 54305.92
+      },
+      {
+        "date": "2026-04-08",
+        "amount": 6703.9,
+        "balance": 61009.82
+      },
+      {
+        "date": "2026-04-13",
+        "description": "GIRO PAYMENT STARHUB LTD TELECOM BILL",
+        "amount": -214.14,
+        "balance": 60795.68
+      },
+      {
+        "date": "2026-04-19",
+        "amount": 8873.12,
+        "balance": 69668.8
+      },
+      {
+        "date": "2026-04-20",
+        "amount": -4945.16,
+        "balance": 64723.64
+      },
+      {
+        "date": "2026-04-23",
+        "amount": -779.56,
+        "balance": 63944.08
+      },
+      {
+        "date": "2026-04-25",
+        "amount": -6913.2,
+        "balance": 57030.88
+      },
+      {
+        "date": "2026-04-25",
+        "amount": -0.5,
+        "balance": 57030.38
+      },
+      {
+        "date": "2026-04-30",
+        "amount": -35.0,
+        "balance": 56995.38
+      },
+      {
+        "date": "2026-05-02",
+        "description": "GIRO PAYMENT PREMISES RENTAL MAY26",
+        "amount": -3930.0,
+        "balance": 53065.38
+      },
+      {
+        "date": "2026-05-04",
+        "amount": -5604.25,
+        "balance": 47461.13
+      },
+      {
+        "date": "2026-05-05",
+        "amount": 10484.2,
+        "balance": 57945.33
+      },
+      {
+        "date": "2026-05-05",
+        "amount": 7946.39,
+        "balance": 65891.72
+      },
+      {
+        "date": "2026-05-05",
+        "amount": -286.37,
+        "balance": 65605.35
+      },
+      {
+        "date": "2026-05-06",
+        "amount": -4350.59,
+        "balance": 61254.76
+      },
+      {
+        "date": "2026-05-11",
+        "description": "GIRO PAYMENT STARHUB LTD TELECOM BILL",
+        "amount": -214.14,
+        "balance": 61040.62
+      },
+      {
+        "date": "2026-05-20",
+        "amount": -4670.07,
+        "balance": 56370.55
+      },
+      {
+        "date": "2026-05-22",
+        "amount": 8623.58,
+        "balance": 64994.13
+      },
+      {
+        "date": "2026-05-25",
+        "amount": -6913.2,
+        "balance": 58080.93
+      },
+      {
+        "date": "2026-05-25",
+        "amount": -0.5,
+        "balance": 58080.43
+      },
+      {
+        "date": "2026-05-31",
+        "amount": -35.0,
+        "balance": 58045.43
+      },
+      {
+        "date": "2026-06-02",
+        "description": "GIRO PAYMENT PREMISES RENTAL JUN26",
+        "amount": -3930.0,
+        "balance": 54115.43
+      },
+      {
+        "date": "2026-06-03",
+        "amount": -6142.24,
+        "balance": 47973.19
+      },
+      {
+        "date": "2026-06-05",
+        "amount": 10900.68,
+        "balance": 58873.87
+      },
+      {
+        "date": "2026-06-05",
+        "amount": -4143.64,
+        "balance": 54730.23
+      },
+      {
+        "date": "2026-06-08",
+        "amount": 6674.87,
+        "balance": 61405.1
+      },
+      {
+        "date": "2026-06-16",
+        "description": "GIRO PAYMENT STARHUB LTD TELECOM BILL",
+        "amount": -214.14,
+        "balance": 61190.96
+      },
+      {
+        "date": "2026-06-18",
+        "amount": -5321.2,
+        "balance": 55869.76
+      },
+      {
+        "date": "2026-06-18",
+        "amount": -637.91,
+        "balance": 55231.85
+      },
+      {
+        "date": "2026-06-22",
+        "amount": 10478.23,
+        "balance": 65710.08
+      },
+      {
+        "date": "2026-06-25",
+        "amount": -6913.2,
+        "balance": 58796.88
+      },
+      {
+        "date": "2026-06-25",
+        "amount": -0.5,
+        "balance": 58796.38
+      },
+      {
+        "date": "2026-06-30",
+        "amount": -626.98,
+        "balance": 58169.4
+      },
+      {
+        "date": "2026-06-30",
+        "amount": -35.0,
+        "balance": 58134.4
+      },
+      {
+        "date": "2026-07-01",
+        "description": "GIRO PAYMENT PREMISES RENTAL JUL26",
+        "amount": -3930.0,
+        "balance": 54204.4
+      },
+      {
+        "date": "2026-07-02",
+        "amount": 9536.5,
+        "balance": 63740.9
+      },
+      {
+        "date": "2026-07-03",
+        "amount": -4333.59,
+        "balance": 59407.31
+      },
+      {
+        "date": "2026-07-06",
+        "amount": 6452.76,
+        "balance": 65860.07
+      },
+      {
+        "date": "2026-07-06",
+        "amount": -4990.96,
+        "balance": 60869.11
+      },
+      {
+        "date": "2026-07-17",
+        "description": "GIRO PAYMENT STARHUB LTD TELECOM BILL",
+        "amount": -214.14,
+        "balance": 60654.97
+      },
+      {
+        "date": "2026-07-18",
+        "amount": 9548.99,
+        "balance": 70203.96
+      },
+      {
+        "date": "2026-07-18",
+        "amount": -5080.78,
+        "balance": 65123.18
+      },
+      {
+        "date": "2026-07-25",
+        "amount": -6913.2,
+        "balance": 58209.98
+      },
+      {
+        "date": "2026-07-25",
+        "amount": -0.5,
+        "balance": 58209.48
+      },
+      {
+        "date": "2026-07-30",
+        "amount": -719.77,
+        "balance": 57489.71
+      },
+      {
+        "date": "2026-07-31",
+        "amount": -35.0,
+        "balance": 57454.71
+      }
+    ]
+  },
+  "not_printed": {
+    "company_address": "9 TEMASEK BOULEVARD, #02-04, SINGAPORE 038989",
+    "transactions": [
+      {
+        "description": "Inward PayNow PAYMENT SG3P138876981678 C694002459582 OTHER ASIA LINK COMMODITIES PTE. LTD. SGD 10,616"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT86840811056 0016RF3179293 MERIDIAN LOGISTICS SERVICES SGD 5,908"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT82182264251 0016RF3927548 TAN HENG PACKAGING PTE LTD SGD 5,119"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT GRAB* TRIP SI NG 05APR 4856-XXXX-XXXX-5742"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P620518042200 C441949458999 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 6,704"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P485063430374 C862641597810 OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 8,873"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT44326606220 0016RF6561436 SEAWAY FREIGHT (S) PTE LTD SGD 4,945"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT SP SERVICES LTD SI NG 23APR 4672-XXXX-XXXX-7871"
+      },
+      {
+        "description": "FAST PAYMENT SALARY EBGPP17847929939549C100000000000 M:+6592302163 SALARY PAYMENT SGD 6,913"
+      },
+      {
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP68302432561519C100000000000 M:IDEAL SALARY PAYMENT"
+      },
+      {
+        "description": "SERVICE CHARGE"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT15076826168 0016RF4615833 MERIDIAN LOGISTICS SERVICES SGD 5,604"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P596650326231 C595976300266 OTHER ASIA LINK COMMODITIES PTE. LTD. SGD 10,484"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P803564370102 C426777168752 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 7,946"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT SP SERVICES LTD SI NG 05MAY 4018-XXXX-XXXX-4792"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT80175932231 0016RF1221189 TAN HENG PACKAGING PTE LTD SGD 4,351"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT13778151005 0016RF3221638 SEAWAY FREIGHT (S) PTE LTD SGD 4,670"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P227822066764 C537406346374 OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 8,624"
+      },
+      {
+        "description": "FAST PAYMENT SALARY EBGPP76886770922271C100000000000 M:+6582070725 SALARY PAYMENT SGD 6,913"
+      },
+      {
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP49011505798431C100000000000 M:IDEAL SALARY PAYMENT"
+      },
+      {
+        "description": "SERVICE CHARGE"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT56264815321 0016RF6221547 MERIDIAN LOGISTICS SERVICES SGD 6,142"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P326067618225 C956114138118 OTHER ASIA LINK COMMODITIES PTE. LTD. SGD 10,901"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT68887348399 0016RF7162828 TAN HENG PACKAGING PTE LTD SGD 4,144"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P212663724916 C897004860937 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 6,675"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT24008165464 0016RF5746051 SEAWAY FREIGHT (S) PTE LTD SGD 5,321"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT FAIRPRICE FINEST SI NG 18JUN 4953-XXXX-XXXX-9215"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P696293570875 C337510918676 OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 10,478"
+      },
+      {
+        "description": "FAST PAYMENT SALARY EBGPP18803705095862C100000000000 M:+6587353036 SALARY PAYMENT SGD 6,913"
+      },
+      {
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP24517173068534C100000000000 M:IDEAL SALARY PAYMENT"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT COURTS MEGASTORE SI NG 30JUN 4736-XXXX-XXXX-5695"
+      },
+      {
+        "description": "SERVICE CHARGE"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P923966425719 C275511887003 OTHER ASIA LINK COMMODITIES PTE. LTD. SGD 9,536"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT33545992158 0016RF1058901 TAN HENG PACKAGING PTE LTD SGD 4,334"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P618350395142 C550152460346 OTHER GREENFIELD RETAIL GROUP PTE. LTD. SGD 6,453"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT43060833543 0016RF7090027 MERIDIAN LOGISTICS SERVICES SGD 4,991"
+      },
+      {
+        "description": "Inward PayNow PAYMENT SG3P935308874465 C951148748240 OTHER HARBOURFRONT DISTRIBUTORS PTE LTD SGD 9,549"
+      },
+      {
+        "description": "REMITTANCE TRANSFER OF FUNDS RTF EBACT22918713387 0016RF9649508 SEAWAY FREIGHT (S) PTE LTD SGD 5,081"
+      },
+      {
+        "description": "FAST PAYMENT SALARY EBGPP59391301555146C100000000000 M:+6584942073 SALARY PAYMENT SGD 6,913"
+      },
+      {
+        "description": "SERVICE CHARGE FOR FAST PAYMENT SALARY EBGPP17503714681013C100000000000 M:IDEAL SALARY PAYMENT"
+      },
+      {
+        "description": "BUSINESS ADVANCE CARD TRANSACTION BAT SHELL SERVICE STN SI NG 30JUL 4183-XXXX-XXXX-7771"
+      },
+      {
+        "description": "SERVICE CHARGE"
+      }
+    ]
+  },
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

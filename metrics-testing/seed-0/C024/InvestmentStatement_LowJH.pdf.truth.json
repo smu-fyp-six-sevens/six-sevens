@@ -1,0 +1,22 @@
+{
+  "filename": "InvestmentStatement_LowJH.pdf",
+  "files": [
+    "InvestmentStatement_LowJH.pdf"
+  ],
+  "document_type": "source_of_wealth",
+  "also_acceptable": [],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "account_holder_name": "LOW JUN HAO",
+    "individual_address": "130A CANBERRA CRESCENT,#12-12,Singapore,751130",
+    "account_number": "1008397769044144",
+    "net_asset_value": 16160.83,
+    "portfolio_value": 12051.83,
+    "cash_balance": 4109.0
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}
