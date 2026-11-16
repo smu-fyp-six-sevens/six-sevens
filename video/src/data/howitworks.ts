@@ -44,7 +44,7 @@ export const TRACE_COPY = {
   headline: "And it's not a black box.",
   beats: [
     { text: "The agent trace shows every step, every tool call, and what it returned.", at: "line1In" },
-    { text: "Every finding can be audited.", at: "auditAt", accent: true },
+    { text: "Every step can be audited.", at: "auditAt", accent: true },
   ],
 };
 
