@@ -22,8 +22,8 @@ export const DETECTION_STEPS = [
   { step: 'detection_plan', at: 12.6, in_span: 'run', detection_briefs: { layout: 'Fonts.', authenticity: 'Metadata.' }, confidence: 0.8 },
   {
     step: 'span', at: 14, name: 'tool.font_consistency_tool', id: 'font', parent: 'layout', duration_s: 0.8, kind: 'tool',
-    tool: 'font_consistency_tool', input: '{}', findings: 1, unable_to_assess: false, nothing_to_check: false,
-    output: '{"tool": "font_consistency_tool", "findings": [{"id": "font_consistency_tool-1"}]}',
+    tool: 'font_consistency_tool', input: '{"document": "Anchorpoint_BankStatement_Jan2026.pdf", "pages": [1], "fields": ["closing_balance"]}', findings: 1, unable_to_assess: false, nothing_to_check: false,
+    output: '{"tool": "font_consistency_tool", "body_font": "Helvetica-Bold 9pt", "findings": [{"id": "font_consistency_tool-1", "severity": "medium", "text": "812,400.00", "field": "closing_balance", "expected": "Helvetica-Bold 9pt", "detected": "Helvetica 9pt", "page": 1, "summary": "The closing balance is set in a different weight from the rest of the statement."}]}',
   },
   {
     step: 'span', at: 16, name: 'detection.specialist.layout', id: 'layout-turn', parent: 'layout', duration_s: 1.5,
@@ -32,7 +32,7 @@ export const DETECTION_STEPS = [
   },
   {
     step: 'span', at: 16.2, name: 'detection.review.layout', id: 'layout', parent: 'run', duration_s: 3.5, kind: 'agent',
-    brief: 'Check the fonts.', tool_calls: [{ name: 'font_consistency_tool', args: {} }], summary: 'One font differs.',
+    brief: 'Check the fonts and layout of the closing balance.', tool_calls: [{ name: 'font_consistency_tool', args: { document: 'Anchorpoint_BankStatement_Jan2026.pdf' } }], summary: 'The closing balance is set in a different weight.',
   },
   {
     step: 'span', at: 15, name: 'detection.review.authenticity', id: 'auth', parent: 'run', duration_s: 2, kind: 'agent',

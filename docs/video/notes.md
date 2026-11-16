@@ -191,3 +191,7 @@
 ## Wave 35 - caption
 - "Every finding can be audited." -> "Every step can be audited." Rendered renders/audit-caption.mp4 (frames 1905-2081, 1 s handles) and spliced into renders/picture.mp4.
 - The owner deleted the remote branch (work not in main): committed locally only, not pushed.
+
+## Wave 36 - a meaningful tool output in the trace
+- The font consistency check's trace step now shows story input (the statement, page 1, closing_balance) and output (812,400.00: expected Helvetica-Bold 9pt, detected Helvetica 9pt) (capture/traceSteps.ts); re-captured; the Output highlight and camera re-aimed.
+- Whole trace section incl. "Every step can be audited." rendered as renders/trace-section.mp4 (frames 1683-2081, 1 s handles), replacing audit-caption.mp4; spliced into renders/picture.mp4.

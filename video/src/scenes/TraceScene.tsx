@@ -22,7 +22,7 @@ const lerp = (p: number, a: number, b: number) => a + (b - a) * p;
 const ROWS = boxes.trace.rows;
 const TOOL_ROW = ROWS.findIndex((r) => r.text.includes("Font consistency check"));
 /** The tool's returned output in the details pane (CSS px of the capture). */
-const OUTPUT = { x: 722, y: 352, w: 690, h: 182 };
+const OUTPUT = { x: 726, y: 506, w: 680, h: 333 };
 
 export const TraceScene: React.FC<{ showText?: boolean }> = ({ showText = true }) => {
   const frame = useCurrentFrame();
@@ -47,7 +47,7 @@ export const TraceScene: React.FC<{ showText?: boolean }> = ({ showText = true }
     <AbsoluteFill style={{ background: colors.paper }}>
       {swipeA !== null && (
         <Window enter={1} swipe={swipeA}>
-          <Screen {...SCREENS_STORY2.trace} zoom={lerp(push, 1, 1.32)} focus={{ x: lerp(push, 600, 1060), y: lerp(push, 353, 430) }}>
+          <Screen {...SCREENS_STORY2.trace} zoom={lerp(push, 1, 1.32)} focus={{ x: lerp(push, 600, 1060), y: lerp(push, 353, 600) }}>
             {opened > 0 && <Img src={staticFile(SCREENS_STORY2.traceTool.src)} style={{ position: "absolute", left: 0, top: 0, width: 1440, height: 900, opacity: opened }} />}
             {opened < 1 && <Trace frame={frame} start={T.rowsStart} end={T.rowsEnd} />}
             {outP > 0 && <div style={{ position: "absolute", left: OUTPUT.x, top: OUTPUT.y, width: OUTPUT.w, height: OUTPUT.h, border: `3px solid ${colors.steel}`, borderRadius: 8, background: "rgba(53,95,150,0.06)", opacity: outP, transform: `scale(${1.06 - 0.06 * outP})` }} />}
