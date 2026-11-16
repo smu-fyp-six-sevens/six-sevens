@@ -1,6 +1,6 @@
 """
 Shapes of a per-case analysis run: cross-document findings, the risk
-outlook, and the stored result. See CROSS_DOCUMENT_AND_RISK_PLAN.md.
+outlook, and the stored result. See HOW_IT_WORKS.md, Step 6.
 """
 
 from __future__ import annotations

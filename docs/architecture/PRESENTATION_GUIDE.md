@@ -7,7 +7,7 @@ A plain-language guide to how Six Sevens runs in the cloud, so you can explain i
 - **Open them:** the VS Code "Draw.io Integration" extension, or app.diagrams.net → File → Open from → Device. For slides: File → Export as PNG or SVG.
 - **Change them:** edit `build_diagrams.py`, then run `python docs/architecture/build_diagrams.py docs/architecture/six-sevens-architecture.drawio` from the repo root. Anything you change by hand in draw.io is lost the next time the script runs.
 
-More detail, if you need it: `CLOUD_ARCHITECTURE_PLAN.md` (the design), `HOW_IT_WORKS.md` (what the app does), `deploy/terraform/README.md` (how to operate it).
+More detail, if you need it: `HOW_IT_WORKS.md` (what the app does and how it's built, the cloud included), `CLOUD_ARCHITECTURE_PLAN.md` (open cloud work), `deploy/terraform/README.md` (how to operate it).
 
 ---
 

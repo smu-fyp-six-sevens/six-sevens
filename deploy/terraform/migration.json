@@ -1,4 +1,4 @@
 {
-  "_about": "The GKE move (CLOUD_ARCHITECTURE_PLAN.md section 17): the event-consuming roles GKE now runs. Terraform turns each listed role's subscription from push to pull (in place); the chart runs that role's pods (unlisted consumers stay at 0, since only one platform may take a role's events). Moving a role: add it, terraform apply, then push. Moving it back: remove it, terraform apply, then push. Order of moves: audit-metrics, case-worker, detection-worker, doc-worker.",
+  "_about": "The GKE move (HOW_IT_WORKS.md §9, How the move went): the event-consuming roles GKE now runs. Terraform turns each listed role's subscription from push to pull (in place); the chart runs that role's pods (unlisted consumers stay at 0, since only one platform may take a role's events). Moving a role: add it, terraform apply, then push. Moving it back: remove it, terraform apply, then push. Order of moves: audit-metrics, case-worker, detection-worker, doc-worker.",
   "pull_roles": ["audit-metrics", "case-worker", "detection-worker", "doc-worker"]
 }

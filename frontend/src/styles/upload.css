@@ -546,7 +546,6 @@
 /* The page's header: the breadcrumbs, and the title under them, above a hairline. */
 .case-header {
   display: grid;
-  row-gap: 8px;
   padding: 0 0 18px;
   margin-bottom: 20px;
   border-bottom: 1px solid var(--line);

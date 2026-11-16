@@ -1,18 +1,6 @@
 # Test suite audit
 
-Open items only: delete a row once it's fixed. Read 2026-11-13. Tests owed for fixes already made are in `PENDING_TESTS.md`. Bugs: `CODEBASE_AUDIT.md`.
-
-## 1. Background
-
-**Keep in mind:**
-- All test documents are synthetic (GLDB can't share real ones), so real fraud may look different.
-- Two company-name matchers on purpose: `identifiers.company_names_match` is lenient (does this document belong to the case?); `company_identity.cross_document_company_names_match` is strict (a fraud signal).
-- Case match is triage, not a fraud signal.
-- Regression suites test code, not AI accuracy: Claude is scripted. Real AI behaviour is checked by the manual live run each sprint.
-- A known bug is pinned with `xfail(strict=True, raises=...)` (`it.fails` in Vitest, `test.fail()` in Playwright). None today.
-- Guards that keep the suite honest: every route but the public ones must answer 401 without a login (`test_auth.py`); every backend route is either mocked for Playwright or listed as not mocked (`mockCoverage.test.ts`); coverage below 85% fails CI (`pyproject.toml`).
-
-**Health (2026-11-13):** backend 3,289 cases pass locally (CI 2026-11-11: 93% line coverage). Playwright: 276 pass in 15 specs. Vitest: 76 tests in 9 files (of ~160 source files).
+Open items only: delete a row once it's fixed, and this file once it's empty. Read 2026-11-13. How the suite is built, what to keep in mind and its health: `HOW_IT_WORKS.md` §10. Tests owed for fixes already made are in `PENDING_TESTS.md`. Bugs: `CODEBASE_AUDIT.md`.
 
 ## 2. Most important
 
@@ -32,7 +20,7 @@ None open. The regression fixtures are regenerated from the code, so they catch 
 
 ## 4c. Overlap (checked 2026-11-16)
 
-Every backend test (2,575 in 147 files) and Playwright test (271 in 15 specs) compared by structure, with and without its literal values. No test checks the same thing as another with the same inputs: the one exact copy (an approval whose event fails to publish, `test_documents.py`) is deleted. Same-named tests in two files test two different checks (`test_image_manipulation` and `test_image_tampering`) or two layers (route and repository). Playwright runs against the mock, so it can't repeat a backend test: it checks what the page shows, from backend-computed fixtures. The layers that do repeat a rule are on purpose: `approval_rules.json` is checked by the backend, the page and the mock, so the three copies can't drift.
+Every backend and Playwright test compared by structure, with and without its literal values: no two check the same thing with the same inputs (the one exact copy is deleted). What's left is optional tidying:
 
 | # | Sev | In plain words | Fix | Where | Size |
 |---|---|---|---|---|---|
@@ -53,7 +41,7 @@ Every backend test (2,575 in 147 files) and Playwright test (271 in 15 specs) co
 | 6.1 | Feedback counts only other cases | No test, including a document with no case (SQL: needs a real database, so a manual check) | S |
 | 6.2 | Low coverage | `cross_document/tools/consistency.py` 68% (lines 61–82); `routers/agents.py` 53% and `agent_prompts.py` 48% (the prompt view) | M |
 | 6.3 | The important frontend logic has no unit tests | Vitest for `caseValidation`, `fileValidation`, `request.ts` and `caseSocket.ts` only (the rest is covered by Playwright) | S |
-| 6.4 | Load tests are described but not in the repo; the agent sensibility checks are partly tested (`tests/test_evals.py`) | Load tests: `CLOUD_ARCHITECTURE_PLAN.md` §10; checks: `PENDING_TESTS.md` 36, 37 and 39 | — |
+| 6.4 | Load tests are described but not in the repo; the agent sensibility checks are partly tested (`tests/test_evals.py`) | Load tests: `CLOUD_ARCHITECTURE_PLAN.md`, "Stage 2"; checks: `PENDING_TESTS.md` 36, 37 and 39 | — |
 
 ## 7. Suggested order
 

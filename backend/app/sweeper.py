@@ -1,5 +1,5 @@
 """
-The sweeper (CLOUD_ARCHITECTURE_PLAN.md section 5): finds work stuck past its stage's limit and asks the worker
+The sweeper (HOW_IT_WORKS.md §8, "Stuck work"): finds work stuck past its stage's limit and asks the worker
 that owns the stage to recover it, with a recovery.requested event. It writes no state.
 
 Pub/Sub redelivery already covers a worker that dies mid-push. This covers what redelivery can't: an event lost

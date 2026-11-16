@@ -1,4 +1,4 @@
-# The cluster's network (CLOUD_ARCHITECTURE_PLAN.md section 15): private nodes, and all egress through Cloud NAT on
+# The cluster's network (HOW_IT_WORKS.md §9, GKE design): private nodes, and all egress through Cloud NAT on
 # one static address. Created only with gke_enabled.
 
 resource "google_compute_network" "gke" {

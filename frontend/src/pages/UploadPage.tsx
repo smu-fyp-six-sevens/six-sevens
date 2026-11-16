@@ -257,7 +257,7 @@ export default function UploadPage({
           <>
             <CaseTitle caseRecord={selectedCase} />
             <span className="case-title-actions">
-              {snapshotLoaded && (
+              {snapshotLoaded && activeSection === 'documents' && (
                 <CaseChecklistButton
                   key={openGroupParam ?? 'checklist'}
                   fulfilledRequirements={fulfilledRequirements}

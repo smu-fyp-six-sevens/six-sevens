@@ -1,6 +1,6 @@
 # Terraform: the Cloud Run deployment
 
-Creates everything the services need on GCP (design: `CLOUD_ARCHITECTURE_PLAN.md`). Project `fyp-six-sevens` (number `1076848636975`), region `asia-southeast1`, repo `smu-fyp-six-sevens/six-sevens`. A green push to `main` deploys; `terraform apply` is manual and must come **before** a push that needs new infrastructure.
+Creates everything the services need on GCP (design: `HOW_IT_WORKS.md` §9; open work: `CLOUD_ARCHITECTURE_PLAN.md`). Project `fyp-six-sevens` (number `1076848636975`), region `asia-southeast1`, repo `smu-fyp-six-sevens/six-sevens`. A green push to `main` deploys; `terraform apply` is manual and must come **before** a push that needs new infrastructure.
 
 | File | What |
 |---|---|
@@ -110,7 +110,7 @@ Fixed in the code unless the fix says otherwise.
 
 ## GKE
 
-Everything for GKE sits behind `gke_enabled` (Terraform) and the repository variable `GKE_ENABLED`; with both off nothing changes. The move goes one role at a time (`CLOUD_ARCHITECTURE_PLAN.md` §17). Commands are for cmd, from the repository root unless they say otherwise.
+Everything for GKE sits behind `gke_enabled` (Terraform) and the repository variable `GKE_ENABLED`; with both off nothing changes. The move goes one role at a time (`HOW_IT_WORKS.md` §9, "How the move went"). Commands are for cmd, from the repository root unless they say otherwise.
 
 ### Before phase 1
 

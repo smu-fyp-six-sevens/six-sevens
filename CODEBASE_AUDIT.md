@@ -1,6 +1,6 @@
 # Codebase audit
 
-Open items only: delete a row once it's fixed. Bugs, performance, structure, backwards-compatibility debt and security in one place. Read from the code, 2026-11-13; the backend and its Supabase queries again on 2026-11-16 (live schema, indexes and advisors checked through the Supabase MCP, no rows read). Sev: High, Medium, Low. Size: S (minutes), M (hours), L (a day+). Demo: **before** (small, low-risk, worth doing now) or **after**. Paths are under `backend/app/` unless they say otherwise. "(unconfirmed)" means read from code but not proven. Tests: `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md`. Product work: `PENDING_WORK.md`.
+Open items only: delete a row once it's fixed. Bugs, performance, structure, backwards-compatibility debt and security in one place (detection bugs included). As built: `HOW_IT_WORKS.md`. Read from the code, 2026-11-13; the backend and its Supabase queries again on 2026-11-16 (live schema, indexes and advisors checked through the Supabase MCP, no rows read). Sev: High, Medium, Low. Size: S (minutes), M (hours), L (a day+). Demo: **before** (small, low-risk, worth doing now) or **after**. Paths are under `backend/app/` unless they say otherwise. "(unconfirmed)" means read from code but not proven. Tests: `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md`. Product work: `PENDING_WORK.md`.
 
 ## 1. Most important
 
@@ -13,12 +13,26 @@ Nothing open is urgent. The open bugs need a run alive past the sweeper's 10-min
 | 2.1 | Medium | Recovering a document stuck `detecting` can start a second run beside a live one. `on_recovery_requested` reverts to `approved` without checking the run is dead, then calls `run()` with no claim; `mark_detecting` writes `detecting` with no compare-and-swap, so a redelivered recovery event reverts and starts yet another. The older run then saves its report and replaces the document's findings (and the officer's verdicts on them, `sync_findings`) before `mark_detected`'s check, which passes because the newer run set `detecting` again. Needs a run alive past `STUCK_RUNNING_SECONDS` (600 s) | Skip when `_runs.is_running`; claim with `start_from=[APPROVED]` after the revert; make `mark_detecting` a compare-and-swap from `approved` (or drop it: the claim already writes `detecting`); check the status before `save_report` and `sync_document` | `workers/detection.py:156-175`, `langgraph/detection/graph.py:649,680-683`, `document_repository.py:208` | M | after |
 | 2.2 | Low | `finish_run` writes with no status guard and after a separate read: a run the sweeper marked failed (past 900 s) that then finishes is rewritten `complete`, after a `recovery.exhausted` already said failed; a new run inserted between its `latest_run_id` read and its update still lets the old result publish, and sync findings and the score | `.eq("status", "running")` on the update; newest-run check and write in one statement (an RPC), or re-check after writing | `case_pipeline/repository.py:178-206` | S | after |
 
+### Detection bugs
+
+Found by reading the code; none reproduced. Wiring: `HOW_IT_WORKS.md`, "How a detection run is wired".
+
+| # | Sev | In plain words | Where | Size | Demo |
+|---|---|---|---|---|---|
+| 2.3 | Medium–High | A finding the specialist never assessed counts as `medium` and can flag the document and raise case risk | `langgraph/detection/specialists.py` `_collect_node` | S | after |
+| 2.4 | Medium | If a specialist calls the same tool twice, the second call's findings silently overwrite the first's (ids repeat) | `langgraph/detection/tools.py` `_with_ids`; `specialists.py` `_collect_node` | S | after |
+| 2.5 | Medium | `metadata_tool` blocks the event loop (runs a sync check in an async function) | `langgraph/detection/tools.py` `metadata_tool` | S | after |
+| 2.6 | Medium (local only) | A run lost mid-scan can't be cancelled or retried; in the cloud the sweeper recovers it after 10 min, locally run `python -m app.sweeper --once --case <id>` | `routers/detection.py`, `DetectionPanel.tsx` | M | after |
+| 2.7 | Low | If the lead's call fails, specialists get a generic brief; the trace shows which briefs fell back (`fallback_briefs`) but not why (the error is only logged) | `langgraph/detection/graph.py` `_ask_lead`, `_normalise_plan` | S | after |
+
+**Design questions:** "call each tool at most once" is asked in the prompt, not enforced (see 2.4). A wrongly dismissed finding disappears from the lead's view and the report (the panel still lists it with the reason); check how often real documents get dismissals.
+
 ## 3. Performance
 
 | # | Sev | In plain words | Fix | Where | Size | Demo |
 |---|---|---|---|---|---|---|
 | 3.1 | Low | A case is re-read hundreds of times a day by live snapshot builds | Recheck once a few cases are worked in a day | `snapshots.py` | — | after |
-| 3.2 | Low | Precision/recall figures read every review (`list_reviews`) | Aggregate in SQL once reviews pass the thousands (or store evaluation rows: `CLOUD_ARCHITECTURE_PLAN.md` §13) | `findings_repository.py` | M | after |
+| 3.2 | Low | Precision/recall figures read every review (`list_reviews`) | Aggregate in SQL once reviews pass the thousands (or store evaluation rows: `CLOUD_ARCHITECTURE_PLAN.md`, "Accuracy from officer verdicts") | `findings_repository.py` | M | after |
 | 3.3 | Low | Saving a group's verdicts is 3–4 sequential round trips per finding: a document read per item (the same document each time), `find_current`, `set_verdict`, a feedback upsert. A 15-finding group is about 60 calls, roughly 2–3 s at 30–50 ms each (estimate, unmeasured) | Read each distinct document once, the group's findings in one `in_("fingerprint", …)` read, write the verdicts in one RPC | `routers/finding_reviews.py:197-241` | M | after |
 | 3.4 | Low | Reads that fetch more than they use: `GET /documents` without `case_id` reads every document and all their fields, unpaged (the page always sends `case_id`); `list_runs` pulls each run's whole findings array to count it; `_company_on_file` re-reads fields `list_documents` already attached | Make `case_id` required; count in SQL or store the count; use `document.extracted_fields` | `routers/documents.py:87`, `case_pipeline/repository.py:235`, `case_pipeline/service.py:391` | S | after |
 
@@ -65,14 +79,11 @@ Code kept only for old data, old links or the platform being retired. The databa
 | 6.2 | Medium | The public `api` holds the database key that bypasses every rule | A database role per service. Restricting the key to the cluster's NAT address doesn't help: Supabase's network restrictions don't cover the HTTPS APIs the backend uses | `deploy/terraform/roles.json` (each role's `secrets`) | L |
 | 6.3 | Low | Actions and the base image are pinned by tag, not hash; pip doesn't check hashes | Pin by digest; `--require-hashes` (needs the digests looked up and a hashed lock). Our own images already deploy to GKE by digest, signed and admitted by Binary Authorization | `.github/workflows/ci-cd.yml:63`; `backend/Dockerfile` | S |
 
-Password hashing and the login token's place in `localStorage` are in `PENDING_WORK.md` ("Security"). Supabase's advisors (2026-11-16): security lists only "RLS enabled, no policy" on all 13 tables, which is the design (secret key only, no anon grants); performance lists 4 unused indexes, all backing a cascade or the reply lookup, so they stay.
+Lockout, revocation and the login token's place in `localStorage` are in `PENDING_WORK.md` ("Security"). Supabase's advisors (2026-11-16) found nothing open (`HOW_IT_WORKS.md` §6). On GKE: 6.2 is unchanged (the NAT allow-list doesn't help); 6.3 is closed for our own images; 6.1 is unchanged.
 
-## 7. Not read yet, and leftovers
+## 7. Not read yet
 
 - **Not read yet (flagged by size only):** `DocumentDetailsPage.tsx` (716 lines) and `UploadPage.tsx` (530); `_finding` defined in 7 files.
-- **Deletes** rely on cascades (`backend/sql/schema.sql`; checked live 2026-11-16: every document- or case-keyed table cascades, `finding_feedback.document_id` is set null); `audit_events` is never deleted. Known limits: a delete's audit event is best effort, and a failed file delete leaves the file in storage (logged). Signed URLs are made only in `routers/documents.py` (server side); a moved document keeps its storage path, which is fine (the path is opaque and the file goes with the row).
-- **Field writes** go through the `replace_extracted_fields`, `add_extracted_field` and `delete_extracted_field` functions, each refusing unless the document is still in the status its caller read (`backend/sql/schema.sql`; live since 2026-11-16).
-- **Rule:** a new stored field gets a model default that old rows read correctly.
 
 ## 8. Decisions needed
 
@@ -80,4 +91,4 @@ Password hashing and the login token's place in `localStorage` are in `PENDING_W
 
 ## 9. Order
 
-After the demo: 2.1, 2.2; 3.3, 3.4; 4.8; `FRAUD_DETECTION_MAP.md` §8 bug 4 (quick), 4.3, 4.9 once decided, 4.2 with the risk-card restyle; B1 with phase 6; B2 on 2026-11-21; B3.
+After the demo: 2.1, 2.2; 3.3, 3.4; 4.8; 2.5 (quick), 2.3 and 2.4, 4.3, 4.9 once decided, 4.2 with the risk-card restyle; B1 with phase 6; B2 on 2026-11-21; B3.

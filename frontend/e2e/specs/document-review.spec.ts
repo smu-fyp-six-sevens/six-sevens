@@ -218,8 +218,9 @@ test.describe('Validate extracted data and support manual correction @sprint2 @S
     await expect(page.getByRole('button', { name: 'Approve Document' })).toHaveCount(0);
     expect(backend.requestsTo('POST', `/documents/${cert.id}/approve`)).toHaveLength(1);
     await page.goto(`${fixture.caseUrl}?section=documents`);
-    await page.getByTestId('document-group').filter({ hasText: 'Approved' }).click();
-    await expect(page.getByTestId('documents-card')).toContainText(cert.filename);
+    // Approved is open on arrival, with the document under it.
+    await expect(page.getByTestId('document-group').filter({ hasText: 'Approved' })).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('.documents-table-row--approved', { hasText: cert.filename })).toHaveCount(1);
   });
 
   test('an unrecognised document starts as Unrecognised and only becomes Other once the officer picks it @DI-others', async ({ page, backend }) => {

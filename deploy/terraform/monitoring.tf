@@ -1,4 +1,4 @@
-# Budget alert (CLOUD_ARCHITECTURE_PLAN.md section 6) and alert policies emailed to var.alert_email.
+# Budget alert (HOW_IT_WORKS.md §9) and alert policies emailed to var.alert_email.
 
 resource "google_billing_budget" "monthly" {
   count           = var.billing_account == "" ? 0 : 1

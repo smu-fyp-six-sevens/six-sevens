@@ -2,7 +2,7 @@
 Runs the per-case analysis: cross-document hypotheses, the risk outlook and
 the plain-language summary. It starts on its own once the case's documents
 are all decided and scanned (start_if_due), or on an officer's request. See
-CROSS_DOCUMENT_AND_RISK_PLAN.md.
+HOW_IT_WORKS.md, Step 6.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# One service account per service, with only what it needs (CLOUD_ARCHITECTURE_PLAN.md section 6).
+# One service account per service, with only what it needs (HOW_IT_WORKS.md §9).
 
 resource "google_service_account" "role" {
   for_each     = toset(concat(keys(local.roles), ["kong", "frontend", "grafana"]))

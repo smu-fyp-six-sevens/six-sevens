@@ -1,6 +1,6 @@
 # Pending work
 
-Open product and platform work only: delete an item once done. Updated 2026-11-16. Elsewhere: bugs, stability, performance and security in `CODEBASE_AUDIT.md`; tests in `TEST_SUITE_AUDIT.md` and `PENDING_TESTS.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §8; cloud to-dos in `CLOUD_ARCHITECTURE_PLAN.md` §9–10 and Kubernetes in §13–24.
+Open product and platform work only: delete an item once done. Updated 2026-11-16. How things are built today: `HOW_IT_WORKS.md`. Elsewhere: bugs (detection included), performance and security in `CODEBASE_AUDIT.md`; tests in `TEST_SUITE_AUDIT.md` and `PENDING_TESTS.md`; cloud work in `CLOUD_ARCHITECTURE_PLAN.md`.
 
 ## Handover documentation
 
@@ -27,18 +27,24 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 ## Detection and the document pipeline
 
 - **Cross-document category.** *Issue:* a share-capital conflict is labelled `unsupported_claim`. *Do:* a `cross_document_variance` label (schema change).
-- **No checkpointing, by choice.** A crashed run is rerun from the start (the sweeper recovers it, `HOW_IT_WORKS.md` §9); a checkpointer would only keep the model calls already made. If it is ever wanted: `langgraph-checkpoint-postgres`, its own schema, no personal data in state.
+- **Audit the "Other" checks:** `date_anomalies`, `metadata_analysis` and `image_manipulation` use the document type in places; mark each rule type-agnostic or type-keyed.
 - **Model output gaps.** *Issue:* nothing checks an extracted value's type (text in a number field), and the binder (`field_checks/binder.py`) and `llm_classify.py` skip `validate`, so repairs aren't traced.
 
-## Case analysis (design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`)
+## Case analysis (design: `HOW_IT_WORKS.md`, Step 6)
 
+- **Cancel the outdated run.** *Issue:* a replaced run finishes anyway and spends its calls; only its result is dropped (`superseded`).
+- **A fence on the case row** (`current_run_id`). *Issue:* two instances finishing at once could both publish a result (`CODEBASE_AUDIT.md` 2.2). Two instances *starting* the same run is already stopped by a unique index.
+- **Debounce** (5–10 s) before an automatic start, for a burst of officer changes.
+- **Dismissing a cross-document finding** (officer, with a reason; leaves the score, kept on record).
 - **No follow-up round** in plan-then-judge: add one if evals show low recall.
-- **Guardrails still open:** dismissing a cross-document finding, the three sponsor questions in the plan.
+- **Monitoring:** false-positive, dismissal and citation-discard rates, cost per case.
+- **Sponsor questions:** does GLDB's model risk policy need formal validation and a model owner? How long must the audit record be kept? Is sending masked data to an external LLM acceptable, or does it need zero-data-retention terms?
 - **Evidence requests need rethinking.** *Issue:* a document can only lower the score, so "ask for everything" always looks best. *Ideas:* the smallest set that reaches a target level (code); score documents that could go either way; an agent that checks existing documents first. The score stays deterministic.
 
 ## Evals and verification (all on demand: they spend tokens)
 
-- **Agent evals:** the sensibility checks are built; what's open (tests, tuning, the officer-verdict accuracy table) is in `CLOUD_ARCHITECTURE_PLAN.md` §13. No golden set, by decision.
+- **Agent evals:** the sensibility checks are built; what's open (tests, tuning, the officer-verdict accuracy table) is in `CLOUD_ARCHITECTURE_PLAN.md`, "Agent evaluation". No golden set, by decision.
+- **Case analysis evals:** false positives on clean generated cases (Other documents included), recall on planted contradictions, false-positive parity across subgroups.
 - **Extraction accuracy:** text-only vs second look, and code-read vs model-read statement transactions, on labelled statements and payslips.
 - **Does officer feedback help?** Same cases with and without `finding_feedback`.
 - **One real end-to-end run** (never done with real Claude): a bank statement and a payslip through the local app, including a second-look disagreement reaching Manual Review.
@@ -47,7 +53,6 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 ## Performance
 
-- A burst of changes can chain snapshot builds; the first requester waits for the next.
 - **Opening a case by direct link waits in sequence** (case lookup, ticket, socket, first snapshot). *Do:* fetch the first snapshot over HTTP alongside the socket, and put the case's details in the snapshot.
 
 ## Cloud operations
@@ -56,7 +61,6 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 - **Make Snyk blocking again** when its quota resets: delete the two `continue-on-error: true` lines in `.github/workflows/ci-cd.yml`, and "temporarily non-blocking" from CLAUDE.md, README and `HOW_IT_WORKS.md` §9.
 - **Frontend fully non-root:** `nginx-unprivileged` on 8080 (change `nginx.conf`, compose and the chart's `templates/frontend.yaml` port, with `runAsNonRoot`, together; `run.tf`'s `container_port` too while Cloud Run exists).
 - **Dead letters** sit in `domain-events-dead-letter-pull` until someone reads them.
-- **Socket ticket replay** within 10 s on another instance is accepted; not worth fixing.
 
 ## Frontend
 

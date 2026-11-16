@@ -1,4 +1,4 @@
-"""Stuck work and recovery (CLOUD_ARCHITECTURE_PLAN.md section 5): the sweeper, the owners, routing, cancels."""
+"""Stuck work and recovery (HOW_IT_WORKS.md §8, "Stuck work"): the sweeper, the owners, routing, cancels."""
 
 import asyncio
 from datetime import datetime, timedelta, timezone

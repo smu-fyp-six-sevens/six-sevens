@@ -1,4 +1,4 @@
-# Releases on GKE (CLOUD_ARCHITECTURE_PLAN.md section 18): the deploy signs each image with one Cloud KMS key (cosign
+# Releases on GKE (HOW_IT_WORKS.md §9, "Releases on GKE"): the deploy signs each image with one Cloud KMS key (cosign
 # signature and SBOM, plus a Binary Authorization attestation), Binary Authorization admits only attested images,
 # and Cloud Deploy rolls out the rendered chart, records it, runs the gateway checks, and rolls back.
 

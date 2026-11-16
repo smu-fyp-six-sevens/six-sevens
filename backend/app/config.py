@@ -91,7 +91,7 @@ class Settings:
     # The commit an image was built from (backend/Dockerfile's GIT_COMMIT build argument), for agent_versions.py.
     GIT_COMMIT: str = _str("GIT_COMMIT", "local")
 
-    # --- Services and events (CLOUD_ARCHITECTURE_PLAN.md) ---
+    # --- Services and events (HOW_IT_WORKS.md §9) ---
     # Which roles this process runs; the default runs all of them, as uvicorn always has.
     ROLES: frozenset[str] = _roles(_str("ROLE", "all"))
     # "inprocess" calls handlers in this process; "pubsub" publishes to Pub/Sub (or the emulator
@@ -104,7 +104,7 @@ class Settings:
     PUSH_AUDIENCE: str = _str("PUSH_AUDIENCE")
     PUSH_SERVICE_ACCOUNT: str = _str("PUSH_SERVICE_ACCOUNT")
     # How workers receive events: "push" (Cloud Run: Pub/Sub posts to /push/<role>) or "pull" (GKE: events/pull.py
-    # streams from the role's subscription). Same subscription either way, switched in place (CLOUD_ARCHITECTURE_PLAN.md §17).
+    # streams from the role's subscription). Same subscription either way, switched in place (HOW_IT_WORKS.md §9).
     # "none": no events at all, only HTTP (a role serving requests on GKE while Cloud Run still takes its events).
     EVENT_DELIVERY: str = _str("EVENT_DELIVERY", "push").lower()
     # Messages each role's subscription hands this process at once (the role's concurrency on Cloud Run).
@@ -124,7 +124,7 @@ class Settings:
     # A case analysis still "running" after this long was interrupted; the sweeper then marks it failed.
     CASE_ANALYSIS_TIMEOUT_SECONDS: int = _int("CASE_ANALYSIS_TIMEOUT_SECONDS", 900)
 
-    # --- Stuck work and recovery (sweeper.py, CLOUD_ARCHITECTURE_PLAN.md section 5) ---
+    # --- Stuck work and recovery (sweeper.py, HOW_IT_WORKS.md §8, "Stuck work") ---
     # Off by default: the database is shared, so a local process must never sweep cloud work. Terraform turns it on.
     SWEEPER_ENABLED: bool = _bool("SWEEPER_ENABLED", False)
     # uploaded/queued past the first means its event was lost; processing/extracting/detecting past the second means

@@ -1,6 +1,6 @@
 # Cloud architecture: what's left
 
-Planned and open cloud work only. Delete an item once it's done. Updated 2026-11-16.
+Open cloud work only: delete an item once it's done, and this file once it's empty. Updated 2026-11-16. The cloud as built, and why (the GKE design, Helm, releases, decisions, cost, risks): `HOW_IT_WORKS.md` §9. Operations and every problem met: `deploy/terraform/README.md`.
 
 ## Status and next steps (read this first)
 
@@ -10,94 +10,57 @@ Planned and open cloud work only. Delete an item once it's done. Updated 2026-11
 
 | # | Step | Who | When |
 |---|---|---|---|
-| 3 | Cloud Armor now enforces: log in, upload, save a field on `sixsevens.me`. A 403 means a rule caught real traffic; send the request for an exclusion | You, me to propose the fix | Now |
-| 3b | After the demo (Friday 2026-11-20): put the workers back to scaling from zero. In `deploy/terraform/roles.json`, each worker's `gke` block has `min` 1 (always warm, about $5 a day, so teammates never wait on a cold start) and doc- and detection-worker `max` 2; set `min` back to 0, run `gen_values.py`, push. Warm them again the same way before the Cloud Native presentation | You | 2026-11-20 or 21 |
-| 4 | Delete Cloud Run (phase 6): its services, the push identity, the Cloud Run deploy in CI, the Grafana panels moved to GKE | Me to prepare, you to apply | About 2026-11-21, once GKE has been stable |
-| 5 | Failure tests (§9) | Both | After step 4 |
+| 1 | Cloud Armor now enforces: log in, upload, save a field on `sixsevens.me`. A 403 means a rule caught real traffic; send the request for an exclusion | You, me to propose the fix | Now |
+| 2 | After the demo (Friday 2026-11-20): put the workers back to scaling from zero. In `deploy/terraform/roles.json`, each worker's `gke` block has `min` 1 (always warm, about $5 a day, so teammates never wait on a cold start) and doc- and detection-worker `max` 2; set `min` back to 0, run `gen_values.py`, push. Warm them again the same way before the Cloud Native presentation | You | 2026-11-20 or 21 |
+| 3 | Delete Cloud Run (phase 6): its services, the push identity and its grants, the Cloud Run deploy in CI, the second frontend image, the Grafana panels moved to GKE (`build_dashboards.py` needs GKE versions of the `service_name`, `run_googleapis_com:*` and cost panels). Rollback: re-apply them from git history | Me to prepare, you to apply | About 2026-11-21, once GKE has been stable |
+| 4 | Failure tests (below) | Both | After step 3 |
 
 **If a worker breaks on GKE:** remove that role from `deploy/terraform/migration.json`, run `gen_values.py`, `terraform apply`, push. Cloud Run takes its work again.
 
-## Background
+**Phases 2–4 still being watched:** every event stored; sweeps run; p95 and failures within 10% of Cloud Run; no more recoveries or dead letters (`PENDING_TESTS.md`, manual checks).
 
-The cloud as built is summarised in `HOW_IT_WORKS.md` §9; operations and every problem met are in `deploy/terraform/README.md`; running the split locally is in `README.md`. Sections 1–7 and 12 moved there, so the numbers from 8 on are unchanged. Adding a service: `docs/ADDING_A_SERVICE.md`.
-
-**Decided 2026-11-14:**
-- **Production moves to GKE Autopilot**, and the Cloud Run deployment is removed once GKE is stable (§13–24). This is a Cloud Native award, so Kubernetes is the platform, not an afterthought. Load doesn't require it: detection's p95 is 92 s against a 600 s limit.
-- **No staging environment.** It's designed (below, for the record) but not built: about 3–5 days of work before the deadline. Load tests run against the local compose stack with Claude stubbed; failure tests run on production after the move, on synthetic cases.
-- **Front door:** `sixsevens.me` (the frontend), `api.sixsevens.me` (Kong), `grafana.sixsevens.me`, on one Google-managed certificate on the load balancer, which re-encrypts to the cluster. No plain-HTTP hop anywhere. The API's URL is fixed, so the frontend keeps its build-time URL: until phase 6, CI builds a second frontend image for GKE (`VITE_API_URL=https://api.sixsevens.me`).
-- **No release approval in Cloud Deploy, ever:** a green push to `main` deploys, as today. The human checkpoint is the merge to `main`; every release is still recorded and one step to roll back.
-- **Claude stays on the Anthropic API** (decided 2026-11-16; Vertex AI dropped). Its key is in Secret Manager. Vertex appeared not to serve the Claude 5 models in `asia-southeast1`, so it wouldn't have kept processing in Singapore either.
-
-Also open, no rush: the budget's new amount for GKE. Runbook for every step: `deploy/terraform/README.md` ("GKE").
-
-## 8. Open decisions
+## Open decisions
 
 1. **Login:** keep `AUTH_USERS` (hashed now) as a stated limit, or move to Supabase Auth.
+2. **The budget's new amount** for GKE.
 
-## 9. To do
+## To do
 
 - **Failure tests** (a deliverable), on production after the GKE move, on synthetic cases at a quiet time: kill a worker pod mid-run; flood uploads; stop audit-metrics; a poison message; a lost publish (set a document to `queued` without publishing; the sweeper should recover it). The lost publish writes to the shared database.
-- **Argo CD (planned, after the demo):** releases pulled from git (GitOps) instead of pushed by Cloud Deploy. Open points: replace Cloud Deploy or run beside it (replace, so there is one deployer); how image digests reach git (CI commits them to a values file, or Argo CD Image Updater); its vCPU on the free trial's 8 (check the peak first, after step 3b lowers the workers); the verify step and one-step rollback moved over; Binary Authorization unchanged (it checks at admission, whoever deploys).
+- **Argo CD (planned, after the demo):** releases pulled from git (GitOps) instead of pushed by Cloud Deploy. Open points: replace Cloud Deploy or run beside it (replace, so there is one deployer); how image digests reach git (CI commits them to a values file, or Argo CD Image Updater); its vCPU on the free trial's 8 (check the peak first, after step 2 lowers the workers); the verify step and one-step rollback moved over; Binary Authorization unchanged (it checks at admission, whoever deploys).
 - **Shared Anthropic rate budget:** today each instance caps itself.
 - **Kong behaviour test in CI** (routes, CORS, rate limits, WebSocket upgrade): CI only checks the config parses.
+- **Delete the cluster** after the assessment if nobody takes it over.
 - **Optional:** ingestion out of api.
 
-**Staging (designed, not built):** a second GCP project and Supabase project, the same Terraform with its own variables; schema as migrations; a frontend runtime config so one image serves both; no Anthropic key, with `langgraph/_anthropic.py` returning canned replies; `main` → staging → smoke test → the same images to production. Revisit after the deadline, or if GLDB asks for one.
+## Stage 2 (after the supervisor's feedback, 2026-10-26; updated 2026-11-14)
 
-## 10. Stage 2 (revised after the supervisor's feedback, 2026-10-26; updated 2026-11-14)
+Steps 1–6 before the final presentation; the rest after the demo, as time allows.
 
-**Feedback in short:** the architecture is fine. A handful of users doesn't justify heavier infrastructure without a measured need. Let load testing drive decisions; spend the time on testing, productionisation, usability and business value. `docker compose up` liked; on-prem accepted as hard; a deployment document (server, model, RAM, storage) requested. The GKE move goes beyond that advice deliberately, for the award; the measured load figures stay in the write-up.
+1. **Load tests as code** (k6 or Locust) against the local compose stack, written up as a capacity report (uploads a minute, time for KEDA to add a worker, p95 per stage). **No Claude calls** (stubbed) and **no Supabase writes** (writes go to an in-memory store). For the presentation, a live run with the Workloads page and Grafana showing pods being added.
+2. **Tune autoscaling** (KEDA, pod sizes) from the results, recording before and after.
+3. **Failure tests** on production (above).
+4. **Accuracy from officer verdicts** (below).
+5. **Service-level objectives** with burn-rate alerts in Cloud Monitoring: for example 99% of API requests succeed, 95% of detection runs finish within 3 minutes; an alert when the error budget burns too fast.
+6. **Supply-chain extras:** build provenance (`actions/attest-build-provenance`, SLSA), CodeQL and gitleaks, and Trivy on each image with high findings blocking, beside the signing and Binary Authorization already in place.
+7. **Argo CD** (above).
+8. **Event contracts:** every event type checked against a schema in CI, so no service can publish what another can't read.
+9. **Disaster recovery:** one Supabase backup-and-restore drill, timed, with stated recovery-time and data-loss targets (RTO, RPO); and the self-host kit (`docker compose up` install and the Helm chart).
+10. **Uptime checks and a status page:** Cloud Monitoring checks on `sixsevens.me` and the API from several regions.
+11. **Architecture decision records:** one short page per big decision (events over direct calls, GKE over Cloud Run, Claude only, the score set by code, no staging), in `docs/adr/`.
+12. **Cost:** infrastructure cost per case (each namespace's share from the billing export in BigQuery) beside the Claude cost per case; and the guardrails: a shared rate budget, a spend cap per case, budget alerts (the cluster costs money idle).
 
-**Steps, in order** (1–7 before the final presentation; the rest after the demo, as time allows):
-1. **GKE production:** live; phase 6 open (§17).
-2. **Load tests as code** (k6 or Locust) against the local compose stack, written up as a capacity report (uploads a minute, time for KEDA to add a worker, p95 per stage). **No Claude calls** (stubbed) and **no Supabase writes** (writes go to an in-memory store). For the presentation, a live run with the Workloads page and Grafana showing pods being added.
-3. **Tune autoscaling** (KEDA, pod sizes) from the results, recording before and after.
-4. **Failure tests** on production (§9).
-5. **Accuracy from officer verdicts** (§13.3): per-agent precision and recall by prompt version, from finalised cases. One table (a dated SQL file), one handler, one panel.
-6. **Service-level objectives** with burn-rate alerts in Cloud Monitoring: for example 99% of API requests succeed, 95% of detection runs finish within 3 minutes; an alert when the error budget burns too fast.
-7. **Supply-chain extras:** build provenance (`actions/attest-build-provenance`, SLSA), CodeQL and gitleaks, and Trivy on each image with high findings blocking, beside the signing and Binary Authorization already in place.
-8. **Argo CD** (§9).
-9. **Event contracts:** every event type checked against a schema in CI, so no service can publish what another can't read.
-10. **Disaster recovery:** one Supabase backup-and-restore drill, timed, with stated recovery-time and data-loss targets (RTO, RPO); and the self-host kit (`docker compose up` install and the Helm chart).
-11. **Uptime checks and a status page:** Cloud Monitoring checks on `sixsevens.me` and the API from several regions.
-12. **Architecture decision records:** one short page per big decision (events over direct calls, GKE over Cloud Run, Claude only, the score set by code, no staging), in `docs/adr/`.
-13. **Cost:** infrastructure cost per case (each namespace's share from the billing export in BigQuery) beside the Claude cost per case; and the guardrails: a shared rate budget, a spend cap per case, budget alerts (the cluster costs money idle, §21).
+**Not doing:** staging (decided; its design is in `HOW_IT_WORKS.md` §9); nightly evals or model-comparison runs (they spend tokens).
 
-**Not doing:** staging (above); nightly evals or model-comparison runs (they spend tokens).
+## Agent evaluation
 
-## 11. Risks
+The sensibility checks are built (`HOW_IT_WORKS.md`, "Sensibility checks on each agent run"). Open:
 
-- **Database written, publish lost:** the sweeper recovers it.
-- **Supabase Realtime** carries all live updates; untested under load.
-- **Kong** is a single entry point: a wrong `Host` or CORS rule breaks the frontend; test with compose first.
-- **One environment:** with no staging, the post-deploy check, the phased move (§17) and rollback are the safety net.
-- **Shared Supabase:** local and cloud see each other's data; whole-database scans (the sweeper) run only in the cloud.
-
----
-
-# Kubernetes deployment (live; phase 6 open)
-
-How Six Sevens moved from Cloud Run to GKE. Decided and built 2026-11-14; phases 1–4 are done (§17). Sections 13–24; what's built is summarised in `HOW_IT_WORKS.md` §9.
-
-**The rule:** every phase is watched on the agents' sensibility checks (built, §13) and, once built, the officer-verdict accuracy trend.
-
-## 13. First: the evaluation harness
-
-*In plain words:* the agents are officer-facing, and the officer decides every case. So the harness has one job: catch an agent going off track before the officer relies on it. The sensibility checks on every agent run are built (`backend/app/evals/`, the trace view and the Agents dashboard; how they work: `HOW_IT_WORKS.md` §3). Accuracy comes from the officers' own verdicts (§13.3), not from a golden set. No golden set, no nightly evals, no tokens spent on evals.
-
-### 13.1 Open on the sensibility checks
-
-- **Tests:** `PENDING_TESTS.md` rows 36, 37 and 39 (the rest are written: `tests/test_evals.py`), then one real run per run kind (a payslip, a bank statement, a case) to see the checks on a live trace.
+- **Tests:** `PENDING_TESTS.md` rows 36, 37 and 39 (the rest are in `tests/test_evals.py`), then one real run per run kind (a payslip, a bank statement, a case) to see the checks on a live trace.
 - **Tune from real runs:** the overconfidence gap (0.3); the expected-checks table (`evals/detection.py`: today only Content Validation's numerical checks on income documents and bank statements, and Digital Authenticity's metadata check); the field-name rules for dates and amounts (`evals/extraction.py`). A check that warns on most runs is noise: change or drop it.
 - **Extraction rerun:** records no `extraction` step, so its field checks don't run (only its second look is checked).
 
-### 13.2 What the checks cannot tell you
-
-- A run can follow the expected path, give a sensible answer, and still miss fraud. The checks don't measure accuracy.
-- Officers mostly confirm or dismiss what the system flagged. They rarely see what it missed, so misses are under-measured. This is a stated limitation, along with the fact that all test data is synthetic.
-- With no golden set, a prompt change can't be rerun on fixed cases and compared. Changes are watched through the checks and the officer-verdict trend instead.
-
-### 13.3 Accuracy from officer verdicts (not built)
+### Accuracy from officer verdicts (not built)
 
 *In plain words:* when a case is finalised, the officers' verdicts on each agent's findings are counted against what the agent said. This is the accuracy figure. It's human-labelled and comes from real use, so no answer key is needed.
 
@@ -112,144 +75,3 @@ How Six Sevens moved from Cloud Run to GKE. Decided and built 2026-11-14; phases
 | Use | A trend to watch, not a gate. A drop after a prompt or model change prompts a person to look; nothing blocks automatically |
 | Never | Changes a score, severity or verdict, or reaches a prompt |
 | Size | M: one table (dated SQL file), one handler, one route, one panel |
-
-### 13.4 Rules
-
-- **Evals only watch.** They never change a score, severity, verdict, status or finding, never reach a prompt, and never block a run.
-- **No model marks another model** (cost, and "code verifies" is the design rule).
-- **No golden set, no nightly evals, no scheduled token spend.** Evals run inside normal use and cost nothing extra per run.
-- **No personal data** in metrics or the trace's check results (field names, never values).
-
-## 14. Why GKE, and what it shows
-
-The move isn't forced by load (detection p95 92 s against Cloud Run's 600 s push limit), so it's justified by what Kubernetes demonstrates and what a bank would run:
-
-| Reason | What it shows |
-|---|---|
-| Portability | The same Helm chart runs on GLDB's own cluster, on-premises or in any cloud; Cloud Run is Google-only |
-| Network isolation | Services are internal (no public URLs); only the load balancer and Kong face the internet |
-| No request-time ceiling | Pull workers have no 600 s push limit, so a long case analysis can't be cut off |
-| Event-driven scaling | Workers scale on undelivered messages (KEDA), down to zero |
-| Supply-chain control | Only signed images from our registry are admitted |
-| Operations a bank recognises | GitOps-style releases, namespaces per service, network policies, pod security |
-
-The measured figures stay in the write-up, so the move reads as a deliberate design choice, not a load fix.
-
-## 15. Target design
-
-| Concern | Choice | Why |
-|---|---|---|
-| Cluster | GKE Autopilot, regional, `asia-southeast1`, one cluster (prod) | No nodes to manage; the control plane survives a zone loss. The lean profile (one replica each, for a team of 5-6 on free-trial credits) doesn't: raising `kong.replicas` and api's `gke.min` to 2 spreads them across zones and adds their disruption budgets |
-| Namespaces | One per role, plus `gateway`, `frontend`, `observability` | A boundary each; dashboards already key on `namespace` |
-| Front door | `sixsevens.me` on Cloud Load Balancing (Gateway API, global external) with a Google-managed certificate (Certificate Manager, DNS authorisation) → Kong; services internal (ClusterIP) | One front door, by the network; the gateway key (backend `gateway.py`) stays until phase 6 as a second guard |
-| WebSockets | A `GCPBackendPolicy` with `timeoutSec: 3600` on Kong's backend (the default 30 s would cut every case WebSocket); a `HealthCheckPolicy` on `/health` | Live updates through the load balancer |
-| Edge protection | Cloud Armor on the load balancer: OWASP rules and per-address rate limits before traffic reaches Kong | A bank-facing app gets a web application firewall; Kong keeps the per-officer limits |
-| Events | Same topic; each role's existing subscription switches from push to pull in place (no second subscription: it would collect every message and process each twice) | Private services can't take push; removes the 600 s limit |
-| Scaling | KEDA on undelivered messages, 0 to max; Kong, api, frontend and audit-metrics (sweeps every 5 min) at least 1. From zero, expect 2–4 minutes (the backlog metric lags 1–2 min, and Autopilot may add a node) against Cloud Run's 10–30 s, close to the sweeper's 5-minute limit for queued work. Workers get a termination grace longer than a detection run but stay evictable: `safe-to-evict: "false"` makes Autopilot give each pod its own node, past the trial's vCPU quota (an evicted run is nacked and redelivered) | Idle workers cost nothing |
-| Database | Supabase outside; egress via Cloud NAT on a static IP | Private nodes need NAT to reach Supabase and Anthropic. Supabase's network restrictions cover direct Postgres and pooler connections only, and the backend uses only the HTTPS APIs (`supabase_client.py`), so the allow-list does **not** make a leaked key useless |
-| Secrets | Secret Manager through the GKE add-on, mounted as files; the chart's start command exports them as the variables the app (`config._str`) and Kong (`render.sh`) read. A rotated secret needs a restart | No secrets in Helm values |
-| Identity | Workload Identity, one account per role (as today) | No keys |
-| Claude | The Anthropic API, its key from Secret Manager (Vertex AI dropped 2026-11-16) | One outside key, mounted only where it's used |
-| Images | Artifact Registry with Artifact Analysis (vulnerability scanning on push); cosign signs each image and attaches its SBOM, and a Binary Authorization attestation (same Cloud KMS key) admits it: the enforcing policy checks attestors, not cosign signatures. KEDA's images are allow-listed | Only our software runs, and every image has a parts list |
-| Releases | Cloud Deploy, rendering the Helm chart, with a rollout record and one-step rollback; no approval (decided); its verify step runs the gateway checks | Every production change is recorded and reversible, without running a deploy tool inside the cluster |
-| Monitoring | Managed Prometheus (PodMonitoring instead of sidecars), the same Grafana (in `observability`), Cloud Logging, Cloud Trace; the GKE security posture dashboard. The Cloud Run panels (`service_name`, `run_googleapis_com:*`, the cost panels) need GKE versions in `build_dashboards.py`; app metrics keep working because namespaces are named after the roles | Mostly what runs today; posture is free with GKE |
-| Scheduled work | Cloud Scheduler's sweep (as today) | Nothing new |
-| Backups | Cluster holds no state; Supabase point-in-time recovery matters | No cluster backup tool |
-| Environments | dev (laptop, compose or kind) and prod | No staging (decided) |
-
-**Not used, on purpose:** Cloud SQL, Firestore, Cloud Storage and Memorystore (Supabase Postgres and Storage, and no Redis, are settled); a service mesh (network policies suffice); GKE Enterprise (not needed for one cluster).
-
-## 16. The Helm chart
-
-- **Chart:** one chart, a template per kind; per-role values generated from `deploy/terraform/roles.json`. Values files: default, kind, prod.
-- **Network:** default-deny per namespace; gateway → api and audit-metrics only; Kong takes traffic only from Google's front ends and health checks (`35.191.0.0/16`, `130.211.0.0/22`, also Kong's trusted IPs for the real client address); workers take no inbound traffic except the metrics scrape; egress only to DNS, Supabase, Anthropic, Pub/Sub, registries.
-- **Labels:** chosen once. Deployment selectors are immutable, so a changed label means deleting the Deployment.
-- **KEDA** is installed once per cluster (a pinned `helm install`, in `deploy/terraform/README.md`), not by this chart.
-- **Pods:** non-root (uid 10001; not yet the frontend's nginx, `PENDING_WORK.md`), read-only root, no privilege escalation, CPU and memory limits; a disruption budget for Kong and api once they run 2 or more (with one, it would block every node drain).
-- **CI on kind:** Pub/Sub emulator, stub Supabase, kind's own network plugin (it enforces network policies); smoke test (health, one event per worker, one call the policies must block); Checkov on the rendered chart. Values, render and Checkov run on any chart-input change (about 2 minutes); the kind run only when the templates, smoke files, Kong, event code or Dockerfile change, and weekly (about 8–10 minutes, images cached).
-
-## 17. Migration
-
-Each consumer's subscription switched from push to pull in place (`migration.json`), so only one platform gets a role's messages; rollback is switching back. Phase 1 (the cluster and front door, which also covered the planned phase 5) went live on 2026-11-14; phases 2–4 (audit-metrics, case-worker, detection-worker, doc-worker) were applied together the same day, at the team's call, rather than one at a time.
-
-| Phase | Moves | Check | Rollback |
-|---|---|---|---|
-| 2–4 (being watched) | Every consumer's events, the sweeper with audit-metrics. Cloud Run's audit-metrics still serves `/audit` to Cloud Run's Kong | Every event stored; sweeps run; p95 and failures within 10% of Cloud Run; no more recoveries or dead letters (`PENDING_TESTS.md`, manual checks) | Remove the role from `migration.json`, apply, push |
-| 6 | Remove the Cloud Run services, the push identity and its grants after a stable week (Terraform) | — | Re-apply them from git history |
-
-Then the failure tests (§9).
-
-## 18. CI/CD on GKE
-
-Actions builds and pushes to Artifact Registry, signs each digest with cosign and attaches its SBOM (syft), creates the Binary Authorization attestation with the same KMS key, then creates a Cloud Deploy release that renders the chart with the image digests. Cloud Deploy rolls it out without approval and records it; its verify step runs the gateway checks; rollback is its previous release. Terraform owns the cloud pieces; the chart owns everything inside the cluster. Binary Authorization enforces (since 2026-11-14, after a clean dry run). The checks that block today (Checkov, pip-audit, npm audit) keep blocking. Until phase 6 the same images also roll out to Cloud Run (`deploy.yml`), with the GKE job behind a repository variable.
-
-## 19. Tools: in and out
-
-| Tool | Why | Cost | When |
-|---|---|---|---|
-| Cloud Deploy | Every production release recorded and reversible (MAS TRM) | Small per active pipeline; check the calculator | With the move |
-| KEDA | Idle workers cost nothing | Free | With the move |
-| Binary Authorization, cosign, SBOM, Artifact Analysis | Only our images run; a parts list for vulnerability reviews | Free to small | With the move |
-| Cloud Armor | Web application firewall and edge rate limits | Per policy, rule and request; check the calculator | With the move |
-| Secret Manager add-on | Secrets in one audited place | Included | With the move |
-| NetworkPolicy | Services can't talk to each other unless allowed | Included | In the chart |
-
-**Left out:** a service mesh, Kyverno or Gatekeeper (Autopilot covers it), Velero (no state to back up), Falco (needs privileged pods; the posture dashboard covers basics), Litmus (scripted failure tests instead).
-
-## 20. Open security items on GKE
-
-| Security item (`CODEBASE_AUDIT.md`) | On GKE |
-|---|---|
-| 6.2 every role holds the database key | Still true, and the NAT allow-list doesn't help: Supabase's network restrictions don't cover the HTTPS APIs the backend uses |
-| 6.6 pinning by tag | Our images: closed (deployed by digest, signed, Binary Authorization enforces). Actions, base images and pip hashes: still open |
-| 6.1 any service can publish any event | Unchanged |
-
-The gateway key (backend `gateway.py`) stays until phase 6, as a second guard beside the network policies; drop it then or keep it.
-
-## 21. Cost (rough; check Google's calculator before quoting)
-
-| | Monthly |
-|---|---|
-| Helm chart on kind in CI | $0 |
-| Production on GKE Autopilot, lean profile (one each of Kong, api, frontend, Grafana and audit-metrics always on, 1.6 vCPU; workers at 0, at most one each; 4.85 vCPU at peak, under the free trial's 8) plus NAT, load balancer and Cloud Armor | roughly $130–150, about $4–5 a day, plus per document and about $2–3 of image scans per push; about $1.50 a day with every pod scaled to 0 (`deploy/terraform/README.md`). GKE's free-tier credit may cover one cluster's management fee. Check the calculator before quoting |
-| Today on Cloud Run | about $0 idle, cents per document |
-
-The cluster costs money while idle, unlike Cloud Run. The budget alert stays; delete the cluster after the assessment if nobody takes it over.
-
-## 22. Risks
-
-| Risk | Mitigation |
-|---|---|
-| No staging: production is the first cluster | The phased move (§17), one role at a time, each reversible; the kind test on every chart change |
-| The chart drifts from what Cloud Run ran | Values generated from `roles.json` (CI checks) |
-| A message processed twice during a switch | Handlers are idempotent; one subscription per role |
-| Idle cost | KEDA to zero for workers; budget alert; delete the cluster when it's no longer needed |
-| A wrong network policy or Cloud Armor rule breaks a flow | kind test has a must-pass and a must-block call; Cloud Armor rules start in preview mode |
-| A slow start from zero trips the sweeper | Watch recoveries in phase 4; keep doc-worker at 1 for demos |
-| Nobody to run it after handover | Autopilot, Cloud Deploy, a short runbook |
-| Data leaves Singapore | Regional cluster and registry; Claude calls leave Singapore (Anthropic API), a stated limitation |
-| Too few officer verdicts to read accuracy | Show the count with each figure; a person decides below 30 cases |
-
-## 23. Why each piece (in the bank's terms)
-
-| Feature | Problem it solves | Expectation it meets |
-|---|---|---|
-| Evaluation harness | Catches agents going off track on every run; accuracy from officer verdicts | MAS FEAT (monitoring); TRM change management |
-| Helm chart | GLDB can run it on its own platform | MAS outsourcing (exit, portability) |
-| Pull workers + KEDA | No 10-minute ceiling; free when idle | TRM capacity |
-| Load balancer + Cloud Armor, internal services | Nobody reaches a service directly; common web attacks stopped at the edge | TRM access control; OWASP |
-| NetworkPolicies | A hijacked part can't reach the others | TRM segmentation |
-| Workload Identity | No keys to leak | TRM least privilege |
-| Secret Manager add-on | Secrets in one audited place | TRM; PDPA |
-| Cloud NAT, static IP | All egress from one known address, which the bank's firewalls can allow-list | TRM network security |
-| Cloud Deploy | Every release recorded and reversible; the merge to `main` is the approval | TRM change management |
-| Signing, Binary Authorization, Artifact Analysis | Only our software runs, with known parts | TRM supply chain; OWASP A08 |
-| Regional, Singapore only | Survives a zone outage; the cluster, registry and stored data stay in Singapore | TRM; PDPA; MAS outsourcing |
-
-## 24. Assumptions (decided 2026-11-14)
-
-We have little access to GLDB's technical side, so these stand until the bank says otherwise.
-
-- **GLDB's platform:** unknown. GKE stands in for the bank's own Kubernetes: the chart is what its platform team would install.
-- **The demo line:** "Production runs on Kubernetes (GKE Autopilot). We have no access to GLDB's infrastructure, so we run the same Helm chart on our own Google Cloud project; the bank's platform team would install it on theirs, on-premises or in their cloud, with no code changes."
-- **Ownership after handover:** GLDB's platform team, if it adopts the chart. Otherwise the cluster is deleted after the assessment.

@@ -1,5 +1,5 @@
 """
-Prometheus metrics, served on GET /metrics by every service (CLOUD_ARCHITECTURE_PLAN.md section 7).
+Prometheus metrics, served on GET /metrics by every service (HOW_IT_WORKS.md §8).
 Labels are routes, event types, stages, agents and models, never a document or case id. Cloud Run's Managed
 Prometheus sidecar scrapes :8080/metrics and adds the service name as `namespace`; the Grafana dashboards
 (deploy/grafana) read these.

@@ -2,7 +2,7 @@ name: Helm chart
 
 # The GKE chart (deploy/helm). Two jobs, so most changes cost about two minutes:
 # - chart (every run): role values match roles.json, lint, render what prod would get, Checkov on it.
-# - kind (only when something it exercises changed, weekly, or by hand): the chart on kind (its network
+# - kind (only when something it exercises changed, or by hand): the chart on kind (its network
 #   plugin enforces network policies) against the Pub/Sub emulator and a stub Supabase. About 8-10 minutes with a warm image cache.
 # No Claude, no Google credentials, no real data.
 on:
@@ -27,8 +27,6 @@ on:
       - 'backend/app/events/**'
       - 'backend/Dockerfile'
       - '.github/workflows/helm.yml'
-  schedule:
-    - cron: '0 2 * * 1' # Monday 10:00 SGT
   workflow_dispatch:
 
 permissions:
@@ -94,7 +92,7 @@ jobs:
         run: |
           base="$PUSH_BEFORE"
           [ "$EVENT" = "pull_request" ] && base="$PR_BASE"
-          if [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ] \
+          if [ "$EVENT" = "workflow_dispatch" ] \
             || ! git cat-file -e "${base:-none}^{commit}" 2>/dev/null \
             || ! git diff --quiet "$base" HEAD -- deploy/helm/six-sevens/templates deploy/helm/six-sevens/values.yaml \
                  deploy/helm/six-sevens/values-kind.yaml deploy/helm/smoke deploy/kong backend/app/events \

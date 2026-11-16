@@ -96,14 +96,16 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await page.reload();
     await expectLocked(page);
 
-    // MA-005: it has left Uploaded Files for its own tab.
+    // MA-005: it has left Uploaded for the Approved group (open on arrival), read as flagged.
     await page.goto(`${fixture.caseUrl}?section=documents`);
-    await expect(extractedCard(page)).not.toContainText(document.filename);
-    await approvedGroup(page).click();
-    await expect(page.getByTestId('documents-card')).toContainText(document.filename);
+    await expect(approvedGroup(page)).toHaveAttribute('aria-expanded', 'true');
+    const row = (kind: string) => extractedCard(page).locator(`.documents-table-row--${kind}`, { hasText: document.filename });
+    await expect(row('approved')).toHaveCount(1);
+    await expect(row('uploaded')).toHaveCount(0);
+    await expect(row('approved').locator('.status-pill')).toHaveText('Flagged');
   });
 
-  test('an approved document reads "Scanning" until the scan finishes, then "Clean" or "Detected" from its findings', async ({ page, backend }) => {
+  test('an approved document reads "Scanning…" until the scan finishes, then "Clean" or "Flagged" from its findings', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const scanning = fixture.document('Credit_Bureau_Report');
     const clean = fixture.document('Payslip');
@@ -121,15 +123,20 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     };
 
     await page.goto(`${fixture.caseUrl}?section=documents`);
-    await approvedGroup(page).click();
-    const pill = (filename: string) => page.locator('.documents-table-row', { hasText: filename }).locator('.status-pill');
+    // Approved is open on arrival.
+    await expect(approvedGroup(page)).toHaveAttribute('aria-expanded', 'true');
+    const row = (filename: string) => page.locator('.documents-table-row', { hasText: filename });
+    const pill = (filename: string) => row(filename).locator('.status-pill');
 
-    await expect(pill(scanning.filename)).toHaveText('Scanning');
-    await expect(pill(scanning.filename)).not.toHaveClass(/status-pill--(ok|warn|proc|fail)/); // grey base pill
+    await expect(pill(scanning.filename)).toHaveText('Scanning…');
+    await expect(pill(scanning.filename)).toHaveClass(/status-pill--proc/);
+    await expect(row(scanning.filename).locator('.document-remark')).toHaveText('Anomaly detection in progress');
     await expect(pill(clean.filename)).toHaveText('Clean');
     await expect(pill(clean.filename)).toHaveClass(/status-pill--ok/);
-    await expect(pill(flagged.filename)).toHaveText('Detected');
+    await expect(row(clean.filename).locator('.document-remark')).toHaveText('Checks completed, no anomalies flagged');
+    await expect(pill(flagged.filename)).toHaveText('Flagged');
     await expect(pill(flagged.filename)).toHaveClass(/status-pill--warn/);
+    await expect(row(flagged.filename).locator('.document-remark')).toHaveText('1 finding to review.');
   });
 
   test('MA-006 a document not yet approved stays in Uploaded Files @MA-006', async ({ page, backend }) => {

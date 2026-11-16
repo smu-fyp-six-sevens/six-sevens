@@ -7,7 +7,7 @@ directly (see classify_graph.prepare_reclassify_node), not the whole classify
 subgraph: a bare rule re-guess has nothing new to react to, whereas the agent
 can actually weigh Extraction's objection — the conversation just continues.
 
-No checkpointer yet (see PENDING_WORK.md).
+No checkpointer, by choice (HOW_IT_WORKS.md §11).
 """
 
 from __future__ import annotations

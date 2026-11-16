@@ -11,7 +11,7 @@ from .base import Check, judged, last, names, of, spans
 PLANNER, JUDGE, SUMMARY, REQUESTS, MEDIA = (
     "hypothesis_planner", "hypothesis_judge", "summary_writer", "evidence_requests", "adverse_media",
 )
-# The model may never recommend an outcome (CROSS_DOCUMENT_AND_RISK_PLAN.md, Governance).
+# The model may never recommend an outcome (HOW_IT_WORKS.md, case analysis design rules).
 _OUTCOME = re.compile(
     r"\b(approv\w*|declin\w*|reject\w*)\b[^.]{0,30}\b(application|loan|applicant|case)\b"
     r"|\b(application|loan|applicant)\b[^.]{0,30}\b(approv\w*|declin\w*|reject\w*)\b",

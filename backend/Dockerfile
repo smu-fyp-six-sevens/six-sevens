@@ -1,4 +1,4 @@
-# One image per role (CLOUD_ARCHITECTURE_PLAN.md section 2): build with --target <role>.
+# One image per role (HOW_IT_WORKS.md §9): build with --target <role>.
 # api, doc-worker, detection-worker, case-worker, audit-metrics, or all (every role in one process).
 
 FROM python:3.13-slim AS deps

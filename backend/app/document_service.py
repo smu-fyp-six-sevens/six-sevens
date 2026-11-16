@@ -555,9 +555,10 @@ async def approve(document: DocumentRecord) -> DocumentRecord:
     if approved is None:
         # Read as analyzed a moment ago, so it was approved, rejected or deleted since (a double click, or two officers).
         raise Refused("conflict", _CHANGED_ELSEWHERE)
-    # A field edit can land between the read above and the approval; once approved, none can, so check again.
+    # A field edit can land between the read above and the approval; once approved, none can, so check the fields
+    # again, against the document as it was read (its status is approved now).
     extracted_fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document.id)
-    refusal = approval_refusal(document, extracted_fields)
+    refusal = approval_refusal(document.model_copy(update={"status": DocumentStatus.ANALYZED}), extracted_fields)
     if refusal:
         await asyncio.to_thread(document_repository.undo_approval, document.id, document.routing_status)
         raise Refused("conflict", f"The fields changed while you approved. {refusal}")

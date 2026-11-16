@@ -1,4 +1,4 @@
-"""Domain events: the only way one service triggers another (CLOUD_ARCHITECTURE_PLAN.md section 3)."""
+"""Domain events: the only way one service triggers another (HOW_IT_WORKS.md §9)."""
 
 from . import types
 from .bus import publish, record

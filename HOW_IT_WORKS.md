@@ -1,6 +1,6 @@
 # How the App Works
 
-A plain-language walkthrough of the system as it is now (updated 2026-11-16): from a loan officer logging in to a case getting a risk score, what is built, and where it is rough. Design rationale is in the other documents; this one describes behaviour.
+A plain-language walkthrough of the system as it is now (updated 2026-11-16): from a loan officer logging in to a case getting a risk score, how each part is built and why, the cloud, how it's tested, and where it is rough. Everything built is described here; the other documents at the root list only open work, and go away as it's done. Setup and running: `README.md`; cloud operations: `deploy/terraform/README.md`.
 
 ---
 
@@ -80,7 +80,63 @@ Approval publishes `document.approved`; the detection-worker runs it, **two runs
 
 **Findings** are written by code, never by the model (`findings_repository.py`, through the `sync_findings` function, in one transaction). Each row records what the specialists decided (`agent_decision`: accepted, not_assessed, overridden or dismissed) and, once an officer reviews it, the verdict. A finished run replaces the document's findings outright, with any verdicts on them (missed issues officers reported stay); a completed case analysis does the same for the case's cross-document findings, linked to the case only. Officers review at the end, so nothing is carried over. A finding is named within its run by a fingerprint (`finding_keys.py`), which the report and the case risk carry too. The Risk Summary lists the scored findings and, per document, the ones the specialists set aside, dismissed or rated info (`CaseRisk.dismissed_findings`): an officer ticks any that is real, and a set-aside finding marked real counts as a miss for recall (`detection_metrics.py`). A group with no findings moves to Reviewed only once an officer saves it (`review_sign_offs`); this doesn't hold up the case's stage.
 
-If detection crashes it is recorded, the document returns to `approved`, and the officer can retry. Single checks can be run on demand once a report exists.
+If detection crashes it is recorded, the document returns to `approved`, and the officer can retry. Single checks can be run on demand once a report exists. "Other" documents are scanned too: type-specific checks report "nothing to check", and layout runs in generic mode.
+
+#### How a detection run is wired (`backend/app/langgraph/detection/`)
+
+```
+load_context ─► lead_plan ─(×3)─► specialist ─► lead_review ─► synthesize ─► END
+                                                  │  ▲
+                                                  ▼  │
+                                             run_second_look   (at most once)
+```
+
+The graph runs with `recursion_limit=40`. On an error the run saves it and puts the document back (`approved`, or `detected` if an earlier report stands); on success it saves the report, stores the findings, then marks `detected`, in that order.
+
+- **Lead** (Sonnet, effort medium, 4,000 tokens, cached prompt): an unusable plan gives every specialist a generic brief; an unusable review gives no summary and no second look. It sees summaries and kept findings, not dismissed ones. A second-look request is kept only if the finding exists and goes to a different, known specialist.
+- **Specialist** (Haiku, 6,144 tokens): up to 3 tool rounds, then a wrap-up turn with no tools. Its reply is JSON (`summary`, `assessments`, `uncertain`); if it can't be read, or no tool ran, the report is marked uncertain.
+  - Layout & Rendering: hidden text (run first), font, layout, image manipulation, image tampering.
+  - Content Validation: spelling, dates, pages, numerical, external (its prompt lists the fields and check menus).
+  - Digital Authenticity: prompt injection (run first), metadata, AI generation.
+  - **Floors:** a tool with a floor (`_MIN_SEVERITY_BY_TOOL`, or `severity_floor` on the finding) can't be dismissed or rated below it. An unassessed finding stays at `medium`, `ai_accepted: false`, and scores 2 points in the case risk (not 3), so one alone doesn't make a case Medium.
+- **Tools** (`tools.py`): 13 (hidden text, font, layout, spelling, page consistency, date, metadata, prompt injection, image manipulation, image tampering, AI generation, plus `numerical_checks_tool` and `external_validation_tool` in `field_checks/`). Each returns `{tool, unable_to_assess, reason, findings, truncated}`: up to 15 findings, ids `<tool>-<n>`, the tool's `severity_hint` kept apart from the specialist's rating. The field tools take `bindings` the specialist fills; the document type comes from the run state and decides which checks run. The document, its fields and its file are fetched once per run and shared.
+- **Merge (code):** findings keyed by `(tool, id)`; duplicates take the higher severity. `flagged` = anything above `info`; `inconclusive` = nothing flagged but a check couldn't run; else `clean`.
+- **Trace events:** `detection_start`, `detection_plan`, `detection_specialist`, `detection_second_look`, `detection_done`, `detection_error`, `findings_error`, `run_audit`. Spans: `detection.run`, `.lead_plan`, `.lead_review`, `.review.<name>`, `.specialist.<name>`, `tool.<name>`. A failed findings write is noted on the trace (`findings_error`) and doesn't fail the run.
+- **Other files:** `graph.py` (the lead, the merge, `run_detection()`), `specialists.py`, `feedback.py` (officer feedback appended to tool results).
+
+**API** (`routers/detection.py`): `GET /documents/{id}/detection/<check>` runs one check (409 until a report exists; numerical and external use one Haiku call to bind inputs). `GET …/detection/report` (200; 502 if the last run failed with none; 404 if never run), `POST …/detection/cancel`, `POST …/detection/retry` (409 while running or queued), `GET …/detection/case-match`. There is no "run detection" route: approval starts it.
+
+**Frontend:** `DetectionPanel.tsx` shows the verdict, each specialist's brief, tools and dismissals, the second look, the findings and what couldn't be assessed; Cancel while scanning; "Run detection again" after a failed or cancelled run, or over a report (confirmed first).
+
+#### The forensic checks (`backend/app/fraud_detection/`)
+
+| Folder / file | Checks |
+|---|---|
+| `layout_anomalies/` | Indentation, alignment, margins, spacing. `profiles.py` has per-type rules (only `nric`, and only above the classification threshold); `reference.py` compares standard forms with references in `references/<type>/` (built by `scripts/build_layout_reference.py`) |
+| `layout_anomalies/text_overlay.py` | Overlapping text (skips repeated watermarks and vertical text) |
+| `font_consistency.py` | Font family, size, emphasis |
+| `numerical_validation/` | Arithmetic and identity over extracted fields (`@check` in `registry.py`; `statements.py`, `identity_company.py`, `records.py`, `casts.py`, `payslip_inputs.py`, `runner.py`). `common._as_number` reads DR/CR and comma decimals |
+| `authenticity/` | `metadata_analysis.py` (metadata tamper signs), `ai_generation.py` |
+| `dates/` | `date_anomalies.py` (future dates, end before start), `date_parsing.py` (any printed date form). "Today" is Singapore's (`app/sg_time.py`) |
+| `spelling/` | SymSpell, one finding per word; `domain_terms.py` allow-list |
+| `pages/` | Multi-page consistency, no model: `PAGE.NUMBERING`, `PAGE.CARRY_FORWARD`, `PAGE.HEADER_IDENTITY`, `PAGE.SOURCE` (signal), `PAGE.DUPLICATE` |
+| `images/` | Resolution/compression mismatches, overlays, scaling, boundaries, quality (`image_manipulation.py`, `image_integrity.py`) |
+| `external_validation/` | Facts against outside sources. `registry_lookups/` (live ACRA, OneMap, HDB, URA, MOM), `sg_reference/` (CPF, GST, IRAS, bank ids, holidays), `reference_checks/` (`PAY.CPF_*`, `POA.GST`, `NOA.PAYABLE`, `BS.BANK_IDENTIFIERS`, `BS.ACCOUNT_NUMBER_FORMAT`), `giro.py` |
+| `shared/` | Not checks: `check_result.py` (base class), `field_values.py`, `field_catalogue.py`, `file_facts.py`, `pdf_pages.py` |
+| `app/guardrails/` | `content_guard.py` (hidden text, prompt injection; scanned at ingest), `envelope.py` (fencing), `leak_check.py` |
+
+**CPF:** the three `PAY.CPF_*` checks share one assessment, so each wrong contribution is reported once: `CPF_CEILING` (ceiling not applied), `CPF_BASE` (basic pay only), `CPF_RATE` (anything else). A pay date in a year after the newest rate table is skipped as unable to assess.
+
+**Addresses** (`registry_lookups/addresses.py`, each checked once): HDB blocks against HDB's register; private buildings against URA approved use, then Master Plan zoning (a ~12 MB local index built into the image; without it zoning is skipped). Addresses compare after `address_matching.normalize_address` ("Blk 50 … #01-30 S639107" = "50 TUAS AVENUE 11, Unit 01-30, Singapore 639107").
+
+| Code | Meaning | Severity |
+|---|---|---|
+| `REG.POSTAL_CODE_EXISTS` | Postal code not in OneMap | impossible |
+| `REG.ADDRESS_MATCH` | Block and street not at that postal code | inconsistent |
+| `REG.RESIDENTIAL_ADDRESS` | A home that can't be lived in | inconsistent / implausible / signal |
+| `REG.COMPANY_ADDRESS_RESIDENTIAL` | Company registered at a home | signal |
+| `REG.UNIT_STOREY` | HDB unit above the top storey | impossible |
+| `REG.UNIT_MISSING` | No or unreadable unit number | skipped, not a finding |
 
 ### Step 6: Case Analysis (automatic, the only source of the score)
 **It starts on its own** (`case_pipeline/service.start_if_due`) once every document is decided (none processing, failed or waiting for the officer, required checklist documents approved) and every approved one is `detected`. The check runs after each detection run (detection-worker) and after an officer rejects, cancels, moves or deletes a document (api). It records a `running` run and publishes `case.analysis.requested` as the system (`detail.trigger = "automatic"`); the case-worker runs it and publishes `case.analysis.completed`. While it is due or running, the case stays at **Fraud Detection**.
@@ -108,9 +164,57 @@ One run, in order:
 - **Results:** `clean` only when every search ran and the reply says so. `concerns` needs at least one cited page the search really returned. Anything else is `failed`, or `skipped` with no company name; neither reads as clean.
 - **Cache:** a `clean` or `concerns` result is reused for 24 hours while the company and former names are the same, with no search and no cost.
 
-The run stores its result, including the risk and additional documents, and writes one `risk_scores` row. Cost: 5 model calls (plan, judge, requests, summary, adverse media) against a ceiling of 7, with output capped at 3,000 and 2,500 tokens for plan and judge; a real run before the media check logged about 13k tokens in and 2.4k out. Each web search is billed on top of the tokens (`pricing.py`). Plan and judge share one cached system prompt. Bias is enforced at four points (input, prompt, proposals, verdicts); see `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
+The run stores its result, including the risk and additional documents, and writes one `risk_scores` row. Cost: 5 model calls (plan, judge, requests, summary, adverse media) against a ceiling of 7, with output capped at 3,000 and 2,500 tokens for plan and judge; a real run before the media check logged about 13k tokens in and 2.4k out. Each web search is billed on top of the tokens (`pricing.py`). Plan and judge share one cached system prompt. Bias is enforced at four points (input, prompt, proposals, verdicts); see "Design rules" below.
 
-A case that was never analysed shows "Not scored yet". If documents change after a run, the run is marked out of date and the previous result stays visible with a notice. `CASE_ANALYSIS_ENABLED=false` switches the module off.
+A case that was never analysed shows "Not scored yet". If documents change after a run, the run is marked out of date and the previous result stays visible with a notice. `CASE_ANALYSIS_ENABLED=false` switches the module off. Every run writes a step-by-step `trace` to its row.
+
+#### Design rules of the case analysis
+
+- **Only conclusive hypotheses exist:** unproven ones aren't shown, stored or scored (the developer trace does list them).
+- **Bounds:** 3 hypotheses × 4 checks; two Sonnet calls plus three Haiku calls (summary, evidence requests, adverse media), ceiling 7; capped input and output sizes. No tool loop. The two Sonnet calls (effort medium) are each retried once if they call no tool.
+- **Severity cap:** model judgement alone tops out at Medium. High needs a tool result with a typed breach flag (from a fixed list) or a registry mismatch. Name, address and person mismatches stop at medium; identifier conflicts may be high.
+- **Evidence tools** (read-only, one case; every fact carries a ref id the model copies, never invents; missing data says so):
+  - Reading: `list_documents`, `get_fields`, `get_business_profile`
+  - Behaviour: `transaction_stats`, `query_transactions`, `top_counterparties`, `monthly_flow`, `compare_periods`, `find_repeated_transactions`, `card_usage_tool`, `recurring_payment_amounts` (patterns to test, never findings alone)
+  - Agreement: `compare_identifiers`, `compare_people`, `compare_linked_people`, `company_name_consistency_tool`, `address_consistency_tool`
+- **Storage:** results keep their input fingerprint. A completed run writes one `risk_scores` row and, if newest, its findings to `findings`. One running run per case and fingerprint (a unique index, `case_analysis_runs_one_running_idx`).
+- **The model never sets the score.** It recommends evidence and explains the result. The summary restates existing findings only and never feeds the score.
+- **Outlook ("get document Y and the score drops to Z"):** each recommended piece of evidence (any kind, not just the 12 types) addresses at least one finding, as `full` or `partial`. Code re-scores: `full` removes those findings' points, `partial` scales them. Shown both ways (if it supports / contradicts), plus a combined best case that never goes below what unreducible findings leave. Requests that can't change the score stay, labelled "no effect on score"; checklist items never affect it. What evidence can reduce is decided by code, by category:
+
+| Category | Reducible? |
+|---|---|
+| `tampering_forensic` (font, metadata, layout, image, overlay) | No: a new document doesn't un-forge another |
+| `registry_discrepancy` | No |
+| `identity_entity_conflict` (UEN, NRIC, passport differ) | No |
+| `cross_document_variance` (address, name variant, limits) | Yes (tenancy, change of address, deed poll, board resolution) |
+| `behavioural_anomaly`, `unsupported_claim` | Yes |
+
+- **Approved "Other" documents** are scanned and counted, but only type-free checks run (fonts, overlay, spelling, image splicing, AI generation, self-comparing metadata, generic layout). Fewer checks means less coverage, not more suspicion.
+- **Not part of it:** `case_match.py` (the right case? triage, not fraud) and `external_validation/` (per document; reaches the agent through each detection report). Both `case_match.py` and the cross-document code build keys through `identifiers.py` and never import each other.
+- **Governance:** advisory only; the system never approves, declines or changes a status. Protected attributes and proxies (race, nationality, religion, sex, age, marital status, disability…) are removed from model input and screened from proposals and verdicts (`bias.py`; it over-blocks on purpose). Document text is untrusted and fenced; tools are read-only; outputs are schema-checked. NRIC and account numbers are masked unless needed. Each run records its fingerprint, models, prompts and tool calls. References: MAS FEAT, PDPA, IMDA Model AI Governance, NIST AI RMF (a statement of what it does, not a certification). The model may never recommend an outcome, set the score, invent a claim, reduce a tampering finding with other documents, use protected attributes, or follow instructions in a document.
+- **Decisions made:** unproven hypotheses are never shown or stored; a hypothesis alone can't reach High; the analysis starts on its own once every document is decided and scanned, and a change replaces an outdated run; approved Other documents are scanned and counted; score and recommendations come only from a run, and views just read them; this module makes cross-document findings only; no model sees protected attributes, only code compares them; code comparisons always run, one row per difference, and the agent doesn't restate them.
+- **Risks, and what answers them:** plausible but wrong theories (the main one: conclusive-only, citation checks, refutation probes, the severity cap); over-fitting to the test set (categories stay general); marking its own homework (code verifies); strict citations discarding real findings (watch the discard rate); synthetic data (theories needing outside data can't become conclusive); runs vary, since models sample at defaults (results are stored, with a stale flag).
+
+#### Where the case analysis code is (`backend/app/case_pipeline/`)
+
+| File | Does |
+|---|---|
+| `readiness.py` | Ready = at least one approved document, all approved ones detected |
+| `service.py`, `repository.py`, `state.py` | Starts and stores runs (`case_analysis_runs`), writes `risk_scores`, says if a run is stale or lost |
+| `trace.py` | The run's step log, shown as "Case analysis trace" |
+| `models.py`, `categories.py` | Finding, outlook and analysis models; categories set by code |
+| `cross_document/deterministic.py`, `identity_pairs.py` | The code comparisons that always run first |
+| `cross_document/evidence.py` | The dossier (protected fields removed), masked ids, the ref-id ledger |
+| `cross_document/bias.py` | Protected fields and text patterns no model may reason from |
+| `cross_document/agents.py`, `graph.py`, `verify.py` | Plan, run checks, judge, verify |
+| `cross_document/leads.py` | Where a detection finding's figure should also appear elsewhere |
+| `cross_document/feedback.py` | Officer feedback from other cases |
+| `cross_document/tools/` | Read-only evidence tools |
+| `adverse_media.py` | Web search for bad news; never scored |
+| `risk/case_risk.py` | The score |
+| `risk/store.py`, `risk/outlook.py`, `risk/additional_documents.py`, `risk/summary.py`, `risk/supporting_documents.py` | Score storage, what-if re-scoring, the merged evidence list, the summary, rule-based recommendations (stored on the case when the newest run completes) |
+
+API: `POST /cases/{id}/analysis/run` (409 unless ready, or if already running), `GET /cases/{id}/analysis`. Frontend: `CaseAnalysisCard.tsx` (progress, "Run again" for a failed or missing run, summary, findings, "Checked and consistent", the what-if list, the "Out of date" notice). `app/identifiers.py` is a leaf module (key functions `alnum`, `id_key`, `uen_key`, `name_key`, `company_key`, name matchers, person extraction). `llm_io.py` reads and `llm_contracts.py` checks every model reply.
 
 ### How the score is calculated (no AI)
 `case_pipeline/risk/case_risk.py`:
@@ -168,6 +272,10 @@ At the end of each run (classification and extraction, an extraction rerun, dete
 - **Summary writer** (only when the model wrote it): kept its limits; no advice to approve or decline (fail); no protected attribute (fail).
 - **Evidence requests:** say what they would show; cite findings that exist. **Adverse media:** a result backed by sources.
 
+**Rules for evals.** They only watch: they never change a score, severity, verdict, status or finding, never reach a prompt, and never block a run. No model marks another model (cost, and "code verifies" is the design rule). No golden set, no nightly evals, no scheduled token spend: evals run inside normal use and cost nothing extra per run. No personal data in metrics or the trace's check results (field names, never values). Accuracy is meant to come from officers' own verdicts on finalised cases, not from a golden set (not built yet: `CLOUD_ARCHITECTURE_PLAN.md`, "Accuracy from officer verdicts").
+
+**What the checks can't tell you.** A run can follow the expected path, give a sensible answer and still miss fraud: the checks don't measure accuracy. Officers mostly confirm or dismiss what the system flagged and rarely see what it missed, so misses are under-measured; this is a stated limitation, along with all test data being synthetic. With no golden set, a prompt change can't be rerun on fixed cases and compared; changes are watched through the checks and the officer-verdict trend instead.
+
 ### Which agent version ran (`app/agent_versions.py`)
 Each agent has a **fingerprint**: a hash of what the agent directory (`/agents`, `agent_registry.py` and `agent_prompts.py`) shows for it, meaning its prompt templates (every document type's, for the extractor, plus its second look), model, tools and call budget. Change any of them and the fingerprint changes, so a version can't be forgotten. It's computed once per process. Every document, extraction-rerun, detection and case-analysis run's end event carries the fingerprints of the agents it used (`detail.agent_versions`, about 20 characters each), so the audit trail answers "which version produced this finding?". The `agent_versions` table has one row per fingerprint, with its model, tools, prompt hash and the commit it first appeared in (`GIT_COMMIT`, set by the deploy). Each Claude-calling role adds its rows at start-up, skips any already stored, and never fails start-up over it. The agent directory shows each agent's fingerprint. Nothing reads them to decide anything. The summary writer, evidence requests and adverse media aren't in the registry, so they have no fingerprint yet.
 
@@ -217,6 +325,11 @@ uploaded → queued → processing → extracting → analyzed ──approve─�
 | Storage bucket `documents` | the uploaded files |
 
 Deleting a document removes its fields, findings, trace and file; deleting a case removes its documents, then its runs, scores and findings. `backend/sql/schema.sql` mirrors the live schema by hand.
+
+- **Deletes rely on cascades:** every document- or case-keyed table cascades (checked live 2026-11-16), except `finding_feedback.document_id`, which is set null. The code removes only stored files, cross-document findings on a deleted document and in-memory traces. `audit_events` is never deleted. A delete's audit event is best effort, and a failed file delete leaves the file in storage (logged). Signed URLs are made only in `routers/documents.py` (server side); a moved document keeps its storage path (it is opaque, and the file goes with the row).
+- **Field writes** go only through the `replace_extracted_fields`, `add_extracted_field` and `delete_extracted_field` functions. Each locks the document row and writes only while the document is still in the status its caller read, so a field write can't interleave with an approval, a cancel or a recovery. An approval then re-checks the fields after its own write and undoes itself if they changed in between.
+- **A new stored field** gets a model default that old rows read correctly.
+- Supabase's advisors (2026-11-16): security lists only "RLS enabled, no policy" on every table, which is the design (secret key only, no anon grants); performance lists 4 unused indexes, all backing a cascade or the reply lookup, so they stay.
 
 ---
 
@@ -304,17 +417,17 @@ Every 60 seconds a summary of Realtime and WebSocket traffic (events received, i
 
 **Built:** upload and queue; the content guard; classify and extract with the reclassify loop and the second look; officer review tools; requirements checklist; case-match; the Detection Agent with 13 checks and on-demand single checks, cancel and rerun; every finding stored with the agents' decision and the officer's verdict (dismissed ones included); learning from officers; the case analysis (deterministic and agent cross-document findings, score, outlook, additional documents, adverse media, summary); live WebSocket updates; case notes; cost logging and per-case Claude cost (every run: retries, reruns, cancelled and failed runs, earlier analyses, deleted documents); the service split on Cloud Run and then GKE Autopilot (`sixsevens.me`), Kong, the compose stack, Terraform, and CI/CD that deploys every green push to `main` (summary below).
 
-**Not built:** open items are in `PENDING_WORK.md` and the cloud plan's section 9.
+**Not built:** open product work is in `PENDING_WORK.md`, open cloud work in `CLOUD_ARCHITECTURE_PLAN.md`.
 
 ### The cloud, as built
 
-Live in GCP project `fyp-six-sevens` (`asia-southeast1`): on Cloud Run since 2026-10-22, and on GKE Autopilot at `sixsevens.me` since 2026-11-14 (the GKE bullet below), where every consumer now takes its events. Until phase 6 the rest of this section also describes Cloud Run, which runs alongside taking none. One GCP project and one Supabase project, shared by local runs and the cloud. Operations and every problem met: `deploy/terraform/README.md`.
+Live in GCP project `fyp-six-sevens` (`asia-southeast1`): on Cloud Run since 2026-10-22, and on GKE Autopilot at `sixsevens.me` since 2026-11-14 (the GKE bullet below), where every consumer now takes its events. Until phase 6 the rest of this section also describes Cloud Run, which runs alongside taking none. One GCP project and one Supabase project, shared by local runs and the cloud. Operations and every problem met: `deploy/terraform/README.md`. Adding a service: `docs/ADDING_A_SERVICE.md`.
 
 - **Roles:** one image per role, `ROLE` picks what runs. api (HTTP, uploads, WebSocket), doc-worker (OCR, classify, extract), detection-worker (lead and specialists, checks), case-worker (case analysis, score, summary, adverse media), audit-metrics (stores every event, serves the audit trail and costs, runs the sweeper). Plus Kong, the frontend and Grafana. Everything scales to zero by default. Sizes are in `deploy/terraform/roles.json`, the one role table Terraform and the Helm chart both read.
 - **Services talk only through events and Supabase.** One topic, `domain-events`, with a dead-letter topic; each role has a filtered subscription (filters from `backend/app/events/types.py`), pushed to Cloud Run or pulled on GKE (`migration.json`). Messages carry ids; Supabase holds the state. Delivery is at least once, so handlers are idempotent, and each state change has one writer. An officer action that starts work fails with a 502 if its publish fails. Kong's request id and a W3C `traceparent` travel with each message, so one upload is one trace.
 - **Kong** is the only entry point (`deploy/kong/`). It rate-limits login, uploads and officer actions, and adds a gateway key that api and audit-metrics require. Workers accept calls only from Pub/Sub's push identity.
 - **Stuck work:** Cloud Scheduler sends a sweep every 5 minutes (`backend/app/sweeper.py`). Limits: 5 min for uploads, 10 min for processing and detection, 15 min for the case analysis. At most 3 recovery attempts in 24 h. Case analysis is never rerun automatically, because its Claude calls are the officer's call.
-- **Delivery:** CI runs ruff, pyright, pytest, Playwright, Checkov, pip-audit, npm audit and Terraform checks. The deploy rolls out the workers first, then api, Kong, the frontend and Grafana, then checks through Kong; any failure rolls every service back. Snyk runs weekly or when lock files change, and is non-blocking until its quota resets.
+- **Delivery:** CI runs ruff, pyright, pytest, Playwright, Checkov, pip-audit, npm audit and Terraform checks. The deploy rolls out the workers first, then api, Kong, the frontend and Grafana, then checks through Kong; any failure rolls every service back. Snyk runs when lock files change or by hand, and is non-blocking until its quota resets.
 - **Security:** one service account per service, each secret readable only by the services that need it, keyless GitHub sign-in, non-root containers (except the frontend's nginx: `PENDING_WORK.md`).
 - **Observability:** `/metrics` on every service with no document or case ids in labels; Managed Prometheus; Grafana (Services, Pipeline, Agents, Cost); Cloud Trace; alerts for dead letters, API 5xx over 5%, daily Claude spend and recovery given up.
 - **Fixed design** (changing one touches every service): the event envelope and names, one topic with filtered subscriptions, the ownership rules, a Dockerfile target per role, Kong as the only entry, handler plus adapter.
@@ -322,9 +435,106 @@ Live in GCP project `fyp-six-sevens` (`asia-southeast1`): on Cloud Run since 202
 - **GKE (live since 2026-11-14, `sixsevens.me`):** the same images on GKE Autopilot, behind `gke_enabled` in Terraform and `GKE_ENABLED` in the repository variables. Terraform makes the cluster (regional, private nodes), its network with Cloud NAT on one static address, `sixsevens.me` in Cloud DNS with a Google-managed certificate, Cloud Armor (in preview until a day of normal use shows no false positives), Workload Identity (each pod acts as its role's own Google account), the signing key, Binary Authorization (enforced: only images the deploy signed run) and the Cloud Deploy pipeline. The Helm chart (`deploy/helm/six-sevens`) holds everything inside the cluster: a namespace per role, Kong, the frontend and Grafana; default-deny network policies; secrets from Secret Manager as files; KEDA scaling consumers on undelivered messages, an HPA for api and Kong. Sizes are a lean profile for a team of 5-6 on free-trial credits: one replica each always on (1.6 vCPU); workers normally scale from 0 to 1 (4.85 vCPU at peak), but until the demo on 2026-11-20 they stay warm at 1, with doc- and detection-worker allowed 2 (4.1 vCPU always on, about 6.9 at peak). Set in `roles.json`'s `gke` blocks and the chart's `values.yaml`. KEDA scales a worker up on its undelivered messages, polled every 15 s, about 2–4 minutes from zero (the backlog metric lags 1–2 minutes), and back to its minimum 5 minutes after the backlog empties. Its role values are generated from `roles.json` (`deploy/helm/gen_values.py`). Consumers pull their subscription (`EVENT_DELIVERY=pull`); `deploy/terraform/migration.json` says which roles GKE runs, and Terraform switches exactly those subscriptions from push to pull in place, so only one platform takes a role's events: all four consumers are on GKE (phases 2–4), and Cloud Run runs alongside taking none until phase 6 removes it. Kong runs one nginx worker (one per node CPU would outgrow its memory), and no pod is marked `safe-to-evict: "false"` (Autopilot would give each its own node, past the trial's vCPU quota); an evicted run is nacked and redelivered. The deploy signs every image (cosign with an SBOM, plus the attestation), renders the chart by digest and releases it through Cloud Deploy, whose verify step runs the gateway checks; a failed rollout is rolled back. CI runs the chart on kind, whose network plugin enforces network policies (`.github/workflows/helm.yml`): must-pass and must-block calls, one pulled event per worker, Checkov on the rendered chart. Operations: `deploy/terraform/README.md`.
 - **Running locally:** one `uvicorn` process with in-memory events (`README.md`), or the compose split. Debugging workers in the IDE and the checks before a risky change: `deploy/terraform/README.md`.
 
-## 10. Known rough edges
+### The GKE design
+
+| Concern | Choice | Why |
+|---|---|---|
+| Cluster | GKE Autopilot, regional, `asia-southeast1`, one cluster (prod) | No nodes to manage; the control plane survives a zone loss. The lean profile (one replica each) doesn't: raising `kong.replicas` and api's `gke.min` to 2 spreads them across zones and adds their disruption budgets |
+| Namespaces | One per role, plus `gateway`, `frontend`, `observability` | A boundary each; dashboards key on `namespace` |
+| Front door | `sixsevens.me` (the frontend), `api.sixsevens.me` (Kong), `grafana.sixsevens.me` on Cloud Load Balancing (Gateway API, global external), one Google-managed certificate (Certificate Manager, DNS authorisation) that re-encrypts to the cluster; services internal (ClusterIP) | One front door, no plain-HTTP hop; the gateway key (backend `gateway.py`) stays until phase 6 as a second guard. The API's URL is fixed at build time, so until phase 6 CI builds a second frontend image for GKE (`VITE_API_URL=https://api.sixsevens.me`) |
+| WebSockets | A `GCPBackendPolicy` with `timeoutSec: 3600` on Kong's backend (the default 30 s would cut every case WebSocket); a `HealthCheckPolicy` on `/health` | Live updates through the load balancer |
+| Edge protection | Cloud Armor on the load balancer: OWASP rules and per-address rate limits before traffic reaches Kong | A web application firewall; Kong keeps the per-officer limits |
+| Events | Same topic; each role's subscription switched from push to pull in place (no second subscription: it would collect every message and process each twice) | Private services can't take push; removes Cloud Run's 600 s push limit |
+| Scaling | KEDA on undelivered messages, 0 to max; Kong, api, frontend and audit-metrics at least 1. From zero, expect 2–4 minutes (the backlog metric lags 1–2 min, and Autopilot may add a node), close to the sweeper's 5-minute limit for queued work. Workers get a termination grace longer than a detection run but stay evictable | Idle workers cost nothing |
+| Database | Supabase outside; egress through Cloud NAT on a static IP | Private nodes need NAT to reach Supabase and Anthropic. Supabase's network restrictions cover direct Postgres and pooler connections only, and the backend uses only the HTTPS APIs, so an allow-list doesn't make a leaked key useless |
+| Secrets | Secret Manager through the GKE add-on, mounted as files; the chart's start command exports them as the variables the app (`config._str`) and Kong (`render.sh`) read. A rotated secret needs a restart | No secrets in Helm values |
+| Identity | Workload Identity, one account per role | No keys |
+| Claude | The Anthropic API, its key from Secret Manager (Vertex AI dropped 2026-11-16: it appeared not to serve the Claude 5 models in `asia-southeast1`) | One outside key, mounted only where it's used |
+| Images | Artifact Registry with Artifact Analysis (scanning on push); cosign signs each image and attaches its SBOM, and a Binary Authorization attestation (same Cloud KMS key) admits it: the enforcing policy checks attestors, not cosign signatures. KEDA's images are allow-listed | Only our software runs, with a parts list |
+| Releases | Cloud Deploy renders the Helm chart, records each rollout, rolls back in one step; no approval step (decided: the merge to `main` is the checkpoint); its verify step runs the gateway checks | Every production change recorded and reversible |
+| Monitoring | Managed Prometheus (PodMonitoring), the same Grafana (in `observability`), Cloud Logging, Cloud Trace, the GKE security posture dashboard | App metrics keep working because namespaces are named after the roles |
+| Backups | The cluster holds no state; Supabase point-in-time recovery matters | No cluster backup tool |
+| Environments | dev (laptop, compose or kind) and prod | No staging (decided) |
+
+**Not used, on purpose:** Cloud SQL, Firestore, Cloud Storage and Memorystore (Supabase Postgres and Storage, and no Redis, are settled); a service mesh (network policies suffice); GKE Enterprise (one cluster); Kyverno or Gatekeeper (Autopilot covers it); Velero (no state to back up); Falco (needs privileged pods; the posture dashboard covers basics); Litmus (scripted failure tests instead).
+
+**The Helm chart** (`deploy/helm/six-sevens`): one chart, a template per kind; per-role values generated from `deploy/terraform/roles.json`; values files for default, kind and prod.
+- **Network:** default-deny per namespace; gateway → api and audit-metrics only; Kong takes traffic only from Google's front ends and health checks (`35.191.0.0/16`, `130.211.0.0/22`, also Kong's trusted IPs for the real client address); workers take no inbound traffic except the metrics scrape; egress only to DNS, Supabase, Anthropic, Pub/Sub and the registries.
+- **Labels** are chosen once: Deployment selectors are immutable, so a changed label means deleting the Deployment.
+- **KEDA** is installed once per cluster (a pinned `helm install`, in `deploy/terraform/README.md`), not by the chart.
+- **Pods:** non-root (uid 10001; not yet the frontend's nginx), read-only root, no privilege escalation, CPU and memory limits; a disruption budget for Kong and api once they run 2 or more (with one, it would block every node drain).
+
+**Releases on GKE:** Actions builds and pushes to Artifact Registry, signs each digest with cosign and attaches its SBOM (syft), creates the Binary Authorization attestation with the same KMS key, then creates a Cloud Deploy release that renders the chart with the image digests. Terraform owns the cloud pieces; the chart owns everything inside the cluster. Binary Authorization enforces (since 2026-11-14, after a clean dry run). Until phase 6 the same images also roll out to Cloud Run (`deploy.yml`), with the GKE job behind a repository variable.
+
+**How the move went:** each consumer's subscription switched from push to pull in place (`migration.json`), so only one platform gets a role's messages, and rollback is switching back. Phase 1 (the cluster and front door, which also covered the planned phase 5) went live on 2026-11-14; phases 2–4 (audit-metrics, case-worker, detection-worker, doc-worker) were applied together the same day, at the team's call. Phase 6 (removing Cloud Run) is open.
+
+### Why the cloud is built this way
+
+**Why GKE.** Load doesn't force it (detection's p95 is 92 s against Cloud Run's 600 s push limit), so it rests on what Kubernetes shows and what a bank would run, for the Cloud Native award:
+
+| Reason | What it shows |
+|---|---|
+| Portability | The same Helm chart runs on GLDB's own cluster, on-premises or in any cloud; Cloud Run is Google-only |
+| Network isolation | Services are internal; only the load balancer and Kong face the internet |
+| No request-time ceiling | Pull workers have no 600 s push limit, so a long case analysis can't be cut off |
+| Event-driven scaling | Workers scale on undelivered messages (KEDA), down to zero |
+| Supply-chain control | Only signed images from our registry are admitted |
+| Operations a bank recognises | Recorded releases, namespaces per service, network policies, pod security |
+
+**Each piece, in the bank's terms:**
+
+| Feature | Problem it solves | Expectation it meets |
+|---|---|---|
+| Sensibility checks; accuracy from officer verdicts | Catches agents going off track | MAS FEAT (monitoring); TRM change management |
+| Helm chart | GLDB can run it on its own platform | MAS outsourcing (exit, portability) |
+| Pull workers + KEDA | No 10-minute ceiling; free when idle | TRM capacity |
+| Load balancer + Cloud Armor, internal services | Nobody reaches a service directly; common web attacks stopped at the edge | TRM access control; OWASP |
+| NetworkPolicies | A hijacked part can't reach the others | TRM segmentation |
+| Workload Identity | No keys to leak | TRM least privilege |
+| Secret Manager add-on | Secrets in one audited place | TRM; PDPA |
+| Cloud NAT, static IP | All egress from one known address the bank's firewalls can allow-list | TRM network security |
+| Cloud Deploy | Every release recorded and reversible; the merge to `main` is the approval | TRM change management |
+| Signing, Binary Authorization, Artifact Analysis | Only our software runs, with known parts | TRM supply chain; OWASP A08 |
+| Regional, Singapore only | Survives a zone outage; the cluster, registry and stored data stay in Singapore | TRM; PDPA; MAS outsourcing |
+
+**Decisions:**
+- **No staging environment** (decided 2026-11-14). Designed but not built, about 3–5 days of work: a second GCP and Supabase project with the same Terraform; schema as migrations; a frontend runtime config so one image serves both; no Anthropic key, with `langgraph/_anthropic.py` returning canned replies; `main` → staging → smoke test → the same images to production. Load tests run against the local compose stack with Claude stubbed; failure tests run on production on synthetic cases.
+- **No release approval in Cloud Deploy:** a green push to `main` deploys; every release is still recorded and one step to roll back.
+- **The supervisor's feedback (2026-10-26):** the architecture is fine, and a handful of users doesn't justify heavier infrastructure without a measured need; let load testing drive decisions. The GKE move goes beyond that on purpose, for the award; the measured load figures stay in the write-up.
+
+**Assumptions** (2026-11-14; we have little access to GLDB's technical side, so these stand until the bank says otherwise): GLDB's platform is unknown, so GKE stands in for the bank's own Kubernetes and the chart is what its platform team would install. The demo line: *"Production runs on Kubernetes (GKE Autopilot). We have no access to GLDB's infrastructure, so we run the same Helm chart on our own Google Cloud project; the bank's platform team would install it on theirs, on-premises or in their cloud, with no code changes."* After handover the cluster is GLDB's if it adopts the chart; otherwise it is deleted after the assessment.
+
+**Cost** (rough; check Google's calculator before quoting): production on GKE Autopilot in the lean profile (one each of Kong, api, frontend, Grafana and audit-metrics always on, 1.6 vCPU; workers 0 to 1, 4.85 vCPU at peak, under the free trial's 8) plus NAT, load balancer and Cloud Armor is roughly $130–150 a month (about $4–5 a day), plus per-document costs and about $2–3 of image scans per push; about $1.50 a day with every pod at 0 (`deploy/terraform/README.md`). Cloud Run costs about $0 idle, cents per document. The Helm chart on kind in CI costs nothing. Unlike Cloud Run, the cluster costs money while idle; the budget alert stays.
+
+**Risks, and what answers them:**
+- Database written, publish lost: the sweeper recovers it.
+- Supabase Realtime carries all live updates; untested under load.
+- Kong is a single entry point: a wrong `Host` or CORS rule breaks the frontend (test with compose first).
+- One environment, no staging: the post-deploy check, the phased move and rollback are the safety net; the kind test runs on every chart change.
+- Shared Supabase: local and cloud see each other's data; whole-database scans (the sweeper) run only in the cloud.
+- The chart drifting from what Cloud Run ran: values are generated from `roles.json` (CI checks).
+- A message processed twice during a switch: handlers are idempotent; one subscription per role.
+- A wrong network policy or Cloud Armor rule breaking a flow: the kind test has must-pass and must-block calls; Cloud Armor rules start in preview.
+- A slow start from zero tripping the sweeper: keep doc-worker warm for demos.
+- Nobody to run it after handover: Autopilot, Cloud Deploy, a short runbook.
+- Data leaving Singapore: a regional cluster and registry; Claude calls leave Singapore (Anthropic API), a stated limitation.
+- Too few officer verdicts to read accuracy: show the count with each figure; a person decides below 30 cases.
+
+## 10. How it's tested
+
+- **Backend** (`backend/tests/`, pytest): one test file per check module; `test_detection.py` (endpoints), `test_detection_tools.py` (the tool contract), `test_detection_verdict.py` (the merge), `test_output_validation.py` (`_collect_node`). Tests can't reach real Supabase or Claude: `tests/conftest.py` blocks both. Coverage below 85% fails CI (`pyproject.toml`).
+- **Regression suites** (`test_regression_*.py`) test code, not AI accuracy: Claude is scripted. Their fixtures are regenerated from the code (`scripts/regenerate_regression_fixtures.py`), so they catch changes, not mistakes. Real AI behaviour is checked by a manual live run each sprint.
+- **Playwright** (`frontend/e2e/`) runs against a mocked backend, so it checks what the page shows, not backend logic. Rules both sides need, such as approval, come from one shared fixture checked by the backend, the page and the mock (`approval_rules.json`), so the copies can't drift.
+- **Guards that keep the suite honest:** every route but the public ones must answer 401 without a login (`test_auth.py`); every backend route is either mocked for Playwright or listed as not mocked (`mockCoverage.test.ts`).
+- A known bug is pinned with `xfail(strict=True, raises=...)` (`it.fails` in Vitest, `test.fail()` in Playwright).
+- **Keep in mind:** all test documents are synthetic (GLDB can't share real ones), so real fraud may look different. There are two company-name matchers on purpose: `identifiers.company_names_match` is lenient (does this document belong to the case?), `company_identity.cross_document_company_names_match` is strict (a fraud signal). Case match is triage, not a fraud signal.
+- **Synthetic fraud data** (`backend/app/injection/`): `injectors.py` (layout, font, text and metadata defects), `page_defects.py`, `schemas.py`, `service.py`, `store.py`; exposed through `routers/injection.py`, mounted only in local uvicorn mode.
+- **Health (2026-11-16):** backend about 3,490 tests (CI: 93.6% line coverage); Playwright 276 tests in 15 specs; Vitest 76 tests in 9 files.
+
+## 11. Known rough edges
 
 - `exiftool` is not installed on the dev machine, so the metadata check and the AI-provenance part of the AI-generation check report "could not run". The summary says so.
+- No checkpointing, by choice: a crashed run is rerun from the start (the sweeper recovers it); a checkpointer would only keep the model calls already made. If it is ever wanted: `langgraph-checkpoint-postgres`, its own schema, no personal data in state.
 - "Run again" on unchanged documents spends the tokens again; only an automatic start is skipped when the fingerprint matches.
 - The first requester of a burst of snapshot requests can wait for a follow-up build.
 - Known limits of the split:
@@ -336,7 +546,7 @@ Live in GCP project `fyp-six-sevens` (`asia-southeast1`): on Cloud Run since 202
 
 ---
 
-## 11. Where to start reading
+## 12. Where to start reading
 
 | To understand… | Read |
 |---|---|
