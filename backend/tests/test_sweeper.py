@@ -36,8 +36,8 @@ def test_find_stuck_uses_each_stage_limit_and_the_detection_start():
     documents = [
         _doc("queued-old", DocumentStatus.QUEUED, 10),       # past 5 min: its event was lost
         _doc("queued-new", DocumentStatus.QUEUED, 2),
-        _doc("processing-old", DocumentStatus.PROCESSING, 20),  # past 15 min: its run died
-        _doc("processing-new", DocumentStatus.PROCESSING, 10),
+        _doc("processing-old", DocumentStatus.PROCESSING, 20),  # past 10 min: its run died
+        _doc("processing-new", DocumentStatus.PROCESSING, 7),
         _doc("detecting-old", DocumentStatus.DETECTING, 1),  # the row's own times are old news for detection
         _doc("detecting-new", DocumentStatus.DETECTING, 60),
     ]

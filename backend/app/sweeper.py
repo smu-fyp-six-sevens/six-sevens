@@ -72,7 +72,7 @@ def find_stuck(now: datetime, case_id: str | None = None) -> list[Stuck]:
     """Every document and case analysis past its stage's limit. Sync: run on a worker thread."""
     stuck: list[Stuck] = []
     documents = [
-        d for d in document_repository.get_documents_in_status(list(_DOCUMENT_STAGES), include_fields=False)
+        d for d in document_repository.get_documents_in_status(list(_DOCUMENT_STAGES), include_fields=False, brief=True)
         if case_id is None or d.case_id == case_id
     ]
     # Approved with a type and neither a report nor an error: its approval event was lost (a failed run keeps

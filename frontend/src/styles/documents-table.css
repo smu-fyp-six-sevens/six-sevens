@@ -69,13 +69,62 @@
   text-transform: uppercase;
 }
 
-.documents-table--selectable .documents-table-header,
-.documents-table--selectable .documents-table-row {
+/* Uploaded, Approved and Rejected share one grid, so their columns line up: the last column is Issue under Uploaded and
+   Anomalies under Approved. Status stays compact (a pill and its retry and cancel icons); the free width goes to the
+   filename and the last column, where the text is. */
+.documents-table--selectable .documents-table-header--uploaded,
+.documents-table--selectable .documents-table-row--uploaded,
+.documents-table--selectable .documents-table-header--approved,
+.documents-table--selectable .documents-table-row--approved {
   grid-template-columns:
     44px
-    minmax(170px, 1.3fr)
-    minmax(230px, 2.6fr)
-    minmax(130px, 1fr);
+    minmax(150px, 1fr)
+    minmax(180px, 1.35fr)
+    minmax(170px, 0.85fr)
+    minmax(220px, 1.8fr);
+  min-width: 860px;
+}
+
+/* Issue: why the document needs the officer, in the red its row mark uses; one line, the rest on hover. */
+.document-issue-cell {
+  min-width: 0;
+}
+
+.document-issue {
+  display: block;
+  overflow: hidden;
+  color: var(--red);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A row with nothing to act on: where it stands, in grey. */
+.document-remark {
+  display: block;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Rows stay one line high: the issue is cut to a line, so a review row is no taller than any other. */
+.documents-table--selectable .documents-table-row--uploaded,
+.documents-table--selectable .documents-table-row--approved {
+  min-height: 48px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.documents-table--selectable .documents-table-header--uploaded,
+.documents-table--selectable .documents-table-header--approved {
+  min-height: 36px;
+}
+
+.status-pill--review {
+  background: var(--red-bg);
+  color: var(--red);
 }
 
 .document-select-cell {
@@ -229,36 +278,6 @@
   padding-bottom: 14px;
 }
 
-/* Documents, as a checklist: one progress figure beside the title, and the table split by where each file waits. */
-.checklist-progress {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.checklist-progress strong {
-  color: var(--ink);
-}
-
-.checklist-bar {
-  width: 90px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--line);
-  overflow: hidden;
-}
-
-.checklist-bar i {
-  display: block;
-  height: 100%;
-  border-radius: 3px;
-  background: var(--steel);
-}
-
 .documents-table-group {
   display: flex;
   align-items: center;
@@ -275,38 +294,6 @@
 .documents-table-group .num {
   color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
-}
-
-.documents-table-group--review,
-.documents-table-group--review .num {
-  color: var(--red);
-}
-
-/* A required document not uploaded yet: same grid as a file row, with its type in the type column. */
-.checklist-missing-row {
-  display: grid;
-  grid-template-columns: 44px minmax(170px, 1.3fr) minmax(230px, 2.6fr) minmax(130px, 1fr);
-  align-items: center;
-  column-gap: 18px;
-  min-height: 46px;
-  padding: 0 20px;
-  border-top: 1px solid var(--slate-94);
-  color: var(--ink-soft);
-  font-size: 13px;
-}
-
-.checklist-missing-row .document-type-cell {
-  color: var(--ink-soft);
-  font-size: 13px;
-}
-
-.checklist-hint {
-  color: var(--text-muted);
-  font-weight: 400;
-}
-
-.checklist-additional {
-  border-top: 0;
 }
 
 /* The round mark before a filename: red for a document that needs the officer, a tick once it is ready. */
@@ -526,11 +513,6 @@
   font-weight: 400;
 }
 
-.documents-table--selectable .checklist-missing-row .document-type-cell {
-  color: var(--ink-soft);
-  font-weight: 500;
-}
-
 /* A status as a pill: grey by default, green once extracted, steel while in flight, red when it failed. */
 .status-pill {
   display: inline-block;
@@ -603,10 +585,6 @@
 
 .documents-table-group--toggle[aria-expanded='true'] .group-chevron {
   transform: rotate(90deg);
-}
-
-.checklist-decided .documents-table-group {
-  padding-bottom: 12px;
 }
 
 /* The first column: every row starts with its round mark. On a file row the checkbox takes the mark's place when the
@@ -691,30 +669,14 @@
   letter-spacing: 0;
 }
 
-.documents-table-group--review {
-  color: var(--red);
-}
-
-.documents-table-group--review .num {
-  border-color: transparent;
-  background: var(--red-bg);
-  color: var(--red);
-}
-
 .documents-table-group .group-chevron {
   width: 14px;
   height: 14px;
 }
 
 /* Lines between rows, strong enough to see. */
-.documents-table-row,
-.checklist-missing-row {
+.documents-table-row {
   border-bottom-color: var(--line);
-}
-
-.checklist-missing-row {
-  border-top: 0;
-  border-bottom: 1px solid var(--line);
 }
 
 /* A document still being worked on: its mark spins. */
@@ -730,14 +692,10 @@
   .row-mark--processing { animation: none; }
 }
 
-/* Each category has its own colour, so what is what reads at a glance: Missing steel, Additional grey, Needs Review red,
-   Pending Approval yellow, Approved green, Rejected slate. The band carries it as a bar down its left edge, its label
-   and its count; the rows' marks carry it into the list. */
-.documents-table-group--missing { --group-ink: var(--steel-dark); --group-bg: var(--steel-a10); --group-edge: var(--steel); }
-.documents-table-group--requested { --group-ink: var(--violet-dark); --group-bg: var(--violet-bg); --group-edge: var(--violet); }
-.documents-table-group--additional { --group-ink: var(--ink-soft); --group-bg: var(--stone-94); --group-edge: var(--slate-86); }
-.documents-table-group--review { --group-ink: var(--red); --group-bg: var(--red-bg); --group-edge: var(--red-53); }
-.documents-table-group--pending { --group-ink: var(--orange-27); --group-bg: var(--amber-bg); --group-edge: var(--amber); }
+/* Each group has its own colour, so what is what reads at a glance: Uploaded steel, Approved green, Rejected slate. The
+   band carries it as a bar down its left edge, its label and its count; the rows' marks and the group's chips carry what
+   is inside (red needs review, yellow ready to approve). */
+.documents-table-group--uploaded { --group-ink: var(--steel-dark); --group-bg: var(--steel-a10); --group-edge: var(--steel); }
 .documents-table-group--approved { --group-ink: var(--teal); --group-bg: var(--teal-bg); --group-edge: var(--teal); }
 .documents-table-group--rejected { --group-ink: var(--slate-34); --group-bg: var(--slate-94); --group-edge: var(--slate-46); }
 
@@ -761,12 +719,17 @@
   color: var(--group-ink);
 }
 
+/* The approved count stays neutral: the band's green already says approved. */
+.documents-table-group--approved .documents-table-group--toggle .num {
+  background: var(--slate-94);
+  color: var(--slate-34);
+}
+
 .documents-table-group--toggle .muted-note {
   color: var(--text-muted);
 }
 
-/* The marks: a document ready for approval is a yellow tick, an approved one a green tick, a missing one a dashed steel
-   ring (and an optional one a dashed grey ring). */
+/* The marks: a document ready for approval is a yellow tick, an approved one a green tick. */
 .row-mark--pending {
   border-color: var(--amber);
   background: var(--amber);
@@ -777,68 +740,319 @@
   background: var(--teal);
 }
 
-.row-mark--missing {
-  border-style: dashed;
-  border-color: var(--steel);
+/* What a folded group holds, beside its count: small chips in the colour of what they count. */
+.group-chip {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.checklist-optional-row .row-mark--missing {
-  border-color: var(--slate-86);
+.group-chip--review { background: var(--red-bg); color: var(--red); }
+.group-chip--pending { background: var(--amber-bg); color: var(--orange-27); }
+.group-chip--processing { background: var(--white); color: var(--steel-dark); }
+.group-chip--anomalies { background: var(--risk-high); color: var(--white); }
+
+.documents-table-group .muted-note {
+  margin-left: 4px;
 }
 
-.checklist-missing-row:not(.checklist-optional-row) .status-pill {
-  background: var(--steel-a10);
-  color: var(--steel-dark);
+.documents-table-empty {
+  margin: 0;
+  padding: 22px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
-/* A requested document's way back to its request: plain text with an arrow, the link showing on hover. */
-.checklist-request-link {
+/* The case header's checklist: a button with what is missing and requested, and a panel on hover, kept open by a click. */
+.doc-checklist {
+  position: relative;
+}
+
+.doc-checklist-button {
   display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--orange-83);
+  border-radius: 10px;
+  background: var(--orange-96);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.doc-checklist-button:hover,
+.doc-checklist-button[aria-expanded='true'] {
+  border-color: var(--orange-69);
+}
+
+.doc-checklist-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--steel-a25);
+}
+
+.doc-checklist-button--complete {
+  border-color: var(--green-82);
+  background: var(--green-94);
+}
+
+.doc-checklist-button--complete:hover,
+.doc-checklist-button--complete[aria-expanded='true'] {
+  border-color: var(--teal);
+}
+
+.doc-checklist-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.doc-checklist-badge--missing { background: var(--risk-high); color: var(--white); }
+.doc-checklist-badge--requested { background: var(--violet); color: var(--white); }
+.doc-checklist-badge--complete { background: var(--teal); color: var(--white); }
+
+.doc-checklist-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--slate-88);
+  border-radius: 12px;
+  background: var(--white);
+  box-shadow: 0 12px 32px var(--ink-a16);
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+}
+
+.doc-checklist-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.doc-checklist-head strong { font-size: 15px; }
+.doc-checklist-head span { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+.doc-checklist-bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--slate-94);
+  overflow: hidden;
+}
+
+.doc-checklist-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--teal);
+}
+
+.doc-checklist-group h3 {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.doc-checklist-group ul,
+.doc-checklist-optional ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-checklist-group li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* Every list's marker (dot, tick, clock) takes the same 14px slot, so the names line up across the panel. */
+.doc-checklist-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 5px 3px 0;
+  border-radius: 50%;
+}
+
+.doc-checklist-icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 14px;
+  height: 18px;
+}
+
+.doc-checklist-tick { color: var(--teal); }
+.doc-checklist-pending { color: var(--slate-65); }
+
+.doc-checklist-group--missing h3 { color: var(--red); }
+.doc-checklist-group--missing .doc-checklist-dot { background: var(--risk-high); }
+
+.doc-checklist-group--requested {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--violet-bg);
+}
+
+/* Folds like the Optional list, with the same chevron. */
+.doc-checklist-group--requested summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--violet-dark);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  list-style: none;
+  cursor: pointer;
+}
+
+.doc-checklist-group--requested summary::-webkit-details-marker { display: none; }
+.doc-checklist-group--requested summary .group-chevron { width: 14px; height: 14px; }
+.doc-checklist-group--requested[open] summary { margin-bottom: 8px; }
+.doc-checklist-group--requested[open] summary .group-chevron { transform: rotate(90deg); }
+.doc-checklist-group--requested .doc-checklist-dot { background: var(--violet); }
+
+.doc-checklist-name {
+  display: block;
+  font-weight: 600;
+}
+
+.doc-checklist-hint {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.doc-checklist-link {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--violet-dark);
+  font: inherit;
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
 }
 
-.checklist-request-link-arrow {
-  flex: none;
-  color: var(--violet);
-  transition: transform 0.15s;
-}
+.doc-checklist-link:hover { text-decoration: underline; }
 
-.checklist-request-link:hover {
-  color: var(--violet-dark);
-}
-
-.checklist-request-link:hover .checklist-request-link-text {
-  text-decoration: underline;
-  text-decoration-color: var(--violet-76);
-  text-underline-offset: 3px;
-}
-
-.checklist-request-link:hover .checklist-request-link-arrow {
-  transform: translateX(3px);
-}
-
-.checklist-request-link:focus-visible {
+.doc-checklist-link:focus-visible {
   outline: none;
   border-radius: 3px;
   box-shadow: 0 0 0 3px var(--violet-76);
 }
 
-/* Requested rows are missing rows too; their mark and status take the group's violet instead of Missing's steel. */
-.checklist-requested-row .row-mark--missing {
-  border-color: var(--violet);
+.doc-checklist-done {
+  margin: 0;
+  color: var(--teal);
+  font-weight: 600;
 }
 
-.checklist-requested-row .status-pill.status-pill--requested {
-  background: var(--violet-bg);
-  color: var(--violet-dark);
+.doc-checklist-optional {
+  padding-top: 10px;
+  border-top: 1px solid var(--slate-94);
+  color: var(--ink-soft);
+}
+
+/* The same chevron as the table's group bands, turning down when open, in place of the browser's own marker. */
+.doc-checklist-optional summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.doc-checklist-optional summary::-webkit-details-marker {
+  display: none;
+}
+
+.doc-checklist-optional summary .group-chevron {
+  width: 14px;
+  height: 14px;
+}
+
+.doc-checklist-optional[open] summary .group-chevron {
+  transform: rotate(90deg);
+}
+
+.doc-checklist-optional summary:focus-visible {
+  outline: none;
+  border-radius: 4px;
+  box-shadow: 0 0 0 3px var(--steel-a25);
+}
+
+.doc-checklist-optional ul {
+  margin-top: 8px;
+}
+
+.doc-checklist-optional li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* A group's band: the fold toggle across it and, for Uploaded, the bulk actions at its right end. The band carries the
+   group's colour; the toggle inside it is transparent. */
+.documents-table-band {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 16px;
+  border-top: 1px solid var(--slate-86);
+  border-bottom: 1px solid var(--slate-86);
+  background: color-mix(in srgb, var(--group-bg) 45%, var(--stone-98));
+  box-shadow: inset 4px 0 0 var(--group-edge);
+  color: var(--group-ink);
+}
+
+.documents-table-band:has(> .documents-table-group--toggle:hover) {
+  background: color-mix(in srgb, var(--group-bg) 100%, var(--stone-98));
+}
+
+.documents-table-band > .documents-table-group--toggle,
+.documents-table-band > .documents-table-group--toggle:hover {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.documents-table-band > .documents-table-group--toggle:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--steel);
+}
+
+.documents-table-band-actions {
+  flex: none;
+  padding: 4px 0;
 }

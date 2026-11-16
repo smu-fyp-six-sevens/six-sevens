@@ -1026,21 +1026,6 @@ class BulkApproveResponse(BaseModel):
     failed: list[BulkActionFailure]
 
 
-class StuckDocument(BaseModel):
-    id: str
-    case_id: str | None = None
-    status: DocumentStatus
-    seconds_in_current_status: float = Field(
-        ..., description="How long the document has sat in its current status"
-    )
-
-
-class ProcessingErrorEntry(BaseModel):
-    document_id: str
-    error: str
-    occurred_at: datetime
-
-
 def is_classification_confirmed(document: DocumentRecord) -> bool:
     """
     Whether the document's type can be trusted enough to approve it. A real

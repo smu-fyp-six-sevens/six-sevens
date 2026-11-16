@@ -415,7 +415,11 @@ async def cancel_document_detection(
             detail="No detection run is currently in progress for this document.",
         )
     # Before the event, so a run on any instance sees the cancel through the database alone.
-    await asyncio.to_thread(document_repository.request_detection_cancel, document_id)
+    await to_thread_or_502(
+        document_repository.request_detection_cancel, document_id,
+        detail="Failed to cancel detection. Check Supabase table access.",
+        log=("Failed to save the detection cancel of document %s", document_id),
+    )
     await events.publish(officer_event(
         types.DETECTION_CANCEL_REQUESTED, document_id=document_id, case_id=document.case_id,
     ))

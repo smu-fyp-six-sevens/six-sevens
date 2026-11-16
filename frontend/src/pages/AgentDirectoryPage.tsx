@@ -65,7 +65,12 @@ function AgentModelCard({ agent }: { agent: AgentRecord }) {
             {agent.tool_details.map((tool) => (
               <li key={tool.name}>
                 <details className="agent-tool">
-                  <summary><code>{tool.name}</code></summary>
+                  <summary>
+                    <svg className="group-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                    <code>{tool.name}</code>
+                  </summary>
                   <p>{tool.description}</p>
                 </details>
               </li>
@@ -183,8 +188,7 @@ function WorkflowDiagram({ agents, loading, selectedId, onSelect }: {
       <div className="agent-directory-section-heading">
         <div>
           <h2 id="agent-workflow-title">Agent Registry</h2>
-          <p>Document checks happen per upload. The detection lead assigns focused checks to specialists, who report back. Case analysis compares approved documents after they are available. Select an agent to open its model card.</p>
-          <p>Models and pipeline call limits are read from the current backend configuration. A shared pipeline cap is not an individual agent budget.</p>
+          <p>Each upload is read and checked first. Once you approve a document, the detection lead assigns focused checks to specialists, who report back. When every approved document is checked, the case analysis compares them. Select an agent to open its model card.</p>
         </div>
         <span className="agent-directory-count">{loading ? 'Loading' : `${agents.length} roles`}</span>
       </div>
@@ -220,32 +224,16 @@ export default function AgentDirectoryPage() {
         <header className="agent-directory-intro">
           <p className="agent-directory-eyebrow">SYSTEM OVERSIGHT</p>
           <h1>Know Your Agents</h1>
-          <p className="agent-directory-lede">A plain-language registry of the AI roles used to process documents and review loan applications.</p>
+          <p className="agent-directory-lede">
+            The AI assistants that read, check and summarise each case. They prepare the work; you make every decision.
+            Open an agent to see what it does, the tools it uses and its instructions. Every run records which version of
+            each agent did the work.
+          </p>
         </header>
 
         {error && <p className="agent-directory-error" role="alert">{error}</p>}
 
         {!error && <WorkflowDiagram agents={agents} loading={loading} selectedId={openId} onSelect={setOpenId} />}
-
-        <section className="agent-directory-oversight-grid" aria-label="Governance coverage">
-          <article className="agent-directory-oversight-card">
-            <p className="agent-directory-eyebrow">AUDIT TRAIL</p>
-            <h2>Run events are recorded; per-agent traces are incomplete</h2>
-            <p>Current audit events identify the worker or pipeline that completed a run. Case-analysis records also include the prompt version, but most individual model/tool actions are not yet linked to an agent identity and version in the shared audit trail.</p>
-            <span className="agent-directory-tag agent-directory-tag-partial">Partial coverage</span>
-          </article>
-          <article className="agent-directory-oversight-card">
-            <p className="agent-directory-eyebrow">PROMPT TRANSPARENCY</p>
-            <h2>View the source prompt for each role</h2>
-            <p>Select an agent on the map and choose “View prompt” to inspect its instructions. Runtime document data is replaced by clear placeholders, and the extractor prompt can be previewed by document type.</p>
-            <span className="agent-directory-tag agent-directory-tag-partial">Templates shown</span>
-          </article>
-        </section>
-
-        <aside className="agent-directory-note">
-          <span aria-hidden="true">i</span>
-          <p><strong>How to read this page:</strong> “Not assigned” marks a gap in the current implementation. Select a tool to see what it does, in the words the agent itself is given. Tool access is described from code; it is not a separate per-agent permission policy. Pipeline caps are shared ceilings, not per-agent or dollar-cost budgets. Agent outputs support human review; they do not make the lending decision.</p>
-        </aside>
       </div>
       {openAgent && <AgentDialog key={openAgent.id} agent={openAgent} onClose={() => setOpenId(null)} />}
     </main>

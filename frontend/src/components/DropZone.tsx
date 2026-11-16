@@ -57,7 +57,7 @@ export default function DropZone({ onFiles, disabled = false }: DropZoneProps) {
         <span className="browse-link">browse</span>
       </div>
       <div className="dz-formats">
-        PDF · PNG · JPG  — up to 25MB each
+        PDF, PNG or JPG, up to 25MB each
       </div>
     </div>
   );

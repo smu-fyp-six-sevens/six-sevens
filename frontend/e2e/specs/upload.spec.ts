@@ -31,7 +31,7 @@ test.describe('Upload documents @sprint1 @SCRUM-6', () => {
     const dropZone = page.getByRole('button', { name: 'Upload documents' });
     await expect(dropZone).toBeVisible();
     await expect(dropZone).toContainText('Drag files here or browse');
-    await expect(dropZone).toContainText('PDF · PNG · JPG — up to 25MB each');
+    await expect(dropZone).toContainText('PDF, PNG or JPG, up to 25MB each');
     await expect(page.getByText('No files selected yet')).toHaveCount(0);
 
     await browseFiles(page, [pdf('payslip.pdf')]);

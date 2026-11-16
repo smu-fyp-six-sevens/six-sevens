@@ -69,7 +69,7 @@ Settings come from `backend/.env`. The workers share one container (~3 GB). Walk
 
 ## Deploying
 
-Cloud Run from GitHub Actions: a green push to `main` deploys, or run "Deploy to Cloud Run" by hand. Terraform (`deploy/terraform`, one-time setup in its README) creates the services, Pub/Sub, secrets and identities; run `terraform apply` before a push that needs it. Adding a service: [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md).
+Production runs on GKE Autopilot at `sixsevens.me`: a green push to `main` builds and signs the images and releases the Helm chart through Cloud Deploy (`deploy.yml`'s `gke` job). Cloud Run still deploys alongside, taking no events, until phase 6 removes it (`CLOUD_ARCHITECTURE_PLAN.md`); "Deploy to Cloud Run" can also be run by hand. Terraform (`deploy/terraform`, one-time setup in its README) creates the services, Pub/Sub, secrets and identities; run `terraform apply` before a push that needs it. Adding a service: [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md).
 
 ## Tests
 

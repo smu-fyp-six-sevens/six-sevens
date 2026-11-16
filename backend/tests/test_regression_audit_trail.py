@@ -101,12 +101,14 @@ class TrailStore:
     def add_extracted_field(self, document_id, field_name, value, **kwargs):
         self.fields[document_id][field_name] = ExtractedField(
             field_name=field_name, field_type="string", field_value=value, confidence=1.0)
+        return True
 
     def replace_extracted_fields(self, document_id, values, *, field_confidences, **kwargs):
         self.fields[document_id] = {
             name: ExtractedField(field_name=name, field_type="string", field_value=value, confidence=field_confidences[name])
             for name, value in values.items()
         }
+        return True
 
 
 def officer_trail(published_events: list) -> list[Event]:

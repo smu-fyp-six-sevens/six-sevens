@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from tests.conftest import TEST_USER
 
 from fastapi.testclient import TestClient
 
+from app.case_service import CaseNotDeletable
 from app.main import app
 from app.models import (
     CaseCounts,
@@ -361,10 +362,9 @@ def test_delete_case_calls_case_service_delete_case() -> None:
     with (
         patch("app.routers._dependencies.case_service") as mock_dep_case_service,
         patch("app.routers.cases.case_service") as mock_case_service,
-        patch("app.routers.cases.document_repository") as mock_doc_repo,
     ):
         mock_dep_case_service.get_case.return_value = _make_case("case-1")
-        mock_doc_repo.list_documents.return_value = []
+        mock_case_service.delete_case.return_value = []
 
         response = client.delete("/cases/case-1")
 
@@ -381,11 +381,10 @@ def test_deleting_a_case_puts_each_of_its_documents_on_the_record_too(published_
     ]
     with (
         patch("app.routers._dependencies.case_service") as mock_dep_case_service,
-        patch("app.routers.cases.case_service"),
-        patch("app.routers.cases.document_repository") as mock_doc_repo,
+        patch("app.routers.cases.case_service") as mock_case_service,
     ):
         mock_dep_case_service.get_case.return_value = _make_case("case-1")
-        mock_doc_repo.list_documents.return_value = documents
+        mock_case_service.delete_case.return_value = documents
 
         assert client.delete("/cases/case-1").status_code == 204
 
@@ -409,31 +408,26 @@ def test_delete_case_not_found() -> None:
     mock_case_service.delete_case.assert_not_called()
 
 
-def test_delete_case_rejects_when_a_document_is_in_flight() -> None:
+def test_delete_case_refused_while_something_runs_is_409() -> None:
     with (
         patch("app.routers._dependencies.case_service") as mock_dep_case_service,
         patch("app.routers.cases.case_service") as mock_case_service,
-        patch("app.routers.cases.document_repository") as mock_doc_repo,
     ):
         mock_dep_case_service.get_case.return_value = _make_case("case-1")
-        in_flight_document = MagicMock()
-        in_flight_document.status = DocumentStatus.PROCESSING
-        mock_doc_repo.list_documents.return_value = [in_flight_document]
+        mock_case_service.delete_case.side_effect = CaseNotDeletable("A document is still being scanned.")
 
         response = client.delete("/cases/case-1")
 
     assert response.status_code == 409
-    mock_case_service.delete_case.assert_not_called()
+    assert response.json()["detail"] == "A document is still being scanned."
 
 
 def test_delete_case_db_failure_returns_502() -> None:
     with (
         patch("app.routers._dependencies.case_service") as mock_dep_case_service,
         patch("app.routers.cases.case_service") as mock_case_service,
-        patch("app.routers.cases.document_repository") as mock_doc_repo,
     ):
         mock_dep_case_service.get_case.return_value = _make_case("case-1")
-        mock_doc_repo.list_documents.return_value = []
         mock_case_service.delete_case.side_effect = RuntimeError("connection refused")
 
         response = client.delete("/cases/case-1")

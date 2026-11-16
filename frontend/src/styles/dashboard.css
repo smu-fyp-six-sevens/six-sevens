@@ -526,7 +526,7 @@ button.check-case:focus-visible { outline: 2px solid var(--steel); outline-offse
 .range-calendar-navs button { pointer-events: auto; }
 .range-calendar-head { display: grid; place-items: center; height: 28px; margin-bottom: 8px; }
 .range-calendar-head strong { color: var(--ink); font-size: 13.5px; font-weight: 650; }
-.range-calendar-nav { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; background: var(--white); color: var(--ink-soft); font: inherit; font-size: 16px; line-height: 1; cursor: pointer; }
+.range-calendar-nav { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; background: var(--white); color: var(--ink-soft); font: inherit; font-size: 16px; line-height: 1; cursor: pointer; }
 .range-calendar-nav:hover:not(:disabled) { border-color: var(--steel); color: var(--steel-dark); }
 .range-calendar-nav:disabled { opacity: .35; cursor: default; }
 .range-calendar-grid { display: grid; grid-template-columns: repeat(7, 34px); row-gap: 2px; }

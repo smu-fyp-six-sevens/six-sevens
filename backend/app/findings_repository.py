@@ -254,16 +254,17 @@ def delete_missed(row_id: str) -> None:
     service_supabase_client().table(TABLE).delete().eq("id", row_id).eq("source", "officer").execute()
 
 
-def delete_case_findings_citing(document_ids: list[str]) -> None:
+def delete_case_findings_citing(document_ids_by_case: dict[str, list[str]]) -> None:
     """
     Cross-document findings that rest on a document being deleted go with it, as its own findings do (by the
-    foreign key). The case's analysis is out of date until it runs again.
+    foreign key). Searched within the document's own case. The case's analysis is out of date until it runs again.
     """
     client = service_supabase_client()
-    for document_id in document_ids:
-        client.table(TABLE).delete().eq("scope", "case").filter(
-            "evidence->document_ids", "cs", json.dumps([document_id])
-        ).execute()
+    for case_id, document_ids in document_ids_by_case.items():
+        for document_id in document_ids:
+            client.table(TABLE).delete().eq("case_id", case_id).eq("scope", "case").filter(
+                "evidence->document_ids", "cs", json.dumps([document_id])
+            ).execute()
 
 
 def move_with_documents(document_ids: list[str], case_id: str) -> None:

@@ -21,7 +21,7 @@ from .gateway import GatewayOnly
 from .health import check_db_connection
 from .langgraph._anthropic import warm_up
 from .routers import audit as audit_router
-from .routers import agents, cases, detection, documents, finding_reviews, monitoring, notes, upload, ws
+from .routers import agents, cases, detection, documents, finding_reviews, notes, upload, ws
 from .workers import cases as case_worker
 from .workers import detection as detection_worker
 from .workers import documents as doc_worker
@@ -233,7 +233,6 @@ if "api" in ROLES:
     app.include_router(cases.router, dependencies=_protected)
     app.include_router(upload.router, dependencies=_protected)
     app.include_router(documents.router, dependencies=_protected)
-    app.include_router(monitoring.router, dependencies=_protected)
     app.include_router(detection.router, dependencies=_protected)
     app.include_router(notes.router, dependencies=_protected)
     app.include_router(finding_reviews.router, dependencies=_protected)

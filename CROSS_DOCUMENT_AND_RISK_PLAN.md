@@ -5,7 +5,7 @@ The case analysis is built (`backend/app/case_pipeline/`). `HOW_IT_WORKS.md` §3
 ## Still open
 
 - **Cancel the outdated run.** *Issue:* a replaced run finishes anyway and spends its calls; only its result is dropped (`superseded`).
-- **A fence on the case row** (`current_run_id`). *Issue:* two instances finishing at once could both publish a result. (Two instances *starting* the same run is stopped by a unique index, `case_analysis_runs_one_running_idx`.)
+- **A fence on the case row** (`current_run_id`). *Issue:* two instances finishing at once could both publish a result (`CODEBASE_AUDIT.md` 2.2). (Two instances *starting* the same run is stopped by a unique index, `case_analysis_runs_one_running_idx`.)
 - **Debounce** (5–10 s) before an automatic start, for a burst of officer changes.
 - **Audit the "Other" checks:** `date_anomalies`, `metadata_analysis` and `image_manipulation` use the document type in places; mark each rule type-agnostic or type-keyed.
 - **Dismissing a cross-document finding** (officer, with a reason; leaves the score, kept on record).

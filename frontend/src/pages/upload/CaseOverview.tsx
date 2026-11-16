@@ -176,7 +176,7 @@ export function CaseOverview({
                               })}
                             </span>
                           </span>
-                          <span className="case-overview-flagged-chevron" aria-hidden="true">›</span>
+                          <Icon name="chevronRight" size={16} className="case-overview-flagged-chevron" />
                         </button>
                       </li>
                     ))}

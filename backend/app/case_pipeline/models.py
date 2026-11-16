@@ -201,8 +201,7 @@ class CaseAnalysis(BaseModel):
     consistent_checks: list[str] = Field(default_factory=list)
     # Detection checks (tool names) that examined the documents and raised nothing.
     clean_checks: list[str] = Field(default_factory=list)
-    # A web search for recent adverse media about the company. Informational only; never scored. None on an older
-    # run from before the check existed, or when the feature is off.
+    # A web search for recent adverse media about the company. Informational only; never scored. None when it didn't run.
     adverse_media: AdverseMediaCheck | None = None
     audit: AnalysisAudit = Field(default_factory=AnalysisAudit)
     # Step-by-step log of the run, for debugging. Includes hypotheses that were tried and dropped.

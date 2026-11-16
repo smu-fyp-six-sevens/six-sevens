@@ -205,19 +205,22 @@ const COSTED_EVENTS = new Set([
   'document.analyzed', 'document.failed', 'document.detected', 'detection.failed', 'case.analysis.completed',
 ]);
 
-// STUCK_THRESHOLD_SECONDS in backend config.py (600).
-const STUCK_THRESHOLD_MS = 600_000;
+// STUCK_WAITING_SECONDS (300) and STUCK_RUNNING_SECONDS (600) in backend config.py.
+const STUCK_WAITING_MS = 300_000;
+const STUCK_RUNNING_MS = 600_000;
 const sinceLastProgress = (document: DocumentRow) =>
   Date.now() - new Date(document.processing_started_at ?? document.queued_at ?? document.uploaded_at).getTime();
 
-/** Same rule as backend monitoring.is_stuck: still in flight, with no progress for the threshold. */
+/** Same rule as backend monitoring.is_stuck: waiting or running, with no progress for its limit. */
 function isStuck(document: DocumentRow): boolean {
-  return IN_FLIGHT.includes(document.status) && sinceLastProgress(document) > STUCK_THRESHOLD_MS;
+  if (document.status === 'uploaded' || document.status === 'queued') return sinceLastProgress(document) > STUCK_WAITING_MS;
+  if (document.status === 'processing' || document.status === 'extracting') return sinceLastProgress(document) > STUCK_RUNNING_MS;
+  return false;
 }
 
-/** Same rule as backend monitoring.is_stuck_processing_for_retry: processing, with no progress for the threshold. */
+/** Same rule as backend monitoring.is_stuck_processing_for_retry: processing, with no progress for its limit. */
 function isStuckProcessing(document: DocumentRow): boolean {
-  return document.status === 'processing' && sinceLastProgress(document) > STUCK_THRESHOLD_MS;
+  return document.status === 'processing' && sinceLastProgress(document) > STUCK_RUNNING_MS;
 }
 
 /** Same rule as backend case_service.compute_documents_status: the worst state among the case's documents. */

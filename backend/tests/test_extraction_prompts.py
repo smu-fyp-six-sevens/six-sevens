@@ -1,5 +1,10 @@
 import pytest
-from app.langgraph.extraction_prompts import build_extraction_prompt, schema_field_names, EXTRACTION_SCHEMAS
+from app.langgraph.extraction_prompts import build_extraction_prompt, EXTRACTION_SCHEMAS
+
+
+def schema_field_names(document_type: str) -> list[str]:
+    schema = EXTRACTION_SCHEMAS.get(document_type, {})
+    return [*schema.get("required", []), *schema.get("additional", [])]
 
 
 def test_known_document_type_builds_prompt():

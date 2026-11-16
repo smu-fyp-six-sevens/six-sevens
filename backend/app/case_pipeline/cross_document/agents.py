@@ -218,7 +218,7 @@ async def _ask_for_tool(
     The reply and the arguments of its call to `tool`, or None. Tool choice is left to the model (Sonnet 5.5
     rejects a forced one), so a reply with neither the call nor a readable `key` in its text is asked once more.
     """
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, max_tokens, effort=_EFFORT).bind_tools(
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, max_tokens, effort=_EFFORT, cache_history=True).bind_tools(
         _TOOLS, tool_choice="auto"
     )
     prompt, response = messages, None

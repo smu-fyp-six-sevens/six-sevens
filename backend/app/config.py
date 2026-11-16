@@ -127,10 +127,10 @@ class Settings:
     # --- Stuck work and recovery (sweeper.py, CLOUD_ARCHITECTURE_PLAN.md section 5) ---
     # Off by default: the database is shared, so a local process must never sweep cloud work. Terraform turns it on.
     SWEEPER_ENABLED: bool = _bool("SWEEPER_ENABLED", False)
-    # uploaded/queued past this means its event was lost; processing/extracting/detecting past the other means
-    # its run died (both well past the 600 s push deadline, so a recovery never races a live redelivery).
+    # uploaded/queued past the first means its event was lost; processing/extracting/detecting past the second means
+    # its run died. The case queue's Stuck badge and an officer's retry use the same two (monitoring.py).
     STUCK_WAITING_SECONDS: int = _int("STUCK_WAITING_SECONDS", 300)
-    STUCK_RUNNING_SECONDS: int = _int("STUCK_RUNNING_SECONDS", 900)
+    STUCK_RUNNING_SECONDS: int = _int("STUCK_RUNNING_SECONDS", 600)
     RECOVERY_MAX_ATTEMPTS: int = _int("RECOVERY_MAX_ATTEMPTS", 3)
     # How often a running pipeline or detection checks for a cancel made through another instance (pubsub only).
     CANCEL_POLL_SECONDS: float = _float("CANCEL_POLL_SECONDS", 5)
@@ -155,9 +155,6 @@ class Settings:
 
     # AC2: invocation should be attempted within this window of being dequeued
     DEQUEUE_TO_INVOKE_TARGET_SECONDS: float = 1.0
-    # A document idle in an in-flight status longer than this is "stuck": the monitoring listing shows it, and one
-    # stuck in processing can be retried without waiting for it to fail (routers/documents.py's retry_document).
-    STUCK_THRESHOLD_SECONDS: int = 600
 
     # Bounded classify<->extract escalation loop (langgraph/graph.py) — one
     # re-classification attempt before routing to manual review.

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { isoDay, parseDay, today, type Period } from '../utils/dateRange';
+import { Icon } from './Icon';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
@@ -61,8 +62,8 @@ export default function RangeCalendar({ initial, onApply, onCancel }: RangeCalen
     <div className="range-calendar">
       {/* Over the month names, so both stay reachable when narrow screens show one month. */}
       <div className="range-calendar-navs">
-        <button type="button" className="range-calendar-nav" onClick={() => shift(-1)} aria-label="Previous month">‹</button>
-        <button type="button" className="range-calendar-nav" onClick={() => shift(1)} disabled={!canGoForward} aria-label="Next month">›</button>
+        <button type="button" className="range-calendar-nav" onClick={() => shift(-1)} aria-label="Previous month"><Icon name="chevronLeft" size={14} /></button>
+        <button type="button" className="range-calendar-nav" onClick={() => shift(1)} disabled={!canGoForward} aria-label="Next month"><Icon name="chevronRight" size={14} /></button>
       </div>
       <div className="range-calendar-months">
         {months.map(({ year, month }) => (

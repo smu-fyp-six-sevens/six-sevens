@@ -19,7 +19,7 @@ from .config import settings
 from .events import officer_event, types
 from .extracted_fields_repository import normalise_field_name
 from .guardrails import content_guard
-from .langgraph.extraction_prompts import KNOWN_DOCUMENT_TYPES, drop_empty_optional_fields, schema_field_names
+from .langgraph.extraction_prompts import KNOWN_DOCUMENT_TYPES, drop_empty_optional_fields
 from .models import (
     APPROVED_STATUSES,
     IN_FLIGHT_STATUSES,
@@ -48,6 +48,7 @@ _LOCKED_STATUSES = APPROVED_STATUSES | {DocumentStatus.REJECTED}
 _UNDELETABLE_STATUSES = APPROVED_STATUSES
 # A field value kept in an audit entry is cut to this many characters.
 _AUDIT_VALUE_CHARS = 500
+_CHANGED_ELSEWHERE = "This document was just changed by someone else. Refresh to see where it stands."
 
 
 class Refused(Exception):
@@ -67,6 +68,13 @@ def _decided(document: DocumentRecord) -> str:
 def _ensure_unlocked(document: DocumentRecord, consequence: str) -> None:
     if document.status in _LOCKED_STATUSES:
         raise Refused("conflict", f"This document has been {_decided(document)}, so {consequence}.")
+
+
+def _ensure_fields_editable(document: DocumentRecord) -> None:
+    """Unlocked, and not mid-run: the run's own field write would replace the officer's, or the reverse."""
+    _ensure_unlocked(document, "its fields can't be edited")
+    if document.status in IN_FLIGHT_STATUSES:
+        raise Refused("conflict", "This document is still being processed; edit its fields once it finishes.")
 
 
 def present(document: DocumentRecord, fields: list) -> DocumentRecord:
@@ -370,7 +378,7 @@ async def bulk_delete(document_ids: list[str]) -> BulkDeleteResponse:
 
 async def save_fields(document: DocumentRecord, extracted_fields: dict) -> DocumentRecord:
     """The officer correcting extracted fields. Marks the document human-verified (extraction_confidence 1.0)."""
-    _ensure_unlocked(document, "its fields can't be edited")
+    _ensure_fields_editable(document)
     # An optional field saved empty is dropped; a required one stays so it still blocks approval.
     drop_empty_optional_fields(document.document_type, extracted_fields)
     # An edited address can change whether the document now fulfils proof_of_address.
@@ -400,14 +408,16 @@ async def save_fields(document: DocumentRecord, extracted_fields: dict) -> Docum
         field_confidences[name] = 1.0 if was_editable else existing_field.confidence
 
     # Fields first: the document update fires a snapshot that must already see them.
-    await asyncio.to_thread(
+    written = await asyncio.to_thread(
         extracted_fields_repository.replace_extracted_fields,
         document.id,
         extracted_fields,
         field_confidences=field_confidences,
         default_confidence=None,
-        required_field_names=set(schema_field_names(document.document_type or "")),
+        expected_statuses=[document.status],
     )
+    if not written:
+        raise Refused("conflict", _CHANGED_ELSEWHERE)
     updated = await asyncio.to_thread(
         document_repository.update_extracted_fields,
         document.id,
@@ -429,7 +439,7 @@ async def save_fields(document: DocumentRecord, extracted_fields: dict) -> Docum
 
 async def add_field(document: DocumentRecord, name: str, value: object) -> DocumentRecord:
     """Adds one manually entered field, stored at confidence 1.0."""
-    _ensure_unlocked(document, "its fields can't be edited")
+    _ensure_fields_editable(document)
     field_name = normalise_field_name(name)
     if not field_name:
         raise Refused("invalid", "Field name cannot be empty.")
@@ -438,13 +448,15 @@ async def add_field(document: DocumentRecord, name: str, value: object) -> Docum
     if any(field.field_name == field_name for field in existing_fields):
         raise Refused("conflict", "A field with this name already exists.")
 
-    await asyncio.to_thread(
+    added = await asyncio.to_thread(
         extracted_fields_repository.add_extracted_field,
         document.id,
         field_name,
         value,
-        required_field_names=set(schema_field_names(document.document_type or "")),
+        expected_statuses=[document.status],
     )
+    if not added:
+        raise Refused("conflict", _CHANGED_ELSEWHERE)
     # Re-read the full set to recompute fulfilled_requirements.
     all_fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document.id)
     fulfilled_requirements = compute_fulfilled_requirements(
@@ -468,13 +480,17 @@ async def add_field(document: DocumentRecord, name: str, value: object) -> Docum
 
 async def delete_field(document: DocumentRecord, field_id: str) -> DocumentRecord:
     """Deletes one field of this document and recomputes fulfilled requirements."""
-    _ensure_unlocked(document, "its fields can't be edited")
+    _ensure_fields_editable(document)
     existing_fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document.id)
     field_to_delete = next((field for field in existing_fields if str(field.id) == field_id), None)
     if field_to_delete is None:
         raise Refused("not_found", "Extracted field not found")
 
-    await asyncio.to_thread(extracted_fields_repository.delete_extracted_field, document.id, field_id)
+    deleted = await asyncio.to_thread(
+        extracted_fields_repository.delete_extracted_field, document.id, field_id, expected_statuses=[document.status],
+    )
+    if not deleted:
+        raise Refused("conflict", _CHANGED_ELSEWHERE)
     # What was read above, less the deleted one.
     remaining_fields = [field for field in existing_fields if str(field.id) != field_id]
     fulfilled_requirements = compute_fulfilled_requirements(
@@ -538,7 +554,13 @@ async def approve(document: DocumentRecord) -> DocumentRecord:
     approved = await asyncio.to_thread(document_repository.approve_document, document.id)
     if approved is None:
         # Read as analyzed a moment ago, so it was approved, rejected or deleted since (a double click, or two officers).
-        raise Refused("conflict", "This document was just changed by someone else. Refresh to see where it stands.")
+        raise Refused("conflict", _CHANGED_ELSEWHERE)
+    # A field edit can land between the read above and the approval; once approved, none can, so check again.
+    extracted_fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document.id)
+    refusal = approval_refusal(document, extracted_fields)
+    if refusal:
+        await asyncio.to_thread(document_repository.undo_approval, document.id, document.routing_status)
+        raise Refused("conflict", f"The fields changed while you approved. {refusal}")
 
     skip = skips_detection(document)
     if skip:
@@ -600,11 +622,26 @@ async def reject(document: DocumentRecord) -> DocumentRecord:
 
     rejected = await asyncio.to_thread(document_repository.reject_document, document.id, document.status)
     if rejected is None:
-        raise Refused("conflict", "This document was just changed by someone else. Refresh to see where it stands.")
+        raise Refused("conflict", _CHANGED_ELSEWHERE)
     fields = await asyncio.to_thread(extracted_fields_repository.get_extracted_fields, document.id)
     await _audit(types.DOCUMENT_REJECTED, document, document_type=document.document_type)
     await analysis_service.start_if_due(document.case_id)
     return present(rejected, fields)
+
+
+def _undo_retype(document: DocumentRecord) -> None:
+    """A retype whose event failed to publish: its status and classification back as `document` read them. Sync."""
+    restored = document_repository.update_status(
+        document.id, document.status, failure_reason=document.failure_reason,
+        expected_current_statuses=[DocumentStatus.EXTRACTING],
+    )
+    if restored:
+        document_repository.record_classification(
+            document.id, document_type=document.document_type,
+            classification_confidence=document.classification_confidence,
+            routing_status=document.routing_status.value if document.routing_status else None,
+            evidence=document.evidence, fulfilled_requirements=document.fulfilled_requirements,
+        )
 
 
 async def set_type(document: DocumentRecord, requested_type: str) -> None:
@@ -636,6 +673,16 @@ async def set_type(document: DocumentRecord, requested_type: str) -> None:
 
     requested_at = datetime.now(timezone.utc)
     if needs_extraction:
+        # The status first, as a compare-and-swap: a reject, retry, cancel or delete that landed since wins.
+        claimed = await asyncio.to_thread(
+            document_repository.update_status,
+            document.id,
+            DocumentStatus.EXTRACTING,
+            processing_started_at=requested_at,
+            expected_current_statuses=[document.status],
+        )
+        if not claimed:
+            raise Refused("conflict", _CHANGED_ELSEWHERE)
         # The old fields came from the wrong schema: self-fulfilment only, and the old evidence is cleared.
         await asyncio.to_thread(
             document_repository.record_classification,
@@ -645,14 +692,6 @@ async def set_type(document: DocumentRecord, requested_type: str) -> None:
             routing_status=RoutingStatus.ACCEPTED.value,
             evidence=[],
             fulfilled_requirements=compute_fulfilled_requirements(document_type, None),
-        )
-        if document.fields_reviewed_at is not None:
-            await asyncio.to_thread(document_repository.clear_fields_review, document.id)
-        await asyncio.to_thread(
-            document_repository.update_status,
-            document.id,
-            DocumentStatus.EXTRACTING,
-            processing_started_at=requested_at,
         )
     else:
         # Same type confirmed: the fields and evidence are still valid.
@@ -668,12 +707,18 @@ async def set_type(document: DocumentRecord, requested_type: str) -> None:
 
     detail = {"from_type": document.document_type, "to_type": document_type}
     if needs_extraction:
-        # Starts the extraction rerun, so a failed publish fails the request like any other failure here.
-        # requested_at is the stamp the doc-worker claims the rerun with, so a repeated event runs nothing.
-        await events.publish(officer_event(
-            types.DOCUMENT_RETYPED, document_id=document.id, case_id=document.case_id,
-            detail={**detail, "requested_at": requested_at.isoformat()},
-        ))
+        # Starts the extraction rerun; requested_at is the stamp the doc-worker claims it with, so a repeat runs nothing.
+        try:
+            await events.publish(officer_event(
+                types.DOCUMENT_RETYPED, document_id=document.id, case_id=document.case_id,
+                detail={**detail, "requested_at": requested_at.isoformat()},
+            ))
+        except Exception:
+            # Nothing will run it: put the document back as it was, rather than leave it extracting for the sweeper.
+            await asyncio.to_thread(_undo_retype, document)
+            raise
+        if document.fields_reviewed_at is not None:
+            await asyncio.to_thread(document_repository.clear_fields_review, document.id)
     else:
         await _audit(types.DOCUMENT_TYPE_CORRECTED, document, **detail)
 

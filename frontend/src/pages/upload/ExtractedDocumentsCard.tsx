@@ -1,20 +1,17 @@
-import type { AdditionalDocument, DocumentRecord } from '../../services/uploadService';
+import type { DocumentRecord } from '../../services/uploadService';
 import {
   TERMINAL_DOCUMENT_STATUSES,
   canCancelDocument,
   canRetryDocument,
   documentDetectionStage,
   formatDocumentStatus,
-  formatDocumentStatusLabel,
   formatDocumentLabel,
   isDocumentStuckProcessing,
 } from '../../services/uploadService';
 import { LiveBadge } from './LiveBadge';
-import { useDetectionOutcome } from './useDetectionOutcome';
-import { useState } from 'react';
-import { CANCELLED_REASON, documentGroup, missingAdditional, missingRequirements, type Coverage, type DocumentGroup } from './documentChecklist';
-import { REQUIRED_DOCUMENT_TYPES } from '../../services/uploadService';
-import { requestKey, requestedDocumentName } from './requestedDocument';
+import { useDetectionCounts, type DetectionCounts } from './useDetectionCounts';
+import { useState, type ReactNode } from 'react';
+import { CANCELLED_REASON, documentGroup, type DocumentGroup } from './documentChecklist';
 import type { useDocumentRowActions } from './useDocumentRowActions';
 import type { useDocumentSelection } from './useDocumentSelection';
 import { ErrorMessage } from '../../components/ErrorMessage';
@@ -24,13 +21,11 @@ export type DocumentSelection = ReturnType<typeof useDocumentSelection>;
 export type DocumentRowActions = ReturnType<typeof useDocumentRowActions>;
 
 interface ExtractedDocumentsCardProps {
+  // Every document not yet decided on, cancelled ones included (they wait on the officer under Uploaded).
   extractedDocuments: DocumentRecord[];
   // Why each document that needs the officer's review does (by document id); the others have no entry.
   reviewReasons?: Map<string, string>;
-  // Which required documents the case already has, so the card can list the ones it still lacks.
-  fulfilledRequirements: Set<string>;
-  coverage: Coverage;
-  // The documents already decided on, listed under their own folded groups at the foot of the table.
+  // Approved ones stay under Approved through detection, a failed or cancelled scan included.
   approvedDocuments: DocumentRecord[];
   rejectedDocuments: DocumentRecord[];
   wsConnected: boolean;
@@ -39,20 +34,15 @@ interface ExtractedDocumentsCardProps {
   rowActions: DocumentRowActions;
   // A finalised case: documents can be opened, but nothing in the list can be changed.
   readOnly?: boolean;
-  // What the latest case analysis asks the client for (the Additional Documents tab), listed so they are uploaded here.
-  requestedDocuments?: AdditionalDocument[];
-  // The group to open first, when the officer came here for it (the Additional Documents tab's Upload in Documents).
-  initialGroup?: GroupId;
-  // Goes to one request on the Additional Documents tab (by requestKey), where it says why it is asked for.
-  onOpenRequest?: (key: string) => void;
 }
 
-// Extracted documents awaiting the officer: bulk select, approve, move and delete, plus per-row retry and cancel.
+type GroupId = 'uploaded' | 'approved' | 'rejected';
+
+// The case's documents in one table: Uploaded (waiting on the officer or the pipeline), Approved (through detection),
+// Rejected. Several groups can be open at once; Rejected starts folded.
 export function ExtractedDocumentsCard({
   extractedDocuments,
   reviewReasons,
-  fulfilledRequirements,
-  coverage,
   approvedDocuments,
   rejectedDocuments,
   wsConnected,
@@ -60,9 +50,6 @@ export function ExtractedDocumentsCard({
   selection,
   rowActions,
   readOnly = false,
-  requestedDocuments = [],
-  initialGroup,
-  onOpenRequest,
 }: ExtractedDocumentsCardProps) {
   const {
     allExtractedSelected,
@@ -78,67 +65,39 @@ export function ExtractedDocumentsCard({
     setSelectedDocumentIds,
   } = selection;
   const { approveError, cancelActionError, retryActionError, isApprovingSelected, handleApproveSelected } = rowActions;
+  const counts = useDetectionCounts(approvedDocuments);
 
-  const requiredReceived = REQUIRED_DOCUMENT_TYPES.filter((requirement) => fulfilledRequirements.has(requirement.value)).length;
-  const missing = missingRequirements(fulfilledRequirements, coverage);
-  const optionalMissing = missingAdditional(fulfilledRequirements);
-  const groups: Record<DocumentGroup, DocumentRecord[]> = { review: [], processing: [], pending: [] };
-  extractedDocuments.forEach((document) => groups[documentGroup(document, reviewReasons?.has(document.id) ?? false)].push(document));
+  const [open, setOpen] = useState<Record<GroupId, boolean>>({ uploaded: true, approved: true, rejected: false });
+  const toggle = (id: GroupId) => setOpen((current) => ({ ...current, [id]: !current[id] }));
 
-  // Documents still being worked on wait for approval too: they sit first under Pending Approval, with a spinner.
-  const pendingDocuments = [...groups.processing, ...groups.pending];
+  const groupOf = (document: DocumentRecord) => documentGroup(document, reviewReasons?.has(document.id) ?? false);
+  const byGroup: Record<DocumentGroup, DocumentRecord[]> = { review: [], pending: [], processing: [] };
+  extractedDocuments.forEach((document) => byGroup[groupOf(document)].push(document));
+  // What waits on the officer first, then what's ready to approve, then what's still being read.
+  const uploaded = [
+    ...[...byGroup.review].sort(byDocumentType),
+    ...[...byGroup.pending].sort(byDocumentType),
+    ...[...byGroup.processing].sort(byDocumentType),
+  ];
 
-  // Only one category is open at a time. Until the officer picks one, the first category that has rows is open, other
-  // than Optional (optional documents aren't what the officer came to do). Opening one closes the rest; opening
-  // the open one closes it. A choice whose category has since emptied falls back to that first one.
-  const present: GroupId[] = [
-    missing.length > 0 && 'missing',
-    requestedDocuments.length > 0 && 'requested',
-    optionalMissing.length > 0 && 'additional',
-    groups.review.length > 0 && 'review',
-    pendingDocuments.length > 0 && 'pending',
-    approvedDocuments.length > 0 && 'approved',
-    rejectedDocuments.length > 0 && 'rejected',
-  ].filter((id): id is GroupId => id !== false);
-  const defaultGroup = present.find((id) => id !== 'additional') ?? null;
-  const [chosenGroup, setChosenGroup] = useState<GroupId | null | undefined>(initialGroup);
-  const openGroup = chosenGroup === undefined || (chosenGroup !== null && !present.includes(chosenGroup)) ? defaultGroup : chosenGroup;
-  const toggle = (id: GroupId) => setChosenGroup(openGroup === id ? null : id);
+  const scanned = approvedDocuments.filter((document) => counts.has(document.id));
+  const withAnomalies = scanned.filter((document) => totalFindings(counts.get(document.id)) > 0).length;
+  const scanning = approvedDocuments.filter((document) => approvedStage(document) === 'scanning').length;
 
-  const rowsFor = (documents: DocumentRecord[]) =>
-    [...documents].sort(byDocumentType).map((document) => {
-      const group = documentGroup(document, reviewReasons?.has(document.id) ?? false);
-      return (
-        <ExtractedDocumentRow
-          key={document.id}
-          document={document}
-          group={group}
-          reason={group === 'review' ? (reviewReasons?.get(document.id) ?? CANCELLED_REASON) : undefined}
-          isSelected={selectedDocumentIds.has(document.id)}
-          onToggleSelected={selection.toggleDocumentSelected}
-          onOpenDocument={onOpenDocument}
-          rowActions={rowActions}
-          readOnly={readOnly}
-        />
-      );
-    });
+  const uploadedNote = [
+    byGroup.review.length > 0 && { text: `${byGroup.review.length} need review`, tone: 'review' },
+    byGroup.pending.length > 0 && { text: `${byGroup.pending.length} ready to approve`, tone: 'pending' },
+    byGroup.processing.length > 0 && { text: `${byGroup.processing.length} processing`, tone: 'processing' },
+  ].filter((chip): chip is { text: string; tone: string } => chip !== false);
+  const approvedNote = [
+    withAnomalies > 0 && { text: `${withAnomalies} with anomalies`, tone: 'anomalies' },
+    scanning > 0 && { text: `${scanning} scanning`, tone: 'processing' },
+  ].filter((chip): chip is { text: string; tone: string } => chip !== false);
 
-  return (
-    <section className="documents-card" data-testid="documents-card">
-      <div className="documents-card-header">
-        <div className="documents-card-title">
-          <span className="documents-card-icon"><Icon name="documents" size={20} /></span>
-          <span>Documents</span>
-          <span className="checklist-progress">
-            <strong>{requiredReceived}</strong> of {REQUIRED_DOCUMENT_TYPES.length} required
-            <span className="checklist-bar" aria-hidden="true">
-              <i style={{ width: `${(requiredReceived / REQUIRED_DOCUMENT_TYPES.length) * 100}%` }} />
-            </span>
-          </span>
-        </div>
+  const isEmpty = uploaded.length + approvedDocuments.length + rejectedDocuments.length === 0;
 
-        <div className="documents-card-actions">
-          {!readOnly && (
+  // The bulk actions act only on uploaded documents, so they sit in the Uploaded band.
+  const bulkToolbar = !readOnly && (
           <div className="bulk-icon-toolbar">
             {selectedDocumentIds.size > 0 && (
               <button type="button" className="bulk-icon-clear" title="Clear selection" onClick={clearDocumentSelection}>
@@ -210,9 +169,16 @@ export function ExtractedDocumentsCard({
               <span className="bulk-icon-count">{selectedMovableOrDeletableCount}</span>
             </button>
           </div>
-          )}
-          <LiveBadge connected={wsConnected} />
+  );
+
+  return (
+    <section className="documents-card" data-testid="documents-card">
+      <div className="documents-card-header">
+        <div className="documents-card-title">
+          <span className="documents-card-icon"><Icon name="documents" size={20} /></span>
+          <span>Documents</span>
         </div>
+        <LiveBadge connected={wsConnected} />
       </div>
 
       {[approveError, cancelActionError, retryActionError].map(
@@ -220,126 +186,83 @@ export function ExtractedDocumentsCard({
       )}
 
       <div className={`documents-table documents-table--selectable${selectedDocumentIds.size > 0 ? ' documents-table--has-selection' : ''}`}>
-        <div className="documents-table-header">
-          <label className="document-select-cell">
-            <input
-              type="checkbox"
-              aria-label="Select all extracted files"
-              disabled={readOnly}
-              checked={allExtractedSelected}
-              onChange={() =>
-                setSelectedDocumentIds(
-                  allExtractedSelected ? new Set() : new Set(extractedDocuments.map((document) => document.id)),
-                )
-              }
-            />
-          </label>
-          <span>Document Type</span>
-          <span>Filename</span>
-          <span>Status</span>
-        </div>
+        {isEmpty && <p className="documents-table-empty">No documents yet. Upload them above; the checklist at the top shows what the case needs.</p>}
 
-        {missing.length > 0 && (
+        {uploaded.length > 0 && (
           <>
-            <GroupToggle id="missing" label="Missing" count={missing.length} open={openGroup === 'missing'} onToggle={toggle} />
-            {openGroup === 'missing' && missing.map((requirement) => (
-              <div key={requirement.value} className="checklist-missing-row" data-testid="missing-document">
-                <span className="document-select-cell" aria-hidden="true">
-                  <span className="row-mark row-mark--missing" />
-                </span>
-                <span className="document-type-cell">{requirement.label}</span>
-                <span className="document-filename">
-                  <span className="document-filename-line checklist-hint">{requirement.hint}</span>
-                </span>
-                <span className="document-status-cell">
-                  <span className="status-pill">Missing</span>
-                </span>
+            <GroupToggle id="uploaded" label="Uploaded" count={uploaded.length} chips={uploadedNote} open={open.uploaded} onToggle={toggle} actions={open.uploaded ? bulkToolbar : undefined} />
+            {open.uploaded && (
+              <div className="documents-table-header documents-table-header--uploaded">
+                <label className="document-select-cell">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all uploaded files"
+                    disabled={readOnly}
+                    checked={allExtractedSelected}
+                    onChange={() =>
+                      setSelectedDocumentIds(
+                        allExtractedSelected ? new Set() : new Set(extractedDocuments.map((document) => document.id)),
+                      )
+                    }
+                  />
+                </label>
+                <span>Document Type</span>
+                <span>Filename</span>
+                <span>Status</span>
+                <span>Remarks</span>
               </div>
+            )}
+            {open.uploaded && uploaded.map((document) => {
+              const group = groupOf(document);
+              return (
+                <UploadedRow
+                  key={document.id}
+                  document={document}
+                  group={group}
+                  reason={group === 'review' ? (reviewReasons?.get(document.id) ?? CANCELLED_REASON) : undefined}
+                  isSelected={selectedDocumentIds.has(document.id)}
+                  onToggleSelected={selection.toggleDocumentSelected}
+                  onOpenDocument={onOpenDocument}
+                  rowActions={rowActions}
+                  readOnly={readOnly}
+                />
+              );
+            })}
+          </>
+        )}
+
+        {approvedDocuments.length > 0 && (
+          <>
+            <GroupToggle id="approved" label="Approved" count={approvedDocuments.length} chips={approvedNote} open={open.approved} onToggle={toggle} />
+            {open.approved && (
+              <div className="documents-table-header documents-table-header--approved">
+                <span className="document-select-cell" aria-hidden="true" />
+                <span>Document Type</span>
+                <span>Filename</span>
+                <span>Status</span>
+                <span>Remarks</span>
+              </div>
+            )}
+            {open.approved && [...approvedDocuments].sort(byDocumentType).map((document) => (
+              <DecidedRow key={document.id} document={document} kind="approved" counts={counts.get(document.id)} onOpenDocument={onOpenDocument} />
             ))}
           </>
         )}
 
-        {requestedDocuments.length > 0 && (
-          <div className="checklist-requested">
-            <GroupToggle id="requested" label="Requested" count={requestedDocuments.length} note="by the case analysis" open={openGroup === 'requested'} onToggle={toggle} />
-            {openGroup === 'requested' && requestedDocuments.map((item) => (
-              <div key={requestKey(item)} className="checklist-missing-row checklist-requested-row" data-testid="requested-document">
-                <span className="document-select-cell" aria-hidden="true">
-                  <span className="row-mark row-mark--missing" />
-                </span>
-                {/* The document's name, and the request as the Additional tab heads it, linking to it there. */}
-                <span className="document-type-cell">{requestedDocumentName(item.title)}</span>
-                <span className="document-filename">
-                  {onOpenRequest ? (
-                    <button type="button" className="checklist-request-link" onClick={() => onOpenRequest(requestKey(item))}>
-                      <span className="checklist-request-link-text">{item.title}</span>
-                      <span className="checklist-request-link-arrow" aria-hidden="true">→</span>
-                    </button>
-                  ) : (
-                    <span className="document-filename-line checklist-hint">{item.title}</span>
-                  )}
-                </span>
-                <span className="document-status-cell">
-                  <span className="status-pill status-pill--requested">Requested</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {optionalMissing.length > 0 && (
-          <div className="checklist-additional">
-            <GroupToggle id="additional" label="Optional" count={optionalMissing.length} open={openGroup === 'additional'} onToggle={toggle} />
-            {openGroup === 'additional' && optionalMissing.map((label) => (
-              <div key={label} className="checklist-missing-row checklist-optional-row" data-testid="optional-document">
-                <span className="document-select-cell" aria-hidden="true">
-                  <span className="row-mark row-mark--missing" />
-                </span>
-                <span className="document-type-cell">{label}</span>
-                <span className="document-filename">
-                  <span className="document-filename-line checklist-hint">Not needed unless the case calls for it</span>
-                </span>
-                <span className="document-status-cell">
-                  <span className="status-pill">Optional</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {groups.review.length > 0 && (
+        {rejectedDocuments.length > 0 && (
           <>
-            <GroupToggle id="review" label="Needs Review" count={groups.review.length} open={openGroup === 'review'} onToggle={toggle} />
-            {openGroup === 'review' && rowsFor(groups.review)}
+            <GroupToggle id="rejected" label="Rejected" count={rejectedDocuments.length} note="not used by the case analysis" open={open.rejected} onToggle={toggle} />
+            {open.rejected && [...rejectedDocuments].sort(byDocumentType).map((document) => (
+              <DecidedRow key={document.id} document={document} kind="rejected" onOpenDocument={onOpenDocument} />
+            ))}
           </>
         )}
-
-        {pendingDocuments.length > 0 && (
-          <>
-            <GroupToggle id="pending" label="Pending Approval" count={pendingDocuments.length} open={openGroup === 'pending'} onToggle={toggle} />
-            {openGroup === 'pending' && rowsFor(pendingDocuments)}
-          </>
-        )}
-
-        {(['approved', 'rejected'] as const).map((kind) => {
-          const decided = kind === 'approved' ? approvedDocuments : rejectedDocuments;
-          if (decided.length === 0) return null;
-          const isOpen = openGroup === kind;
-          return (
-            <div key={kind} className="checklist-decided">
-              <GroupToggle id={kind} label={kind === 'approved' ? 'Approved' : 'Rejected'} count={decided.length} open={isOpen} onToggle={toggle} />
-              {isOpen && [...decided].sort(byDocumentType).map((document) => (
-                <DecidedRow key={document.id} document={document} kind={kind} onOpenDocument={onOpenDocument} />
-              ))}
-            </div>
-          );
-        })}
       </div>
     </section>
   );
 }
 
-// A category's documents A to Z by the type as listed (so "NRIC" comes before "NRIC (Proof of Address)"), then by
+// A group's documents A to Z by the type as listed (so "NRIC" comes before "NRIC (Proof of Address)"), then by
 // filename. One not yet classified has no type to sort by, and goes last.
 function byDocumentType(a: DocumentRecord, b: DocumentRecord): number {
   if (!a.document_type !== !b.document_type) return a.document_type ? -1 : 1;
@@ -349,15 +272,28 @@ function byDocumentType(a: DocumentRecord, b: DocumentRecord): number {
   return type || a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: 'base' });
 }
 
+function totalFindings(counts: DetectionCounts | undefined): number {
+  return counts ? counts.high + counts.medium + counts.low + counts.info : 0;
+}
+
+function approvedStage(document: DocumentRecord) {
+  return documentDetectionStage(
+    document.status,
+    document.has_detection_report ?? false,
+    document.document_type,
+    document.has_detection_error ?? false,
+  );
+}
+
 function statusPillClass(status: DocumentRecord['status'], isStuck: boolean, isTerminal: boolean): string {
   if (status === 'analyzed') return 'status-pill--ok';
   if (status === 'failed' || status === 'rejected') return 'status-pill--fail';
-  if (status === 'cancelled') return '';
+  if (status === 'cancelled') return 'status-pill--warn';
   if (isStuck) return 'status-pill--warn';
   return isTerminal ? '' : 'status-pill--proc';
 }
 
-function ExtractedDocumentRow({
+function UploadedRow({
   document,
   group,
   reason,
@@ -369,7 +305,7 @@ function ExtractedDocumentRow({
 }: {
   document: DocumentRecord;
   group: DocumentGroup;
-  // Set in Needs Review: why the document waits on the officer.
+  // Set when the document waits on the officer: why.
   reason?: string;
   isSelected: boolean;
   onToggleSelected: (documentId: string) => void;
@@ -383,10 +319,20 @@ function ExtractedDocumentRow({
   const isStuck = isDocumentStuckProcessing(document);
   const isCancellingRow = cancellingDocumentId === document.id;
   const isRetryingRow = retryingDocumentId === document.id;
+  // An extracted document reads by what it waits on: the officer's review (why, under the pill) or their approval.
+  const needsReview = status === 'analyzed' && group === 'review';
+  const statusLabel = needsReview
+    ? 'Needs review'
+    : status === 'analyzed' && group === 'pending' ? 'Ready to approve' : formatDocumentStatus(status);
+  const pillClass = needsReview ? 'status-pill--review' : statusPillClass(status, isStuck, isTerminal);
+  // Why it needs the officer, and for a failed or stuck run what to do about it.
+  const issue = reason
+    ?? (status === 'failed' ? "Couldn't be processed. Retry or reject it." : null)
+    ?? (isStuck ? 'This is taking too long. Please retry it.' : null);
 
   return (
     <div
-      className={`documents-table-row documents-table-row--clickable${reason ? ' documents-table-row--review' : ''}`}
+      className={`documents-table-row documents-table-row--uploaded documents-table-row--clickable${reason ? ' documents-table-row--review' : ''}`}
       data-testid="document-row"
       role="button"
       tabIndex={0}
@@ -431,12 +377,11 @@ function ExtractedDocumentRow({
 
       <span className="document-filename">
         <span className="document-filename-line">{document.filename}</span>
-        {reason && <span className="document-review-reason">{reason}</span>}
       </span>
 
       <span className="document-status-cell">
-        <span className={`status-pill ${statusPillClass(status, isStuck, isTerminal)}`}>
-          {formatDocumentStatus(status)}
+        <span className={`status-pill ${pillClass}`}>
+          {statusLabel}
           {!isTerminal && '…'}
         </span>
 
@@ -483,40 +428,74 @@ function ExtractedDocumentRow({
         )}
       </span>
 
+      <span className="document-issue-cell">
+        {issue ? (
+          <span className="document-issue" title={issue}>{issue}</span>
+        ) : (
+          <span className="document-remark">
+            {group === 'pending'
+              ? 'Document ready for approval'
+              : status === 'extracting' ? 'Extracting…' : status === 'processing' ? 'Classifying…' : 'Waiting to start…'}
+          </span>
+        )}
+      </span>
     </div>
   );
 }
 
-// The status pill for a decided document. An approved document is on its way through fraud detection, so it reads
-// "Scanning" (a grey pill) from approval until the scan finishes; it never rests on a bare "Approved" that hides that
-// scanning is still to come. Once scanned it reads "Clean" when detection found nothing and "Detected" when it found
-// at least one issue ("Scanned" while the report loads). A document with no type skips detection and stays "Approved".
-function ApprovedStatusPill({ document, kind }: { document: DocumentRecord; kind: 'approved' | 'rejected' }) {
-  const outcome = useDetectionOutcome(document.id, kind === 'approved' ? document.status : '');
-  if (kind === 'rejected') {
-    return <span className="status-pill status-pill--fail">Rejected</span>;
+// Where an approved document is in detection, and a rejected one's status. "Scanning" from approval until the scan
+// ends, so it never rests on a bare "Approved" that hides the scan still to come; then Clean or Flagged.
+function DecidedStatus({
+  document,
+  kind,
+  counts,
+}: {
+  document: DocumentRecord;
+  kind: 'approved' | 'rejected';
+  counts?: DetectionCounts;
+}) {
+  if (kind === 'rejected') return <span className="status-pill status-pill--fail">Rejected</span>;
+  const stage = approvedStage(document);
+  if (stage === 'detected') {
+    if (!counts) return <span className="status-pill status-pill--ok">Scanned</span>;
+    return totalFindings(counts) > 0
+      ? <span className="status-pill status-pill--warn">Flagged</span>
+      : <span className="status-pill status-pill--ok">Clean</span>;
   }
-  if (documentDetectionStage(document.status, false, document.document_type) === 'detected') {
-    if (outcome === 'clean') return <span className="status-pill status-pill--ok">Clean</span>;
-    if (outcome === 'findings') return <span className="status-pill status-pill--warn">Detected</span>;
-    return <span className="status-pill">Scanned</span>;
-  }
-  return <span className="status-pill">{formatDocumentStatusLabel(document.status, false, document.document_type)}</span>;
+  if (stage === 'failed') return <span className="status-pill status-pill--fail">Scan failed or stopped</span>;
+  if (stage === 'skipped') return <span className="status-pill">Not scanned</span>;
+  return <span className="status-pill status-pill--proc">Scanning…</span>;
 }
 
-// An approved or rejected document, listed read-only under its folded group: its type, filename and where it stands.
+// What the scan means for the officer: what to do on a failed scan, and how much a flagged one found.
+function ApprovedRemark({ document, counts }: { document: DocumentRecord; counts?: DetectionCounts }) {
+  const stage = approvedStage(document);
+  if (stage === 'failed') return <span className="document-issue">The scan didn't finish. Open it to retry.</span>;
+  if (stage === 'skipped') return <span className="document-remark">Not scanned for tampering.</span>;
+  if (stage !== 'detected') return <span className="document-remark">Anomaly detection in progress</span>;
+  const found = totalFindings(counts);
+  if (!counts) return <span className="document-remark">Scan finished.</span>;
+  return found > 0
+    ? <span className="document-remark">{found} finding{found === 1 ? '' : 's'} to review.</span>
+    // What was checked, not a promise the document is genuine.
+    : <span className="document-remark">Checks completed, no anomalies flagged</span>;
+}
+
+// An approved or rejected document, read-only: its type, filename, where it stands and, once scanned, what was found.
 function DecidedRow({
   document,
   kind,
+  counts,
   onOpenDocument,
 }: {
   document: DocumentRecord;
   kind: 'approved' | 'rejected';
+  counts?: DetectionCounts;
   onOpenDocument: (documentId: string) => void;
 }) {
   return (
     <div
-      className="documents-table-row documents-table-row--clickable"
+      className="documents-table-row documents-table-row--approved documents-table-row--clickable"
       data-testid="document-row"
       role="button"
       tabIndex={0}
@@ -541,44 +520,58 @@ function DecidedRow({
         <span className="document-filename-line">{document.filename}</span>
       </span>
       <span className="document-status-cell">
-        <ApprovedStatusPill document={document} kind={kind} />
+        <DecidedStatus document={document} kind={kind} counts={counts} />
+      </span>
+      <span className="document-issue-cell">
+        {kind === 'approved'
+          ? <ApprovedRemark document={document} counts={counts} />
+          : <span className="document-remark">Not used in the case analysis.</span>}
       </span>
     </div>
   );
 }
 
-export type GroupId = DocumentGroup | 'missing' | 'requested' | 'additional' | 'approved' | 'rejected';
-
-// A group's label as a button that folds and unfolds it; the chevron sits in the first column, over the marks. The group's
-// colour (documents-table.css, by id) is how a category reads at a glance.
+// A group's label as a button that folds and unfolds it; the chevron sits in the first column, over the marks. The
+// group's colour (documents-table.css, by id) is how it reads at a glance; its chips say what is inside while folded.
 function GroupToggle({
   id,
   label,
   count,
+  chips = [],
   note,
   open,
   onToggle,
+  actions,
 }: {
   id: GroupId;
   label: string;
   count: number;
+  chips?: { text: string; tone: string }[];
   note?: string;
   open: boolean;
   onToggle: (id: GroupId) => void;
+  // Controls that act on this group's documents, at the band's right end (outside the toggle button).
+  actions?: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      className={`documents-table-group documents-table-group--toggle documents-table-group--${id}`}
-      data-testid="document-group"
-      aria-expanded={open}
-      onClick={() => onToggle(id)}
-    >
-      <svg className="group-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M9 6l6 6-6 6" />
-      </svg>
-      {label} <span className="num">{count}</span>
-      {note && <span className="muted-note">{note}</span>}
-    </button>
+    <div className={`documents-table-band documents-table-group--${id}`}>
+      <button
+        type="button"
+        className="documents-table-group documents-table-group--toggle"
+        data-testid="document-group"
+        aria-expanded={open}
+        onClick={() => onToggle(id)}
+      >
+        <svg className="group-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+        {label} <span className="num">{count}</span>
+        {chips.map((chip) => (
+          <span key={chip.text} className={`group-chip group-chip--${chip.tone}`}>{chip.text}</span>
+        ))}
+        {note && <span className="muted-note">{note}</span>}
+      </button>
+      {actions && <div className="documents-table-band-actions">{actions}</div>}
+    </div>
   );
 }

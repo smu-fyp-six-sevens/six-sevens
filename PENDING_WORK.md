@@ -1,6 +1,6 @@
 # Pending work
 
-Open product and platform work only: delete an item once done. Updated 2026-11-14. Elsewhere: bugs, stability, performance and security in `CODEBASE_AUDIT.md`; tests in `TEST_SUITE_AUDIT.md` and `PENDING_TESTS.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §8; cloud to-dos in `CLOUD_ARCHITECTURE_PLAN.md` §9–10 and Kubernetes in §13–24.
+Open product and platform work only: delete an item once done. Updated 2026-11-16. Elsewhere: bugs, stability, performance and security in `CODEBASE_AUDIT.md`; tests in `TEST_SUITE_AUDIT.md` and `PENDING_TESTS.md`; detection bugs in `FRAUD_DETECTION_MAP.md` §8; cloud to-dos in `CLOUD_ARCHITECTURE_PLAN.md` §9–10 and Kubernetes in §13–24.
 
 ## Handover documentation
 
@@ -18,7 +18,7 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 ## Claude
 
 - **Billed cost per role.** *Issue:* per-call cost is estimated from list prices, not the bill. *Do:* one Claude workspace and key per worker role; the Cost API then reports billed USD per workspace.
-- **On-demand live check.** *Issue:* staging stubs Claude, so an API-side break (like the `temperature` 400) isn't caught. *Do:* one tiny call per model, run by hand after an SDK or model change.
+- **On-demand live check.** *Issue:* CI, the kind run and the load tests stub Claude, so an API-side break (like the `temperature` 400) isn't caught. *Do:* one tiny call per model, run by hand after an SDK or model change.
 
 ## Report wording
 
@@ -33,7 +33,6 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 ## Case analysis (design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`)
 
 - **No follow-up round** in plan-then-judge: add one if evals show low recall.
-- **Run trace clean-up:** it lists dropped hypotheses, which the design says are never shown.
 - **Guardrails still open:** dismissing a cross-document finding, the three sponsor questions in the plan.
 - **Evidence requests need rethinking.** *Issue:* a document can only lower the score, so "ask for everything" always looks best. *Ideas:* the smallest set that reaches a target level (code); score documents that could go either way; an agent that checks existing documents first. The score stays deterministic.
 
@@ -55,7 +54,7 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 - **Remove the unused publishable Supabase key:** drop `SUPABASE_PUBLISHABLE_KEY` from every role's secrets in `deploy/terraform/roles.json`, run `python deploy/helm/gen_values.py`, `terraform apply`, delete the secret, then disable the legacy keys in Supabase.
 - **Make Snyk blocking again** when its quota resets: delete the two `continue-on-error: true` lines in `.github/workflows/ci-cd.yml`, and "temporarily non-blocking" from CLAUDE.md, README and `HOW_IT_WORKS.md` §9.
-- **Frontend fully non-root:** `nginx-unprivileged` on 8080 (change `nginx.conf`, `run.tf`'s `container_port` and compose together; apply first).
+- **Frontend fully non-root:** `nginx-unprivileged` on 8080 (change `nginx.conf`, compose and the chart's `templates/frontend.yaml` port, with `runAsNonRoot`, together; `run.tf`'s `container_port` too while Cloud Run exists).
 - **Dead letters** sit in `domain-events-dead-letter-pull` until someone reads them.
 - **Socket ticket replay** within 10 s on another instance is accepted; not worth fixing.
 

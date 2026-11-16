@@ -1,6 +1,6 @@
 # Fraud detection: implementation map
 
-Where detection logic lives and how it's wired. Updated 2026-11-13. Behaviour in plain words: `HOW_IT_WORKS.md`; case-analysis design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
+Where detection logic lives and how it's wired. Updated 2026-11-16. Behaviour in plain words: `HOW_IT_WORKS.md`; case-analysis design: `CROSS_DOCUMENT_AND_RISK_PLAN.md`.
 
 ## 1. Summary
 
@@ -9,7 +9,7 @@ Detection runs in the background after an officer approves a document (approval 
 1. **Lead briefs:** an LLM writes each specialist a one-sentence brief from the document's type.
 2. **Three specialists in parallel**, always all three. Each is a small LLM loop: picks its own tools, reads the results, gives each finding a severity and reason or dismisses it. Tools do the checks; the LLM never computes numbers.
 3. **Lead review:** may ask one other specialist to recheck one uncertain finding, once per run.
-4. **Merge (code):** one report with a verdict (`flagged`, `inconclusive`, `clean`), stored in `detection_results` and the trace.
+4. **Merge (code):** one report with a verdict (`flagged`, `inconclusive`, `clean`), stored in `detection_results` (the trace records only the verdict).
 5. **Single checks:** an officer can rerun one check after a full run.
 
 **Findings:** every finding, kept and dismissed, is fingerprinted (`finding_keys.py`) and written to `findings` (`findings_repository.py`) before the document becomes `detected`; a failed write is noted on the trace (`findings_error`) and doesn't fail the run. **Cancel and rerun:** a run can be cancelled; a rerun that doesn't finish leaves the earlier report standing.
@@ -87,7 +87,7 @@ API: `POST /cases/{id}/analysis/run` (409 unless ready or if already running), `
 
 ### How a run goes
 
-1. The worker claims the document as `detecting` (compare-and-swap) and holds one of `DETECTION_CONCURRENCY` (2) slots.
+1. The worker claims the document as `detecting` (compare-and-swap) and holds one of `DETECTION_CONCURRENCY` (2) slots. A sweeper recovery of a stuck `detecting` document doesn't claim yet (`CODEBASE_AUDIT.md` 2.1).
 2. Graph (`recursion_limit=40`):
 
 ```
@@ -108,7 +108,7 @@ load_context ─► lead_plan ─(×3)─► specialist ─► lead_review ─�
 ## 5. API (`backend/app/routers/detection.py`)
 
 - `GET /documents/{id}/detection/<check>`: single checks, 409 until a report exists. Numerical and external use one Haiku call to bind inputs.
-- `GET …/detection/report` (200 report; 502 if the last run failed with none; 404 if never run), `POST …/detection/cancel`, `POST …/detection/retry` (409 while running or queued), `GET …/detection/case-match`, `GET /cases/{id}/detection/reports`.
+- `GET …/detection/report` (200 report; 502 if the last run failed with none; 404 if never run), `POST …/detection/cancel`, `POST …/detection/retry` (409 while running or queued), `GET …/detection/case-match`.
 - No "run detection" route: approval starts it.
 
 ## 6. Frontend
@@ -126,8 +126,8 @@ Found by reading the code; none reproduced. Delete a row once fixed.
 
 | # | Sev | In plain words | Where |
 |---|---|---|---|
-| 1 | Low | If the lead's call fails, specialists get a generic brief and the failure is only logged, not traced | `graph.py` `_ask_lead`, `_normalise_plan` |
-| 2 | Medium (local only) | A run lost mid-scan can't be cancelled or retried; in the cloud the sweeper recovers it after 15 min, locally run `python -m app.sweeper --once --case <id>` | `routers/detection.py`, `DetectionPanel.tsx` |
+| 1 | Low | If the lead's call fails, specialists get a generic brief; the trace shows which briefs fell back (`fallback_briefs`) but not why (the error is only logged) | `graph.py` `_ask_lead`, `_normalise_plan` |
+| 2 | Medium (local only) | A run lost mid-scan can't be cancelled or retried; in the cloud the sweeper recovers it after 10 min, locally run `python -m app.sweeper --once --case <id>` | `routers/detection.py`, `DetectionPanel.tsx` |
 | 3 | Medium–High | A finding the specialist never assessed counts as `medium` and can flag the document and raise case risk | `specialists.py` `_collect_node` |
 | 4 | Medium | `metadata_tool` blocks the event loop (runs a sync check in an async function) | `tools.py` `metadata_tool` |
 | 5 | Medium | If a specialist calls the same tool twice, the second call's findings silently overwrite the first's (ids repeat) | `tools.py` `_with_ids`; `specialists.py` `_collect_node` |

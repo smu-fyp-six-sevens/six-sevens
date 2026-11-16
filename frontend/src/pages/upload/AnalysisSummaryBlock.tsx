@@ -3,8 +3,7 @@ import type { AdverseMediaCheck, CaseAnalysis } from '../../services/uploadServi
 import { analysisFindingAnchor, checkedAndFine } from './analysisSummary';
 
 // A due-diligence aid, not a score: a web search for recent sanctions, regulatory action or negative news about
-// the company. Every run that has the check says what happened; a skipped or failed one says why, quietly. Only a
-// run from before the check existed shows nothing.
+// the company. A run says what happened; a skipped or failed one says why, quietly; one that didn't run it shows nothing.
 // Which company was searched (the name its documents give, not necessarily the case's title), when, and whether this
 // run used the case's cached result rather than searching again.
 function CheckedWhen({ check }: { check: AdverseMediaCheck }) {

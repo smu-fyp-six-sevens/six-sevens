@@ -146,7 +146,7 @@ for name, detail, cx, events in WORKERS:
 
 dlq = p1.box(S("domain-events-dead-letter", "an event lands here after<br>5 failed deliveries"), 1420, 480, 210, 70, "bus")
 regs = p1.box(S("Public registries", "data.gov.sg · URA · OneMap"), 1420, 590, 210, 70, "external")
-claude = p1.box(S("Claude on Vertex AI", "Sonnet and Haiku, called by every worker's agents with its own Google identity (no API key)"), 600, 710, 720, 50, "gcp")
+claude = p1.box(S("Claude (Anthropic API)", "Sonnet and Haiku, called by every worker's agents; the API key is mounted from Secret Manager"), 600, 710, 720, 50, "external")
 keda = p1.box(S("KEDA", "scales each worker on<br>its undelivered messages"), 1420, 700, 210, 60, "gcp")
 supa = p1.box(S("Supabase", "Postgres: cases, documents, fields,<br>flags, runs, risk, audit_events<br><br>Storage: uploaded files (private)<br><br>Realtime: row changes"), 40, 330, 340, 320, "data")
 
@@ -227,7 +227,7 @@ for i, (label, kind) in enumerate([
     cid = p2.box(label, 260 + i * 177, ROW3, 165, 70, kind)
     sch2 = sch2 or cid
 
-vtx2 = p2.box(S("Vertex AI (global)", "Claude Sonnet and Haiku<br>no API key: Workload Identity"), 1640, 245, 180, 70, "gcp")
+vtx2 = p2.box(S("Anthropic API", "Claude Sonnet and Haiku<br>key from Secret Manager"), 1640, 245, 180, 70, "external")
 regs2 = p2.box(S("Gov registries", "data.gov.sg · URA · OneMap"), 1640, 360, 180, 60, "external")
 supa2 = p2.box(S("Supabase", "Postgres · Storage · Realtime"), 1640, 470, 180, 60, "data")
 
@@ -250,7 +250,7 @@ p2.edge(wsub, vtx2, "Claude calls", DASHED, exit=(1, fx(490, WSUB[1], WSUB[3])),
 p2.box(
     "<b>Security</b><br>• Only the load balancer is public: Cloud Armor in front, Kong accepts only Google's front ends, every service is internal (ClusterIP).<br>"
     "• Default-deny network policies per namespace; pods run non-root with a read-only root filesystem and CPU and memory limits.<br>"
-    "• Workload Identity: a Google account per role and no keys, including for Claude on Vertex AI; GitHub deploys through Workload Identity Federation.<br>"
+    "• Workload Identity: a Google account per role and no Google keys; GitHub deploys through Workload Identity Federation. The one outside key, Anthropic's, sits in Secret Manager.<br>"
     "• Binary Authorization enforces: only images CI signed (cosign, SBOM attached) can run.",
     260, 890, 1240, 120, "note",
 )
@@ -302,7 +302,7 @@ p4 = Page("4 Stuck work recovery", 1680, 920)
 p4.box("Recovering stuck work (no database changes; the audit trail is the memory)", 40, 20, 1200, 40, "title")
 s_sched = p4.box(S("Cloud Scheduler", "every 5 minutes"), 40, 225, 170, 80, "external")
 s_topic = p4.box(S("domain-events", "type = sweep.requested"), 270, 215, 170, 100, "bus")
-s_sweep = p4.box(S("Sweeper (in audit-metrics)", "finds work past its limit:<br>queued/uploaded &gt; 5 min (event lost)<br>processing/extracting/detecting &gt; 15 min<br>case analysis running &gt; 15 min"), 540, 185, 280, 160, "service")
+s_sweep = p4.box(S("Sweeper (in audit-metrics)", "finds work past its limit:<br>queued/uploaded &gt; 5 min (event lost)<br>processing/extracting/detecting &gt; 10 min<br>case analysis running &gt; 15 min"), 540, 185, 280, 160, "service")
 s_db = p4.box(S("Supabase", "documents, runs<br>audit_events (earlier attempts)"), 580, 430, 200, 90, "data")
 T2_Y, T2_H = 100, 330
 s_topic2 = p4.box(S("domain-events", "the same topic, not a new one<br><br>type = recovery.requested<br><br>subscriptions filter on<br>attribute owner = the worker<br><br>attempt n of 3,<br>a full limit apart"), 920, T2_Y, 180, T2_H, "bus")

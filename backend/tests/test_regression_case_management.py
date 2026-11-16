@@ -141,10 +141,9 @@ def test_a_deleted_case_is_removed_and_its_link_then_answers_not_found():
     with (
         patch("app.routers._dependencies.case_service") as lookup,
         patch("app.routers.cases.case_service") as service,
-        patch("app.routers.cases.document_repository") as documents,
     ):
         lookup.get_case.return_value = _case()
-        documents.list_documents.return_value = [_document(DocumentStatus.ANALYZED)]
+        service.delete_case.return_value = [_document(DocumentStatus.ANALYZED)]
         deleted = client.delete("/cases/case-1")
         service.get_case_summary.return_value = None
         reopened = client.get("/cases/case-1")

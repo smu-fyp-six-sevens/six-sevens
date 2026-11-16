@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import HighlightedDocument from './HighlightedDocument';
+import { Icon } from './Icon';
 import { readingOrder } from './findingHighlights';
 import type { FindingHighlight } from './findingHighlights';
 import type { PreviewKind } from '../services/uploadService';
@@ -173,7 +174,7 @@ export default function XrayView({
       <div className="xray-bar">
         {highlights.length > 0 && (
           <button type="button" className="xray-step" onClick={() => step(-1)} aria-label="Previous finding" title="Previous (←)">
-            ‹
+            <Icon name="chevronLeft" size={16} />
           </button>
         )}
         <span className="xray-bar-status" aria-live="polite">
@@ -189,7 +190,7 @@ export default function XrayView({
         </span>
         {highlights.length > 0 && (
           <button type="button" className="xray-step" onClick={() => step(1)} aria-label="Next finding" title="Next (→)">
-            ›
+            <Icon name="chevronRight" size={16} />
           </button>
         )}
         {/* Off, the page shows as printed with the flagged areas outlined, to read the parts around them. */}

@@ -47,6 +47,7 @@ from .models import (
     IN_FLIGHT_STATUSES,
     IdDocumentCoverage,
     ProofOfAddressCoverage,
+    skips_detection,
 )
 from .monitoring import is_stuck
 from .read_pool import submit as _submit
@@ -98,15 +99,39 @@ def update_case(case_id: str, company_name: str) -> CaseRecord | None:
     return case_repository.update_case(case_id, company_name)
 
 
-def delete_case(case_id: str) -> None:
+class CaseNotDeletable(Exception):
+    """Something is still running on the case. The message is written for the officer."""
+
+
+def _ensure_deletable(case_id: str, documents: list[DocumentRecord]) -> None:
+    """A delete mid-run would leave the run spending Claude calls on rows that no longer exist."""
+    if any(document.status in IN_FLIGHT_STATUSES for document in documents):
+        raise CaseNotDeletable(
+            "Case has a document that's still being processed; cancel it first, or wait for it to finish, "
+            "before deleting the case."
+        )
+    if any(document.status == DocumentStatus.DETECTING for document in documents):
+        raise CaseNotDeletable("A document is still being scanned; cancel it or wait for it to finish first.")
+    waiting = [d.id for d in documents if d.status == DocumentStatus.APPROVED and not skips_detection(d)]
+    if waiting:
+        reports, failed = detection_results.get_states(waiting, slim=True)
+        if set(waiting) - set(reports) - failed:
+            raise CaseNotDeletable("A document is waiting to be scanned; cancel it or wait for it to finish first.")
+    latest = analysis_repository.latest_run_state(case_id)
+    if latest is not None and analysis_state.is_live(*latest):
+        raise CaseNotDeletable("The case analysis is still running; wait for it to finish first.")
+
+
+def delete_case(case_id: str) -> list[DocumentRecord]:
     """
-    Removes a case and every document that belongs to it. Documents go
-    first (document_repository.remove_documents), so their stored files are
-    removed; the database cascades the rest.
+    Removes a case and every document that belongs to it, and returns those documents. Refused (CaseNotDeletable)
+    while anything still runs on it. Documents go first, for their stored files; the database cascades the rest.
     """
     documents = document_repository.list_documents(case_id=case_id, include_fields=False)
-    document_repository.remove_documents(documents)
+    _ensure_deletable(case_id, documents)
+    document_repository.remove_documents(documents, case_going=True)
     case_repository.delete_case(case_id)
+    return documents
 
 
 # (reports by document_id, ids whose last detection run failed) — see

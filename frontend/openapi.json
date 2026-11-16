@@ -6654,38 +6654,6 @@
         "title": "MetricsSummary",
         "type": "object"
       },
-      "MonitoringIssues": {
-        "properties": {
-          "failed": {
-            "items": {
-              "$ref": "#/components/schemas/DocumentRecord"
-            },
-            "title": "Failed",
-            "type": "array"
-          },
-          "recent_errors": {
-            "items": {
-              "$ref": "#/components/schemas/ProcessingErrorEntry"
-            },
-            "title": "Recent Errors",
-            "type": "array"
-          },
-          "stuck": {
-            "items": {
-              "$ref": "#/components/schemas/StuckDocument"
-            },
-            "title": "Stuck",
-            "type": "array"
-          }
-        },
-        "required": [
-          "stuck",
-          "failed",
-          "recent_errors"
-        ],
-        "title": "MonitoringIssues",
-        "type": "object"
-      },
       "MoveDocumentRequest": {
         "description": "Reassigns a document to a different case \u2014 see routers/documents.py's move_document.",
         "properties": {
@@ -7224,30 +7192,6 @@
           "text"
         ],
         "title": "Place",
-        "type": "object"
-      },
-      "ProcessingErrorEntry": {
-        "properties": {
-          "document_id": {
-            "title": "Document Id",
-            "type": "string"
-          },
-          "error": {
-            "title": "Error",
-            "type": "string"
-          },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "document_id",
-          "error",
-          "occurred_at"
-        ],
-        "title": "ProcessingErrorEntry",
         "type": "object"
       },
       "PromptSection": {
@@ -7866,41 +7810,6 @@
           "anomalies"
         ],
         "title": "SpellingAnomalyResult",
-        "type": "object"
-      },
-      "StuckDocument": {
-        "properties": {
-          "case_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Case Id"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "seconds_in_current_status": {
-            "description": "How long the document has sat in its current status",
-            "title": "Seconds In Current Status",
-            "type": "number"
-          },
-          "status": {
-            "$ref": "#/components/schemas/DocumentStatus"
-          }
-        },
-        "required": [
-          "id",
-          "case_id",
-          "status",
-          "seconds_in_current_status"
-        ],
-        "title": "StuckDocument",
         "type": "object"
       },
       "SummaryReason": {
@@ -9391,7 +9300,7 @@
     },
     "/cases/{case_id}": {
       "delete": {
-        "description": "Removes a case from the active queue, along with every document that\nbelongs to it. A following GET /cases or GET /cases/{id} no longer\nreturns it.\n\nOnly allowed once every one of the case's documents has reached a\nterminal state (ANALYZED, FAILED, REJECTED, CANCELLED, APPROVED) \u2014 same\nreasoning as delete_document: deleting out from under a document a\nworker is still actively writing to (status, extracted fields) would\nrace the pipeline and orphan a document row mid-flight. Cancel the\nin-flight document(s) first, or wait for them to finish.",
+        "description": "Removes a case and every document that belongs to it. Refused (409) while anything still runs on it: a document\nbeing processed, scanned or waiting to be scanned, or the case analysis (case_service.delete_case).",
         "operationId": "delete_case_cases__case_id__delete",
         "parameters": [
           {
@@ -11025,110 +10934,6 @@
         "summary": "Bulk Move Documents",
         "tags": [
           "documents"
-        ]
-      }
-    },
-    "/documents/monitoring/issues": {
-      "get": {
-        "description": "Single place to check what needs attention: stuck documents, documents\nthat exhausted retries (status=failed), and pipeline-level errors that\nhave no document row to attach to (e.g. a dequeued document whose row\nvanished) \u2014 instead of having to know to filter for each separately.",
-        "operationId": "list_monitoring_issues_documents_monitoring_issues_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MonitoringIssues"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Monitoring Issues",
-        "tags": [
-          "monitoring"
-        ]
-      }
-    },
-    "/documents/monitoring/stuck": {
-      "get": {
-        "description": "AC4: surfaces documents stuck in uploaded/queued/processing past the threshold.",
-        "operationId": "list_stuck_documents_documents_monitoring_stuck_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/StuckDocument"
-                  },
-                  "title": "Response List Stuck Documents Documents Monitoring Stuck Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Stuck Documents",
-        "tags": [
-          "monitoring"
         ]
       }
     },

@@ -15,7 +15,7 @@ const GROUP_CASE = 'Case analysis';
 
 type LabelSide = 'above' | 'below';
 type EdgeKind = 'handoff' | 'delegate' | 'approval' | 'sendback';
-type EdgeShape = 'x' | 'y' | 'bulge-left' | 'bulge-right' | 'loop-left';
+type EdgeShape = 'x' | 'y' | 'bulge-left' | 'bulge-right' | 'loop-right';
 
 interface GraphNode {
   agent: AgentRecord;
@@ -84,11 +84,12 @@ function buildGraph(agents: AgentRecord[]): { nodes: GraphNode[]; edges: GraphEd
   // The extractor sends a document back to the classifier when its type looks wrong (graph.py's reclassify loop).
   const classifier = docs.find((agent) => agent.id === 'document_classifier');
   const extractor = docs.find((agent) => agent.id === 'field_extractor');
-  if (classifier && extractor) link(extractor, classifier, 'sendback', 'loop-left');
+  if (classifier && extractor) link(extractor, classifier, 'sendback', 'loop-right');
   if (hubAgent) {
-    if (docs.length) link(docs[docs.length - 1], hubAgent, 'handoff', 'x');
+    // Detection waits for the officer to approve the extracted document; the case analysis then starts on its own.
+    if (docs.length) link(docs[docs.length - 1], hubAgent, 'approval', 'x');
     ring.forEach((agent) => link(hubAgent, agent, 'delegate', 'y'));
-    if (cases.length) link(hubAgent, cases[0], 'approval', 'x');
+    if (cases.length) link(hubAgent, cases[0], 'handoff', 'x');
   }
   cases.slice(1).forEach((agent, index) => link(cases[index], agent, 'handoff', 'bulge-right'));
 
@@ -115,12 +116,12 @@ function edgeGeometry(a: GraphNode, b: GraphNode, shape: EdgeShape) {
     const k = (end.y - start.y) * 0.55;
     c1 = { x: start.x, y: start.y + k };
     c2 = { x: end.x, y: end.y - k };
-  } else if (shape === 'loop-left') {
-    // Wider than the forward link and off its ports, so the two read as separate paths.
-    start = { x: a.x - a.hw, y: a.y - 14 };
-    end = { x: b.x - b.hw, y: b.y + 14 };
-    c1 = { x: start.x - 140, y: start.y };
-    c2 = { x: end.x - 140, y: end.y };
+  } else if (shape === 'loop-right') {
+    // On the right, away from the forward link on the left, and above the port the next link leaves from.
+    start = { x: a.x + a.hw, y: a.y - 18 };
+    end = { x: b.x + b.hw, y: b.y + 18 };
+    c1 = { x: start.x + 110, y: start.y };
+    c2 = { x: end.x + 110, y: end.y };
   } else {
     const sign = shape === 'bulge-left' ? -1 : 1;
     start = { x: a.x + sign * a.hw, y: a.y };
@@ -250,9 +251,16 @@ export default function AgentGraph({ agents, selectedId, onSelect }: AgentGraphP
                 <title>{`${a.agent.name} → ${b.agent.name}: ${EDGE_TITLES[edge.kind]}`}</title>
                 <path className="agent-graph-edge-line" d={main.d} />
                 {/* Motion only on the connections of the agent in focus, so the map stays still at rest. */}
-                {active && !reducedMotion && (
+                {active && !reducedMotion && edge.kind !== 'sendback' && (
                   <circle className="agent-graph-pulse" r="3.5">
                     <animateMotion dur={duration} repeatCount="indefinite" path={main.d} />
+                  </circle>
+                )}
+                {/* A send-back is the exception: the dot crosses at the usual speed, then waits before the next one. */}
+                {active && !reducedMotion && edge.kind === 'sendback' && (
+                  <circle className="agent-graph-pulse" r="3.5">
+                    <animateMotion dur="8s" repeatCount="indefinite" path={main.d} keyPoints="0;1;1" keyTimes="0;0.33;1" calcMode="linear" />
+                    <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="1;1;0;0" keyTimes="0;0.33;0.34;1" />
                   </circle>
                 )}
                 {active && !reducedMotion && edge.kind === 'delegate' && (
