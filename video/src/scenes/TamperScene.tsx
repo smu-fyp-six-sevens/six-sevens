@@ -10,7 +10,7 @@ import { Stage } from "../components/Stage";
 import { Title } from "../components/Title";
 import { COPY2, DOCS } from "../data/overwhelm";
 import { BAD_ACTOR, CAPTION3, STATEMENT } from "../data/tamper";
-import { colors, fonts } from "../theme";
+import { blendHex, colors, fonts } from "../theme";
 import { FPS, TAMPER as T, atSeconds, s } from "../timing";
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
@@ -86,6 +86,39 @@ export const ForgedFigure: React.FC<{ chars?: number }> = ({ chars }) => (
     {chars === undefined ? STATEMENT.after : STATEMENT.after.slice(STATEMENT.after.length - chars)}
   </span>
 );
+/** The edit, made obvious: the first two digits are marked, then lift and trade places along an arc (1 and 8 in
+ * 182,400.00 become 812,400.00), a double arrow over them. Times: select (marks in), erase..typeEnd (the swap). */
+const SwapFigure: React.FC<{ frame: number }> = ({ frame }) => {
+  const clampE = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
+  const mark = interpolate(frame, [s(T.select), s(T.select) + 6], [0, 1], clampE);
+  const sw = interpolate(frame, [s(T.erase), s(T.typeEnd) - 3], [0, 1], { ...clampE, easing: Easing.bezier(0.65, 0, 0.35, 1) });
+  const lift = Math.sin(Math.PI * sw); // 0 at rest, 1 mid-swap
+  const arrow = interpolate(frame, [s(T.select) + 4, s(T.select) + 10, s(T.typeEnd) - 6, s(T.typeEnd)], [0, 1, 1, 0], clampE);
+  const before = STATEMENT.before;
+  const digit = (ch: string, dir: 1 | -1) => (
+    <span style={{
+      display: "inline-block", position: "relative", zIndex: dir === 1 ? 2 : 1,
+      transform: `translate(${dir * sw}ch, ${-dir * 12 * lift}px) scale(${1 + 0.55 * lift})`,
+      color: mark > 0 ? blendHex(colors.ink, colors.red, mark) : undefined,
+      background: `rgba(179,64,42,${0.16 * mark})`, borderRadius: 2, boxShadow: `0 0 0 ${1.5 * mark}px rgba(179,64,42,${0.7 * mark})`,
+    }}>{ch}</span>
+  );
+  return (
+    <span style={{ fontWeight: 700, position: "relative", display: "inline-block", whiteSpace: "nowrap" }}>
+      {arrow > 0 && (
+        <svg width="26" height="12" viewBox="0 0 26 12" style={{ position: "absolute", left: -3, top: -14, opacity: arrow, overflow: "visible" }}>
+          <path d="M4 9 Q13 -1 22 9" fill="none" stroke={colors.red} strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M1.5 6.5 L4 9.6 L7.2 8" fill="none" stroke={colors.red} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M24.5 6.5 L22 9.6 L18.8 8" fill="none" stroke={colors.red} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+      {digit(before[0], 1)}
+      {digit(before[1], -1)}
+      {before.slice(2)}
+    </span>
+  );
+};
+
 export const slotXY = (i: number) => ({ x: GRID_X + (i % COLS) * PITCH, y: GRID_Y + Math.floor(i / COLS) * PITCH });
 
 export const TamperScene: React.FC<{ showText?: boolean }> = ({ showText = true }) => {
@@ -96,17 +129,16 @@ export const TamperScene: React.FC<{ showText?: boolean }> = ({ showText = true 
 
   // The edit.
   const cursorP = interpolate(frame, [s(T.cursorIn), s(T.cursorAt)], [0, 1], { ...clamp, easing: even });
-  const selection = interpolate(frame, [s(T.select), s(T.select) + 8], [0, 1], { ...clamp, easing: even }) * (frame < s(T.erase) ? 1 : 0);
-  const typed = Math.round(interpolate(frame, [s(T.typeStart), s(T.typeEnd)], [0, STATEMENT.after.length], clamp));
+  const selection = 0; // the swap marks just the two digits (SwapFigure), not the whole figure
   const figureX = PAGE_R - FIGURE_W;
   const caretX = frame < s(T.select)
     ? interpolate(cursorP, [0, 1], [figureX - 120, PAGE_R + 2])
     : frame < s(T.erase) ? figureX - 1 : PAGE_R + 2;
-  const caretOn = frame >= s(T.cursorIn) && frame < s(T.shrinkStart) && (frame < s(T.erase) || Math.floor(t * 2.4) % 2 === 0 || (frame >= s(T.typeStart) && frame <= s(T.typeEnd)));
+  const caretOn = frame >= s(T.cursorIn) && frame < s(T.select);
   // The forgery's tells: a touch lighter, a hair low, a little wider spaced.
-  const figure = frame < s(T.erase)
-    ? <span style={{ fontWeight: 700 }}>{STATEMENT.before}</span>
-    : <ForgedFigure chars={typed} />;
+  const figure = frame < s(T.typeEnd)
+    ? <SwapFigure frame={frame} />
+    : <ForgedFigure />;
 
   // The shrink into the pile.
   const q = interpolate(frame, [s(T.shrinkStart), s(T.shrinkEnd)], [0, 1], { ...clamp, easing: Easing.bezier(0.6, 0, 0.2, 1) });

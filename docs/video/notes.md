@@ -195,3 +195,6 @@
 ## Wave 36 - a meaningful tool output in the trace
 - The font consistency check's trace step now shows story input (the statement, page 1, closing_balance) and output (812,400.00: expected Helvetica-Bold 9pt, detected Helvetica 9pt) (capture/traceSteps.ts); re-captured; the Output highlight and camera re-aimed.
 - Whole trace section incl. "Every step can be audited." rendered as renders/trace-section.mp4 (frames 1683-2081, 1 s handles), replacing audit-caption.mp4; spliced into renders/picture.mp4.
+
+## Wave 37 - the swap made obvious
+- Owner: show the digits being swapped, not delete-and-retype. SwapFigure: the 1 and 8 get red marks and a double arrow at select, then lift and trade places along an arc (erase..typeEnd), landing as 812,400.00 with the forgery's tells. renders/swap-section.mp4 (frames 500-720, 1 s handles), spliced into renders/picture.mp4.
