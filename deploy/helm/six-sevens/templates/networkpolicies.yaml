@@ -1,6 +1,6 @@
 {{- if .Values.network.policies }}
 {{- /*
-Default-deny in every namespace, then only what each part needs (CLOUD_ARCHITECTURE_PLAN.md section 16):
+Default-deny in every namespace, then only what each part needs (HOW_IT_WORKS.md §9, the Helm chart):
 the load balancer -> Kong, the frontend and Grafana; Kong -> api and audit-metrics; the scraper -> metrics ports.
 Workers take nothing in. Egress: DNS, the metadata server (Workload Identity), and HTTPS out (Supabase, Anthropic,
 Pub/Sub and other Google APIs, the registries), never to private ranges.

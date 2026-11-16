@@ -153,7 +153,8 @@ export interface paths {
         };
         /**
          * List Audit Events
-         * @description The audit trail, newest first, optionally for one case or document. `before`: only events older than this (the next page).
+         * @description The audit trail, newest first, optionally for one case or document, or of one event type (`type`, such as
+         *     case.deleted). `before`: only events older than this (the next page).
          */
         get: operations["list_audit_events_audit_events_get"];
         put?: never;
@@ -273,16 +274,8 @@ export interface paths {
         post?: never;
         /**
          * Delete Case
-         * @description Removes a case from the active queue, along with every document that
-         *     belongs to it. A following GET /cases or GET /cases/{id} no longer
-         *     returns it.
-         *
-         *     Only allowed once every one of the case's documents has reached a
-         *     terminal state (ANALYZED, FAILED, REJECTED, CANCELLED, APPROVED) — same
-         *     reasoning as delete_document: deleting out from under a document a
-         *     worker is still actively writing to (status, extracted fields) would
-         *     race the pipeline and orphan a document row mid-flight. Cancel the
-         *     in-flight document(s) first, or wait for them to finish.
+         * @description Removes a case and every document that belongs to it. Refused (409) while anything still runs on it: a document
+         *     being processed, scanned or waiting to be scanned, or the case analysis (case_service.delete_case).
          */
         delete: operations["delete_case_cases__case_id__delete"];
         options?: never;
@@ -693,49 +686,6 @@ export interface paths {
          * @description The single move applied to a batch, with each affected case resynced once.
          */
         post: operations["bulk_move_documents_documents_bulk_move_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/documents/monitoring/issues": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Monitoring Issues
-         * @description Single place to check what needs attention: stuck documents, documents
-         *     that exhausted retries (status=failed), and pipeline-level errors that
-         *     have no document row to attach to (e.g. a dequeued document whose row
-         *     vanished) — instead of having to know to filter for each separately.
-         */
-        get: operations["list_monitoring_issues_documents_monitoring_issues_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/documents/monitoring/stuck": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Stuck Documents
-         * @description AC4: surfaces documents stuck in uploaded/queued/processing past the threshold.
-         */
-        get: operations["list_stuck_documents_documents_monitoring_stuck_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1958,6 +1908,11 @@ export interface components {
             prompt_version: string | null;
             /** Purpose */
             purpose: string;
+            /**
+             * Tool Details
+             * @default []
+             */
+            tool_details: components["schemas"]["ToolDetail"][];
             /** Tools */
             tools: string[];
         };
@@ -2161,11 +2116,6 @@ export interface components {
              */
             runs: number;
             /**
-             * Runs Without Saving
-             * @default 0
-             */
-            runs_without_saving: number;
-            /**
              * Saved Usd
              * @default 0
              */
@@ -2294,7 +2244,6 @@ export interface components {
              *       "cache_write_tokens": 0,
              *       "input_tokens": 0,
              *       "runs": 0,
-             *       "runs_without_saving": 0,
              *       "saved_usd": 0
              *     } */
             cache: components["schemas"]["CacheUse"];
@@ -2369,8 +2318,11 @@ export interface components {
             document_id: string | null;
             /** Llm Cache Read Tokens */
             llm_cache_read_tokens: number | null;
-            /** Llm Cache Saved Usd */
-            llm_cache_saved_usd: number | null;
+            /**
+             * Llm Cache Saved Usd
+             * @default 0
+             */
+            llm_cache_saved_usd: number;
             /** Llm Cache Write Tokens */
             llm_cache_write_tokens: number | null;
             /** Llm Calls */
@@ -4018,15 +3970,6 @@ export interface components {
             /** Wrong */
             wrong: number;
         };
-        /** MonitoringIssues */
-        MonitoringIssues: {
-            /** Failed */
-            failed: components["schemas"]["DocumentRecord"][];
-            /** Recent Errors */
-            recent_errors: components["schemas"]["ProcessingErrorEntry"][];
-            /** Stuck */
-            stuck: components["schemas"]["StuckDocument"][];
-        };
         /**
          * MoveDocumentRequest
          * @description Reassigns a document to a different case — see routers/documents.py's move_document.
@@ -4230,18 +4173,6 @@ export interface components {
             page: number;
             /** Text */
             text: string;
-        };
-        /** ProcessingErrorEntry */
-        ProcessingErrorEntry: {
-            /** Document Id */
-            document_id: string;
-            /** Error */
-            error: string;
-            /**
-             * Occurred At
-             * Format: date-time
-             */
-            occurred_at: string;
         };
         /** PromptSection */
         PromptSection: {
@@ -4467,19 +4398,6 @@ export interface components {
             /** Unable To Assess Reason */
             unable_to_assess_reason: string | null;
         };
-        /** StuckDocument */
-        StuckDocument: {
-            /** Case Id */
-            case_id: string | null;
-            /** Id */
-            id: string;
-            /**
-             * Seconds In Current Status
-             * @description How long the document has sat in its current status
-             */
-            seconds_in_current_status: number;
-            status: components["schemas"]["DocumentStatus"];
-        };
         /** SummaryReason */
         SummaryReason: {
             /**
@@ -4625,6 +4543,13 @@ export interface components {
              * @default 0.4
              */
             min_step_isolation: number;
+        };
+        /** ToolDetail */
+        ToolDetail: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
         };
         /** UnassessedCheck */
         UnassessedCheck: {
@@ -4990,6 +4915,7 @@ export interface operations {
                 document_id?: string | null;
                 limit?: number;
                 before?: string | null;
+                type?: string | null;
             };
             header?: {
                 authorization?: string | null;
@@ -6073,68 +5999,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BulkMoveResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_monitoring_issues_documents_monitoring_issues_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MonitoringIssues"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_stuck_documents_documents_monitoring_stuck_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StuckDocument"][];
                 };
             };
             /** @description Validation Error */

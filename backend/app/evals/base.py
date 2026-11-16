@@ -2,7 +2,7 @@
 The shape every sensibility check shares, and how a run's own steps are picked out of its trace.
 
 A check reads only what the run already recorded. It never changes what the run decided: a guard in the agent code
-stops a bad move, a check records that the agent tried it (CLOUD_ARCHITECTURE_PLAN.md §13).
+stops a bad move, a check records that the agent tried it (HOW_IT_WORKS.md, sensibility checks).
 """
 
 from __future__ import annotations

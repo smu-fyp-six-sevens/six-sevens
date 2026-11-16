@@ -217,7 +217,7 @@ jobs:
             echo "- Grafana: $(gcloud run services describe grafana --region "$REGION" --format='value(status.url)')"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # GKE (CLOUD_ARCHITECTURE_PLAN.md section 18), beside Cloud Run until phase 6 and only once Terraform has made the
+  # GKE (HOW_IT_WORKS.md §9, "Releases on GKE"), beside Cloud Run until phase 6 and only once Terraform has made the
   # cluster (repository variable GKE_ENABLED=true). Signs every image (cosign signature and SBOM, and the Binary
   # Authorization attestation, all with one Cloud KMS key), renders the chart with the images by digest, and hands
   # it to Cloud Deploy, which applies it, records it and runs the gateway checks. A failed rollout is rolled back.

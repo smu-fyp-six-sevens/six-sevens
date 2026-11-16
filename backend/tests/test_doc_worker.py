@@ -26,8 +26,7 @@ def _uploaded(document_id: str = "doc-1") -> Event:
     return Event(type=types.DOCUMENT_UPLOADED, document_id=document_id, case_id="case-1")
 
 
-async def test_missing_document_is_recorded_and_nothing_runs(published_events) -> None:
-    doc_worker._recent_errors.clear()
+async def test_missing_document_runs_nothing(published_events) -> None:
     with (
         patch("app.workers.documents.document_repository") as mock_repo,
         patch("app.workers.documents.langgraph_pipeline") as mock_pipeline,
@@ -38,7 +37,6 @@ async def test_missing_document_is_recorded_and_nothing_runs(published_events) -
 
     mock_repo.update_status.assert_not_called()
     mock_pipeline.process_document.assert_not_called()
-    assert [e.document_id for e in doc_worker.recent_errors()] == ["missing-doc"]
     assert published_events == []
 
 
@@ -133,7 +131,9 @@ async def test_retyped_reruns_extraction_only() -> None:
         mock_repo.get_document.return_value = _make_document(status=DocumentStatus.ANALYZED)
         mock_pipeline.rerun_extraction = AsyncMock()
 
-        await doc_worker.on_retyped(Event(type=types.DOCUMENT_RETYPED, document_id="doc-1"))
+        await doc_worker.on_retyped(Event(
+            type=types.DOCUMENT_RETYPED, document_id="doc-1", detail={"requested_at": "2026-11-16T00:00:00+00:00"},
+        ))
 
     mock_pipeline.rerun_extraction.assert_awaited_once_with("doc-1")
     mock_pipeline.process_document.assert_not_called()

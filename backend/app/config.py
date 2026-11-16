@@ -91,7 +91,7 @@ class Settings:
     # The commit an image was built from (backend/Dockerfile's GIT_COMMIT build argument), for agent_versions.py.
     GIT_COMMIT: str = _str("GIT_COMMIT", "local")
 
-    # --- Services and events (CLOUD_ARCHITECTURE_PLAN.md) ---
+    # --- Services and events (HOW_IT_WORKS.md §9) ---
     # Which roles this process runs; the default runs all of them, as uvicorn always has.
     ROLES: frozenset[str] = _roles(_str("ROLE", "all"))
     # "inprocess" calls handlers in this process; "pubsub" publishes to Pub/Sub (or the emulator
@@ -104,7 +104,7 @@ class Settings:
     PUSH_AUDIENCE: str = _str("PUSH_AUDIENCE")
     PUSH_SERVICE_ACCOUNT: str = _str("PUSH_SERVICE_ACCOUNT")
     # How workers receive events: "push" (Cloud Run: Pub/Sub posts to /push/<role>) or "pull" (GKE: events/pull.py
-    # streams from the role's subscription). Same subscription either way, switched in place (CLOUD_ARCHITECTURE_PLAN.md §17).
+    # streams from the role's subscription). Same subscription either way, switched in place (HOW_IT_WORKS.md §9).
     # "none": no events at all, only HTTP (a role serving requests on GKE while Cloud Run still takes its events).
     EVENT_DELIVERY: str = _str("EVENT_DELIVERY", "push").lower()
     # Messages each role's subscription hands this process at once (the role's concurrency on Cloud Run).
@@ -124,13 +124,13 @@ class Settings:
     # A case analysis still "running" after this long was interrupted; the sweeper then marks it failed.
     CASE_ANALYSIS_TIMEOUT_SECONDS: int = _int("CASE_ANALYSIS_TIMEOUT_SECONDS", 900)
 
-    # --- Stuck work and recovery (sweeper.py, CLOUD_ARCHITECTURE_PLAN.md section 5) ---
+    # --- Stuck work and recovery (sweeper.py, HOW_IT_WORKS.md §8, "Stuck work") ---
     # Off by default: the database is shared, so a local process must never sweep cloud work. Terraform turns it on.
     SWEEPER_ENABLED: bool = _bool("SWEEPER_ENABLED", False)
-    # uploaded/queued past this means its event was lost; processing/extracting/detecting past the other means
-    # its run died (both well past the 600 s push deadline, so a recovery never races a live redelivery).
+    # uploaded/queued past the first means its event was lost; processing/extracting/detecting past the second means
+    # its run died. The case queue's Stuck badge and an officer's retry use the same two (monitoring.py).
     STUCK_WAITING_SECONDS: int = _int("STUCK_WAITING_SECONDS", 300)
-    STUCK_RUNNING_SECONDS: int = _int("STUCK_RUNNING_SECONDS", 900)
+    STUCK_RUNNING_SECONDS: int = _int("STUCK_RUNNING_SECONDS", 600)
     RECOVERY_MAX_ATTEMPTS: int = _int("RECOVERY_MAX_ATTEMPTS", 3)
     # How often a running pipeline or detection checks for a cancel made through another instance (pubsub only).
     CANCEL_POLL_SECONDS: float = _float("CANCEL_POLL_SECONDS", 5)
@@ -155,9 +155,6 @@ class Settings:
 
     # AC2: invocation should be attempted within this window of being dequeued
     DEQUEUE_TO_INVOKE_TARGET_SECONDS: float = 1.0
-    # A document idle in an in-flight status longer than this is "stuck": the monitoring listing shows it, and one
-    # stuck in processing can be retried without waiting for it to fail (routers/documents.py's retry_document).
-    STUCK_THRESHOLD_SECONDS: int = 600
 
     # Bounded classify<->extract escalation loop (langgraph/graph.py) — one
     # re-classification attempt before routing to manual review.

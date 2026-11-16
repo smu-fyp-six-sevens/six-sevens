@@ -379,6 +379,8 @@
 }
 
 .risk-finding-places button {
+  display: inline-grid;
+  place-items: center;
   width: 22px;
   height: 20px;
   padding: 0;

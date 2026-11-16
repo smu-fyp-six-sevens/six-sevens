@@ -11,7 +11,6 @@ from postgrest.exceptions import APIError
 from starlette.datastructures import Headers
 
 from app.config import settings
-from app.langgraph.extraction_prompts import schema_field_names
 from app.fraud_detection.font_consistency import ExtractedField
 from app.main import app
 from app.models import CaseRecord, DocumentRecord, DocumentStatus, RoutingStatus, compute_fulfilled_requirements
@@ -490,18 +489,14 @@ def test_update_extracted_fields_success() -> None:
     mock_repo.update_extracted_fields.assert_called_once_with(
         "doc-1", 1.0, ["payslip"], routing_status="accepted", fields_reviewed=False
     )
-    # required_field_names drawn from the document's own document_type
-    # ("payslip") so field_category reflects the same required/additional
-    # split as the automated pipeline's own save. field_confidences is 1.0
-    # for "individual_name" because it has no prior extracted value (new
-    # field added during manual review), per update_extracted_fields's
-    # was_editable logic.
+    # Written only if the document is still in the status it was read in. field_confidences is 1.0 for
+    # "individual_name" because it has no prior extracted value (a field added during manual review).
     mock_fields_repo.replace_extracted_fields.assert_called_once_with(
         "doc-1",
         {"individual_name": "Jane Tan (corrected)"},
         field_confidences={"individual_name": 1.0},
         default_confidence=None,
-        required_field_names=set(schema_field_names("payslip")),
+        expected_statuses=[DocumentStatus.ANALYZED],
     )
     # A manual correction can change requirement coverage (e.g. adding an
     # address that was missing) just as much as the automated pipeline can —
@@ -591,7 +586,7 @@ def test_update_extracted_fields_preserves_confidence_for_already_reviewed_field
         {"individual_name": "Jane Tan"},
         field_confidences={"individual_name": 0.98},
         default_confidence=None,
-        required_field_names=set(schema_field_names("payslip")),
+        expected_statuses=[DocumentStatus.ANALYZED],
     )
 
 
@@ -638,7 +633,7 @@ def test_update_extracted_fields_bumps_confidence_for_low_confidence_existing_fi
         {"net_pay": "5000"},
         field_confidences={"net_pay": 1.0},
         default_confidence=None,
-        required_field_names=set(schema_field_names("payslip")),
+        expected_statuses=[DocumentStatus.ANALYZED],
     )
 
 
@@ -685,7 +680,7 @@ def test_update_extracted_fields_treats_blank_existing_value_as_editable() -> No
         {"company_address": "1 Raffles Place"},
         field_confidences={"company_address": 1.0},
         default_confidence=None,
-        required_field_names=set(schema_field_names("payslip")),
+        expected_statuses=[DocumentStatus.ANALYZED],
     )
 
 
@@ -735,7 +730,9 @@ def test_update_extracted_fields_fetch_and_save_failures() -> None:
         patch("app.document_service.document_repository"),
         patch("app.document_service.extracted_fields_repository") as mock_fields,
     ):
-        mock_dep_repo.get_document.return_value = _make_document("doc-1")
+        analyzed = _make_document("doc-1")
+        analyzed.status = DocumentStatus.ANALYZED
+        mock_dep_repo.get_document.return_value = analyzed
         mock_fields.get_extracted_fields.return_value = []
         mock_fields.replace_extracted_fields.side_effect = RuntimeError("write failed")
         assert (
@@ -1026,7 +1023,7 @@ def test_add_extracted_field_inserts_and_returns_refetched_document() -> None:
         "doc-1",
         "net_pay",
         5000,
-        required_field_names=set(schema_field_names("payslip")),
+        expected_statuses=[DocumentStatus.ANALYZED],
     )
     # The new field itself is stored at 1.0 (see add_extracted_field above),
     # but adding one isn't a "Save fields" review, so the document-level
@@ -1167,7 +1164,9 @@ def test_delete_extracted_field_removes_and_recomputes_requirements() -> None:
         response = client.delete("/documents/doc-1/extracted-fields/field-1")
 
     assert response.status_code == 200
-    mock_fields_repo.delete_extracted_field.assert_called_once_with("doc-1", "field-1")
+    mock_fields_repo.delete_extracted_field.assert_called_once_with(
+        "doc-1", "field-1", expected_statuses=[DocumentStatus.ANALYZED],
+    )
     # Unlike the add path, a deletion doesn't make the document
     # human-verified, so its existing extraction_confidence is carried
     # through rather than bumped to 1.0.
@@ -1459,28 +1458,6 @@ def test_approve_document_success() -> None:
     mock_repo.approve_document.assert_called_once_with("doc-1")
 
 
-def test_an_approval_whose_event_cannot_be_published_is_undone() -> None:
-    # The approval event is what starts detection: unpublished, the document would sit approved and never scanned.
-    document = _typed_document(classification_confidence=0.97, routing_status=RoutingStatus.MANUAL_REVIEW)
-    with (
-        patch("app.routers._dependencies.document_repository") as dep_repo,
-        patch("app.document_service.document_repository") as repo,
-        patch("app.document_service.extracted_fields_repository") as fields_repo,
-        patch("app.document_service.events.publish", AsyncMock(side_effect=RuntimeError("Pub/Sub unavailable"))),
-    ):
-        dep_repo.get_document.return_value = document
-        repo.approve_document.return_value = document.model_copy(update={"status": DocumentStatus.APPROVED})
-        fields_repo.get_extracted_fields.return_value = [
-            ExtractedField(field_name=name, field_type="string", field_value="x", confidence=0.95)
-            for name in ("individual_name", "company_name", "net_pay")
-        ]
-
-        response = client.post("/documents/doc-1/approve")
-
-    assert response.status_code == 502
-    repo.undo_approval.assert_called_once_with("doc-1", RoutingStatus.MANUAL_REVIEW)
-
-
 def test_approve_document_rejects_unreviewed_low_confidence_field() -> None:
     # A field under the threshold hasn't been through Save fields yet (which
     # would have marked it 1.0), so the document can't be approved.
@@ -1523,6 +1500,7 @@ def test_approve_document_rejects_a_document_not_yet_analyzed() -> None:
 
 
 def test_approve_document_publish_failure_undoes_the_approval_and_its_routing() -> None:
+    # The approval event is what starts detection: unpublished, the document would sit approved and never scanned.
     document = _typed_document(classification_confidence=0.97, routing_status=RoutingStatus.MANUAL_REVIEW)
 
     with (

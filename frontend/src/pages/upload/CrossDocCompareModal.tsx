@@ -23,7 +23,7 @@ function fieldLabel(field: string): string {
 }
 
 // Quoted values in the finding's sentence ('The UEN is "201812345A" on ..., but "201634564N" on ...'), for a finding
-// recorded before each document's value was kept. A masked identifier (S****123A) can't be found on a page.
+// that cites no plain value (only tables or computed results). A masked identifier (S****123A) can't be found on a page.
 function quotedValues(summary: string): string[] {
   return [...summary.matchAll(/"([^"]+)"/g)].map((match) => match[1].trim()).filter((value) => value && !value.includes('*'));
 }
@@ -58,8 +58,8 @@ function highlightsFrom(located: LocatedValue[], values: ValueToFind[], severity
   });
 }
 
-// What to look for on one document: the values the finding cited from it, or (an older finding) every quoted value,
-// of which only this document's will be found.
+// What to look for on one document: the values the finding cited from it, or (when it cites no plain value) every
+// quoted value, of which only this document's will be found.
 function valuesFor(finding: CaseRiskFinding, documentId: string): { values: ValueToFind[]; fromSummary: boolean } {
   const cited = finding.cited_values ?? [];
   if (cited.length > 0) {

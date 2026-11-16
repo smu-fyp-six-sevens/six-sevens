@@ -167,7 +167,7 @@ async def agent_node(state: DocumentGraphState) -> dict:
     # Every turn offers the same tools (tools_node keeps their order). Once vision has run there's nothing left to
     # call, so the turn can't call one: tool_choice may change between turns without touching earlier thinking.
     done = _ran(vision_llm.name, existing)
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 2048, effort="low").bind_tools(
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 2048, effort="low", cache_history=True).bind_tools(
         _TOOLS, tool_choice={"type": "none"} if done else None,
     )
     offered = [] if done else [t.name for t in _TOOLS]

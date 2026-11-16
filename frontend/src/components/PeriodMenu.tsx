@@ -6,9 +6,6 @@ import type { Period } from '../utils/dateRange';
 
 export interface PeriodOption {
   label: string;
-  // The dates it covers, shown beside it.
-  detail?: string;
-  disabled?: boolean;
   onSelect: () => void;
 }
 
@@ -16,23 +13,19 @@ interface PeriodMenuProps {
   // What is chosen ("date range"): names the button and the list.
   name: string;
   trigger: ReactNode;
-  // Styles the button as in use (a comparison is on).
-  active?: boolean;
   options: PeriodOption[];
   // The option ticked; "Custom range" when a custom period is in use.
   selected?: string | null;
   // The custom period in use, for the calendar to open on.
   custom?: Period | null;
   onCustom: (period: Period & { from: string }) => void;
-  // A last action under the options.
-  clear?: { label: string; onClear: () => void };
 }
 
 export const CUSTOM_RANGE = 'Custom range';
 
 // SelectMenu's look for a period: a list of ready-made periods and "Custom range", which swaps the list for a
 // two-month calendar.
-export default function PeriodMenu({ name, trigger, active = false, options, selected, custom, onCustom, clear }: PeriodMenuProps) {
+export default function PeriodMenu({ name, trigger, options, selected, custom, onCustom }: PeriodMenuProps) {
   const listId = useId();
   const rootRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -56,7 +49,6 @@ export default function PeriodMenu({ name, trigger, active = false, options, sel
         ref={triggerRef}
         type="button"
         className="header-filter-trigger"
-        data-active={active || undefined}
         aria-label={name}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
@@ -77,7 +69,6 @@ export default function PeriodMenu({ name, trigger, active = false, options, sel
               type="button"
               className="header-filter-option select-menu-option"
               aria-pressed={selected === option.label}
-              disabled={option.disabled}
               onClick={() => {
                 option.onSelect();
                 close();
@@ -85,7 +76,6 @@ export default function PeriodMenu({ name, trigger, active = false, options, sel
             >
               {tick(selected === option.label)}
               <span className="header-filter-label">{option.label}</span>
-              {option.detail && <span className="period-menu-detail">{option.detail}</span>}
             </button>
           ))}
           <button type="button" className="header-filter-option select-menu-option" aria-pressed={selected === CUSTOM_RANGE} onClick={() => setView('calendar')}>
@@ -96,11 +86,6 @@ export default function PeriodMenu({ name, trigger, active = false, options, sel
               <path d="M2 7h12M5.5 1.5v3M10.5 1.5v3" />
             </svg>
           </button>
-          {clear && (
-            <button type="button" className="header-filter-clear" onClick={() => { clear.onClear(); close(); }}>
-              {clear.label}
-            </button>
-          )}
         </div>
       )}
 

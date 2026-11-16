@@ -137,6 +137,10 @@ class FakeStore:
     def get_document(self, document_id, include_fields=True, include_metadata=False):
         return self.documents.get(document_id)
 
+    def get_status(self, document_id):
+        document = self.documents.get(document_id)
+        return document.status if document else None
+
     def update_status(self, document_id, status, **changes):
         document = self.documents[document_id]
         expected = changes.get("expected_current_statuses")
@@ -172,9 +176,12 @@ class FakeStore:
 
     # extracted_fields_repository
     def replace_extracted_fields(self, document_id, fields, *, field_confidences=None, default_confidence=None,
-                                 required_field_names=None):
+                                 expected_statuses):
+        if self.documents[document_id].status not in expected_statuses:
+            return False
         self.fields[document_id] = dict(fields)
         self.field_confidences[document_id] = dict(field_confidences or {})
+        return True
 
     # storage_service
     def download_file(self, storage_path):

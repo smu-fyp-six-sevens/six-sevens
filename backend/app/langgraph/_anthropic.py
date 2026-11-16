@@ -85,10 +85,17 @@ def _with_thinking_summaries(chat_class: Any) -> Any:
     return _summarising[chat_class]
 
 
-def build_chat_anthropic(model: str, max_tokens: int, *, effort: Effort) -> "ChatAnthropic":
+def build_chat_anthropic(
+    model: str, max_tokens: int, *, effort: Effort, cache_history: bool = False,
+) -> "ChatAnthropic":
+    """
+    cache_history: for an agent's tool loop. Each turn resends the whole conversation; automatic caching marks its
+    end, so the next turn reads everything before it from the cache instead of paying for it again. Off for a single
+    call, whose tail is never read back (a write premium for nothing).
+    """
     from langchain_anthropic import ChatAnthropic  # local import: keeps the SDK out of module import time
 
-    key = (ChatAnthropic, model, max_tokens, effort)
+    key = (ChatAnthropic, model, max_tokens, effort, cache_history)
     if key not in _models:
         # Pydantic alias names: pyright's plugin only accepts these, and they are
         # always valid at runtime. timeout/stop are required by that view of the
@@ -101,6 +108,7 @@ def build_chat_anthropic(model: str, max_tokens: int, *, effort: Effort) -> "Cha
             timeout=settings.LLM_TIMEOUT_SECONDS,
             max_retries=settings.LLM_MAX_RETRIES,
             stop=None,
+            model_kwargs={"cache_control": {"type": "ephemeral"}} if cache_history else {},
             # Counts calls and tokens per unit of work (query_stats.py); flags a reply that repeats its own
             # instructions (guardrails/leak_check.py); turns a refusal into ModelRefused.
             callbacks=[llm_callback, leak_callback, _refusal_callback],

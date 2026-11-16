@@ -224,14 +224,20 @@ def _short(text: Any) -> str:
 def _font_deviation_summary(
     deviation_type: str, detected: dict, expected: dict, field_name: str | None, occurrence_count: int
 ) -> str:
+    def shown(value: object) -> str:
+        # Sizes come from the PDF as floats (8.999999046325684): to a tenth of a point, as a reader would say them.
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return f"{round(float(value), 1):g}pt"
+        return repr(value)
+
     where = f"'{field_name}'" if field_name else "text"
     changed = [
-        f"{label} {detected.get(key)!r} vs. expected {expected.get(key)!r}"
+        f"{label} {shown(detected.get(key))} vs. expected {shown(expected.get(key))}"
         for key, label in (
             ("font", "font"), ("size", "size"), ("bold", "bold"),
             ("italic", "italic"), ("underline", "underline"),
         )
-        if detected.get(key) != expected.get(key)
+        if shown(detected.get(key)) != shown(expected.get(key))
     ]
     detail = "; ".join(changed) if changed else deviation_type
     plural = "s" if occurrence_count != 1 else ""

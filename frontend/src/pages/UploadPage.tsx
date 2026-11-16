@@ -10,6 +10,7 @@ import { useDocumentRowActions } from './upload/useDocumentRowActions';
 import { useDocumentSelection } from './upload/useDocumentSelection';
 import { useUploadSelection } from './upload/useUploadSelection';
 import { DocumentListPanel } from './upload/DocumentListPanel';
+import { CaseChecklistButton } from './upload/CaseChecklistButton';
 import { MoveDocumentsDialog } from './upload/MoveDocumentsDialog';
 import { AdditionalDocumentsCard } from './upload/AdditionalDocumentsCard';
 import { AuditTrailCard } from './upload/AuditTrailCard';
@@ -95,7 +96,7 @@ export default function UploadPage({
   const selectSection = (section: CaseSection) => {
     setSearchParams(section === 'summary' ? {} : { section }, { replace: true });
   };
-  // From the Additional Documents tab: the Documents tab, at its upload, with the requested documents listed open.
+  // From the Additional Documents tab: the Documents tab, at its upload, with the checklist open on what is requested.
   const openGroupParam = searchParams.get('open');
   const uploadRequested = () => {
     setSearchParams({ section: 'documents', open: 'requested' }, { replace: true });
@@ -256,6 +257,16 @@ export default function UploadPage({
           <>
             <CaseTitle caseRecord={selectedCase} />
             <span className="case-title-actions">
+              {snapshotLoaded && activeSection === 'documents' && (
+                <CaseChecklistButton
+                  key={openGroupParam ?? 'checklist'}
+                  fulfilledRequirements={fulfilledRequirements}
+                  coverage={{ idDocument: idDocumentCoverage, proofOfAddress: proofOfAddressCoverage }}
+                  requestedDocuments={additionalDocuments?.items ?? []}
+                  onOpenRequest={(key) => setSearchParams({ section: 'additional', request: key }, { replace: true })}
+                  defaultOpen={openGroupParam === 'requested'}
+                />
+              )}
               <KebabMenu
                 label={isDeletingCase ? 'Deleting case' : 'Case actions'}
                 disabled={isDeletingCase}
@@ -426,8 +437,6 @@ export default function UploadPage({
                 <DocumentListPanel
                   extractedDocuments={extractedDocuments}
                   reviewReasons={reviewReasons}
-                  fulfilledRequirements={fulfilledRequirements}
-                  coverage={{ idDocument: idDocumentCoverage, proofOfAddress: proofOfAddressCoverage }}
                   approvedDocuments={approvedDocuments}
                   rejectedDocuments={rejectedDocuments}
                   wsConnected={wsConnected}
@@ -435,9 +444,6 @@ export default function UploadPage({
                   selection={selection}
                   rowActions={rowActions}
                   readOnly={isFinalised}
-                  requestedDocuments={additionalDocuments?.items ?? []}
-                  initialGroup={openGroupParam === 'requested' ? 'requested' : undefined}
-                  onOpenRequest={(key) => setSearchParams({ section: 'additional', request: key }, { replace: true })}
                 />
               </section>
 

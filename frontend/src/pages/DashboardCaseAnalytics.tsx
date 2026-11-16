@@ -1,6 +1,5 @@
 import { useState, type CSSProperties } from 'react';
 import SelectMenu from '../components/SelectMenu';
-import CompareDelta from '../components/CompareDelta';
 import { formatDuration } from './upload/processingTimes';
 import { median, usd } from './dashboardCosts';
 import { LEVELS, RISK_RANK, levelClass, type Risk } from './dashboardRisk';
@@ -11,7 +10,7 @@ import { StageMark } from '../components/StageMark';
 
 export interface AnalyticsCase {
   id: string;
-  // Set for a live case, which opens; sample rows don't.
+  // The case's route, so its row opens it.
   routeId?: string;
   applicant: string;
   // The stage's label, and its tone (utils/caseStages.ts).
@@ -25,13 +24,13 @@ export interface AnalyticsCase {
   cost: number | null;
 }
 
-// Where the costs stand: loading, failed, or not recorded at all (sample cases).
+// Where the costs stand: loading, failed, or nothing to cost (no cases).
 export type CostState = 'loaded' | 'loading' | 'error' | 'unavailable';
 
 function costNote(state: CostState): string {
   if (state === 'loading') return 'Loading…';
   if (state === 'error') return "Couldn't load the costs. Try refreshing.";
-  if (state === 'unavailable') return 'Recorded for live cases only';
+  if (state === 'unavailable') return 'No cases in view';
   return 'No Claude spend recorded for these cases';
 }
 
@@ -67,10 +66,9 @@ function caseFigures(cases: AnalyticsCase[]) {
   };
 }
 
-// The figures, and when comparing, each one's change in place of its caption.
-export function CaseKpis({ cases, compare, costState }: { cases: AnalyticsCase[]; compare?: AnalyticsCase[]; costState: CostState }) {
+// The figures, each with a caption.
+export function CaseKpis({ cases, costState }: { cases: AnalyticsCase[]; costState: CostState }) {
   const now = caseFigures(cases);
-  const before = compare ? caseFigures(compare) : null;
   const { timed, costed } = now;
 
   return (
@@ -78,27 +76,27 @@ export function CaseKpis({ cases, compare, costState }: { cases: AnalyticsCase[]
       <article className="dashboard-stat-card">
         <span className="stat-caption">Analysed</span>
         <span className="stat-number">{timed.length}<small> / {cases.length}</small></span>
-        {before ? <CompareDelta value={timed.length} previous={before.timed.length} /> : <span className="stat-caption">{cases.length ? `${Math.round((timed.length / cases.length) * 100)}% of cases in view` : 'No cases in view'}</span>}
+        <span className="stat-caption">{cases.length ? `${Math.round((timed.length / cases.length) * 100)}% of cases in view` : 'No cases in view'}</span>
       </article>
       <article className="dashboard-stat-card">
         <span className="stat-caption">Median processing time</span>
         <span className="stat-number">{now.medianTime != null ? formatDuration(now.medianTime) : '—'}</span>
-        {before ? <CompareDelta value={now.medianTime} previous={before.medianTime} format={formatDuration} better="down" /> : <span className="stat-caption">{timed.length ? `${formatDuration(Math.min(...timed))} to ${formatDuration(Math.max(...timed))}` : 'Shown once a case is analysed'}</span>}
+        <span className="stat-caption">{timed.length ? `${formatDuration(Math.min(...timed))} to ${formatDuration(Math.max(...timed))}` : 'Shown once a case is analysed'}</span>
       </article>
       <article className="dashboard-stat-card">
         <span className="stat-caption">Total Claude cost</span>
         <span className="stat-number">{now.total != null ? usd(now.total) : '—'}</span>
-        {before && costState === 'loaded' ? <CompareDelta value={now.total} previous={before.total} format={usd} better="down" /> : <span className="stat-caption">{costed.length ? `across ${costed.length} ${costed.length === 1 ? 'case' : 'cases'}` : costNote(costState)}</span>}
+        <span className="stat-caption">{costed.length ? `across ${costed.length} ${costed.length === 1 ? 'case' : 'cases'}` : costNote(costState)}</span>
       </article>
       <article className="dashboard-stat-card">
         <span className="stat-caption">Cost per case</span>
         <span className="stat-number">{now.average != null ? usd(now.average) : '—'}</span>
-        {before && costState === 'loaded' ? <CompareDelta value={now.average} previous={before.average} format={usd} better="down" /> : <span className="stat-caption">{costed.length ? `averaged across ${costed.length} ${costed.length === 1 ? 'case' : 'cases'}` : costNote(costState)}</span>}
+        <span className="stat-caption">{costed.length ? `averaged across ${costed.length} ${costed.length === 1 ? 'case' : 'cases'}` : costNote(costState)}</span>
       </article>
       <article className="dashboard-stat-card">
         <span className="stat-caption">High or critical risk</span>
         <span className="stat-number">{now.highRisk}<small> / {now.scored}</small></span>
-        {before ? <CompareDelta value={now.highRisk} previous={before.highRisk} /> : <span className="stat-caption">{now.scored ? `${Math.round((now.highRisk / now.scored) * 100)}% of scored cases` : 'No case scored yet'}</span>}
+        <span className="stat-caption">{now.scored ? `${Math.round((now.highRisk / now.scored) * 100)}% of scored cases` : 'No case scored yet'}</span>
       </article>
     </section>
   );
@@ -111,7 +109,7 @@ const CASE_SORTS = ['Slowest first', 'Costliest first', 'Highest risk first'];
 const SHOWN_CASES = 8;
 
 // Each case's processing time and Claude cost as two bars on their own scales, a tick at each median.
-export function TimeAndCostByCase({ cases, compare, costState, onOpen }: { cases: AnalyticsCase[]; compare?: AnalyticsCase[]; costState: CostState; onOpen: (item: AnalyticsCase) => void }) {
+export function TimeAndCostByCase({ cases, costState, onOpen }: { cases: AnalyticsCase[]; costState: CostState; onOpen: (item: AnalyticsCase) => void }) {
   const [sort, setSort] = useState(CASE_SORTS[0]);
   const [showAll, setShowAll] = useState(false);
   const measured = cases.filter((item) => item.processingMs != null || item.cost != null);
@@ -125,20 +123,15 @@ export function TimeAndCostByCase({ cases, compare, costState, onOpen }: { cases
   const costs = measured.flatMap((item) => (item.cost != null ? [item.cost] : []));
   const medianTime = times.length ? median(times) : null;
   const medianCost = costs.length ? median(costs) : null;
-  // The comparison period's medians, as striped markers on the same scales.
-  const compareTimes = compare?.flatMap((item) => (item.processingMs != null ? [item.processingMs] : [])) ?? [];
-  const compareCosts = compare?.flatMap((item) => (item.cost != null ? [item.cost] : [])) ?? [];
-  const wasTime = compareTimes.length ? median(compareTimes) : null;
-  const wasCost = compareCosts.length ? median(compareCosts) : null;
-  const maxTime = Math.max(1, ...times, wasTime ?? 0);
-  const maxCost = Math.max(0.000001, ...costs, wasCost ?? 0);
+  const maxTime = Math.max(1, ...times);
+  const maxCost = Math.max(0.000001, ...costs);
 
   return (
     <section className="dashboard-panel case-cost-panel">
       <div className="panel-heading">
         <div>
           <h2>Time and cost by case</h2>
-          <p>Automated processing time and Claude spend per analysed case; the line marks the median{compare ? ', the striped marker the comparison period\'s' : ''}</p>
+          <p>Automated processing time and Claude spend per analysed case; the line marks the median</p>
         </div>
         {measured.length > 1 && <SelectMenu name="Sort cases" options={CASE_SORTS} value={sort} onChange={setSort} />}
       </div>
@@ -148,8 +141,8 @@ export function TimeAndCostByCase({ cases, compare, costState, onOpen }: { cases
         <>
           <div className="case-cost-head" aria-hidden="true">
             <span>CASE</span>
-            <span>PROCESSING TIME{medianTime != null && <small> · median {formatDuration(medianTime)}{wasTime != null && `, was ${formatDuration(wasTime)}`}</small>}</span>
-            <span>CLAUDE COST{medianCost != null && <small> · median {usd(medianCost)}{wasCost != null && `, was ${usd(wasCost)}`}</small>}</span>
+            <span>PROCESSING TIME{medianTime != null && <small> · median {formatDuration(medianTime)}</small>}</span>
+            <span>CLAUDE COST{medianCost != null && <small> · median {usd(medianCost)}</small>}</span>
           </div>
           <ul className="case-cost-list">
             {shown.map((item) => {
@@ -163,7 +156,6 @@ export function TimeAndCostByCase({ cases, compare, costState, onOpen }: { cases
                     <span className="case-cost-track">
                       {item.processingMs != null && <i className="case-cost-bar--time" style={{ width: `${(item.processingMs / maxTime) * 100}%` }} />}
                       {medianTime != null && <b style={{ left: `${(medianTime / maxTime) * 100}%` }} />}
-                      {wasTime != null && <span className="compare-marker" style={{ left: `${(wasTime / maxTime) * 100}%` }} title={`Comparison median: ${formatDuration(wasTime)}`} />}
                     </span>
                     <span className="case-cost-value">{item.processingMs != null ? formatDuration(item.processingMs) : '—'}</span>
                   </span>
@@ -171,7 +163,6 @@ export function TimeAndCostByCase({ cases, compare, costState, onOpen }: { cases
                     <span className="case-cost-track">
                       {item.cost != null && <i className="case-cost-bar--cost" style={{ width: `${(item.cost / maxCost) * 100}%` }} />}
                       {medianCost != null && <b style={{ left: `${(medianCost / maxCost) * 100}%` }} />}
-                      {wasCost != null && <span className="compare-marker" style={{ left: `${(wasCost / maxCost) * 100}%` }} title={`Comparison median: ${usd(wasCost)}`} />}
                     </span>
                     <span className="case-cost-value">{item.cost != null ? usd(item.cost) : '—'}</span>
                   </span>
@@ -206,14 +197,12 @@ export function TimeAndCostByCase({ cases, compare, costState, onOpen }: { cases
 // Where the cases are
 
 // The cases in view split by stage, in the stages' own order: one bar, then a row per stage holding cases.
-export function StageBreakdown({ cases, compare, stages }: { cases: AnalyticsCase[]; compare?: AnalyticsCase[]; stages: { label: string; tone: string; stage?: string }[] }) {
+export function StageBreakdown({ cases, stages }: { cases: AnalyticsCase[]; stages: { label: string; tone: string; stage?: string }[] }) {
   const counts = stages.map((stage) => ({
     ...stage,
     count: cases.filter((item) => item.status === stage.label).length,
-    was: compare?.filter((item) => item.status === stage.label).length ?? 0,
   }));
-  // Stages holding cases now, or (when comparing) then.
-  const held = counts.filter((stage) => stage.count > 0 || stage.was > 0);
+  const held = counts.filter((stage) => stage.count > 0);
 
   return (
     <section className="dashboard-panel">
@@ -223,7 +212,7 @@ export function StageBreakdown({ cases, compare, stages }: { cases: AnalyticsCas
           <p>Cases in view by stage</p>
         </div>
       </div>
-      {cases.length === 0 && !compare?.length ? (
+      {cases.length === 0 ? (
         <p className="empty-insight">No cases in this date and status selection.</p>
       ) : (
         <>
@@ -236,9 +225,7 @@ export function StageBreakdown({ cases, compare, stages }: { cases: AnalyticsCas
                 <StageMark stage={stage.stage} />
                 <span className="stage-name">{stage.label}</span>
                 <strong>{stage.count}</strong>
-                {compare
-                  ? <CompareDelta value={stage.count} previous={stage.was} compact />
-                  : <span className="stage-share">{Math.round((stage.count / cases.length) * 100)}%</span>}
+                <span className="stage-share">{Math.round((stage.count / cases.length) * 100)}%</span>
               </li>
             ))}
           </ul>
@@ -263,13 +250,11 @@ function ticks(max: number): number[] {
 
 // One dot per case with both a time and a cost, coloured by risk level: whether slow cases cost more, and which
 // cases sit apart from the rest.
-export function CostAgainstTime({ cases, compare, costState, onOpen }: { cases: AnalyticsCase[]; compare?: AnalyticsCase[]; costState: CostState; onOpen: (item: AnalyticsCase) => void }) {
+export function CostAgainstTime({ cases, costState, onOpen }: { cases: AnalyticsCase[]; costState: CostState; onOpen: (item: AnalyticsCase) => void }) {
   const [hovered, setHovered] = useState<string | null>(null);
-  const plotted = (list: AnalyticsCase[], was: boolean) => list
+  const points = cases
     .filter((item): item is AnalyticsCase & { processingMs: number; cost: number } => item.processingMs != null && item.cost != null)
-    .map((item) => ({ ...item, key: `${was ? 'was' : 'now'}:${item.id}`, was }));
-  // The comparison period's dots first, so the period's sit on top.
-  const points = [...plotted(compare ?? [], true), ...plotted(cases, false)];
+    .map((item) => ({ ...item, key: item.id }));
   const xTicks = ticks(Math.max(1000, ...points.map((item) => item.processingMs)));
   const yTicks = ticks(Math.max(0.001, ...points.map((item) => item.cost)));
   const xMax = xTicks[xTicks.length - 1];
@@ -285,7 +270,7 @@ export function CostAgainstTime({ cases, compare, costState, onOpen }: { cases: 
       <div className="panel-heading">
         <div>
           <h2>Cost against processing time</h2>
-          <p>Each dot is an analysed case, coloured by risk level{compare ? '; striped dots are the comparison period' : ''}</p>
+          <p>Each dot is an analysed case, coloured by risk level</p>
         </div>
       </div>
       {points.length === 0 ? (
@@ -307,7 +292,7 @@ export function CostAgainstTime({ cases, compare, costState, onOpen }: { cases: 
               {points.map((item) => (
                 <g
                   key={item.key}
-                  className={`scatter-point${item.routeId ? ' scatter-point--link' : ''}${item.was ? ' scatter-point--was' : ''}`}
+                  className={`scatter-point${item.routeId ? ' scatter-point--link' : ''}`}
                   onMouseEnter={() => setHovered(item.key)}
                   onMouseLeave={() => setHovered(null)}
                   onClick={() => item.routeId && onOpen(item)}
@@ -315,7 +300,6 @@ export function CostAgainstTime({ cases, compare, costState, onOpen }: { cases: 
                   {/* A larger, invisible target than the dot. */}
                   <circle cx={x(item.processingMs)} cy={y(item.cost)} r={12} fill="transparent" />
                   <circle className={`scatter-dot ${levelClass(item.risk ?? 'Not scored')}`} cx={x(item.processingMs)} cy={y(item.cost)} r={hovered === item.key ? 7 : 5.5} />
-                  {item.was && <circle className="scatter-dot-stripes" cx={x(item.processingMs)} cy={y(item.cost)} r={hovered === item.key ? 7 : 5.5} />}
                 </g>
               ))}
             </svg>
@@ -325,7 +309,7 @@ export function CostAgainstTime({ cases, compare, costState, onOpen }: { cases: 
                 role="tooltip"
                 style={{ left: `${(x(active.processingMs) / PLOT.width) * 100}%`, top: `${(y(active.cost) / PLOT.height) * 100}%` } as CSSProperties}
               >
-                <strong>{active.id}{active.was && ' · comparison period'}</strong>
+                <strong>{active.id}</strong>
                 <span>{active.applicant}</span>
                 <span>{formatDuration(active.processingMs)} · {usd(active.cost)}</span>
                 <span>{active.risk ? `${active.risk} risk, ${active.score ?? '—'}` : 'Not scored'}</span>
@@ -342,7 +326,7 @@ export function CostAgainstTime({ cases, compare, costState, onOpen }: { cases: 
 // Risk scores
 
 // Scored cases per band of ten points, each column split by risk level.
-export function RiskScoreSpread({ cases, compare }: { cases: AnalyticsCase[]; compare?: AnalyticsCase[] }) {
+export function RiskScoreSpread({ cases }: { cases: AnalyticsCase[] }) {
   const bins = Array.from({ length: 10 }, (_, index) => ({ from: index * 10, counts: { Critical: 0, High: 0, Medium: 0, Low: 0 } as Record<Risk, number>, total: 0 }));
   const scored = cases.filter((item): item is AnalyticsCase & { risk: Risk; score: number } => item.risk != null && item.score != null);
   for (const item of scored) {
@@ -350,25 +334,19 @@ export function RiskScoreSpread({ cases, compare }: { cases: AnalyticsCase[]; co
     bin.counts[item.risk] += 1;
     bin.total += 1;
   }
-  // The comparison period's scored cases per bin, drawn as striped columns beside this period's.
-  const ghosts = Array<number>(10).fill(0);
-  compare?.forEach((item) => {
-    if (item.risk != null && item.score != null) ghosts[Math.min(9, Math.max(0, Math.floor(item.score / 10)))] += 1;
-  });
-  const peak = Math.max(1, ...bins.map((bin) => bin.total), ...ghosts);
+  const peak = Math.max(1, ...bins.map((bin) => bin.total));
   const unscored = cases.length - scored.length;
   const medianScore = scored.length ? Math.round(median(scored.map((item) => item.score))) : null;
-  const compareScores = compare?.flatMap((item) => (item.risk != null && item.score != null ? [item.score] : [])) ?? [];
 
   return (
     <section className="dashboard-panel">
       <div className="panel-heading">
         <div>
           <h2>Risk score spread</h2>
-          <p>Scored cases per ten points of risk score{compare ? '; striped columns are the comparison period' : ''}</p>
+          <p>Scored cases per ten points of risk score</p>
         </div>
       </div>
-      {scored.length === 0 && !ghosts.some(Boolean) ? (
+      {scored.length === 0 ? (
         <p className="empty-insight">No case in this selection has been scored yet.</p>
       ) : (
         <>
@@ -377,12 +355,11 @@ export function RiskScoreSpread({ cases, compare }: { cases: AnalyticsCase[]; co
               <li key={level}><i className={levelClass(level)} aria-hidden="true" />{level}</li>
             ))}
           </ul>
-          <div className={`timeline${compare ? ' timeline--compare' : ''}`} role="img" aria-label={`Risk scores of ${scored.length} cases${medianScore != null ? `, median ${medianScore}` : ''}`}>
+          <div className="timeline" role="img" aria-label={`Risk scores of ${scored.length} cases${medianScore != null ? `, median ${medianScore}` : ''}`}>
             <span className="timeline-peak" aria-hidden="true">{peak}</span>
             <div className="timeline-columns">
               {bins.map((bin, index) => (
                 <div key={bin.from} className="timeline-column" style={{ '--column': index } as CSSProperties}>
-                  {ghosts[index] > 0 && <span className="timeline-ghost" style={{ height: `${(ghosts[index] / peak) * 100}%` }} aria-hidden="true" />}
                   <div className="timeline-stack" style={{ height: `${(bin.total / peak) * 100}%` }}>
                     {(Object.keys(bin.counts) as Risk[]).map((level) =>
                       bin.counts[level] ? <i key={level} className={levelClass(level)} style={{ flexGrow: bin.counts[level] }} /> : null,
@@ -393,7 +370,6 @@ export function RiskScoreSpread({ cases, compare }: { cases: AnalyticsCase[]; co
                     {(Object.keys(bin.counts) as Risk[]).filter((level) => bin.counts[level]).map((level) => (
                       <span key={level}><i className={levelClass(level)} aria-hidden="true" />{level} {bin.counts[level]}</span>
                     ))}
-                    {compare && <span className="timeline-tip-was">Comparison: {ghosts[index]}</span>}
                   </span>
                   <span className="timeline-label" aria-hidden="true">{index % 2 === 0 ? bin.from : ''}</span>
                 </div>
@@ -402,7 +378,6 @@ export function RiskScoreSpread({ cases, compare }: { cases: AnalyticsCase[]; co
           </div>
           <p className="insight-note">
             {medianScore != null ? `Median score ${medianScore}` : 'No case scored'}
-            {compare && ` (was ${compareScores.length ? Math.round(median(compareScores)) : '—'})`}
             {unscored > 0 && ` · ${unscored} ${unscored === 1 ? 'case' : 'cases'} not scored yet`}
           </p>
         </>

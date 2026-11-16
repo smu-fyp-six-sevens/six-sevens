@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections import deque
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
@@ -16,7 +15,7 @@ from ..config import settings
 from ..events import Event, Stopwatch, types
 from ..events.envelope import officer_of
 from ..langgraph import pipeline as langgraph_pipeline
-from ..models import DocumentStatus, ProcessingErrorEntry
+from ..models import DocumentStatus
 from . import recovery
 
 logger = logging.getLogger("classifier_pipeline.doc_worker")
@@ -24,25 +23,13 @@ logger = logging.getLogger("classifier_pipeline.doc_worker")
 _ACTOR = "doc-worker"
 _slots = asyncio.Semaphore(settings.QUEUE_WORKER_CONCURRENCY)
 _runs = recovery.RunTracker("document")
-# Failures with no document row to write to; lost on restart.
-_recent_errors: deque[ProcessingErrorEntry] = deque(maxlen=100)
-
-
-def recent_errors() -> list[ProcessingErrorEntry]:
-    return list(_recent_errors)
-
-
-def _record_error(document_id: str, error: str) -> None:
-    _recent_errors.append(ProcessingErrorEntry(document_id=document_id, error=error, occurred_at=datetime.now(timezone.utc)))
 
 
 async def _process(document_id: str, queued_at: datetime) -> bool:
     """Whether it ran: a repeat or a cancelled document is skipped."""
     document = await asyncio.to_thread(document_repository.get_document, document_id, include_fields=False)
     if document is None:
-        message = f"Document {document_id} not found when its event arrived (row may have been deleted)"
-        logger.error(message)
-        _record_error(document_id, message)
+        logger.error("Document %s not found when its event arrived (row may have been deleted)", document_id)
         return False
     if document.status != DocumentStatus.QUEUED:
         # Cancelled, or a repeat delivery of an event already handled.
@@ -66,8 +53,7 @@ async def _process(document_id: str, queued_at: datetime) -> bool:
 
 
 async def _cancelled_elsewhere(document_id: str) -> bool:
-    document = await asyncio.to_thread(document_repository.get_document, document_id, include_fields=False)
-    return document is not None and document.status == DocumentStatus.CANCELLED
+    return await asyncio.to_thread(document_repository.get_status, document_id) == DocumentStatus.CANCELLED
 
 
 async def _run(
@@ -96,7 +82,6 @@ async def _run(
         return
     except Exception as exc:
         logger.exception("Unhandled error processing document %s", document_id)
-        _record_error(document_id, str(exc))
         try:
             await asyncio.to_thread(
                 document_repository.update_status, document_id, DocumentStatus.FAILED,
@@ -157,7 +142,10 @@ async def on_retyped(event: Event) -> None:
         return
     document_id = event.document_id
     stamp = event.detail.get("requested_at")
-    requested_at = datetime.fromisoformat(stamp) if isinstance(stamp, str) else None
+    if not isinstance(stamp, str):
+        logger.warning("Retype event %s has no requested_at; nothing to claim, skipping", event.event_id)
+        return
+    requested_at = datetime.fromisoformat(stamp)
 
     async def claimed_rerun() -> bool:
         # A repeated delivery, or one after the rerun finished, must not spend the calls again or overwrite

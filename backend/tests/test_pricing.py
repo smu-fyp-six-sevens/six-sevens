@@ -107,19 +107,17 @@ def test_case_cost_says_how_much_input_came_from_the_cache():
     from app import audit
     from app.events import Event, types
 
-    def row(type: str, run: str, input_tokens: int, read: int, saved: float | None) -> dict:
+    def row(type: str, run: str, input_tokens: int, read: int, saved: float) -> dict:
         detail = {
             "run": run, "llm_cost_usd": 0.01, "llm_input_tokens": input_tokens, "llm_cache_read_tokens": read,
-            "llm_cache_write_tokens": 100,
+            "llm_cache_write_tokens": 100, "llm_cache_saved_usd": saved,
         }
-        if saved is not None:
-            detail["llm_cache_saved_usd"] = saved
         return Event(type=type, case_id="case-1", document_id="doc-1", detail=detail).to_audit_row()
 
     rows = [
         row(types.DOCUMENT_ANALYZED, "document", 1000, 600, 0.002),
         row(types.DOCUMENT_DETECTED, "detection", 3000, 0, 0.0),
-        row(types.DOCUMENT_DETECTED, "detection", 1000, 400, None),  # recorded before the saving was
+        row(types.DOCUMENT_DETECTED, "detection", 1000, 400, 0.001),
     ]
     with (
         patch("app.audit.service_supabase_client", return_value=MagicMock()),
@@ -128,6 +126,6 @@ def test_case_cost_says_how_much_input_came_from_the_cache():
         summary = audit.case_cost("case-1", [])
 
     assert (summary.cache.input_tokens, summary.cache.cache_read_tokens, summary.cache.hit_rate) == (5000, 1000, 0.2)
-    assert summary.cache.saved_usd == 0.002 and summary.cache.runs_without_saving == 1
+    assert summary.cache.saved_usd == 0.003
     assert summary.cache_by_run["document"].hit_rate == 0.6
     assert summary.cache_by_run["detection"].hit_rate == 0.1

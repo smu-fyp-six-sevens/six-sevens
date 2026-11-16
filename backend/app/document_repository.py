@@ -227,18 +227,17 @@ def end_unfinished_detection(document_id: str, *, has_report: bool) -> bool:
     return _end_detection(document_id, DocumentStatus.DETECTED if has_report else DocumentStatus.APPROVED)
 
 
-def claim_extraction_rerun(document_id: str, requested_at: datetime | None) -> bool:
+def claim_extraction_rerun(document_id: str, requested_at: datetime) -> bool:
     """
     Takes an officer's retype for one rerun (compare-and-swap): the document must still be EXTRACTING with the
     stamp set_type wrote. A repeated event finds the stamp moved on, or the status changed, and gets False.
-    requested_at None (an event from before the stamp was sent) claims on the status alone.
     """
-    query = supabase_client.table("documents").update(
+    result = supabase_client.table("documents").update(
         {"processing_started_at": datetime.now(timezone.utc).isoformat()}
-    ).eq("id", document_id).eq("status", DocumentStatus.EXTRACTING.value)
-    if requested_at is not None:
-        query = query.eq("processing_started_at", requested_at.isoformat())
-    return bool(query.execute().data)
+    ).eq("id", document_id).eq("status", DocumentStatus.EXTRACTING.value).eq(
+        "processing_started_at", requested_at.isoformat()
+    ).execute()
+    return bool(result.data)
 
 
 def reject_document(document_id: str, expected: DocumentStatus) -> DocumentRecord | None:
@@ -308,7 +307,7 @@ def record_classification(
     *,
     document_type: str | None,
     classification_confidence: float | None,
-    routing_status: str,
+    routing_status: str | None,
     evidence: list[str] | None = None,
     fulfilled_requirements: list[str] | None = None,
 ) -> None:
@@ -417,19 +416,22 @@ def update_ingest_results(document_id: str, *, guard_result: dict, metadata: dic
 def request_detection_cancel(document_id: str) -> None:
     """
     Flags an officer's detection cancel on the document, so a run on any instance sees it through the database alone
-    (workers/detection._cancel_requested_since). Never raises: the cancel event still goes out, and the run also
-    checks the audit trail.
+    (workers/detection._cancel_requested_since). Raises: the cancel route fails rather than publish a cancel no run
+    elsewhere would see.
     """
-    try:
-        supabase_client.table("documents").update({"cancel_requested_at": datetime.now(timezone.utc).isoformat()}).eq(
-            "id", document_id
-        ).execute()
-    except Exception as exc:
-        logger.warning("Document %s: the cancel flag could not be saved: %s", document_id, exc)
+    supabase_client.table("documents").update({"cancel_requested_at": datetime.now(timezone.utc).isoformat()}).eq(
+        "id", document_id
+    ).execute()
+
+
+def get_status(document_id: str) -> DocumentStatus | None:
+    """Just the status, for the cancel checks that poll it; None when the document is gone."""
+    rows = supabase_client.table("documents").select("status").eq("id", document_id).execute().data
+    return DocumentStatus(_row(rows[0])["status"]) if rows else None
 
 
 def detection_cancel_requested_since(document_id: str, since: datetime) -> bool | None:
-    """Whether the document's cancel flag was set after `since`; None when it can't be read (e.g. no column yet)."""
+    """Whether the document's cancel flag was set after `since`; None when the read fails."""
     try:
         rows = supabase_client.table("documents").select("cancel_requested_at").eq("id", document_id).execute().data
     except Exception as exc:
@@ -462,17 +464,22 @@ def get_guard_result(document_id: str) -> dict | None:
     return value if isinstance(value, dict) else None
 
 
-def _delete_document_children(document_ids: list[str]) -> None:
+def _delete_document_children(documents: list[DocumentRecord], *, case_going: bool = False) -> None:
     """
-    What the database's cascades don't cover: the cross-document findings resting on these documents, and the traces
-    held in memory. Every table keyed by document (extracted_fields, findings, detection_results, langgraph_trace,
-    case_notes) cascades from the documents delete (backend/sql/schema.sql). audit_events stays: it is the trail and
-    the cost record.
+    What the database's cascades don't cover: the cross-document findings resting on these documents (unless their
+    case goes too, which takes them), and the traces held in memory. Every table keyed by document (extracted_fields,
+    findings, detection_results, langgraph_trace, case_notes) cascades from the documents delete
+    (backend/sql/schema.sql). audit_events stays: it is the trail and the cost record.
     """
     from .langgraph import trace
 
-    findings_repository.delete_case_findings_citing(document_ids)
-    trace.forget(document_ids)
+    if not case_going:
+        by_case: dict[str, list[str]] = {}
+        for document in documents:
+            if document.case_id is not None:
+                by_case.setdefault(document.case_id, []).append(document.id)
+        findings_repository.delete_case_findings_citing(by_case)
+    trace.forget([document.id for document in documents])
 
 
 def text_lines_cache_path(document_id: str) -> str:
@@ -496,7 +503,7 @@ def remove_document(document: DocumentRecord) -> None:
     Storage deletion is best-effort. A missing object should not leave the
     row in place; a later retry still deletes the row.
     """
-    _delete_document_children([document.id])
+    _delete_document_children([document])
     if document.storage_path:
         try:
             storage_service.delete_file(document.storage_path)
@@ -514,18 +521,15 @@ def remove_document(document: DocumentRecord) -> None:
     _sync_case(document.case_id)
 
 
-def remove_documents(documents: list[DocumentRecord]) -> None:
+def remove_documents(documents: list[DocumentRecord], *, case_going: bool = False) -> None:
     """
-    Batch version of remove_document, for deleting every document under a
-    case in one pass instead of one round-trip per document per step. Skips
-    the per-document _sync_case call â€” callers doing this in bulk (case
-    deletion) are removing the case itself right after, so resyncing its
-    stage in between would be wasted work.
+    Batch version of remove_document: one round trip per step for every document. Skips the per-document stage sync
+    (callers resync each case once). case_going: the case is deleted right after, and its cascade takes the rest.
     """
     if not documents:
         return
     document_ids = [document.id for document in documents]
-    _delete_document_children(document_ids)
+    _delete_document_children(documents, case_going=case_going)
     storage_paths = [document.storage_path for document in documents if document.storage_path]
     # With each file, the cache of where its text sits (text_lines), if one was made.
     storage_paths += [text_lines_cache_path(document.id) for document in documents if document.storage_path]
@@ -591,11 +595,13 @@ def get_document_for_detection(document_id: str) -> tuple[DocumentRecord, dict |
 
 
 def get_documents_in_status(
-    statuses: list[DocumentStatus], *, include_fields: bool = True
+    statuses: list[DocumentStatus], *, include_fields: bool = True, brief: bool = False
 ) -> list[DocumentRecord]:
-    # Paged: failed documents only accumulate, and one read stops at PostgREST's 1,000 rows.
+    """brief: only the status columns (_STATUS_COLUMNS), for the sweeper's scan."""
+    columns = _STATUS_COLUMNS if brief else _LIST_COLUMNS
+    # Paged: one read stops at PostgREST's 1,000 rows.
     rows = fetch_all(
-        lambda: supabase_client.table("documents").select(_LIST_COLUMNS).in_("status", [s.value for s in statuses]),
+        lambda: supabase_client.table("documents").select(columns).in_("status", [s.value for s in statuses]),
         "id",
     )
     documents = [DocumentRecord(**_row(row)) for row in rows]

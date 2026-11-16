@@ -101,7 +101,7 @@ async def agent_node(state: SecondLookState) -> dict:
 
     messages = state.get("agent_messages") or []
     turn = state.get("agent_turns", 0) + 1
-    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 4000, effort="low").bind_tools(
+    model = build_chat_anthropic(settings.LANGGRAPH_SONNET_MODEL, 4000, effort="low", cache_history=True).bind_tools(
         TOOLS, tool_choice={"type": "none"} if turn >= _MAX_AGENT_TURNS else None,
     )
     if messages:

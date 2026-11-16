@@ -1,6 +1,6 @@
 """
 When a case can be analysed: every approved document scanned, and, for a case that enforces the checklist,
-every required document approved. See CROSS_DOCUMENT_AND_RISK_PLAN.md.
+every required document approved. See HOW_IT_WORKS.md, Step 6.
 """
 
 from __future__ import annotations

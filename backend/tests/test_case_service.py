@@ -148,7 +148,7 @@ def test_all_analyzed_returns_analyzed() -> None:
 
 def test_one_stuck_among_many_analyzed_returns_stuck() -> None:
     """The exact scenario from the ask: 9 analyzed + 1 stuck reads 'stuck'."""
-    old_enough = settings.STUCK_THRESHOLD_SECONDS + 5
+    old_enough = settings.STUCK_WAITING_SECONDS + 5
     documents = [_make_document(f"doc-{i}", DocumentStatus.ANALYZED) for i in range(9)]
     documents.append(
         _make_document("doc-stuck", DocumentStatus.QUEUED, queued_seconds_ago=old_enough)
@@ -172,7 +172,7 @@ def test_failed_outranks_in_progress_but_not_stuck() -> None:
 
 
 def test_stuck_outranks_failed() -> None:
-    old_enough = settings.STUCK_THRESHOLD_SECONDS + 5
+    old_enough = settings.STUCK_RUNNING_SECONDS + 5
     documents = [
         _make_document("doc-1", DocumentStatus.FAILED),
         _make_document("doc-2", DocumentStatus.PROCESSING, processing_seconds_ago=old_enough),

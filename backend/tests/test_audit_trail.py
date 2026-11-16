@@ -70,7 +70,9 @@ async def test_a_re_extraction_names_the_officer_who_changed_the_type(published_
         repo.get_document.return_value = _document(DocumentStatus.FAILED)
         pipeline.rerun_extraction = AsyncMock()
 
-        await doc_worker.on_retyped(_by_officer(types.DOCUMENT_RETYPED, document_id="doc-1"))
+        await doc_worker.on_retyped(_by_officer(
+            types.DOCUMENT_RETYPED, document_id="doc-1", detail={"requested_at": "2026-11-16T00:00:00+00:00"},
+        ))
 
     failed = _of_type(published_events, types.DOCUMENT_FAILED)
     assert failed.detail["requested_by"] == OFFICER

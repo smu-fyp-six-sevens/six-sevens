@@ -83,8 +83,6 @@ create table public.extracted_fields (
     field_name text not null,
     field_value jsonb,
     confidence numeric(5,2),
-    extracted_at timestamptz not null default now(),
-    field_category text,
     field_type text,
     constraint extracted_fields_pkey primary key (id),
     constraint extracted_fields_document_id_fkey foreign key (document_id) references public.documents(id) on delete cascade
@@ -381,27 +379,68 @@ begin
 end;
 $$;
 
--- A document's field set replaced in one transaction, so a failure between the delete and the insert can't leave the
--- document with no fields (extracted_fields_repository.replace_extracted_fields).
-create function public.replace_extracted_fields(p_document_id uuid, p_rows jsonb)
-returns void
+-- Every field write (extracted_fields_repository): false, writing nothing, unless the document is still in one of
+-- p_expected_statuses. The document row is locked first, so a write can't interleave with an approval or a cancel.
+-- A replace is one transaction, so a failure between its delete and insert can't leave the document with no fields.
+create function public.replace_extracted_fields(p_document_id uuid, p_rows jsonb, p_expected_statuses text[])
+returns boolean
 language plpgsql
 set search_path = ''
 as $$
 begin
+    perform 1 from public.documents where id = p_document_id and status = any(p_expected_statuses) for update;
+    if not found then
+        return false;
+    end if;
     delete from public.extracted_fields where document_id = p_document_id;
-    insert into public.extracted_fields (document_id, field_name, field_value, confidence, field_category, field_type)
-    select p_document_id, r.field_name, r.field_value, r.confidence, r.field_category, r.field_type
-    from jsonb_to_recordset(p_rows) as r(
-        field_name text, field_value jsonb, confidence numeric, field_category text, field_type text
-    );
+    insert into public.extracted_fields (document_id, field_name, field_value, confidence, field_type)
+    select p_document_id, r.field_name, r.field_value, r.confidence, r.field_type
+    from jsonb_to_recordset(p_rows) as r(field_name text, field_value jsonb, confidence numeric, field_type text);
+    return true;
+end;
+$$;
+
+create function public.add_extracted_field(
+    p_document_id uuid, p_field_name text, p_field_value jsonb, p_field_type text, p_expected_statuses text[]
+)
+returns boolean
+language plpgsql
+set search_path = ''
+as $$
+begin
+    perform 1 from public.documents where id = p_document_id and status = any(p_expected_statuses) for update;
+    if not found then
+        return false;
+    end if;
+    insert into public.extracted_fields (document_id, field_name, field_value, confidence, field_type)
+    values (p_document_id, p_field_name, p_field_value, 1.0, p_field_type);
+    return true;
+end;
+$$;
+
+create function public.delete_extracted_field(p_document_id uuid, p_field_id uuid, p_expected_statuses text[])
+returns boolean
+language plpgsql
+set search_path = ''
+as $$
+begin
+    perform 1 from public.documents where id = p_document_id and status = any(p_expected_statuses) for update;
+    if not found then
+        return false;
+    end if;
+    delete from public.extracted_fields where id = p_field_id and document_id = p_document_id;
+    return true;
 end;
 $$;
 
 revoke all on function public.sync_findings(text, uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.sync_findings(text, uuid, jsonb) to service_role;
-revoke all on function public.replace_extracted_fields(uuid, jsonb) from public, anon, authenticated;
-grant execute on function public.replace_extracted_fields(uuid, jsonb) to service_role;
+revoke all on function public.replace_extracted_fields(uuid, jsonb, text[]) from public, anon, authenticated;
+grant execute on function public.replace_extracted_fields(uuid, jsonb, text[]) to service_role;
+revoke all on function public.add_extracted_field(uuid, text, jsonb, text, text[]) from public, anon, authenticated;
+grant execute on function public.add_extracted_field(uuid, text, jsonb, text, text[]) to service_role;
+revoke all on function public.delete_extracted_field(uuid, uuid, text[]) from public, anon, authenticated;
+grant execute on function public.delete_extracted_field(uuid, uuid, text[]) to service_role;
 
 -- Read functions (backend only) -------------------------------------------------------------------------------------
 
@@ -476,7 +515,6 @@ $$;
 
 -- What the extractor learns (corrections_repository.field_edits): per document type, the fields officers added (a
 -- change from nothing) and deleted (a change to nothing) since p_since, with the cases. Field names only, never values.
--- Events from before document.field_edited carried document_type can't be grouped, so they are left out.
 create function public.field_edit_counts(p_since timestamptz, p_document_type text)
 returns table (document_type text, field_name text, edit text, cases integer)
 language sql

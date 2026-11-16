@@ -251,7 +251,7 @@ def test_deleting_a_document_removes_the_case_findings_citing_it(db) -> None:
                     evidence={"document_ids": [OTHER_DOCUMENT]})
     own = finding(db, document_id=DOCUMENT)  # removed with its document by the foreign key, not here
 
-    findings_repository.delete_case_findings_citing([DOCUMENT])
+    findings_repository.delete_case_findings_citing({CASE: [DOCUMENT]})
 
     assert {row["id"] for row in db.rows("findings")} == {other, own}
 

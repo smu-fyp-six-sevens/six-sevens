@@ -525,12 +525,11 @@ export function CaseRiskCard({
               <span className="risk-document-preview">{document.rows[0].finding.summary}</span>
             )}
           </span>
-          <span
+          <Icon
+            name="chevronRight"
+            size={16}
             className={`risk-chevron ${isOpen && document.scope === 'case' ? 'risk-chevron--open' : ''}`}
-            aria-hidden="true"
-          >
-            ›
-          </span>
+          />
         </button>
 
         {isOpen && document.scope === 'case' && renderGroupBody(document)}
@@ -915,7 +914,7 @@ export function CaseRiskCard({
           {!reviewsLoading && done.length > 0 && (
             <details className="risk-reviewed">
               <summary>
-                <span className="risk-chevron" aria-hidden="true">›</span>
+                <Icon name="chevronRight" size={16} className="risk-chevron" />
                 Reviewed ({done.length})
                 <span className="risk-reviewed-hint">Saved by an officer</span>
               </summary>
@@ -1004,13 +1003,13 @@ function PlaceLocator({ places, shownAt, onShow }: { places: Place[]; shownAt: n
   return (
     <span className="risk-finding-places" role="group" aria-label="Places on the document">
       <button type="button" onClick={() => go(-1)} aria-label="Previous place">
-        ‹
+        <Icon name="chevronLeft" size={14} />
       </button>
       <span>
         Place {shownAt + 1} of {places.length} (Page {places[shownAt].place.page})
       </span>
       <button type="button" onClick={() => go(1)} aria-label="Next place">
-        ›
+        <Icon name="chevronRight" size={14} />
       </button>
     </span>
   );

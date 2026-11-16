@@ -1,4 +1,4 @@
-# The front door on GKE (CLOUD_ARCHITECTURE_PLAN.md section 15): sixsevens.me in Cloud DNS, one Google-managed
+# The front door on GKE (HOW_IT_WORKS.md §9, GKE design): sixsevens.me in Cloud DNS, one Google-managed
 # certificate (checked through DNS), the load balancer's static address, and Cloud Armor. The chart's Gateway
 # (deploy/helm/six-sevens/templates/gateway.yaml) uses the address, the certificate map and the policy by name.
 

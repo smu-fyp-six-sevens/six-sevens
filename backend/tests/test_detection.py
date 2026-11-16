@@ -599,11 +599,15 @@ def test_image_integrity_runs_both_checks_on_one_download() -> None:
 
 
 def test_cancel_detection_publishes_a_cancel_request(published_events) -> None:
-    with patch("app.routers._dependencies.document_repository") as mock_repo:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.document_repository") as flag,
+    ):
         mock_repo.get_document.return_value = _document(status=DocumentStatus.DETECTING)
         response = client.post("/documents/doc-1/detection/cancel")
 
     assert response.status_code == 200
+    flag.request_detection_cancel.assert_called_once_with("doc-1")
     assert [(e.type, e.document_id) for e in published_events] == [("detection.cancel_requested", "doc-1")]
 
 
@@ -634,6 +638,7 @@ def test_cancelling_a_run_still_waiting_for_a_worker_records_it_at_once(publishe
         patch("app.routers._dependencies.document_repository") as mock_repo,
         patch("app.routers.detection.detection_results") as mock_results,
         patch("app.routers.detection.push_case_snapshot") as push,
+        patch("app.routers.detection.document_repository"),
     ):
         mock_repo.get_document.return_value = _document(status=DocumentStatus.APPROVED)
         mock_results.get.return_value = (None, None)

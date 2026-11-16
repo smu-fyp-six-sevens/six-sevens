@@ -19,7 +19,6 @@ from .. import document_repository, extracted_fields_repository, metrics, storag
 from ..config import settings
 from ..evals.extraction import field_shape
 from ..guardrails import content_guard
-from .extraction_prompts import schema_field_names
 from ..ingestion.ingestion_service import ingest_document, content_type_from_filename
 from ..ingestion.metadata_extractor import EXTRACTION_ERROR_KEY, extract_metadata
 from ..cpu_pool import run_cpu
@@ -87,14 +86,17 @@ async def persist_extracted_fields(document_id: str, document_type: str, extract
     # turns out to also fulfil proof_of_address once Extraction has run.
     fulfilled_requirements = compute_fulfilled_requirements(document_type, extracted_fields)
     # Fields first: the documents update fires a live snapshot, which must already see the new fields.
-    await asyncio.to_thread(
+    written = await asyncio.to_thread(
         extracted_fields_repository.replace_extracted_fields,
         document_id,
         extracted_fields,
         field_confidences=field_confidences,
         default_confidence=extraction_confidence,
-        required_field_names=set(schema_field_names(document_type)),
+        expected_statuses=_RUNNING,
     )
+    if not written:
+        # Cancelled or replaced since the run started: it mustn't overwrite the fields.
+        raise RunStopped(f"Document {document_id} left its run; its fields were not written")
     await asyncio.to_thread(
         document_repository.update_extracted_fields,
         document_id,

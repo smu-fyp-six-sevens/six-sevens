@@ -10,17 +10,18 @@ It automates the forgery-check stage of GLDB's loan workflow: officers upload a 
 - `frontend/`: React + TypeScript (Vite) for officers. Live updates over a WebSocket.
 - `deploy/`: Terraform, Kong, Grafana, compose files. `docs/`: adding a service, architecture diagram and presentation guide, sprint regression reports.
 
-**Docs at the root:**
+**Docs at the root.** Two describe the system; the rest list open work only and are deleted once empty.
 
 | File | What it's for |
 |---|---|
-| `HOW_IT_WORKS.md` | How the system behaves today, settings, cost logs |
-| `FRAUD_DETECTION_MAP.md` | How the fraud checks and agents are wired; known detection bugs |
-| `CROSS_DOCUMENT_AND_RISK_PLAN.md` | Design of the case analysis and risk score |
-| `CLOUD_ARCHITECTURE_PLAN.md` | What's left in the cloud: to-dos, Stage 2, open decisions (§8–11); the move of production to GKE, live with phase 6 open (§13–24). The cloud as built: `HOW_IT_WORKS.md` §9 and `deploy/terraform/README.md` |
-| `CODEBASE_AUDIT.md` | Open bugs, stability, performance, code structure and security findings |
-| `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md` | Test gaps, and tests owed for recent fixes |
+| `README.md` | Setup, running, tests and CI (this file) |
+| `HOW_IT_WORKS.md` | Everything as built: behaviour, how detection and the case analysis are wired and why, settings, cost logs, the cloud and its design, how it's tested |
 | `PENDING_WORK.md` | Open product and platform work |
+| `CLOUD_ARCHITECTURE_PLAN.md` | Open cloud work: next steps, to-dos, Stage 2, agent evaluation |
+| `CODEBASE_AUDIT.md` | Open bugs (detection included), performance, code structure and security findings |
+| `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md` | Test gaps, and tests owed for recent fixes |
+
+Cloud operations and every problem met: `deploy/terraform/README.md`.
 
 ## Run locally
 
@@ -69,7 +70,7 @@ Settings come from `backend/.env`. The workers share one container (~3 GB). Walk
 
 ## Deploying
 
-Cloud Run from GitHub Actions: a green push to `main` deploys, or run "Deploy to Cloud Run" by hand. Terraform (`deploy/terraform`, one-time setup in its README) creates the services, Pub/Sub, secrets and identities; run `terraform apply` before a push that needs it. Adding a service: [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md).
+Production runs on GKE Autopilot at `sixsevens.me`: a green push to `main` builds and signs the images and releases the Helm chart through Cloud Deploy (`deploy.yml`'s `gke` job). Cloud Run still deploys alongside, taking no events, until phase 6 removes it (`HOW_IT_WORKS.md` §9; next steps in `CLOUD_ARCHITECTURE_PLAN.md`); "Deploy to Cloud Run" can also be run by hand. Terraform (`deploy/terraform`, one-time setup in its README) creates the services, Pub/Sub, secrets and identities; run `terraform apply` before a push that needs it. Adding a service: [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md).
 
 ## Tests
 
@@ -78,9 +79,9 @@ Cloud Run from GitHub Actions: a green push to `main` deploys, or run "Deploy to
 
 ## GitHub Actions
 
-- **`ci-cd.yml`** (PRs and pushes to `main`, not docs-only): backend (ruff, pyright, `openapi.json` up to date, tests with coverage); frontend (lint, `api.gen.ts` up to date, types, build, Playwright); security (Checkov, pip-audit, `npm audit` high, Terraform fmt/validate; Snyk only on lock-file changes, weekly or by hand, non-blocking until its quota resets). All must pass; a push to `main` then deploys.
+- **`ci-cd.yml`** (PRs and pushes to `main`, not docs-only): backend (ruff, pyright, `openapi.json` up to date, tests with coverage); frontend (lint, `api.gen.ts` up to date, types, build, Playwright); security (Checkov, pip-audit, `npm audit` high, Terraform fmt/validate; Snyk only on lock-file changes or by hand, non-blocking until its quota resets). All must pass; a push to `main` then deploys.
 - **`deploy.yml`**: one image per service, rolled out to Cloud Run, gateway checked, everything rolled back on failure. Signs in by Workload Identity Federation (repo variables `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`); the only repo secrets are `DATA_GOV_SG_API_KEY` and `SNYK_TOKEN`. With the repo variable `GKE_ENABLED=true` (and `SUPABASE_URL`), its `gke` job also signs every image and releases the Helm chart to GKE through Cloud Deploy (`deploy/terraform/README.md`, "GKE").
-- **`helm.yml`** (only changes to the chart, the role table, Kong, the event code or the backend Dockerfile; weekly; by hand). Most pushes don't run it. Two jobs:
+- **`helm.yml`** (only changes to the chart, the role table, Kong, the event code or the backend Dockerfile; or by hand). Most pushes don't run it. Two jobs:
   - **Values, render and Checkov** (about 2 minutes): the chart's role values match `roles.json`, it lints and renders, and Checkov passes on the rendered chart.
-  - **The kind run** (about 8–10 minutes with a warm image cache): only when the templates, the smoke files, Kong, the event code or the Dockerfile changed, weekly, or by hand. It runs the chart on kind (whose network plugin enforces network policies) against the Pub/Sub emulator and a stub Supabase: must-pass and must-block calls, one pulled event per worker.
+  - **The kind run** (about 8–10 minutes with a warm image cache): only when the templates, the smoke files, Kong, the event code or the Dockerfile changed, or by hand. It runs the chart on kind (whose network plugin enforces network policies) against the Pub/Sub emulator and a stub Supabase: must-pass and must-block calls, one pulled event per worker.
   - No Claude and no Google credentials in either.

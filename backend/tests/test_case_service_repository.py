@@ -267,11 +267,13 @@ def test_delete_case_removes_its_documents_then_the_case() -> None:
     with (
         patch("app.case_service.case_repository") as mock_case_repo,
         patch("app.case_service.document_repository") as mock_doc_repo,
+        patch("app.case_service.analysis_repository") as mock_runs,
     ):
         mock_doc_repo.list_documents.return_value = documents
+        mock_runs.latest_run_state.return_value = None
 
-        case_service.delete_case("case-1")
+        assert case_service.delete_case("case-1") == documents
 
         mock_doc_repo.list_documents.assert_called_once_with(case_id="case-1", include_fields=False)
-        mock_doc_repo.remove_documents.assert_called_once_with(documents)
+        mock_doc_repo.remove_documents.assert_called_once_with(documents, case_going=True)
         mock_case_repo.delete_case.assert_called_once_with("case-1")

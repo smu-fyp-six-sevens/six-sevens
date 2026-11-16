@@ -1,5 +1,5 @@
 # Grafana with its data sources and dashboards baked in, so an instance needs no state: Cloud Run may stop it
-# at any time (CLOUD_ARCHITECTURE_PLAN.md section 7). Built from the repository root.
+# at any time (HOW_IT_WORKS.md §8). Built from the repository root.
 FROM grafana/grafana:12.4.10
 
 # Reads the Cloud Billing export (the Cost dashboard's "Billed" row). Installed at build, not at start, so a cold

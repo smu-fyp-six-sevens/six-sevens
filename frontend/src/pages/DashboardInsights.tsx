@@ -1,5 +1,4 @@
 import type { CSSProperties } from 'react';
-import CompareDelta from '../components/CompareDelta';
 import { SeverityGauge } from './upload/SeverityGauge';
 import { SCORE_BANDS } from './upload/scoreBands';
 
@@ -16,14 +15,11 @@ export interface FlagInsight {
   severity: FlagSeverity;
   // The cases in view with this flag.
   caseIds: string[];
-  // Cases with it in the comparison period, when comparing.
-  previous?: number;
 }
 
 // Each flag as a run of pills, one per case in view, those with the flag filled in its severity's colour: how many
 // cases, and how serious, at a glance. A row opens the Flags tab.
-export function FlagPills({ flags, caseCount, compareCaseCount, onOpen }: { flags: FlagInsight[]; caseCount: number; compareCaseCount?: number; onOpen: () => void }) {
-  const comparing = compareCaseCount !== undefined;
+export function FlagPills({ flags, caseCount, onOpen }: { flags: FlagInsight[]; caseCount: number; onOpen: () => void }) {
   const pills = Math.max(1, Math.min(caseCount, MAX_PILLS));
   const casesPerPill = caseCount / pills;
 
@@ -32,13 +28,13 @@ export function FlagPills({ flags, caseCount, compareCaseCount, onOpen }: { flag
       <div className="flag-pill-list">
         {flags.map((flag, index) => {
           const count = flag.caseIds.length;
-          // At least one pill for a flag in view; none for one only in the comparison.
+          // At least one pill for a flag in view.
           const filled = count ? Math.max(1, Math.round(count / casesPerPill)) : 0;
           return (
             <button
               key={flag.name}
               type="button"
-              className={`flag-pill-row${comparing ? ' flag-pill-row--compare' : ''}`}
+              className="flag-pill-row"
               onClick={onOpen}
               title={`${flag.caseIds.slice(0, 5).join(', ')}${count > 5 ? ` +${count - 5} more` : ''}`}
               aria-label={`${flag.name}: ${count} of ${caseCount} cases, ${flag.severity.toLowerCase()} severity. View flags`}
@@ -55,13 +51,8 @@ export function FlagPills({ flags, caseCount, compareCaseCount, onOpen }: { flag
                     />
                   ))}
                 </span>
-                {/* The comparison period's share of cases with the flag, as a thin light bar under the pills. */}
-                {comparing && (
-                  <span className="compare-bar"><i style={{ width: `${compareCaseCount ? ((flag.previous ?? 0) / compareCaseCount) * 100 : 0}%` }} /></span>
-                )}
               </span>
               <strong>{count}</strong>
-              {comparing && <CompareDelta value={count} previous={flag.previous ?? 0} compact />}
               <span className={`flag-pill-severity flag-pill-severity--${flag.severity.toLowerCase()}`}>{flag.severity}</span>
             </button>
           );
@@ -69,7 +60,6 @@ export function FlagPills({ flags, caseCount, compareCaseCount, onOpen }: { flag
       </div>
       <p className="insight-note">
         Each pill is {casesPerPill === 1 ? 'a case' : `about ${Math.round(casesPerPill)} cases`} in view; filled, it has the flag.
-        {comparing && ' The thin striped bar is the share of cases with it in the comparison period.'}
       </p>
     </>
   );
@@ -77,7 +67,7 @@ export function FlagPills({ flags, caseCount, compareCaseCount, onOpen }: { flag
 
 // Each document type as a ring: the share of the cases in view that include it. A case holds several types, so
 // these are separate shares, not slices of one whole.
-export function CoverageRings({ types, caseCount, compare }: { types: [string, number][]; caseCount: number; compare?: { types: Map<string, number>; caseCount: number } }) {
+export function CoverageRings({ types, caseCount }: { types: [string, number][]; caseCount: number }) {
   return (
     <ul className="coverage-rings">
       {types.map(([type, count]) => {
@@ -86,22 +76,6 @@ export function CoverageRings({ types, caseCount, compare }: { types: [string, n
           <li key={type} title={`${count} of ${caseCount} cases (${share}%) include a ${type}`}>
             <svg className="coverage-ring" viewBox="0 0 64 64" aria-hidden="true">
               <circle className="coverage-ring-track" cx="32" cy="32" r="26" />
-              {compare && (
-                <>
-                  <circle className="coverage-ring-track coverage-ring-track--was" cx="32" cy="32" r="19" />
-                  {['coverage-ring-was-fill', 'coverage-ring-was-stripes'].map((ring) => (
-                    <circle
-                      key={ring}
-                      className={ring}
-                      cx="32"
-                      cy="32"
-                      r="19"
-                      pathLength={100}
-                      strokeDasharray={`${compare.caseCount ? Math.round(((compare.types.get(type) ?? 0) / compare.caseCount) * 100) : 0} 100`}
-                    />
-                  ))}
-                </>
-              )}
               <circle
                 className="coverage-ring-fill"
                 cx="32"
@@ -117,7 +91,6 @@ export function CoverageRings({ types, caseCount, compare }: { types: [string, n
               <small>/{caseCount}</small>
             </span>
             <span className="coverage-ring-label">{type}</span>
-            {compare && <span className="coverage-ring-was">vs {compare.types.get(type) ?? 0}/{compare.caseCount}</span>}
             <span className="sr-only">
               : {count} of {caseCount} cases
             </span>
@@ -140,7 +113,7 @@ function averageScore(cases: RiskCase[]): number | null {
   return scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null;
 }
 
-export function RiskOverview({ cases, compare }: { cases: RiskCase[]; compare?: RiskCase[] }) {
+export function RiskOverview({ cases }: { cases: RiskCase[] }) {
   const scores = cases.flatMap((item) => (item.score === null ? [] : [item.score]));
   const average = averageScore(cases);
   const averageLevel = average === null ? null : SCORE_BANDS.find((band) => average >= band.min && average <= band.max)?.level ?? null;
@@ -148,7 +121,6 @@ export function RiskOverview({ cases, compare }: { cases: RiskCase[]; compare?: 
     ...RISK_ORDER.map((risk) => ({ key: risk.toLowerCase(), label: risk, cases: cases.filter((item) => item.risk === risk) })),
     { key: 'none', label: 'Not scored', cases: cases.filter((item) => item.risk === null) },
   ];
-  const inGroup = (list: RiskCase[], key: string) => list.filter((item) => (key === 'none' ? item.risk === null : item.risk?.toLowerCase() === key));
 
   return (
     <div className="risk-overview">
@@ -157,7 +129,6 @@ export function RiskOverview({ cases, compare }: { cases: RiskCase[]; compare?: 
         <span className="risk-overview-dial-caption">
           {average === null ? 'No case scored yet' : `Average of ${scores.length} scored ${scores.length === 1 ? 'case' : 'cases'}`}
         </span>
-        {compare && <CompareDelta value={average} previous={averageScore(compare)} />}
       </div>
 
       <div className="risk-overview-split">
@@ -166,7 +137,6 @@ export function RiskOverview({ cases, compare }: { cases: RiskCase[]; compare?: 
             <li key={group.key} className={group.cases.length ? undefined : 'risk-overview-legend--empty'}>
               <span className="risk-overview-count">
                 <strong>{group.cases.length}</strong>
-                {compare && <CompareDelta value={group.cases.length} previous={inGroup(compare, group.key).length} compact />}
               </span>
               <span>
                 <i className={`risk-overview-swatch risk-overview--${group.key}${group.key === 'none' ? '' : ` risk-gauge-band--${group.key}`}`} aria-hidden="true" />
@@ -187,22 +157,6 @@ export function RiskOverview({ cases, compare }: { cases: RiskCase[]; compare?: 
             ) : null,
           )}
         </div>
-        {/* The comparison period's mix, thinner and striped, under this period's. */}
-        {compare && (
-          <div className="risk-overview-bar risk-overview-bar--was" aria-hidden="true">
-            {groups.map((group) => {
-              const count = inGroup(compare, group.key).length;
-              return count ? (
-                <i
-                  key={group.key}
-                  className={`risk-overview--${group.key}${group.key === 'none' ? '' : ` risk-gauge-band--${group.key}`}`}
-                  style={{ flexGrow: count }}
-                  title={`Comparison period, ${group.label}: ${count}`}
-                />
-              ) : null;
-            })}
-          </div>
-        )}
       </div>
     </div>
   );

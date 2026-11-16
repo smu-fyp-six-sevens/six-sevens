@@ -110,7 +110,7 @@ export const TERMINAL_DOCUMENT_STATUSES = new Set([
   'cancelled',
 ]);
 
-// Mirrors settings.STUCK_THRESHOLD_SECONDS in backend/app/config.py.
+// Mirrors settings.STUCK_RUNNING_SECONDS in backend/app/config.py.
 export const STUCK_PROCESSING_RETRY_THRESHOLD_MS = 10 * 60 * 1000;
 
 // True once a PROCESSING document has been sitting there long enough that it's more likely orphaned.

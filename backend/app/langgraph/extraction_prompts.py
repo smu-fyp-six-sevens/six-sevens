@@ -702,19 +702,6 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
 KNOWN_DOCUMENT_TYPES = [t.value for t in DocumentType if t is not DocumentType.UNRECOGNISED]
 
 
-def schema_field_names(document_type: str) -> list[str]:
-    """
-    Flat union of a document type's required + additional schema fields —
-    what extracted_fields_repository.replace_extracted_fields wants for its
-    required_field_names param (it only distinguishes "named in the schema"
-    vs. "the LLM added this on its own", not the required/additional split
-    within the schema itself). Kept here so callers don't each re-derive
-    this union from EXTRACTION_SCHEMAS's two-tier shape themselves.
-    """
-    schema = EXTRACTION_SCHEMAS.get(document_type, {})
-    return [*schema.get("required", []), *schema.get("additional", [])]
-
-
 def drop_empty_optional_fields(document_type: str | None, fields: dict) -> list[str]:
     """
     Removes, in place, every field whose value is None or a blank string,

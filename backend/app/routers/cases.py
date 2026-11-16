@@ -6,9 +6,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 
-from .. import case_report, case_service, document_repository, events
+from .. import case_report, case_service, events
 from ..auth import current_actor
-from ..case_service import CaseRiskFilter, CaseSort
+from ..case_service import CaseNotDeletable, CaseRiskFilter, CaseSort
 from ..labels import requirement_label
 from ..case_stage import StageChangeNotAllowed
 from ..config import settings
@@ -18,7 +18,6 @@ from ..case_match import CaseMatchResult
 from ..case_pipeline import service as analysis_service
 from ..case_pipeline.models import CaseAnalysis, CaseAnalysisRunItem
 from ..models import (
-    IN_FLIGHT_STATUSES,
     MAX_COMPANY_NAME_LENGTH,
     CaseCounts,
     CaseListItem,
@@ -178,37 +177,18 @@ async def finalise_case(case_id: str, case: CaseRecord = Depends(get_case_or_404
 @router.delete("/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_case(case_id: str, case: CaseRecord = Depends(get_editable_case_or_404)) -> None:
     """
-    Removes a case from the active queue, along with every document that
-    belongs to it. A following GET /cases or GET /cases/{id} no longer
-    returns it.
-
-    Only allowed once every one of the case's documents has reached a
-    terminal state (ANALYZED, FAILED, REJECTED, CANCELLED, APPROVED) — same
-    reasoning as delete_document: deleting out from under a document a
-    worker is still actively writing to (status, extracted fields) would
-    race the pipeline and orphan a document row mid-flight. Cancel the
-    in-flight document(s) first, or wait for them to finish.
+    Removes a case and every document that belongs to it. Refused (409) while anything still runs on it: a document
+    being processed, scanned or waiting to be scanned, or the case analysis (case_service.delete_case).
     """
-    documents = await to_thread_or_502(
-        document_repository.list_documents, case_id,
-        detail="Failed to fetch the case's documents. Check Supabase table access.",
-        log=("Failed to fetch documents for case %s", case_id),
-    )
-
-    if any(document.status in IN_FLIGHT_STATUSES for document in documents):
+    try:
+        documents = await asyncio.to_thread(case_service.delete_case, case_id)
+    except CaseNotDeletable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Failed to delete case %s", case_id)
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Case has a document that's still being processed; cancel it "
-                "first, or wait for it to finish, before deleting the case."
-            ),
-        )
-
-    await to_thread_or_502(
-        case_service.delete_case, case_id,
-        detail="Failed to delete the case. Check Supabase table access.",
-        log=("Failed to delete case %s", case_id),
-    )
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to delete the case. Check Supabase table access.",
+        ) from exc
     # Each document goes on the record too, as it would deleted alone: the trail names what was in the case.
     await asyncio.gather(*(
         events.record(officer_event(
@@ -219,7 +199,9 @@ async def delete_case(case_id: str, case: CaseRecord = Depends(get_editable_case
     ))
     await events.record(officer_event(
         types.CASE_DELETED, case_id=case_id,
-        detail={"company_name": case.company_name, "documents": len(documents)},
+        detail={
+            "greenlink_case_id": case.greenlink_case_id, "company_name": case.company_name, "documents": len(documents),
+        },
     ))
 
 

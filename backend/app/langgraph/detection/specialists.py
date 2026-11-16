@@ -341,7 +341,7 @@ def _make_agent_node(spec: Specialist):
         from ..cache_gate import cache_gate
 
         # The final JSON covers every finding, so it needs far more room than a tool call.
-        base = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 6144, effort="low")
+        base = build_chat_anthropic(settings.LANGGRAPH_HAIKU_MODEL, 6144, effort="low", cache_history=True)
         model = base.bind_tools(list(spec.tools))
         # First turn must call a tool: a specialist that answers without one has reviewed nothing.
         first_model = base.bind_tools(list(spec.tools), tool_choice="any")

@@ -1,4 +1,4 @@
-# Grafana on Cloud Run (CLOUD_ARCHITECTURE_PLAN.md section 7), and the scrape config for Kong's metrics.
+# Grafana on Cloud Run (HOW_IT_WORKS.md §8), and the scrape config for Kong's metrics.
 #
 # Grafana reads Managed Prometheus through Google's query proxy, a sidecar that signs each query as Grafana's
 # service account, so no key is stored anywhere. Its dashboards and data source are baked into the image

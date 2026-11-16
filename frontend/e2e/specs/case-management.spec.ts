@@ -167,11 +167,12 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
     seedQueue(backend);
     await page.goto('/cases');
 
-    // One box per stage some case is at, in the order a case moves through them.
-    await expect((await openFilter(page, 'status')).getByRole('checkbox')).toHaveCount(3);
+    // One box per stage some case is at, in the order a case moves through them, then Deleted (unticked).
+    await expect((await openFilter(page, 'status')).getByRole('checkbox')).toHaveCount(4);
     await expect((await openFilter(page, 'status')).locator('label')).toContainText([
-      'Awaiting Documents', 'Processing Documents', 'Pending Review',
+      'Awaiting Documents', 'Processing Documents', 'Pending Review', 'Deleted',
     ]);
+    await expect((await openFilter(page, 'status')).getByRole('checkbox', { name: 'Deleted' })).not.toBeChecked();
 
     await showOnly(page, 'status', /Pending Review/);
     await expect(caseCards(page)).toHaveCount(1);
@@ -634,17 +635,18 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
 
-    // A document that needs the officer says why under its name in the document list.
+    // A document that needs the officer says why in its Remarks, and the Uploaded band counts it.
     const row = page.getByTestId('document-row').filter({ hasText: 'Fashion-Purchase-Order.pdf' });
-    await openGroup(page, 'Needs Review');
+    await openGroup(page, 'Uploaded');
     await expect(page.locator('.documents-table-row--review')).toHaveCount(1);
-    await expect(row.locator('.document-review-reason')).toContainText('could not be recognised');
-    await expect(page.locator('.documents-table-group--review')).toContainText('Needs Review');
+    await expect(row.locator('.document-issue')).toHaveText("We couldn't tell what document this is. Please choose its type.");
+    await expect(page.locator('.documents-table-group--uploaded')).toContainText('1 need review');
     // Not confirmed by an officer yet, so it reads Unrecognised, not Other.
     await expect(row.locator('.document-type-cell')).toContainText('Unrecognised');
-    // The document that is fine has no reason under its name.
-    await openGroup(page, 'Pending Approval');
-    await expect(page.getByTestId('document-row').filter({ hasText: 'C014_CertIncorp.pdf' }).locator('.document-review-reason')).toHaveCount(0);
+    // The document that is fine has no reason, only where it stands.
+    const fine = page.getByTestId('document-row').filter({ hasText: 'C014_CertIncorp.pdf' });
+    await expect(fine.locator('.document-issue')).toHaveCount(0);
+    await expect(fine.locator('.document-remark')).toHaveText('Document ready for approval');
   });
 
   test('CM-009 the case audit trail is reached from case details and lists what was recorded for this case @CM-009', async ({ page, backend }) => {
@@ -730,14 +732,14 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     await expect(page).toHaveURL(/section=documents/);
     await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
-    const requested = page.getByTestId('documents-card').getByTestId('document-group').filter({ hasText: 'Requested' });
-    await expect(requested).toHaveAttribute('aria-expanded', 'true');
+    // The checklist opens on its requested documents.
+    await expect(page.getByRole('dialog', { name: 'Document checklist' })).toBeVisible();
+    await expect(page.locator('.doc-checklist-group--requested')).toHaveAttribute('open', '');
     const rows = page.getByTestId('requested-document');
     await expect(rows).toHaveCount(2);
     // Each is named as the app names that type of document.
-    await expect(rows.first().locator('.document-type-cell')).toHaveText('Purchase Order');
-    await expect(rows.nth(1).locator('.document-type-cell')).toHaveText('Loan Statement');
-    await expect(rows.first()).toContainText('Requested');
+    await expect(rows.first().locator('.doc-checklist-name')).toHaveText('Purchase Order');
+    await expect(rows.nth(1).locator('.doc-checklist-name')).toHaveText('Loan Statement');
 
     // Each row links its request, as the Additional tab heads it, back to that request there, highlighted.
     await rows.nth(1).getByRole('button', { name: 'Bank Loan Statements or Bank Loan Repayment Schedules' }).click();
@@ -748,14 +750,16 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(highlighted).toBeInViewport();
   });
 
-  test('the Documents tab lists the requested documents, folded, when the officer goes there directly', async ({ page, backend }) => {
+  test('the Documents tab counts the requested documents on the checklist button when the officer goes there directly', async ({ page, backend }) => {
     const harbor = makeCase({ greenlink_case_id: 'GLDB-2007', ...CASE_VIEWS.recommendations });
     backend.cases.push(harbor);
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
 
-    const requested = page.getByTestId('documents-card').getByTestId('document-group').filter({ hasText: 'Requested' });
-    await expect(requested).toContainText('by the case analysis');
-    await expect(requested).toHaveAttribute('aria-expanded', 'false');
+    const checklist = page.getByTestId('document-checklist');
+    await expect(checklist).toContainText('2 requested');
+    await expect(page.getByRole('dialog', { name: 'Document checklist' })).toHaveCount(0);
+    await checklist.getByRole('button', { name: /Checklist/ }).click();
+    await expect(page.locator('.doc-checklist-group--requested')).toContainText('Requested by the case analysis (2)');
   });
 
   test('a finalised case offers no Upload in Documents', async ({ page, backend }) => {
@@ -1154,7 +1158,10 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     const noa = fixture.document('Anchorpoint_IRAS_NOA');
     await page.goto(`${fixture.caseUrl}?section=documents`);
     const missing = (label: string) =>
-      page.getByTestId('missing-document').filter({ has: page.locator('.document-type-cell', { hasText: new RegExp(`^${label}$`) }) });
+      page.getByTestId('missing-document').filter({ has: page.locator('.doc-checklist-name', { hasText: new RegExp(`^${label}$`) }) });
+    const openChecklist = () => page.getByTestId('document-checklist').getByRole('button', { name: /Checklist/ }).click();
+    await openChecklist();
+    await expect(page.getByTestId('received-document').filter({ hasText: 'Notice of Assessment' })).toHaveCount(1);
     await expect(missing('Notice of Assessment')).toHaveCount(0);
 
     await page.goto(fixture.documentUrl(noa));
@@ -1162,6 +1169,7 @@ test.describe('Delete case and documents @sprint3 @SCRUM-117', () => {
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
 
     await expect(page).toHaveURL(`${fixture.caseUrl}?section=documents`);
+    await openChecklist();
     await expect(missing('Notice of Assessment')).toHaveCount(1);
     // Only that requirement reverts: the others the case's documents fulfil stay met.
     await expect(missing('Certificate of Incorporation')).toHaveCount(0);
@@ -1204,10 +1212,8 @@ test.describe('Case page: document actions, live updates and cost', () => {
     await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/cancel`).length).toBe(1);
     expect(document.status).toBe('cancelled');
     backend.push(harbor.id);
-    // A cancelled document moves to Needs Review. Wait for the group (the case's only document leaves Pending Approval
-    // for it) before opening it: until the snapshot lands, the row still shows under Pending Approval.
-    await expect(page.getByTestId('documents-card').getByTestId('document-group').filter({ hasText: /^Needs Review/ })).toBeVisible();
-    await openGroup(page, 'Needs Review');
+    // A cancelled document stays under Uploaded, now waiting on the officer.
+    await expect(page.locator('.documents-table-group--uploaded')).toContainText('1 need review');
     await expect(page.getByRole('button', { name: `View ${document.filename}` })).toContainText('Cancelled');
     await expect(page.getByRole('button', { name: `Cancel ${document.filename}` })).toHaveCount(0);
   });
@@ -1466,12 +1472,14 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
     backend.push(fixture.case.id);
 
     await expect(groupToggle(page, 'Approved')).toHaveText(/^Approved 1/);
-    await openGroup(page, 'Approved');
-    await expect(documentRow(page, noa.filename)).toBeVisible();
+    await expect(groupToggle(page, 'Rejected')).toHaveText(/^Rejected 1/);
+    // Approved is open, so the approved document shows once, scanning; Rejected starts folded.
+    await expect(documentRow(page, noa.filename)).toHaveCount(1);
+    await expect(documentRow(page, noa.filename).locator('.document-status-cell')).toHaveText('Scanning…');
     await expect(documentRow(page, fatca.filename)).toHaveCount(0);
     await openGroup(page, 'Rejected');
     await expect(documentRow(page, fatca.filename).locator('.document-status-cell')).toHaveText('Rejected');
-    await expect(documentRow(page, noa.filename)).toHaveCount(0);
+    await expect(documentRow(page, noa.filename)).toHaveCount(1);
   });
 
   test('CM-043 each document shows its type, name and status @CM-043', async ({ page, backend }) => {
@@ -1484,18 +1492,19 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
     const row = documentRow(page, noa.filename);
     await expect(row.locator('.document-filename-line')).toHaveText(noa.filename);
     await expect(row.locator('.document-type-cell')).toHaveText('Notice of Assessment');
-    await expect(row.locator('.document-status-cell')).toHaveText('Extracted');
+    await expect(row.locator('.document-status-cell')).toHaveText('Ready to approve');
   });
 
-  test('CM-044 a document still being processed shows its in-progress status under Pending Approval @CM-044', async ({ page, backend }) => {
+  test('CM-044 a document still being processed shows its in-progress status under Uploaded @CM-044', async ({ page, backend }) => {
     const fixture = loadFixture(backend, 'anchorpoint');
     const noa = fixture.document('IRAS_NOA');
     noa.status = 'extracting';
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
-    await openGroup(page, 'Pending Approval');
+    await openGroup(page, 'Uploaded');
 
     await expect(documentRow(page, noa.filename).locator('.status-pill')).toHaveText('Extracting…');
+    await expect(documentRow(page, noa.filename).locator('.document-remark')).toHaveText('Extracting…');
   });
 
   test('CM-045 selecting a document opens its details @CM-045', async ({ page, backend }) => {
@@ -1515,9 +1524,10 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
 
     await page.goto(`${fixture.caseUrl}?section=documents`);
 
-    await expect(groupToggle(page, 'Pending Approval')).toBeVisible();
+    await expect(groupToggle(page, 'Uploaded')).toBeVisible();
     // Nothing approved or rejected yet, and the case has every required document.
-    for (const group of ['Approved', 'Rejected', 'Missing']) await expect(groupToggle(page, group)).toHaveCount(0);
+    for (const group of ['Approved', 'Rejected']) await expect(groupToggle(page, group)).toHaveCount(0);
+    await expect(page.getByTestId('document-checklist')).not.toContainText('missing');
   });
 
   test('CM-048 a case with no documents lists every required document as missing @CM-048', async ({ page, backend }) => {
@@ -1525,12 +1535,14 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
 
     await page.goto('/cases/GLDB-3048?section=documents');
 
-    await expect(groupToggle(page, 'Missing')).toBeVisible();
-    await expect(page.getByTestId('missing-document').locator('.status-pill').first()).toHaveText('Missing');
+    const checklist = page.getByTestId('document-checklist');
+    await expect(checklist).toContainText('11 missing');
+    await checklist.getByRole('button', { name: /Checklist/ }).click();
+    await expect(page.getByTestId('missing-document')).toHaveCount(11);
     // Every section is still waiting (only documents missing, nothing scored or analysed), so the menu shows no dots.
     await expect(sectionNav(page).locator('.case-nav-badge')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^View / })).toHaveCount(0);
-    for (const group of ['Needs Review', 'Pending Approval', 'Approved', 'Rejected']) await expect(groupToggle(page, group)).toHaveCount(0);
+    for (const group of ['Uploaded', 'Approved', 'Rejected']) await expect(groupToggle(page, group)).toHaveCount(0);
   });
 
   test('CM-049 the open section is kept after a reload @CM-049', async ({ page, backend }) => {

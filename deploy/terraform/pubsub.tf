@@ -1,5 +1,5 @@
-# One topic, a dead-letter topic, and one filtered push subscription per role (CLOUD_ARCHITECTURE_PLAN.md
-# section 3). The filters come from the code: backend/app/events/types.py exports subscriptions.json.
+# One topic, a dead-letter topic, and one filtered push subscription per role (HOW_IT_WORKS.md
+# §9). The filters come from the code: backend/app/events/types.py exports subscriptions.json.
 
 locals {
   subscriptions = jsondecode(file("${path.module}/subscriptions.json"))
@@ -57,7 +57,7 @@ resource "google_pubsub_subscription" "push" {
   }
 }
 
-# The sweeper's clock (CLOUD_ARCHITECTURE_PLAN.md section 5): a sweep.requested event every 5 minutes (the shortest stage limit), which
+# The sweeper's clock (HOW_IT_WORKS.md §8, "Stuck work"): a sweep.requested event every 5 minutes (the shortest stage limit), which
 # audit-metrics handles. Fields the envelope leaves out (event_id, occurred_at) are filled in when it is read.
 resource "google_cloud_scheduler_job" "sweep" {
   name      = "sweep"

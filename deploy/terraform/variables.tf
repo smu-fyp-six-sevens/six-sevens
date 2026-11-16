@@ -90,7 +90,7 @@ variable "budget_amount_sgd" {
   default     = 50
 }
 
-# --- GKE (CLOUD_ARCHITECTURE_PLAN.md sections 13-24) ---
+# --- GKE (HOW_IT_WORKS.md §9) ---
 
 variable "gke_enabled" {
   description = "Create the GKE cluster and everything around it (network, NAT, DNS, certificate, Cloud Armor, signing, Cloud Deploy). Starts billing, idle included."

@@ -77,6 +77,8 @@ const PATHS = {
   ),
   overview: <path d="M4 4h6.5v6.5H4zM13.5 4H20v6.5h-6.5zM4 13.5h6.5V20H4zM13.5 13.5H20V20h-6.5z" />,
   flag: <path d="M5.5 21V4M5.5 4.5h11l-2 3.7 2 3.7h-11" />,
+  chevronRight: <path d="M9 6l6 6-6 6" />,
+  chevronLeft: <path d="M15 6l-6 6 6 6" />,
   locate: (
     <>
       <circle cx="12" cy="12" r="4.5" />

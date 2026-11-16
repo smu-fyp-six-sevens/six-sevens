@@ -23,3 +23,13 @@ export async function listCaseAuditTrail(caseId: string): Promise<AuditEvent[]> 
   }
   return events.reverse();
 }
+
+// Every case deletion on record, newest first (one page: deletions are rare).
+export async function listDeletedCases(): Promise<AuditEvent[]> {
+  const query = new URLSearchParams({ type: 'case.deleted', limit: String(AUDIT_LIMIT) });
+  const response = await authFetch(`/audit/events?${query}`);
+
+  await assertOk(response, 'Failed to load the deleted cases');
+
+  return (await response.json()) as AuditEvent[];
+}

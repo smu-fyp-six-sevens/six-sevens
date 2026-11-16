@@ -1,18 +1,6 @@
 # Test suite audit
 
-Open items only: delete a row once it's fixed. Read 2026-11-13. Tests owed for fixes already made are in `PENDING_TESTS.md`. Bugs: `CODEBASE_AUDIT.md`.
-
-## 1. Background
-
-**Keep in mind:**
-- All test documents are synthetic (GLDB can't share real ones), so real fraud may look different.
-- Two company-name matchers on purpose: `identifiers.company_names_match` is lenient (does this document belong to the case?); `company_identity.cross_document_company_names_match` is strict (a fraud signal).
-- Case match is triage, not a fraud signal.
-- Regression suites test code, not AI accuracy: Claude is scripted. Real AI behaviour is checked by the manual live run each sprint.
-- A known bug is pinned with `xfail(strict=True, raises=...)` (`it.fails` in Vitest, `test.fail()` in Playwright). None today.
-- Guards that keep the suite honest: every route but the public ones must answer 401 without a login (`test_auth.py`); every backend route is either mocked for Playwright or listed as not mocked (`mockCoverage.test.ts`); coverage below 85% fails CI (`pyproject.toml`).
-
-**Health (2026-11-13):** backend 3,289 cases pass locally (CI 2026-11-11: 93% line coverage). Playwright: 276 pass in 15 specs. Vitest: 76 tests in 9 files (of ~160 source files).
+Open items only: delete a row once it's fixed, and this file once it's empty. Read 2026-11-13. How the suite is built, what to keep in mind and its health: `HOW_IT_WORKS.md` §10. Tests owed for fixes already made are in `PENDING_TESTS.md`. Bugs: `CODEBASE_AUDIT.md`.
 
 ## 2. Most important
 
@@ -30,6 +18,15 @@ None open. The regression fixtures are regenerated from the code, so they catch 
 |---|---|---|---|---|---|
 | 4.1 | Medium | Some tests only check which mock was called, so they pass whatever the code stores | Move `test_sweeper`, `test_case_stage`, `test_doc_worker`, `test_case_auto_analysis`, `test_health`, `test_ws`, `test_realtime_listener` to the in-memory client (`tests/support/fake_supabase.py`); extend the fake (it lacks `or_`) rather than mock | `backend/tests/` | L |
 
+## 4c. Overlap (checked 2026-11-16)
+
+Every backend and Playwright test compared by structure, with and without its literal values: no two check the same thing with the same inputs (the one exact copy is deleted). What's left is optional tidying:
+
+| # | Sev | In plain words | Fix | Where | Size |
+|---|---|---|---|---|---|
+| 4.2 | Low | The approval route tests check, one rule at a time, refusals the approval-rules fixture already pins (19 cases); the route only needs one refused case (400, nothing written) | Fold the rule-by-rule route tests into one parametrised test, or keep only the refusal-to-400 one | `backend/tests/test_documents.py` (the `test_approve_document_*` refusals) | S |
+| 4.3 | Low | About 50 pairs of tests are the same code with different inputs (CPF and GST rates, NOA chains, identity progress, the "unable to assess" guards) | `pytest.mark.parametrize` where it reads better; not a gap or a duplicate | `test_sg_reference_checks.py`, `test_numerical_validation.py`, `test_mapper.py`, `test_image_*.py` | M |
+
 ## 5. Playwright
 
 | # | Sev | In plain words | Fix | Where | Size |
@@ -44,10 +41,11 @@ None open. The regression fixtures are regenerated from the code, so they catch 
 | 6.1 | Feedback counts only other cases | No test, including a document with no case (SQL: needs a real database, so a manual check) | S |
 | 6.2 | Low coverage | `cross_document/tools/consistency.py` 68% (lines 61–82); `routers/agents.py` 53% and `agent_prompts.py` 48% (the prompt view) | M |
 | 6.3 | The important frontend logic has no unit tests | Vitest for `caseValidation`, `fileValidation`, `request.ts` and `caseSocket.ts` only (the rest is covered by Playwright) | S |
-| 6.4 | Load tests are described but not in the repo; the agent sensibility checks have no tests yet | Load tests: `CLOUD_ARCHITECTURE_PLAN.md` §10; checks: `PENDING_TESTS.md` 34–39 | — |
+| 6.4 | Load tests are described but not in the repo; the agent sensibility checks are partly tested (`tests/test_evals.py`) | Load tests: `CLOUD_ARCHITECTURE_PLAN.md`, "Stage 2"; checks: `PENDING_TESTS.md` 36, 37 and 39 | — |
 
 ## 7. Suggested order
 
 1. Type the mock (5.1), then mock the four unexercised routes (5.3).
 2. Move mock-only tests to the in-memory client (4.1).
 3. Frontend unit tests and the coverage gaps (6.3, 6.2).
+4. Fold the overlapping tests (4.2, then 4.3 when a file is next touched).

@@ -25,7 +25,7 @@ export function documentGroup(document: DocumentRecord, needsReview: boolean): D
 }
 
 // A cancelled run can't be retried (only a failed or stuck one can), so the way on is a fresh upload.
-export const CANCELLED_REASON = 'Processing was cancelled before it finished. Delete it, or upload the file again.';
+export const CANCELLED_REASON = 'Cancelled. Delete it or upload it again.';
 
 export function missingRequirements(fulfilled: Set<string>, coverage: Coverage): MissingRequirement[] {
   // Lacking, or met only in part: an address with no matching ID, or an ID with one side missing.

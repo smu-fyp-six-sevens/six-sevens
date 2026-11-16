@@ -104,7 +104,7 @@ def test_a_processing_document_is_retryable_only_after_the_retry_threshold() -> 
     long_running = _document(
         status=DocumentStatus.PROCESSING,
         processing_started_at=datetime.now(timezone.utc)
-        - timedelta(seconds=settings.STUCK_THRESHOLD_SECONDS + 60),
+        - timedelta(seconds=settings.STUCK_RUNNING_SECONDS + 60),
     )
     response, _, queue = _retry(long_running)
     assert response.status_code == 200
