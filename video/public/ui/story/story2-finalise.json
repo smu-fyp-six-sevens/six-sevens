@@ -22,5 +22,17 @@
     "y": 205.5,
     "width": 90.890625,
     "height": 24
+  },
+  "menuButton": {
+    "x": 1369,
+    "y": 117.5,
+    "width": 32,
+    "height": 32
+  },
+  "reportItem": {
+    "x": 1238,
+    "y": 158.5,
+    "width": 158,
+    "height": 35.5
   }
 }

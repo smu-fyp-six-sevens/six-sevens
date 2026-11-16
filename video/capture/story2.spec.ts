@@ -223,9 +223,16 @@ test('finalise the case', async ({ page, backend }) => {
   await confirm.getByRole('button', { name: 'Finalise Case' }).click();
   await page.waitForTimeout(900);
   await page.screenshot({ path: `${OUT}/finalise-done.png` });
+  // The case menu's Download report, on the finalised case.
+  const menuButton = await page.getByRole('button', { name: 'Case actions' }).boundingBox();
+  await page.getByRole('button', { name: 'Case actions' }).click();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${OUT}/finalise-menu.png` });
+  const reportItem = await page.getByRole('menuitem', { name: /Download report/ }).boundingBox();
+  await page.keyboard.press('Escape');
   const cardBox = await card.boundingBox();
   const badge = await card.locator('.case-stage-badge').boundingBox();
-  writeFileSync(`${OUT}/story2-finalise.json`, JSON.stringify({ button, confirmButton, card: cardBox, badge }, null, 2));
+  writeFileSync(`${OUT}/story2-finalise.json`, JSON.stringify({ button, confirmButton, card: cardBox, badge, menuButton, reportItem }, null, 2));
 });
 
 // The dashboard with a month of cases, so every panel has data (pipeline, flags, document types, risk, needs

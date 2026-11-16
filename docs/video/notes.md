@@ -198,3 +198,9 @@
 
 ## Wave 37 - the swap made obvious
 - Owner: show the digits being swapped, not delete-and-retype. SwapFigure: the 1 and 8 get red marks and a double arrow at select, then lift and trade places along an arc (erase..typeEnd), landing as 812,400.00 with the forgery's tells. renders/swap-section.mp4 (frames 500-720, 1 s handles), spliced into renders/picture.mp4.
+
+## Wave 38 - finalise and send a report
+- Owner: "At the end, the officers can finalise the case and even send a report of findings for loan decisions." Show an exported report; clip under 7 s with lag into the dashboard.
+- The report is the backend's real renderer (app.case_report.render) fed the story case (video/capture/story_report.py, run with placeholder Supabase settings in a venv); 4 pages rasterised to public/ui/report. Case menu "Download report" captured on the finalised case.
+- Finalise 4.46 -> 5.6 s: finalise by 1.82 s, menu 2.45, Download report 3.0, report slides up 3.15 (pages fanned, "Downloaded" chip), away at 4.85, ending on the framing the dashboard opens on. Captions "Finalise the case," / "Locked cases become view-only." / "And send a report of findings for loan decisions."
+- Everything after Finalise is 1.13 s later. renders/finalise-report.mp4: frames 2498-2704 (0.5 s lead, 0.8 s into the dashboard), 6.9 s.

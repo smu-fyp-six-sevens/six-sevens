@@ -74,6 +74,8 @@ export const SCREENS_STORY2 = {
   finaliseReady: { src: "ui/story/finalise-ready.png", w: 1440, h: 900 },
   finaliseConfirm: { src: "ui/story/finalise-confirm.png", w: 1440, h: 900 },
   finaliseDone: { src: "ui/story/finalise-done.png", w: 1440, h: 900 },
+  finaliseMenu: { src: "ui/story/finalise-menu.png", w: 1440, h: 900 },
+  reportPages: ["ui/report/report-page-1.png", "ui/report/report-page-2.png", "ui/report/report-page-3.png"],
 };
 
 /** Additional Documents, measured on its capture (CSS px): the score line and each recommended document. */
@@ -89,10 +91,12 @@ export const ADDITIONAL_BOXES = {
 // ---- Sections 9-11: the business value and the call to action ----------------------------------
 
 export const FINALISE_COPY = {
-  headline: "Finally, lock the case.",
+  headline: "Finalise the case,",
   beats: [
-    { text: "Finalised cases become view-only, with every step on record.", at: "readyAt", accent: true },
+    { text: "Locked cases become view-only.", at: "readyAt" },
+    { text: "And send a report of findings for loan decisions.", at: "reportAt", accent: true },
   ],
+  downloaded: "GLDB-02 Case Report.pdf",
 };
 
 export const FINALISE_BOXES = {
@@ -102,6 +106,8 @@ export const FINALISE_BOXES = {
   card: { x: 553.7, y: 188.5, w: 847.3, h: 194 },
   badge: { x: 672.7, y: 205.5, w: 90.9, h: 24 },
   banner: { x: 1140, y: 112, w: 330, h: 22 },
+  menuButton: { x: 1369, y: 117.5, w: 32, h: 32 },
+  reportItem: { x: 1238, y: 158.5, w: 158, h: 35.5 },
 };
 
 export const DASHBOARD_COPY = {
