@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, field_validator
 
+from .case_pipeline import adverse_media
 from .case_pipeline.cross_document import agents as case_agents
+from .case_pipeline.risk import outlook, summary
 from .langgraph import classify_support, extraction_prompts
 from .langgraph.detection import graph as detection_graph
 from .langgraph.detection import specialists
@@ -107,6 +109,8 @@ def get_agent_prompt(agent_id: str, document_type: str | None = None) -> AgentPr
                 limit=case_agents.MAX_HYPOTHESES,
                 max_checks=case_agents.MAX_CHECKS_PER_HYPOTHESIS,
                 dossier="[CASE DOSSIER AND AVAILABLE FINDINGS INSERTED AT RUNTIME]",
+                overview="[CASE OVERVIEW COMPUTED BY CODE INSERTED AT RUNTIME]",
+                candidates="[CANDIDATE HYPOTHESES COMPUTED BY CODE INSERTED AT RUNTIME]",
             )
             if is_planner else case_agents._JUDGE_INSTRUCTIONS.format(
                 hypotheses="[HYPOTHESES AND CHECK RESULTS INSERTED AT RUNTIME]",
@@ -123,5 +127,15 @@ def get_agent_prompt(agent_id: str, document_type: str | None = None) -> AgentPr
                 PromptSection(title="Planner instructions" if is_planner else "Judge instructions", text=instruction),
             ],
         )
+
+    # The case analysis's single calls: one template each, its runtime values shown as placeholders.
+    single_calls = {
+        "evidence_requests": (outlook._PROMPT, "The scored findings, the case's documents and the open questions are inserted for each run."),
+        "case_summary": (summary._PROMPT, "The level, findings, clean and unrun checks and the evidence requests are inserted for each run."),
+        "adverse_media": (adverse_media._PROMPT, "The company's name, former names and the search window are inserted for each run."),
+    }
+    if agent_id in single_calls:
+        template, note = single_calls[agent_id]
+        return AgentPrompt(agent_id=agent_id, note=note, sections=[PromptSection(title="Prompt", text=_as_sent(template))])
 
     raise KeyError(agent_id)

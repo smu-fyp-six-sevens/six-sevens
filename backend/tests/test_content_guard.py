@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -422,7 +423,12 @@ def test_an_image_with_transparency_is_read_too() -> None:
     assert result["risk"] == "high" and result["spans"][0]["where"] == "image" and "error" not in result
 
 
-@pytest.mark.parametrize("attack", ATTACKS)
+# Every attack is tested as text above; through OCR (several seconds each) only the ones that address an AI, which
+# OCR misreads as "Al" and the guard has to put back. The other wording reads the same in an image as in text.
+_ATTACKS_NAMING_AI = [attack for attack in ATTACKS if re.search(r"\bAI\b", attack)]
+
+
+@pytest.mark.parametrize("attack", _ATTACKS_NAMING_AI)
 def test_each_attack_drawn_into_an_image_blocks_the_document(attack: str) -> None:
     result, _ = scan(_pdf_with_picture(attack), "application/pdf", "Payslip for October 2026   Net pay SGD 5,000.00", {})
     assert content_guard.blocking_reason(result) is not None and result["spans"][0]["where"] == "image"

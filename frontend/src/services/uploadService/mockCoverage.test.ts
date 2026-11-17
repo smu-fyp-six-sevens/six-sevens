@@ -40,7 +40,11 @@ async function isUnmocked(operation: string): Promise<boolean> {
   const url = `http://api.test${route.replace(/\{[^}]+\}/g, 'x')}`;
   const backend = new MockBackend();
   const fakeRoute = {
-    request: () => ({ url: () => url, method: () => method, postDataJSON: () => ({}), postData: () => '{}' }),
+    // The CSRF header the page sends on every call (lib/api.ts), so the mock's own check lets the request through.
+    request: () => ({
+      url: () => url, method: () => method, postDataJSON: () => ({}), postData: () => '{}',
+      headers: () => ({ 'x-requested-with': 'fetch' }),
+    }),
     fulfill: async () => undefined,
   };
   try {
