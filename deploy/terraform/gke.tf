@@ -70,6 +70,12 @@ resource "google_container_cluster" "prod" {
     enabled = true
   }
 
+  # Labels each billing export line with its namespace (free), so the Cost dashboard splits the cluster's bill by
+  # service and per case.
+  cost_management_config {
+    enabled = true
+  }
+
   binary_authorization {
     evaluation_mode = "PROJECT_SINGLETON_POLICY_ENFORCE"
   }

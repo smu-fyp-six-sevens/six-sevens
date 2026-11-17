@@ -223,6 +223,22 @@ jobs:
         working-directory: frontend
         run: npm audit --audit-level=high
 
+      # Secrets in the commits this push or pull request adds (not the whole history again: seconds, not minutes). The
+      # binary in a pinned image: gitleaks-action needs a licence for organisation repositories.
+      - name: gitleaks (secrets in new commits)
+        if: ${{ !cancelled() }}
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base="$PUSH_BEFORE"
+          [ "$EVENT" = "pull_request" ] && base="$PR_BASE"
+          range="HEAD~1..HEAD"
+          git cat-file -e "${base:-none}^{commit}" 2>/dev/null && range="$base..HEAD"
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 \
+            git /repo --config /repo/.gitleaks.toml --log-opts="$range" --redact --no-banner --exit-code 1
+
       # Snyk's free plan has a monthly test quota, so it runs only when the dependencies change, or by hand.
       - name: Did the dependencies change?
         id: deps

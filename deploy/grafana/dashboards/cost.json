@@ -17,6 +17,12 @@
   },
   "links": [
     {
+      "title": "Status",
+      "url": "/d/six-status",
+      "type": "link",
+      "icon": "dashboard"
+    },
+    {
       "title": "Services",
       "url": "/d/six-services",
       "type": "link",
@@ -1570,6 +1576,340 @@
         "y": 56,
         "w": 12,
         "h": 4
+      }
+    },
+    {
+      "type": "row",
+      "title": "Per case (range): GKE from the billing export, by namespace (cost allocation, gke.tf)",
+      "collapsed": false,
+      "panels": [],
+      "id": 29,
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Cloud cost per case analysed",
+      "description": "Everything Google billed in the range (the cluster, load balancer, Pub/Sub...) over the case analyses that finished in it. The cluster costs money idle, so few cases make each one look expensive.",
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-bigquery-datasource",
+            "uid": "bigquery"
+          },
+          "rawSql": "SELECT SUM(net_cost) AS billed FROM billing_export.costs WHERE $__timeFilter(time)",
+          "format": 1,
+          "rawQuery": true,
+          "editorMode": "code",
+          "hide": true
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "clamp_min(sum(increase(stage_duration_seconds_count{stage=\"case.analysis.completed\"}[$__range])), 1)",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "hide": true
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "type": "math",
+          "expression": "$A / $B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "id": 30,
+      "gridPos": {
+        "x": 0,
+        "y": 61,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Claude cost per case analysed",
+      "description": "Every Claude call in the range (documents, detection and analyses) over the case analyses that finished in it.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum(increase(llm_cost_usd_total[$__range]))) or vector(0)) / clamp_min(sum(increase(stage_duration_seconds_count{stage=\"case.analysis.completed\"}[$__range])), 1)",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "id": 31,
+      "gridPos": {
+        "x": 6,
+        "y": 61,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Case analyses finished (range)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum(increase(stage_duration_seconds_count{stage=\"case.analysis.completed\"}[$__range]))) or vector(0))",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "id": 32,
+      "gridPos": {
+        "x": 12,
+        "y": 61,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Cluster billed in range",
+      "description": "Lines GKE's cost allocation labelled with a namespace; the cluster's own fee and idle capacity have none.",
+      "datasource": {
+        "type": "grafana-bigquery-datasource",
+        "uid": "bigquery"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-bigquery-datasource",
+            "uid": "bigquery"
+          },
+          "rawSql": "SELECT SUM(net_cost) AS billed FROM billing_export.costs WHERE $__timeFilter(time) AND namespace IS NOT NULL",
+          "format": 1,
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "id": 33,
+      "gridPos": {
+        "x": 18,
+        "y": 61,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Billed by namespace (range)",
+      "description": "Each service's share of the cluster: the api, each worker, the gateway, Grafana.",
+      "datasource": {
+        "type": "grafana-bigquery-datasource",
+        "uid": "bigquery"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-bigquery-datasource",
+            "uid": "bigquery"
+          },
+          "rawSql": "SELECT namespace, ROUND(SUM(net_cost), 4) AS cost FROM billing_export.costs WHERE $__timeFilter(time) AND namespace IS NOT NULL GROUP BY namespace ORDER BY cost DESC",
+          "format": 1,
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "displayName": "${__data.fields.namespace}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": true,
+          "fields": "/^cost$/"
+        }
+      },
+      "id": 34,
+      "gridPos": {
+        "x": 0,
+        "y": 65,
+        "w": 24,
+        "h": 8
       }
     }
   ]

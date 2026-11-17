@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 from .. import (
+    spend_cap,
     audit, case_repository, case_stage, detection_results, document_repository, events, finding_keys,
     findings_repository, identifiers, read_pool, telemetry,
 )
@@ -70,6 +71,10 @@ class TooManyAnalyses(Exception):
     pass
 
 
+class SpendCapReached(Exception):
+    """The case's Claude spend passed CASE_SPEND_CAP_USD (spend_cap.py); the message says how much."""
+
+
 def _check_outcomes(reports: dict[str, dict[str, Any]]) -> tuple[list[str], list[str]]:
     """
     (clean, could_not_run). A check is clean only if it examined something, raised
@@ -107,6 +112,9 @@ async def start_analysis(case_id: str) -> CaseAnalysis:
     since = datetime.now(timezone.utc) - timedelta(hours=1)
     if await asyncio.to_thread(repository.count_runs_since, case_id, since) >= settings.CASE_ANALYSIS_RUNS_PER_HOUR:
         raise TooManyAnalyses()
+    spent = await asyncio.to_thread(spend_cap.reached, case_id)
+    if spent is not None:
+        raise SpendCapReached(spend_cap.message(spent))
 
     reports, _ = await asyncio.to_thread(
         detection_results.get_states, [d.id for d in documents]
@@ -166,6 +174,9 @@ def _due_fingerprint(case_id: str) -> str | None:
     if repository.count_runs_since(case_id, since) >= settings.CASE_ANALYSIS_AUTO_RUNS_PER_HOUR:
         logger.warning("Case %s reached %d analysis runs this hour; not starting another automatically",
                        case_id, settings.CASE_ANALYSIS_AUTO_RUNS_PER_HOUR)
+        return None
+    if spend_cap.reached(case_id) is not None:
+        logger.warning("Case %s is past its spend cap; not starting an analysis automatically", case_id)
         return None
     return fingerprint
 

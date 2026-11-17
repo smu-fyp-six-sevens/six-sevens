@@ -98,6 +98,8 @@ Say these in order. They're layered: if one misses, the next catches it.
 4. **Poison messages are set aside.** An event that fails 5 times goes to a *dead-letter* topic for a human to read, instead of blocking everything.
 5. **The sweeper.** Every 5 minutes, Cloud Scheduler wakes the sweeper, which looks for anything stuck too long (5 minutes waiting, or 10 minutes running) and asks the worker that owns it to redo it. After 3 tries it gives up and marks the document failed, so an officer can retry. A stuck case analysis is just marked failed and never rerun automatically, because rerunning costs Claude calls and that's the officer's decision.
 6. **Bad releases roll back.** After every deploy, an automatic check runs through the real front door. If it fails, the previous version comes back.
+7. **A runaway case can't run up the bill.** Once a case has spent $5 on Claude, no more runs start on it until an administrator raises the cap.
+8. **If the database is lost.** We rehearsed it: copy the database, restore it somewhere empty, check every table came back (`dr_drill.py`). The cluster holds no data, so everything else is rebuilt from code. The copy and restore took 10 seconds, and every row came back; the target for being fully back, reconnecting included, is an hour.
 
 ---
 
@@ -109,9 +111,9 @@ This is diagram page 6.
 2. **CI checks everything**, three jobs in parallel:
    - backend: style (ruff), types (pyright), the tests;
    - frontend: lint, types, build, browser tests (Playwright);
-   - security: Checkov (infrastructure rules), pip-audit and npm audit (known-vulnerable libraries), Terraform checks.
+   - security: Checkov (infrastructure rules), pip-audit and npm audit (known-vulnerable libraries), gitleaks (a password or key pasted into the code), Terraform checks.
    If anything fails, nothing deploys.
-3. **Build and sign.** It builds 8 images, each with a parts list (an *SBOM*), and signs each one with our key.
+3. **Build and sign.** It builds 8 images, each with a parts list (an *SBOM*) and a signed record of where it was built (*provenance*: which commit and which run), and signs each one with our key.
 4. **Release.** Cloud Deploy fills the Helm chart with those exact images and rolls them out. Every release is recorded and can be rolled back in one step.
 5. **Only our images run.** *Binary Authorization* refuses to start any image we didn't sign. Even if someone got into the cluster, they couldn't run their own code there.
 6. **No passwords for the deploy.** GitHub signs in to Google with a short-lived token (Workload Identity Federation), so there's no long-lived key that could leak.
@@ -123,10 +125,13 @@ This is diagram page 6.
 This is diagram page 5.
 
 - **Metrics:** every service reports numbers (requests, errors, how long each stage takes, Claude calls and cost per agent). Google's Managed Prometheus collects them.
-- **Dashboards:** four in Grafana: Services, Pipeline, Agents and Cost.
+- **Dashboards:** five in Grafana: Status, Services, Pipeline, Agents and Cost.
 - **Traces:** one upload shows as one timeline across every service in Cloud Trace, because each event carries a trace id.
-- **Alerts:** email for dead letters, API errors over 5%, daily Claude spend, and recovery giving up.
-- **Cost per case:** the case page's **Claude Cost** tab shows what each document and the analysis cost, and what prompt caching saved. The Cost dashboard puts that beside Google's real bill.
+- **Uptime checks:** Google opens the website and the API from Asia, Europe and the US every 5 minutes.
+- **Promises we measure (SLOs):** 99% of API requests succeed, and 95% of detections finish within 3 minutes, over 28 days. The 1% or 5% we're allowed to miss is the *error budget*; we get an email if it's being used up too fast.
+- **Alerts:** email for the site being down, the error budget burning, dead letters, API errors over 5%, daily Claude spend, and recovery giving up.
+- **Cost per case:** the case page's **Claude Cost** tab shows what each document and the analysis cost, and what prompt caching saved. The Cost dashboard adds the cloud's share per case (Google's bill split by service, divided by cases finished), beside the Claude cost per case.
+- **Load test:** a script plays many officers at once against the real services, with the database and Claude replaced by stand-ins, so it costs nothing (`deploy/loadtest/`). It shows where work starts to queue.
 
 ---
 
@@ -176,7 +181,7 @@ This is diagram page 5.
 | 4 | Pub/Sub subscriptions | Console → Pub/Sub | "Each worker only gets its own events. Failures go to the dead-letter topic." |
 | 5 | The case's **Claude Cost** tab | case page | "We know what every document and analysis cost, and what caching saved." |
 | 6 | One trace for that upload | Console → Trace explorer | "One upload, one timeline, across every service." |
-| 7 | Grafana: Pipeline, Agents, Cost | grafana.sixsevens.me | "Stage times, cost per agent, cache hits, the real bill." |
+| 7 | Grafana: Status, then Pipeline, Agents, Cost | grafana.sixsevens.me | "Is it up, are we keeping our promises; then stage times, cost per agent and per case, the real bill." |
 | 8 | Diagram page 4, then the recovery panel | draw.io, Grafana | "Stuck work fixes itself." |
 | 9 | Diagram page 6 and a release | GitHub → Actions, Console → Cloud Deploy | "Every push is tested and scanned; only signed images run; a failed check rolls back." |
 | 10 | `deploy/terraform/` and `deploy/helm/` | the repo | "All of it is code. Nothing was clicked together by hand." |
@@ -195,7 +200,10 @@ This is diagram page 5.
 | What if a worker crashes halfway? | It never said "done", so Pub/Sub redelivers the event. If something is still stuck, the sweeper asks its owner to redo it, up to 3 times, then marks it failed for the officer |
 | What if an event arrives twice? | Status changes only happen if the status is still what we expect, so the repeat does nothing. The audit trail ignores ids it has already stored |
 | How do you know only your code runs? | Every image is signed in CI with a parts list, and Binary Authorization refuses anything unsigned |
-| How do you know what it costs? | Every Claude call is priced and recorded per run, and the Cost dashboard shows Google's bill beside it |
+| How do you know what it costs? | Every Claude call is priced and recorded per run, and the Cost dashboard shows Google's bill beside it, split per case |
+| How much load can it take? | The load test (§7): 10 officers uploading 30 documents in one minute all finished in 11 minutes with no failures, and the website never slowed. Detection is the bottleneck: one copy clears about 3 documents a minute, so on GKE KEDA adds a second when work waits. Details: `HOW_IT_WORKS.md` §9 |
+| How do you know it's reliable? | Two measured promises (SLOs) with alerts when we're missing them, uptime checks from three continents, and a rehearsed database restore |
+| Could a bug burn through the Claude budget? | A $5 cap per case stops new runs, and a daily spend alert covers everything |
 | Aren't you locked into Google? | §8. Short version: the core is portable and proven on kind; the Google parts are at the edges; the real lock-in is the AI model, and the model never decides the score |
 | What isn't done? | A shared Anthropic rate limit across copies, a staging environment (decided against), and the list in `PENDING_WORK.md` |
 
@@ -204,7 +212,7 @@ This is diagram page 5.
 ## 11. Limits to say before anyone asks
 
 - **All test documents are made up.** GLDB can't share real ones, so real fraud may look different.
-- **Claude calls leave Singapore** (the Anthropic API). The cluster, the image registry and the stored data stay in Singapore.
+- **Not everything stays in Singapore.** The cluster and the image registry do, but the database and files are in Supabase's Seoul region (a project's region can't be changed in place), and Claude calls go to the Anthropic API. For a bank, the database would move to Singapore: a new Supabase project there and a copy of the data (the restore drill does that copy).
 - **Claude cost uses list prices.** The real bill is exact but a few hours behind.
 - **One cluster, no staging.** To save money, most services run one copy; a bank would run at least two.
 
@@ -216,7 +224,8 @@ This is diagram page 5.
 - 8 workloads: 5 backend services, Kong, the frontend and Grafana, each in its own namespace.
 - 1 topic, 4 filtered subscriptions (one per worker and audit-metrics), 1 dead-letter topic, a sweep every 5 minutes.
 - 13 detection checks, 1 lead and 3 specialist agents.
-- 4 Grafana dashboards, 4 alerts.
+- 5 Grafana dashboards; 2 SLOs (99% API, 95% detections within 3 minutes); uptime checks from 3 regions every 5 minutes.
+- $5 Claude cap per case; database restore target 1 hour.
 
 ---
 

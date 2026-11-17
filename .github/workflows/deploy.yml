@@ -238,7 +238,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # GKE (HOW_IT_WORKS.md §9, "Releases on GKE"), beside Cloud Run until phase 6 and only once Terraform has made the
-  # cluster (repository variable GKE_ENABLED=true). Signs every image (cosign signature and SBOM, and the Binary
+  # cluster (repository variable GKE_ENABLED=true). Signs every image (cosign signature, SBOM and build provenance, and the Binary
   # Authorization attestation, all with one Cloud KMS key), renders the chart with the images by digest, and hands
   # it to Cloud Deploy, which applies it, records it and runs the gateway checks. A failed rollout is rolled back.
   gke:
@@ -319,6 +319,14 @@ jobs:
             # No public transparency log: the signatures stay in our registry.
             cosign sign --yes --tlog-upload=false --key "gcpkms://$KMS_KEY" "$ref"
             cosign attest --yes --tlog-upload=false --key "gcpkms://$KMS_KEY" --type spdxjson --predicate "sbom-$image.json" "$ref"
+            # Build provenance (SLSA v1): which repository, commit and workflow run built it, signed with the same key.
+            # GitHub's own attestations need a paid plan on a private repository.
+            repo="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+            printf '%s' "{\"buildDefinition\":{\"buildType\":\"https://github.com/actions/runner\",\"externalParameters\":{\"repository\":\"$repo\",\"ref\":\"$GITHUB_REF\",\"workflow\":\"$GITHUB_WORKFLOW_REF\",\"image\":\"$image\"},\"resolvedDependencies\":[{\"uri\":\"git+$repo@$GITHUB_REF\",\"digest\":{\"gitCommit\":\"$GITHUB_SHA\"}}]},\"runDetails\":{\"builder\":{\"id\":\"$GITHUB_SERVER_URL/$GITHUB_WORKFLOW_REF\"},\"metadata\":{\"invocationId\":\"$repo/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT\"}}}" \
+              > "provenance-$image.json"
+            # A warning, not a failure: the signature and SBOM above are what Binary Authorization relies on.
+            cosign attest --yes --tlog-upload=false --key "gcpkms://$KMS_KEY" --type slsaprovenance1 \
+              --predicate "provenance-$image.json" "$ref" || echo "::warning::provenance attestation failed for $image"
           }
           pids=""
           for image in $BACKEND_ROLES kong frontend-gke grafana; do

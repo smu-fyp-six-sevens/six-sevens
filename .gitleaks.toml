@@ -1,0 +1,15 @@
+# gitleaks (CI: ci-cd.yml, Security job): the default rules, minus the placeholder keys tests and the kind smoke
+# test carry on purpose. A real secret never belongs in these paths either; they're skipped only because every
+# value in them is a fake.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures and placeholders"
+paths = [
+  '''^backend/tests/''',
+  '''^frontend/e2e/''',
+  '''^deploy/helm/smoke/''',
+  '''^backend/sql/''',
+  '''^deploy/loadtest/stand_ins\.py$''',
+]

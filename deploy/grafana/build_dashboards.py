@@ -1,5 +1,5 @@
 """
-Generates the four Grafana dashboards in deploy/grafana/dashboards/. Edit the panels here, not the JSON, then run
+Generates the five Grafana dashboards in deploy/grafana/dashboards/. Edit the panels here, not the JSON, then run
 from the repo root:  python deploy/grafana/build_dashboards.py deploy/grafana/dashboards
 """
 
@@ -13,6 +13,7 @@ RUN = 'monitored_resource="cloud_run_revision"'
 APP = 'container_name!~"collector|prometheus"'
 NOT_PUSH = 'route!~"/push.*"'
 LINKS = [
+    {"title": "Status", "url": "/d/six-status", "type": "link", "icon": "dashboard"},
     {"title": "Services", "url": "/d/six-services", "type": "link", "icon": "dashboard"},
     {"title": "Pipeline", "url": "/d/six-pipeline", "type": "link", "icon": "dashboard"},
     {"title": "Agents", "url": "/d/six-agents", "type": "link", "icon": "dashboard"},
@@ -159,6 +160,17 @@ def bq_series(title, sql, desc=""):
 def bq_table(title, sql, desc=""):
     return {"type": "table", "title": title, "description": desc, "datasource": BQ, "targets": [bq_target(sql)],
             "fieldConfig": {"defaults": {"decimals": 4}, "overrides": []}, "options": {"showHeader": True}}
+
+
+def per_case(title, sql, count_expr, desc=""):
+    """A BigQuery sum over a Prometheus count, divided in Grafana (a mixed panel and a math expression)."""
+    panel = stat(title, "", "none", desc, 3)
+    panel.update(datasource={"type": "datasource", "uid": "-- Mixed --"}, targets=[
+        {**bq_target(sql), "hide": True},
+        {**target(f"clamp_min({count_expr}, 1)", instant=True, ref="B"), "hide": True},
+        {"refId": "C", "datasource": {"type": "__expr__", "uid": "__expr__"}, "type": "math", "expression": "$A / $B"},
+    ])
+    return panel
 
 
 def or0(expr):
@@ -369,6 +381,21 @@ L.add(text("About these numbers", (
     "Claude isn't billed by Google, so its cost is always the app's own count. Cloud Run prices default to **asia-southeast1 (tier 2), request-based billing**; "
     "edit the boxes at the top if they change. Claude cost is computed in the app from each call's tokens and "
     "`backend/app/pricing.py`. Counters from an instance that stopped before its next scrape are slightly under-counted.")), 12, 4)
+CASES = 'sum(increase(stage_duration_seconds_count{stage="case.analysis.completed"}[$__range]))'
+L.row("Per case (range): GKE from the billing export, by namespace (cost allocation, gke.tf)")
+L.add(per_case("Cloud cost per case analysed",
+               f"SELECT SUM(net_cost) AS billed FROM {COSTS} WHERE $__timeFilter(time)", CASES,
+               "Everything Google billed in the range (the cluster, load balancer, Pub/Sub...) over the case analyses "
+               "that finished in it. The cluster costs money idle, so few cases make each one look expensive."), 6, 4)
+L.add(stat("Claude cost per case analysed", f"{claude} / clamp_min({CASES}, 1)", "currencyUSD",
+           "Every Claude call in the range (documents, detection and analyses) over the case analyses that finished in it.",
+           decimals=3), 6, 4)
+L.add(stat("Case analyses finished (range)", or0(CASES), "short", decimals=0), 6, 4)
+L.add(bq_stat("Cluster billed in range", f"SELECT SUM(net_cost) AS billed FROM {COSTS} WHERE $__timeFilter(time) AND namespace IS NOT NULL",
+              "Lines GKE's cost allocation labelled with a namespace; the cluster's own fee and idle capacity have none."), 6, 4)
+L.add(bq_bars("Billed by namespace (range)",
+              f"SELECT namespace, ROUND(SUM(net_cost), 4) AS cost FROM {COSTS} WHERE $__timeFilter(time) AND namespace IS NOT NULL GROUP BY namespace ORDER BY cost DESC",
+              "namespace", "cost", "Each service's share of the cluster: the api, each worker, the gateway, Grafana."), 24, 8)
 cost_vars = [
     textbox("cpu_price", "USD / vCPU-s", "0.0000336", "Cloud Run CPU price (request-based, tier 2)."),
     textbox("mem_price", "USD / GiB-s", "0.0000035", "Cloud Run memory price (request-based, tier 2)."),
@@ -378,7 +405,39 @@ cost_vars = [
 cost = dashboard("six-cost", "Six Sevens · Cost", L, time_from="now/M", variables=cost_vars,
                  desc="Claude and cloud spend, per service, agent and unit of work.")
 
+# ---------------------------------------------------------------- Status (uptime checks and SLOs, slo.tf)
+UPTIME = 'monitoring_googleapis_com:uptime_check_check_passed{monitored_resource="uptime_url"}'
+API_OK = 'namespace="api",route!="/health"'
+API_5XX_28D = (f'sum(increase(http_requests_total{{{API_OK},status=~"5.."}}[28d])) '
+               f'/ clamp_min(sum(increase(http_requests_total{{{API_OK}}}[28d])), 1)')
+FAST_28D = ('sum(increase(stage_duration_seconds_bucket{stage="document.detected",le="180.0"}[28d])) '
+            '/ clamp_min(sum(increase(stage_duration_seconds_count{stage="document.detected"}[28d])), 1)')
+GOOD = [{"color": "red", "value": None}, {"color": "orange", "value": 0.5}, {"color": "green", "value": 0.99}]
+L = Layout()
+L.row("Up now (uptime checks from Asia, Europe and the US, every 5 minutes)")
+L.add(bars("Regions passing, by host", [(f"avg by (host) ({UPTIME})", "{{host}}")], "percentunit",
+           "1 means every region reached it on its last check.", decimals=0), 12, 6)
+L.add(series("Checks passing over time", [(f"avg by (host) ({UPTIME})", "{{host}}")], "percentunit"), 12, 6)
+L.row("Service-level objectives (28 days, as Cloud Monitoring's SLO page counts them)")
+L.add(stat("API requests succeeding (objective 99%)", f"1 - ({API_5XX_28D})", "percentunit", decimals=2,
+           thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 0.99}]), 6, 4)
+L.add(stat("API error budget left", f"1 - ({API_5XX_28D}) / 0.01", "percentunit", decimals=0,
+           desc="Share of the 1% allowance not yet used. Below 0: the objective is missed.", thresholds=GOOD), 6, 4)
+L.add(stat("Detection runs within 3 minutes (objective 95%)", FAST_28D, "percentunit", decimals=1,
+           thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 0.95}]), 6, 4)
+L.add(stat("Detection error budget left", f"1 - (1 - {FAST_28D}) / 0.05", "percentunit", decimals=0,
+           desc="Share of the 5% allowance not yet used.", thresholds=GOOD), 6, 4)
+L.add(series("API burn rate (1 h)", [(
+    f'(sum(rate(http_requests_total{{{API_OK},status=~"5.."}}[1h])) / clamp_min(sum(rate(http_requests_total{{{API_OK}}}[1h])), 1e-9)) / 0.01',
+    "burn rate")], "short", "1 spends the budget exactly over 28 days; the alert fires above 14.4 for an hour or 6 for six hours."), 12, 8)
+L.add(text("Where else", (
+    "The same objectives, with their history and error budget, are on Cloud Monitoring's **SLOs** page (service "
+    "\"Six Sevens\"). An uptime check failing from more than one region for 10 minutes, or either SLO burning too fast, "
+    "emails the alert address.")), 12, 8)
+status = dashboard("six-status", "Six Sevens · Status", L, time_from="now-7d",
+                   desc="Is it up, and is it meeting its objectives: uptime checks and the two SLOs.")
+
 OUT.mkdir(parents=True, exist_ok=True)
-for name, board in (("services", services), ("pipeline", pipeline), ("agents", agents), ("cost", cost)):
+for name, board in (("status", status), ("services", services), ("pipeline", pipeline), ("agents", agents), ("cost", cost)):
     (OUT / f"{name}.json").write_text(json.dumps(board, indent=2) + "\n", encoding="utf-8")
     print(name, len(board["panels"]), "panels")

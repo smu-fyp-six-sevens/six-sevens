@@ -44,9 +44,10 @@ terraform apply
 
 ## What's running, and where to look
 
-- **Grafana:** URL in the deploy summary; user `admin`, password `terraform output -raw grafana_admin_password`. Dashboards: Services, Pipeline, Agents, Cost. Data appears minutes after traffic.
+- **Grafana:** URL in the deploy summary; user `admin`, password `terraform output -raw grafana_admin_password`. Dashboards: Status, Services, Pipeline, Agents, Cost. Data appears minutes after traffic; the Cost dashboard's per-namespace rows only after cost allocation (`gke.tf`) has run a day, since the billing export lags.
 - **Traces:** Cloud Console → Trace explorer. One upload is one trace across services; Claude spans carry model, tokens and `llm.cost_usd`.
-- **Alerts:** dead-lettered events (10 min); API 5xx over 5% for 10 min; Claude spend over `alert_daily_claude_usd` (default $10) in 24 h; unrecoverable stuck work (30 min).
+- **Alerts:** dead-lettered events (10 min); API 5xx over 5% for 10 min; Claude spend over `alert_daily_claude_usd` (default $10) in 24 h; unrecoverable stuck work (30 min); and on GKE (`slo.tf`): the site or API down from more than one region for 10 min, and an SLO's error budget burning 14.4× too fast over 1 h or 6× over 6 h. SLOs and their budgets: Monitoring → SLOs, service `six-sevens`.
+- **Disaster recovery drill:** with Docker running and `SUPABASE_DB_URL` set (Supabase → Connect → Session pooler), `python scripts\dr_drill.py` from `backend\`. It reads production only and restores into a local container (`dr-drill-postgres`, removed after).
 - **Claude cost:** every end-of-run event carries `detail.llm_cost_usd`, `llm_calls` and tokens. In the app: the case's **Claude Cost** tab. One case: `GET <Kong URL>/audit/cases/<case_id>/cost`. All cases (SQL editor): `select case_id, round(sum((detail->>'llm_cost_usd')::numeric), 4) as usd, count(*) as runs from audit_events where detail ? 'llm_cost_usd' group by case_id order by usd desc;`. These are list-price estimates (`backend/app/pricing.py`); the Anthropic console has the invoice.
 - **Sweeper:** runs in audit-metrics every 5 minutes. Pause: `gcloud scheduler jobs pause sweep --location asia-southeast1` (`resume` likewise).
 

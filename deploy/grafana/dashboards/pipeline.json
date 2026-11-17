@@ -17,6 +17,12 @@
   },
   "links": [
     {
+      "title": "Status",
+      "url": "/d/six-status",
+      "type": "link",
+      "icon": "dashboard"
+    },
+    {
       "title": "Services",
       "url": "/d/six-services",
       "type": "link",

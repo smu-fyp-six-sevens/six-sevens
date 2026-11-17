@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 
-from .. import audit, detection_results, document_repository, events, metrics
+from .. import audit, detection_results, document_repository, events, metrics, spend_cap
 from ..case_pipeline import service as analysis_service
 from ..config import settings
 from ..events import Event, Stopwatch, types
@@ -51,6 +51,16 @@ async def run(
         logger.info("Detection for document %s is already running here; ignoring the repeat", document_id)
         return
     timer = Stopwatch()
+    spent = await asyncio.to_thread(spend_cap.reached, case_id)
+    if spent is not None:
+        # Recorded like a failed run, so the panel shows why and the officer sees it can't simply be retried.
+        error = spend_cap.message(spent)
+        logger.warning("Case %s is past its spend cap; detection for document %s not started", case_id, document_id)
+        await asyncio.to_thread(detection_results.save_error, document_id, error)
+        await _record_end(document_id, case_id, requested_by, timer, "failed", {"error": error}, {}, trigger_event_id)
+        if case_id:
+            await push_case_snapshot(case_id, realtime_covers=False)
+        return
     outcome: Outcome = "success"
     detail: dict[str, Any] = {}
     meter = recovery.Meter()

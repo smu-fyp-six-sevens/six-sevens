@@ -271,6 +271,9 @@ class Settings:
     CASE_ANALYSIS_AUTO_RUNS_PER_HOUR: int = _int("CASE_ANALYSIS_AUTO_RUNS_PER_HOUR", 4)
     # Runs of any kind per case per hour past which an officer's "Run again" is refused (a stolen token can't loop it).
     CASE_ANALYSIS_RUNS_PER_HOUR: int = _int("CASE_ANALYSIS_RUNS_PER_HOUR", 10)
+    # Claude spend (list price, every run on the case) past which no detection run or case analysis starts on it
+    # (spend_cap.py). 0 turns the cap off.
+    CASE_SPEND_CAP_USD: float = _float("CASE_SPEND_CAP_USD", 5.0)
     # Whether cases created here need every required checklist document approved before they can be analysed.
     # Stored on each case when it's created (cases.checklist_enforced). On only in prod (Terraform).
     REQUIRE_COMPLETE_CHECKLIST: bool = _bool("REQUIRE_COMPLETE_CHECKLIST", False)

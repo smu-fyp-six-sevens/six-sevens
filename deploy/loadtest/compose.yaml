@@ -1,0 +1,48 @@
+# The load test with real Pub/Sub delivery (the emulator, pull, as on GKE): one app container running every role on
+# the stand-ins (stand_ins.py), no backend/.env, no Supabase, no Claude. From the repo root:
+#
+#   docker compose -f deploy/loadtest/compose.yaml up --build
+#   python deploy/loadtest/run.py --cases 20 --documents 3 --ramp 60
+services:
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=local
+
+  pubsub-init:
+    build: &image
+      context: ../..
+      dockerfile: backend/Dockerfile
+      # The test stage: the app plus backend/tests, whose in-memory database the stand-ins use.
+      target: test
+      args:
+        ALLOW_MISSING_LAND_USE: "true"
+    image: six-sevens/loadtest:local
+    command: python -m app.events.emulator_setup
+    environment:
+      PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
+      GOOGLE_CLOUD_PROJECT: local
+      EVENT_DELIVERY: pull
+    depends_on:
+      - pubsub-emulator
+    restart: on-failure
+
+  app:
+    build: *image
+    image: six-sevens/loadtest:local
+    command: python /loadtest/stand_ins.py
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/loadtest:ro
+    environment:
+      BACKEND_DIR: /app
+      EVENT_TRANSPORT: pubsub
+      EVENT_DELIVERY: pull
+      PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
+      GOOGLE_CLOUD_PROJECT: local
+      LOADTEST_DOC_SECONDS: ${LOADTEST_DOC_SECONDS:-20}
+      LOADTEST_DETECTION_SECONDS: ${LOADTEST_DETECTION_SECONDS:-40}
+      LOADTEST_ANALYSIS_SECONDS: ${LOADTEST_ANALYSIS_SECONDS:-30}
+    depends_on:
+      pubsub-init:
+        condition: service_completed_successfully

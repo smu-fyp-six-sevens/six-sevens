@@ -1,6 +1,6 @@
 # Cloud architecture: what's left
 
-Open cloud work only: delete an item once it's done, and this file once it's empty. Updated 2026-11-16. The cloud as built, and why (the GKE design, Helm, releases, decisions, cost, risks): `HOW_IT_WORKS.md` §9. Operations and every problem met: `deploy/terraform/README.md`.
+Open cloud work only: delete an item once it's done, and this file once it's empty. Updated 2026-11-17. The cloud as built, and why (the GKE design, Helm, releases, decisions, cost, risks): `HOW_IT_WORKS.md` §9. Operations and every problem met: `deploy/terraform/README.md`.
 
 ## Status and next steps (read this first)
 
@@ -32,18 +32,15 @@ Open cloud work only: delete an item once it's done, and this file once it's emp
 
 Steps 1–6 before the final presentation (2026-11-20); the rest if time is left.
 
-1. **Load tests as code** (k6 or Locust) against the local compose stack, written up as a capacity report (uploads a minute, time for KEDA to add a worker, p95 per stage). **No Claude calls** (stubbed) and **no Supabase writes** (writes go to an in-memory store). For the presentation, a live run with the Workloads page and Grafana showing pods being added.
+1. **Load test, the rest:** the same run on the compose stack (`deploy/loadtest/compose.yaml`, Pub/Sub emulator; the one-process result is in `HOW_IT_WORKS.md` §9); for the presentation, a live run on production with the Workloads page and Grafana showing a second detection-worker being added.
 2. **Tune autoscaling** (KEDA, pod sizes) from the results, recording before and after.
 3. **Failure tests** on production (above).
 4. **Accuracy from officer verdicts** (below).
-5. **Service-level objectives** with burn-rate alerts in Cloud Monitoring: for example 99% of API requests succeed, 95% of detection runs finish within 3 minutes; an alert when the error budget burns too fast.
-6. **Supply-chain extras:** build provenance (`actions/attest-build-provenance`, SLSA), CodeQL and gitleaks, and Trivy's high findings blocking (it reports only today), beside the signing and Binary Authorization already in place.
-7. **Argo CD** (above).
-8. **Event contracts:** every event type checked against a schema in CI, so no service can publish what another can't read.
-9. **Disaster recovery:** one Supabase backup-and-restore drill, timed, with stated recovery-time and data-loss targets (RTO, RPO); and the self-host kit (`docker compose up` install and the Helm chart).
-10. **Uptime checks and a status page:** Cloud Monitoring checks on `sixsevens.me` and the API from several regions.
-11. **Architecture decision records:** one short page per big decision (events over direct calls, GKE over Cloud Run, Claude only, the score set by code, no staging), in `docs/adr/`.
-12. **Cost:** infrastructure cost per case (each namespace's share from the billing export in BigQuery) beside the Claude cost per case; and the guardrails: a shared rate budget, a spend cap per case, budget alerts (the cluster costs money idle).
+5. **Supply-chain extras left:** Trivy's high findings blocking (it reports only today); CodeQL and GitHub's own attestations need a paid plan on a private repository.
+6. **Argo CD** (above).
+7. **Event contracts:** every event type checked against a schema in CI, so no service can publish what another can't read.
+8. **Architecture decision records:** one short page per big decision (events over direct calls, GKE over Cloud Run, Claude only, the score set by code, no staging), in `docs/adr/`.
+9. **Shared rate budget** (above).
 
 **Not doing:** staging (decided; its design is in `HOW_IT_WORKS.md` §9); nightly evals or model-comparison runs (they spend tokens).
 

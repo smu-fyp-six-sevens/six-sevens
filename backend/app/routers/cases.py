@@ -300,6 +300,8 @@ async def run_case_analysis(case_id: str, case: CaseRecord = Depends(get_editabl
             detail=f"This case has been analysed {settings.CASE_ANALYSIS_RUNS_PER_HOUR} times in the last hour. "
             "Try again later.",
         ) from exc
+    except analysis_service.SpendCapReached as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Failed to start the analysis for case %s", case_id)
         raise HTTPException(
