@@ -15,7 +15,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 from .. import (
-    extracted_fields_repository,
     audit, case_repository, case_stage, detection_results, document_repository, events, finding_keys,
     findings_repository, identifiers, read_pool, telemetry,
 )
@@ -388,7 +387,7 @@ def _company_on_file(documents: list[DocumentRecord]) -> tuple[str | None, list[
         for document in documents:
             if document.document_type != kind or document.status.value == "rejected":
                 continue
-            fields = extracted_fields_repository.get_extracted_fields_dict(document.id) or {}
+            fields = document.extracted_fields or {}
             stated = identifiers.text_values(decode_field_value(fields.get("company_name")))
             name = name or (" ".join(stated[0].split()) if stated else None)
             former += identifiers.text_values(decode_field_value(fields.get("company_former_name")))
@@ -478,7 +477,7 @@ def list_runs(case_id: str) -> list[CaseAnalysisRunItem]:
             run_id=str(row["run_id"]), status=status, started_at=started_at, finished_at=row.get("finished_at"),
             started_by=starters.get(str(row["run_id"])),
             risk_level=row.get("risk_level"), risk_score=round(score) if isinstance(score, (int, float)) else None,
-            finding_count=len(row.get("findings") or []),
+            finding_count=int(row.get("finding_count") or 0),
             stale=row.get("fingerprint") != current,
         ))
     # Oldest first, so each scored run is compared with the scored run before it.

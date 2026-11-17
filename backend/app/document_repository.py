@@ -193,11 +193,17 @@ def undo_approval(document_id: str, routing_status: RoutingStatus | None) -> Non
         _sync_case(_row(result.data[0]).get("case_id"))
 
 
-def _end_detection(document_id: str, status: DocumentStatus) -> bool:
-    """Only while the document is still DETECTING: a run a recovery replaced mustn't overwrite the new one."""
-    result = supabase_client.table("documents").update(
+def _end_detection(document_id: str, status: DocumentStatus, run_stamp: datetime | None = None) -> bool:
+    """
+    Only while the document is still DETECTING, and, given the run's claim stamp, still under that claim: a run a
+    recovery replaced mustn't overwrite the new one.
+    """
+    query = supabase_client.table("documents").update(
         {"status": status.value}
-    ).eq("id", document_id).eq("status", DocumentStatus.DETECTING.value).execute()
+    ).eq("id", document_id).eq("status", DocumentStatus.DETECTING.value)
+    if run_stamp is not None:
+        query = query.eq("processing_started_at", run_stamp.isoformat())
+    result = query.execute()
     if result.data:
         _sync_case(_row(result.data[0]).get("case_id"))
     else:
@@ -206,25 +212,36 @@ def _end_detection(document_id: str, status: DocumentStatus) -> bool:
 
 
 def mark_detecting(document_id: str) -> None:
-    """The Detection Agent has started â€” shown live as "Scanning" (see langgraph/detection/graph.py)."""
+    """The Detection Agent has started â€” shown live as "Scanning". Only from APPROVED (compare-and-swap): a claimed
+    run is already DETECTING, and a document that moved on (cancelled, replaced) mustn't be pulled back."""
     result = supabase_client.table("documents").update(
         {"status": DocumentStatus.DETECTING.value}
-    ).eq("id", document_id).execute()
+    ).eq("id", document_id).eq("status", DocumentStatus.APPROVED.value).execute()
     if result.data:
         _sync_case(_row(result.data[0]).get("case_id"))
 
 
-def mark_detected(document_id: str) -> bool:
+def holds_detection(document_id: str, run_stamp: datetime) -> bool:
+    """Whether the document is still DETECTING under the claim stamped `run_stamp` (workers/detection.run)."""
+    rows = (
+        supabase_client.table("documents").select("id").eq("id", document_id)
+        .eq("status", DocumentStatus.DETECTING.value).eq("processing_started_at", run_stamp.isoformat())
+        .execute().data
+    )
+    return bool(rows)
+
+
+def mark_detected(document_id: str, run_stamp: datetime | None = None) -> bool:
     """The Detection Agent finished and produced a report â€” terminal."""
-    return _end_detection(document_id, DocumentStatus.DETECTED)
+    return _end_detection(document_id, DocumentStatus.DETECTED, run_stamp)
 
 
-def end_unfinished_detection(document_id: str, *, has_report: bool) -> bool:
+def end_unfinished_detection(document_id: str, *, has_report: bool, run_stamp: datetime | None = None) -> bool:
     """
     A detection run crashed or was cancelled. With a report from an earlier run (a rerun that didn't finish),
     back to DETECTED: that report still stands. Otherwise back to APPROVED: still locked, and it can be run again.
     """
-    return _end_detection(document_id, DocumentStatus.DETECTED if has_report else DocumentStatus.APPROVED)
+    return _end_detection(document_id, DocumentStatus.DETECTED if has_report else DocumentStatus.APPROVED, run_stamp)
 
 
 def claim_extraction_rerun(document_id: str, requested_at: datetime) -> bool:

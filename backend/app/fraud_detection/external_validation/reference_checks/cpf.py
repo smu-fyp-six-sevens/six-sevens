@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
-from ...numerical_validation.common import CheckResult, _finding, _money, _parse_field_date, skipped
+from ...numerical_validation.common import CheckResult, new_finding, format_money, parse_field_date, skipped
 from ...numerical_validation.models import SkippedCheck
 from ...numerical_validation.payslip_inputs import (
     WageScenario, basic_pay_input, employee_cpf_input, split_earnings, wage_scenarios,
@@ -94,8 +94,8 @@ class CpfAssessment:
 
 
 def _wages_text(scenario: WageScenario) -> str:
-    text = f"ordinary wages {_money(scenario.ordinary)}"
-    return text + (f" and additional wages {_money(scenario.additional)}" if scenario.additional else "")
+    text = f"ordinary wages {format_money(scenario.ordinary)}"
+    return text + (f" and additional wages {format_money(scenario.additional)}" if scenario.additional else "")
 
 
 def _basic_only_band(employee_cpf: float, basic_pay: float | None, bands: tuple[CpfBand, ...]) -> CpfBand | None:
@@ -120,7 +120,7 @@ def assess_cpf(inputs: PayslipCpfInputs) -> CpfAssessment | SkippedCheck:
     scenarios = wage_scenarios(ordinary_wages, additional_wages, earnings_items)
     if not scenarios:
         return skipped(reason="Required field(s) not extracted: ordinary_wages (or readable earnings_items)")
-    when = _parse_field_date(pay_date) or _parse_field_date(pay_period_end)
+    when = parse_field_date(pay_date) or parse_field_date(pay_period_end)
     if when is None:
         return skipped(reason="Required field(s) not extracted: pay_date or pay_period_end")
     # An assumed table (sg_reference/cpf.PROVISIONAL_RATE_TABLES) is used only when switched on.
@@ -134,7 +134,7 @@ def assess_cpf(inputs: PayslipCpfInputs) -> CpfAssessment | SkippedCheck:
     if ceiling is None:
         return skipped(reason=f"CPF ordinary wage ceiling not configured for {when.isoformat()}")
     in_force = bands_in_force(when, use_provisional)
-    dob = _parse_field_date(date_of_birth)
+    dob = parse_field_date(date_of_birth)
     if in_force is None:
         # The ceiling table goes back further than the rate tables: the most any employee pays is
         # still known, so a contribution above it is caught; a lower one can't be judged.
@@ -169,7 +169,7 @@ def assess_cpf(inputs: PayslipCpfInputs) -> CpfAssessment | SkippedCheck:
         uncapped_max=uncapped_max, expected=expected,
         lines_note=f" Earnings read as {split.describe()}." if split else "",
         basic_note=(
-            f" It equals {basic_band.employee_pct:.1%} of basic pay ({_money(basic_pay)}) alone."
+            f" It equals {basic_band.employee_pct:.1%} of basic pay ({format_money(basic_pay)}) alone."
             if basic_band is not None and basic_pay else ""
         ),
     )
@@ -193,12 +193,12 @@ def _check_cpf_ceiling(
         return [], result
     if result.outcome != "over_ceiling":
         return [], None
-    return [_finding(
+    return [new_finding(
         "PAY.CPF_CEILING", "impossible",
-        f"Employee CPF {_money(result.employee_cpf)} is more than CPF allows on {_wages_text(result.main)} "
-        f"{result.age_basis} (at most {_money(result.capped_max)}): ordinary wages count only up to the "
-        f"{_money(result.ceiling)} ceiling in force on {result.when.isoformat()}.{result.basic_note}{result.lines_note}",
-        field=result.source_field, stated=_money(result.employee_cpf), expected=f"<= {_money(result.capped_max)}",
+        f"Employee CPF {format_money(result.employee_cpf)} is more than CPF allows on {_wages_text(result.main)} "
+        f"{result.age_basis} (at most {format_money(result.capped_max)}): ordinary wages count only up to the "
+        f"{format_money(result.ceiling)} ceiling in force on {result.when.isoformat()}.{result.basic_note}{result.lines_note}",
+        field=result.source_field, stated=format_money(result.employee_cpf), expected=f"<= {format_money(result.capped_max)}",
     )], None
 
 
@@ -224,11 +224,11 @@ def _check_cpf_base(
                                   "most an employee can pay was checked (PAY.CPF_CEILING)")
     if result.outcome != "basic_only":
         return [], None
-    return [_finding(
+    return [new_finding(
         "PAY.CPF_BASE", "inconsistent",
-        f"Employee CPF {_money(result.employee_cpf)} is not calculated on {_wages_text(result.main)}."
+        f"Employee CPF {format_money(result.employee_cpf)} is not calculated on {_wages_text(result.main)}."
         f"{result.basic_note}{result.lines_note}",
-        field=result.source_field, stated=_money(result.employee_cpf),
+        field=result.source_field, stated=format_money(result.employee_cpf),
     )], None
 
 
@@ -253,25 +253,25 @@ def _check_cpf_rate(
         return [], skipped(reason=f"No CPF rate table configured for {result.when.isoformat()}; only the "
                                   "most an employee can pay was checked (PAY.CPF_CEILING)")
     if result.outcome == "over_rate":
-        return [_finding(
+        return [new_finding(
             "PAY.CPF_RATE", "impossible",
-            f"Employee CPF {_money(result.employee_cpf)} on {_wages_text(result.main)} is more than CPF's rate "
+            f"Employee CPF {format_money(result.employee_cpf)} on {_wages_text(result.main)} is more than CPF's rate "
             f"allows {result.age_basis} on {result.when.isoformat()}, even before the wage ceiling (at most "
-            f"{_money(result.uncapped_max)}).{result.lines_note}",
-            field=result.source_field, stated=_money(result.employee_cpf), expected=f"<= {_money(result.capped_max)}",
+            f"{format_money(result.uncapped_max)}).{result.lines_note}",
+            field=result.source_field, stated=format_money(result.employee_cpf), expected=f"<= {format_money(result.capped_max)}",
         )], None
     if result.outcome != "mismatch":
         return [], None
     shares = "; ".join(
-        f"{band.label}: employee {_money(employee)}, employer {_money(total - employee)}"
+        f"{band.label}: employee {format_money(employee)}, employer {format_money(total - employee)}"
         for (scenario, band), (total, employee) in result.expected.items() if scenario == result.main
     )
-    return [_finding(
+    return [new_finding(
         "PAY.CPF_RATE", "inconsistent",
-        f"CPF on {_wages_text(result.main)} (employee {_money(result.employee_cpf)}"
-        + (f", employer {_money(employer_cpf)}" if employer_cpf is not None else "")
+        f"CPF on {_wages_text(result.main)} (employee {format_money(result.employee_cpf)}"
+        + (f", employer {format_money(employer_cpf)}" if employer_cpf is not None else "")
         + f") doesn't match CPF's rates {result.age_basis} on {result.when.isoformat()} ({shares}).{result.lines_note}",
-        field=result.source_field, stated=_money(result.employee_cpf),
+        field=result.source_field, stated=format_money(result.employee_cpf),
         severity_note="1st and 2nd-year Singapore PRs pay lower graduated rates, which can explain a "
                       "contribution below every band shown",
     )], None

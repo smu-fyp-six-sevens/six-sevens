@@ -119,16 +119,39 @@ def save(
     code made of the document's words that names a party to the case or a confidential detail, since the code
     can't be scrubbed without losing what it matches on.
     """
-    if has_protected_text(f"{summary} {note or ''}") or _confidential_code(check_code, names):
-        withdraw(source_key)
-        return False
-    service_supabase_client().table(TABLE).upsert({
-        "source_key": source_key, "case_id": case_id, "document_id": document_id, "scope": scope, "kind": kind,
-        "check_name": check_name, "check_code": check_code, "document_type": document_type, "verdict": verdict,
-        "reason": reason, "summary": scrub(summary, names) or "", "note": scrub(note, names), "reviewer": reviewer,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }, on_conflict="source_key").execute()
-    return True
+    return save_many([dict(
+        source_key=source_key, case_id=case_id, document_id=document_id, scope=scope, kind=kind, check_name=check_name,
+        check_code=check_code, document_type=document_type, verdict=verdict, reason=reason, summary=summary, note=note,
+        reviewer=reviewer, names=names,
+    )]) == 1
+
+
+def save_many(items: list[dict[str, Any]]) -> int:
+    """
+    save for many items (each save's keyword arguments): one upsert for those kept, one delete for those that may not
+    be. How many were kept.
+    """
+    kept: list[dict[str, Any]] = []
+    refused: list[str] = []
+    now = datetime.now(timezone.utc).isoformat()
+    for item in items:
+        names = item["names"]
+        if has_protected_text(f"{item['summary']} {item['note'] or ''}") or _confidential_code(item["check_code"], names):
+            refused.append(item["source_key"])
+            continue
+        kept.append({
+            **{key: item[key] for key in (
+                "source_key", "case_id", "document_id", "scope", "kind", "check_name", "check_code", "document_type",
+                "verdict", "reason", "reviewer",
+            )},
+            "summary": scrub(item["summary"], names) or "", "note": scrub(item["note"], names), "updated_at": now,
+        })
+    withdraw_many(refused)
+    # One upsert can't touch a row twice: a key given twice keeps its last item.
+    unique = list({row["source_key"]: row for row in kept}.values())
+    if unique:
+        service_supabase_client().table(TABLE).upsert(unique, on_conflict="source_key").execute()
+    return len(unique)
 
 
 def _confidential_code(check_code: str | None, names: list[str]) -> bool:
@@ -140,7 +163,12 @@ def _confidential_code(check_code: str | None, names: list[str]) -> bool:
 
 def withdraw(source_key: str) -> None:
     """The officer cleared the verdict or deleted the missed issue: the agents stop seeing it."""
-    service_supabase_client().table(TABLE).delete().eq("source_key", source_key).execute()
+    withdraw_many([source_key])
+
+
+def withdraw_many(source_keys: list[str]) -> None:
+    if source_keys:
+        service_supabase_client().table(TABLE).delete().in_("source_key", source_keys).execute()
 
 
 def get(feedback_id: str) -> FeedbackItem | None:

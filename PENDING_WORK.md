@@ -1,6 +1,6 @@
 # Pending work
 
-Open product and platform work only: delete an item once done. Updated 2026-11-16. How things are built today: `HOW_IT_WORKS.md`. Elsewhere: bugs (detection included), performance and security in `CODEBASE_AUDIT.md`; tests in `TEST_SUITE_AUDIT.md` and `PENDING_TESTS.md`; cloud work in `CLOUD_ARCHITECTURE_PLAN.md`.
+Open product and platform work only: delete an item once done. Updated 2026-11-17. How things are built today: `HOW_IT_WORKS.md`. Elsewhere: bugs (detection included), performance and security in `CODEBASE_AUDIT.md`; tests in `TEST_SUITE_AUDIT.md` and `PENDING_TESTS.md`; cloud work in `CLOUD_ARCHITECTURE_PLAN.md`.
 
 ## Handover documentation
 
@@ -32,7 +32,7 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 ## Case analysis (design: `HOW_IT_WORKS.md`, Step 6)
 
 - **Cancel the outdated run.** *Issue:* a replaced run finishes anyway and spends its calls; only its result is dropped (`superseded`).
-- **A fence on the case row** (`current_run_id`). *Issue:* two instances finishing at once could both publish a result (`CODEBASE_AUDIT.md` 2.2). Two instances *starting* the same run is already stopped by a unique index.
+- **Reminder: make the case analysis and the recommended documents more powerful.** *Issue:* the analysis tests at most three hypotheses in one plan-then-judge pass, with the tools it has today; recommended documents come from three fixed rules (large trade transactions, related-party balances, borrowings up 40%). *Ideas:* more cross-document tools (salary credits against payslips, CPF against payroll, invoices against statement receipts); a follow-up round when a verdict is inconclusive; each recommended document tied to the finding it would settle, ranked by how far it could move the score. Measure with the case-analysis evals before and after.
 - **Debounce** (5–10 s) before an automatic start, for a burst of officer changes.
 - **Dismissing a cross-document finding** (officer, with a reason; leaves the score, kept on record).
 - **No follow-up round** in plan-then-judge: add one if evals show low recall.
@@ -55,10 +55,10 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 ## Cloud operations
 
-- **Remove the unused publishable Supabase key:** drop `SUPABASE_PUBLISHABLE_KEY` from every role's secrets in `deploy/terraform/roles.json`, run `python deploy/helm/gen_values.py`, `terraform apply`, delete the secret, then disable the legacy keys in Supabase.
+- **Remove the unused publishable Supabase key:** the code no longer lists it (`roles.json`, the chart's values, the kind smoke test). Push and let the GKE deploy go green first (pods mount their secrets at start), then `terraform apply` in `deploy/terraform`: it deletes the secret and Cloud Run's references to it.
 - **Make Snyk blocking again** when its quota resets: delete the two `continue-on-error: true` lines in `.github/workflows/ci-cd.yml`, and "temporarily non-blocking" from CLAUDE.md, README and `HOW_IT_WORKS.md` §9.
 - **Frontend fully non-root:** `nginx-unprivileged` on 8080 (change `nginx.conf`, compose and the chart's `templates/frontend.yaml` port, with `runAsNonRoot`, together; `run.tf`'s `container_port` too while Cloud Run exists).
-- **Dead letters** sit in `domain-events-dead-letter-pull` until someone reads them.
+- **Dead letters:** an event that failed delivery 5 times lands in `domain-events-dead-letter-pull`, and the alert email says so. Nothing reads them. *Do (no code change):* when the email comes, look without removing them (`gcloud pubsub subscriptions pull domain-events-dead-letter-pull --limit=10 --project fyp-six-sevens`), check the worker's logs for why, redo the action in the app if the sweeper hasn't (for example "Run detection again"), then remove them (the same command with `--auto-ack`).
 
 ## Frontend
 

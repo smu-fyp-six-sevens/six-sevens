@@ -189,7 +189,7 @@
 
 .bulk-icon-btn--approve:hover:not(:disabled),
 .bulk-icon-btn--approve:focus-visible {
-  background: rgba(31, 111, 67, 0.1);
+  background: var(--green-30-a10);
   color: var(--green-20);
 }
 
@@ -199,7 +199,7 @@
 
 .bulk-icon-btn--danger:hover:not(:disabled),
 .bulk-icon-btn--danger:focus-visible {
-  background: rgba(178, 59, 59, 0.1);
+  background: var(--red-46-a10);
   color: var(--red-35);
 }
 
@@ -433,7 +433,7 @@
 
 .document-row-action-icon--retry:hover:not(:disabled),
 .document-row-action-icon--retry:focus-visible {
-  background: rgba(23, 47, 88, 0.1);
+  background: var(--slate-22-a10);
   color: var(--blue-16);
 }
 

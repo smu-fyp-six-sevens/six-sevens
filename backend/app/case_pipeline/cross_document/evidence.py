@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from statistics import median
 from typing import Any
 
-from ...fraud_detection.numerical_validation.common import _as_number, _rows
+from ...fraud_detection.numerical_validation.common import as_number, table_rows
 from ...fraud_detection.shared.field_values import decode_field_value
 from ...models import APPROVED_STATUSES, CitedValue, DocumentRecord
 from ..categories import category_for_finding
@@ -40,17 +40,17 @@ def mask_identifiers(text: str) -> str:
 
 
 def signed_amount(row: dict) -> float | None:
-    amount = _as_number(row.get("amount"))
+    amount = as_number(row.get("amount"))
     if amount is not None:
         return amount
-    credit, debit = _as_number(row.get("credit")), _as_number(row.get("debit"))
+    credit, debit = as_number(row.get("credit")), as_number(row.get("debit"))
     if credit is None and debit is None:
         return None
     return (credit or 0.0) - (debit or 0.0)
 
 
 def transaction_rows(fields: dict) -> list[dict]:
-    return _rows(decode_field_value(fields.get("transactions")))
+    return table_rows(decode_field_value(fields.get("transactions")))
 
 
 @dataclass
@@ -200,7 +200,7 @@ def render_dossier(context: CaseContext, max_chars: int = MAX_DOSSIER_CHARS) -> 
                 continue
             decoded = decode_field_value(value)
             if name == "transactions" or (isinstance(decoded, list) and decoded and isinstance(decoded[0], dict)):
-                rows = _rows(decoded)
+                rows = table_rows(decoded)
                 lines.append(f"  {name}: {len(rows)} row(s)")
                 if name == "transactions" and rows:
                     summary = transaction_summary(rows)

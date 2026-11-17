@@ -622,7 +622,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Documents */
+        /**
+         * List Documents
+         * @description A case's documents (required: every document in every case, with all their fields, is too large to send).
+         */
         get: operations["list_documents_documents_get"];
         put?: never;
         post?: never;
@@ -5875,8 +5878,8 @@ export interface operations {
     };
     list_documents_documents_get: {
         parameters: {
-            query?: {
-                case_id?: string | null;
+            query: {
+                case_id: string;
                 doc_status?: components["schemas"]["DocumentStatus"] | null;
             };
             header?: {

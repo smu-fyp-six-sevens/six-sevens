@@ -11,7 +11,7 @@ import pymupdf
 
 from ...ingestion.ingestion_service import ingest_document
 from ..font_consistency import _font_family
-from ..numerical_validation.common import _as_number, _field_number, _rows, row_amount
+from ..numerical_validation.common import as_number, field_number, table_rows, row_amount
 from ..shared.pdf_pages import pages as _pdf_pages
 from .models import Place
 
@@ -79,7 +79,7 @@ def money(text: str) -> float | None:
         return None
     printed = match.group(0)
     negative = printed.strip().upper().endswith("DR")
-    value = _as_number(re.sub(r"(?i)\s*(CR|DR)$", "", printed).replace("S$", "").replace("$", ""))
+    value = as_number(re.sub(r"(?i)\s*(CR|DR)$", "", printed).replace("S$", "").replace("$", ""))
     if value is None:
         return None
     return -abs(value) if negative else value
@@ -200,8 +200,8 @@ def place_rows(pages: list[PageView], transactions: Any) -> list[PlacedRow]:
     page boundary is skipped, not guessed."""
     placed: list[PlacedRow] = []
     cursor = 0
-    for index, row in enumerate(_rows(transactions)):
-        balance, amount = _field_number(row, "balance"), row_amount(row)
+    for index, row in enumerate(table_rows(transactions)):
+        balance, amount = field_number(row, "balance"), row_amount(row)
         if balance is None or amount is None:
             continue
         figures = (_money_strings(balance), _money_strings(amount))

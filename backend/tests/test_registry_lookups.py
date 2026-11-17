@@ -174,11 +174,11 @@ async def test_rate_limited_registry_is_a_skip_not_a_finding() -> None:
 async def test_a_passport_has_nothing_to_look_up() -> None:
     # No UEN and no address on a passport: no lookup runs (no_network would fail one), and the
     # detection tool reports it as nothing to check, not as a check that couldn't run.
-    from app.langgraph.detection.tools import _result
+    from app.langgraph.detection.tools import tool_result
 
     result = await verify_against_registries("d", [_field("passport_number", "K5690850D")], "passport")
     assert result.findings == [] and result.skipped_checks == []
-    tool_output = _result("registry_tool", [], unable=result.unable_to_assess_reason)
+    tool_output = tool_result("registry_tool", [], unable=result.unable_to_assess_reason)
     assert tool_output["nothing_to_check"] and not tool_output["unable_to_assess"]
 
 

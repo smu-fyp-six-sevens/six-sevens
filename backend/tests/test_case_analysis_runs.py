@@ -26,7 +26,7 @@ def _row(run_id: str, minutes_ago: int, *, status: str = "complete", score: int 
     return {
         "run_id": run_id, "status": status, "fingerprint": fingerprint,
         "started_at": (NOW - timedelta(minutes=minutes_ago)).isoformat(), "finished_at": None,
-        "risk_score": score, "risk_level": level, "findings": [{"id": f"f{n}"} for n in range(findings)],
+        "risk_score": score, "risk_level": level, "finding_count": findings,
     }
 
 

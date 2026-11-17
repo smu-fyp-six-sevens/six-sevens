@@ -311,6 +311,18 @@ def name_key(value: object) -> str | None:
     return " ".join(sorted(name_tokens(value))) or None
 
 
+def mentions_company(text: object, company: object) -> bool:
+    """
+    Whether free text (a statement line) names the company, its legal suffix written any way: "ACME Private Limited"
+    is named in "TRANSFER TO ACME PTE LTD".
+    """
+    wanted = company_tokens(company)
+    words = name_tokens(text.upper().replace("&", " AND ")) if isinstance(text, str) else []
+    if not wanted:
+        return False
+    return any(words[i:i + len(wanted)] == wanted for i in range(len(words) - len(wanted) + 1))
+
+
 def company_key(value: object) -> str | None:
     """A company's name without its legal suffix: "ACME Pte. Ltd." and "Acme Private Limited" share a key."""
     return " ".join(company_tokens(value)) or None

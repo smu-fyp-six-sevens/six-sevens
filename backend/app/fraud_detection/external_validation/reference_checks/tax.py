@@ -10,11 +10,11 @@ from ...numerical_validation.registry import Num, check
 from ..sg_reference.corporate_tax import TAX_RATE, Exemption, Rebate, exemptions_for, rebates_for
 from ...numerical_validation.common import (
     CheckResult,
-    _field_number,
-    _finding,
-    _money,
-    _MONEY_TOLERANCE,
-    _rows,
+    field_number,
+    new_finding,
+    format_money,
+    MONEY_TOLERANCE,
+    table_rows,
     _skip_reference,
 )
 
@@ -58,56 +58,56 @@ def _noa_findings(
         ("next", r"^next\b", computed["exempt_next"]),
     ):
         stated_tier = _find_line(pattern)
-        if stated_tier is not None and abs(stated_tier - expected) > _MONEY_TOLERANCE:
-            findings.append(_finding(
+        if stated_tier is not None and abs(stated_tier - expected) > MONEY_TOLERANCE:
+            findings.append(new_finding(
                 "NOA.EXEMPTION_TIERS", "impossible",
-                f"The \"{code_label}\" exemption tier should be {_money(expected)} for ECI {_money(eci)} under the "
-                f"YA {year} {exemption.name}, but the computation shows {_money(stated_tier)}",
-                field="tax_computation", stated=_money(stated_tier), expected=_money(expected),
+                f"The \"{code_label}\" exemption tier should be {format_money(expected)} for ECI {format_money(eci)} under the "
+                f"YA {year} {exemption.name}, but the computation shows {format_money(stated_tier)}",
+                field="tax_computation", stated=format_money(stated_tier), expected=format_money(expected),
             ))
 
     stated_after = _find_line(r"chargeable income after")
-    if stated_after is not None and abs(stated_after - computed["after"]) > _MONEY_TOLERANCE:
-        findings.append(_finding(
+    if stated_after is not None and abs(stated_after - computed["after"]) > MONEY_TOLERANCE:
+        findings.append(new_finding(
             "NOA.CHARGEABLE_AFTER_EXEMPTION", "impossible",
-            f"Chargeable income after exemption should be {_money(computed['after'])} for ECI {_money(eci)}, but the "
-            f"computation shows {_money(stated_after)}",
-            field="tax_computation", stated=_money(stated_after), expected=_money(computed["after"]),
+            f"Chargeable income after exemption should be {format_money(computed['after'])} for ECI {format_money(eci)}, but the "
+            f"computation shows {format_money(stated_after)}",
+            field="tax_computation", stated=format_money(stated_after), expected=format_money(computed["after"]),
         ))
 
     stated_tax = _find_line(r"^tax on\b") or _find_line(r"^tax assessed\b")
-    if stated_tax is not None and abs(stated_tax - computed["tax"]) > _MONEY_TOLERANCE:
-        findings.append(_finding(
+    if stated_tax is not None and abs(stated_tax - computed["tax"]) > MONEY_TOLERANCE:
+        findings.append(new_finding(
             "NOA.TAX_AT_RATE", "impossible",
-            f"Tax at {TAX_RATE:.0%} should be {_money(computed['tax'])}, but the computation shows "
-            f"{_money(stated_tax)}",
-            field="tax_computation", stated=_money(stated_tax), expected=_money(computed["tax"]),
+            f"Tax at {TAX_RATE:.0%} should be {format_money(computed['tax'])}, but the computation shows "
+            f"{format_money(stated_tax)}",
+            field="tax_computation", stated=format_money(stated_tax), expected=format_money(computed["tax"]),
         ))
 
     def _matches_either(stated: float, *expected: float) -> bool:
-        return any(abs(stated - e) <= _MONEY_TOLERANCE for e in expected)
+        return any(abs(stated - e) <= MONEY_TOLERANCE for e in expected)
 
     stated_rebate = _find_line(r"\brebate\b")
     if stated_rebate is not None and not _matches_either(abs(stated_rebate), computed["rebate"], computed["rebate_net"]):
         if rebate is None:
             terms = f"YA {year} has no CIT Rebate"
         else:
-            net_note = (f" or {_money(computed['rebate_net'])} net of the {_money(rebate.cash_grant)} cash grant"
+            net_note = (f" or {format_money(computed['rebate_net'])} net of the {format_money(rebate.cash_grant)} cash grant"
                         if rebate.cash_grant else "")
-            terms = (f"Tax rebate should be {_money(computed['rebate'])}{net_note} ({rebate.pct:.0%}, capped at "
-                     f"{_money(rebate.cap)} for YA {year})")
-        findings.append(_finding(
+            terms = (f"Tax rebate should be {format_money(computed['rebate'])}{net_note} ({rebate.pct:.0%}, capped at "
+                     f"{format_money(rebate.cap)} for YA {year})")
+        findings.append(new_finding(
             "NOA.REBATE", "impossible",
-            f"{terms}, but the computation shows {_money(stated_rebate)}",
-            field="tax_computation", stated=_money(stated_rebate), expected=_money(computed["rebate"]),
+            f"{terms}, but the computation shows {format_money(stated_rebate)}",
+            field="tax_computation", stated=format_money(stated_rebate), expected=format_money(computed["rebate"]),
         ))
 
     if not _matches_either(tax_payable, computed["payable"], computed["payable_net"]):
-        findings.append(_finding(
+        findings.append(new_finding(
             "NOA.PAYABLE", "impossible",
-            f"Tax payable should be {_money(computed['payable'])} for ECI {_money(eci)} under the YA {year} "
-            f"{exemption.name}" + (" and CIT Rebate" if rebate else "") + f", but the notice states {_money(tax_payable)}",
-            field="tax_payable", stated=_money(tax_payable), expected=_money(computed["payable"]),
+            f"Tax payable should be {format_money(computed['payable'])} for ECI {format_money(eci)} under the YA {year} "
+            f"{exemption.name}" + (" and CIT Rebate" if rebate else "") + f", but the notice states {format_money(tax_payable)}",
+            field="tax_payable", stated=format_money(tax_payable), expected=format_money(computed["payable"]),
         ))
 
     # An amended assessment nets the new figure against the previous one:
@@ -118,13 +118,13 @@ def _noa_findings(
     if previous is not None and (settled is not None or additional is not None):
         difference = tax_payable - abs(previous)
         stated_diff = -abs(settled) if settled is not None else abs(additional or 0.0)
-        if abs(difference - stated_diff) > _MONEY_TOLERANCE:
-            findings.append(_finding(
+        if abs(difference - stated_diff) > MONEY_TOLERANCE:
+            findings.append(new_finding(
                 "NOA.AMENDMENT", "impossible",
-                f"Tax payable {_money(tax_payable)} less the previous assessment {_money(abs(previous))} is "
-                f"{_money(difference)}, but the notice states "
-                f"{'a discharge of ' + _money(abs(stated_diff)) if settled is not None else 'additional tax of ' + _money(stated_diff)}",
-                field="tax_computation", stated=_money(abs(stated_diff)), expected=_money(abs(difference)),
+                f"Tax payable {format_money(tax_payable)} less the previous assessment {format_money(abs(previous))} is "
+                f"{format_money(difference)}, but the notice states "
+                f"{'a discharge of ' + format_money(abs(stated_diff)) if settled is not None else 'additional tax of ' + format_money(stated_diff)}",
+                field="tax_computation", stated=format_money(abs(stated_diff)), expected=format_money(abs(difference)),
             ))
     return findings
 
@@ -148,7 +148,7 @@ def _check_noa_chain(
     if year is None or rebates is None:
         return [], _skip_reference("NOA.PAYABLE", f"corporate tax rules for YA {year_of_assessment}")
 
-    lines = [(str(r.get("line", "")).strip().lower(), _field_number(r, "amount")) for r in _rows(tax_computation)]
+    lines = [(str(r.get("line", "")).strip().lower(), field_number(r, "amount")) for r in table_rows(tax_computation)]
     candidates = [
         _noa_findings(eci, tax_payable, year, lines, exemption, rebate)
         for exemption in exemptions_for(year)

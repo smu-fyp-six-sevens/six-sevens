@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 from app import detection_results
+from app.langgraph import detection_report
 from tests.support.fake_supabase import FakeSupabase
 
 REPORT = {"verdict": "flagged", "summary": "Net pay restyled.", "findings": []}
@@ -67,7 +68,7 @@ def test_states_split_reports_from_documents_whose_run_failed_with_none() -> Non
     assert failed == {"failed"}
 
 
-def test_slim_states_carry_only_the_verdict_for_more_than_a_hundred_documents() -> None:
+def test_slim_states_carry_only_the_verdict_and_counts_for_more_than_a_hundred_documents() -> None:
     ids = [f"doc-{n}" for n in range(150)]
     for document_id in ids:
         detection_results.save_report(document_id, REPORT)
@@ -75,5 +76,17 @@ def test_slim_states_carry_only_the_verdict_for_more_than_a_hundred_documents() 
     reports, failed = detection_results.get_states(ids, slim=True)
 
     assert len(reports) == 150
-    assert reports["doc-149"] == {"verdict": "flagged"}
+    assert reports["doc-149"] == {
+        "verdict": "flagged", "severity_counts": detection_report.severity_counts(REPORT.get("findings")),
+    }
     assert failed == set()
+
+
+def test_a_report_stored_before_the_counts_reads_back_with_the_verdict_only(db) -> None:
+    detection_results.save_report("old", REPORT)
+    [row] = db.rows("detection_results", document_id="old")
+    row["report"].pop("severity_counts")
+
+    reports, _ = detection_results.get_states(["old"], slim=True)
+
+    assert reports["old"] == {"verdict": "flagged"}

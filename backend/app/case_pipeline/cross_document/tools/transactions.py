@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from langchain_core.tools import tool
 
-from ....fraud_detection.numerical_validation.common import _parse_field_date
+from ....fraud_detection.numerical_validation.common import parse_field_date
 from ....fraud_detection.numerical_validation.statements import card_usage, recurring_payments, repeated_payments
 from ..evidence import mask_identifiers, signed_amount, transaction_summary
 from ...risk.supporting_documents import _counterparty_from_description
@@ -38,7 +38,7 @@ def build_transaction_tools(kit: ToolKit) -> list:
         rows = statement_rows(view)
         if rows is None:
             return kit.log("transaction_stats", args, unavailable(_NO_TRANSACTIONS), is_refutation_probe, view.key)
-        start, end, period = _parse_field_date(date_from), _parse_field_date(date_to), statement_period(view)
+        start, end, period = parse_field_date(date_from), parse_field_date(date_to), statement_period(view)
         chosen = [r for r in rows if (a := signed_amount(r)) is not None and direction_ok(a, direction)
                   and in_range(r, start, end, period)]
         summary = transaction_summary(chosen)
@@ -63,7 +63,7 @@ def build_transaction_tools(kit: ToolKit) -> list:
         rows = statement_rows(view)
         if rows is None:
             return kit.log("query_transactions", args, unavailable(_NO_TRANSACTIONS), is_refutation_probe, view.key)
-        start, end, period = _parse_field_date(date_from), _parse_field_date(date_to), statement_period(view)
+        start, end, period = parse_field_date(date_from), parse_field_date(date_to), statement_period(view)
         matches = []
         for index, row in enumerate(rows):
             amount = signed_amount(row)
@@ -139,7 +139,7 @@ def build_transaction_tools(kit: ToolKit) -> list:
             if day is None:
                 undated += 1
                 continue
-            if _parse_field_date(row.get("date")) is None:
+            if parse_field_date(row.get("date")) is None:
                 year_from_period += 1
             bucket = months[f"{day.year}-{day.month:02d}"]
             bucket["credits" if amount > 0 else "debits"] += abs(amount)

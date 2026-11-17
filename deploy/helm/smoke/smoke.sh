@@ -32,7 +32,7 @@ step "Placeholder secrets (no real key anywhere; an invalid Anthropic key can't 
 jwt="eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.c21va2U"
 for ns in api $WORKERS gateway; do
   kubectl -n "$ns" create secret generic app-secrets \
-    --from-literal=SUPABASE_PUBLISHABLE_KEY="$jwt" --from-literal=SUPABASE_SECRET_KEY="$jwt" \
+    --from-literal=SUPABASE_SECRET_KEY="$jwt" \
     --from-literal=AUTH_USERS="" --from-literal=AUTH_SECRET_KEY=smoke-signing-key \
     --from-literal=GATEWAY_SECRET=smokegatewaykey0123456789 --from-literal=ANTHROPIC_API_KEY=smoke-no-calls \
     --from-literal=DATA_GOV_SG_API_KEY=" " --from-literal=URA_API_KEY=" "

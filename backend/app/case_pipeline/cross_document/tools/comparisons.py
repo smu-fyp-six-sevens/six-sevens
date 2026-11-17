@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel
 
 from ....identifiers import alnum, individual_names_match, uen_key
-from ....fraud_detection.numerical_validation.common import _as_number
+from ....fraud_detection.numerical_validation.common import as_number
 from ....fraud_detection.shared.field_values import decode_field_value
 from ..bias import is_protected_field
 from ..evidence import mask_identifiers
@@ -53,8 +53,8 @@ def build_comparison_tools(kit: ToolKit) -> list:
         if overlap_days > 0:
             flags.append("PERIOD_OVERLAP")
             notes.append(f"The periods overlap by {overlap_days} day(s).")
-        closing = _as_number(decode_field_value(first[0].fields.get("closing_balance")))
-        opening = _as_number(decode_field_value(second[0].fields.get("opening_balance")))
+        closing = as_number(decode_field_value(first[0].fields.get("closing_balance")))
+        opening = as_number(decode_field_value(second[0].fields.get("opening_balance")))
         continuous = None
         if overlap_days <= 0 and gap_days <= 3 and closing is not None and opening is not None:
             continuous = abs(closing - opening) < 0.01

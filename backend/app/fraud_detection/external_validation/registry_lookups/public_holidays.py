@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from ...numerical_validation.common import _parse_field_date
+from ...numerical_validation.common import parse_field_date
 from ..sg_reference.holidays import BUNDLED_HOLIDAYS, PublicHolidays
 from .datagov import collection, dataset_name, datastore_search
 from .http import LookupUnavailable
@@ -39,7 +39,7 @@ async def _live_holidays() -> dict[date, str]:
     days: dict[date, str] = {}
     for dataset_id in await _holiday_datasets():
         for row in await datastore_search(dataset_id, {}, limit=1000):
-            day = _parse_field_date(row.get("date"))
+            day = parse_field_date(row.get("date"))
             name = " ".join(str(row.get("holiday") or "").translate(_APOSTROPHES).split())
             if day and name:
                 days[day] = name

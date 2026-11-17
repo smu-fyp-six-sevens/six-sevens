@@ -17,7 +17,7 @@ from ...config import settings
 from ...sg_time import today_sg
 from ..shared.field_catalogue import array_rows, row_label
 from .casts import CastLine, identity_finding, profit_cast_finding, section_total_finding
-from .common import _apply_needs_review, _as_number
+from .common import apply_needs_review, as_number
 from .models import NumericalFinding, NumericalValidationResult, SkippedCheck
 from .registry import Check, checks_for
 from .statements import _benford_unavailable, _run_benford_pair
@@ -112,7 +112,7 @@ def _run_checks(document_type: str | None, values: dict[str, Any], confidences: 
                 rename[param.name] = resolved
                 outcome.applied.append({"role": param.name, "field": resolved})
             if param.numeric and value is not None:
-                value = _as_number(value)
+                value = as_number(value)
             kwargs[param.name] = value
             if param.required and (value is None or value == "" or value == []):
                 missing.append(param.name)
@@ -128,7 +128,7 @@ def _run_checks(document_type: str | None, values: dict[str, Any], confidences: 
         outcome.findings.extend(findings)
         if skip is not None:
             outcome.skipped.append(skip.model_copy(update={"check_code": skip.check_code or entry.code}))
-    outcome.findings[:] = _apply_needs_review(outcome.findings, confidences)
+    outcome.findings[:] = apply_needs_review(outcome.findings, confidences)
 
 
 def _low_confidence(confidences: dict[str, float], names: list[str]) -> bool:
@@ -149,7 +149,7 @@ def _income_lines_from_labels(name: str, values: dict[str, Any]) -> list[tuple[s
     """Every income statement line except the totals. Amounts are signed (costs negative), so the sign gives the role."""
     lines = []
     for index, row in enumerate(array_rows(values[name]) or []):
-        amount = _as_number(row.get("amount"))
+        amount = as_number(row.get("amount"))
         if amount is None or _is_total(row, INCOME_TOTAL_WORDS):
             continue
         lines.append(("income_line" if amount > 0 else "expense_line", name, index))
@@ -212,8 +212,8 @@ def _income_statement(values: dict[str, Any], plain: dict[str, str], lines: list
     arrays_used = [name for name in arrays]
 
     for year, revenue_name, profit_name, column in years:
-        revenue_value = _as_number(values[revenue_name])
-        profit_value = _as_number(values[profit_name])
+        revenue_value = as_number(values[revenue_name])
+        profit_value = as_number(values[profit_name])
         if revenue_value is None or profit_value is None:
             outcome.skipped.append(SkippedCheck(check_code="FS.IS_CAST",
                                                 reason=f"{year}: revenue or profit is not a number"))
@@ -221,7 +221,7 @@ def _income_statement(values: dict[str, Any], plain: dict[str, str], lines: list
         cast_lines, missing = [], None
         for role, name, index in entries:
             row = arrays[name][index]
-            amount = _as_number(row.get(column))
+            amount = as_number(row.get(column))
             if amount is None:
                 missing = row_label(row)
                 break
@@ -270,11 +270,11 @@ def _balance_sheet(values: dict[str, Any], plain: dict[str, str], sections: dict
             outcome.skipped.append(SkippedCheck(check_code="FS.BS_CAST",
                                                 reason=f"{section}: no total field bound (total_{section})"))
             continue
-        stated = _as_number(values[total_name])
+        stated = as_number(values[total_name])
         amounts = []
         for name, index in bound:
             if 0 <= index < len(arrays[name]) and not _is_total(arrays[name][index], SECTION_TOTAL_WORDS):
-                amounts.append(_as_number(arrays[name][index].get("amount")))
+                amounts.append(as_number(arrays[name][index].get("amount")))
         if stated is None or any(a is None for a in amounts) or not amounts:
             outcome.skipped.append(SkippedCheck(check_code="FS.BS_CAST",
                                                 reason=f"{section}: rows or total are not numbers"))
@@ -294,7 +294,7 @@ def _balance_sheet(values: dict[str, Any], plain: dict[str, str], sections: dict
         resolved_names = [name for name in (_resolve_plain(name, plain, values, outcome.applied) for name in names) if name is not None]
         if len(resolved_names) != len(names):
             continue
-        numbers = [_as_number(values[name]) for name in resolved_names]
+        numbers = [as_number(values[name]) for name in resolved_names]
         numeric_values = [n for n in numbers if n is not None]
         if len(numeric_values) != len(numbers):
             continue
@@ -446,7 +446,7 @@ def build_result(document_id: str, document_type: str | None, fields: list[Any],
     """The endpoint response for one run."""
     values_analysed = sum(
         1 for f in fields
-        if isinstance(f.field_value, (int, float)) or (isinstance(f.field_value, str) and _as_number(f.field_value) is not None)
+        if isinstance(f.field_value, (int, float)) or (isinstance(f.field_value, str) and as_number(f.field_value) is not None)
     )
     unable = not fields
     return NumericalValidationResult(

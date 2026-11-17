@@ -269,9 +269,17 @@ def test_list_documents_db_failure_returns_502() -> None:
     with patch("app.document_service.document_repository") as mock_repo:
         mock_repo.list_documents.side_effect = RuntimeError("connection refused")
 
-        response = client.get("/documents")
+        response = client.get("/documents", params={"case_id": "case-1"})
 
     assert response.status_code == 502
+
+
+def test_listing_documents_needs_a_case() -> None:
+    with patch("app.document_service.document_repository") as mock_repo:
+        response = client.get("/documents")
+
+    assert response.status_code == 422
+    mock_repo.list_documents.assert_not_called()
 
 
 def test_get_document_db_failure_returns_502() -> None:

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from ..numerical_validation.common import _parse_field_date, _rows
+from ..numerical_validation.common import parse_field_date, table_rows
 from .sg_reference.holidays import BUNDLED_HOLIDAYS, PublicHolidays, giro_closed_reason
 
 # The document types GIRO payments appear on, so the only ones that need the holiday list.
@@ -40,11 +40,11 @@ class GiroScan:
 def giro_on_closed_days(transactions: Any, holidays: PublicHolidays = BUNDLED_HOLIDAYS) -> GiroScan:
     found = []
     unknown_years: set[int] = set()
-    for index, row in enumerate(_rows(transactions)):
+    for index, row in enumerate(table_rows(transactions)):
         description = " ".join(str(row.get("description") or "").split())
         if not _GIRO_RE.search(description):
             continue
-        day = _parse_field_date(row.get("value_date")) or _parse_field_date(row.get("date"))
+        day = parse_field_date(row.get("value_date")) or parse_field_date(row.get("date"))
         if day is None:
             continue
         if not holidays.covers(day):

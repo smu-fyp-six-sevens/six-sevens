@@ -10674,22 +10674,16 @@
     },
     "/documents": {
       "get": {
+        "description": "A case's documents (required: every document in every case, with all their fields, is too large to send).",
         "operationId": "list_documents_documents_get",
         "parameters": [
           {
             "in": "query",
             "name": "case_id",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Case Id"
+              "title": "Case Id",
+              "type": "string"
             }
           },
           {

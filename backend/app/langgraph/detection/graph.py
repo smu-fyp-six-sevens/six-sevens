@@ -28,6 +28,7 @@ import logging
 import operator
 import os
 from collections.abc import Hashable
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Annotated, Any, Required, TypeVar
 
@@ -635,9 +636,24 @@ async def _store_findings(document_id: str, case_id: str | None, report: dict) -
         trace.record(document_id, "findings_error", findings_error=f"{type(exc).__name__}: {exc}")
 
 
+# The claim stamp of the run under way (workers/detection.run), so a run a recovery replaced writes nothing.
+current_run_stamp: ContextVar[datetime | None] = ContextVar("detection_run_stamp", default=None)
+
+
+class DetectionSuperseded(Exception):
+    """The document left this run's claim (a recovery started a newer run, or an officer cancelled)."""
+
+
+def _stamped() -> dict:
+    stamp = current_run_stamp.get()
+    return {"run_stamp": stamp} if stamp is not None else {}
+
+
 def end_unfinished_run(document_id: str) -> None:
     """A run crashed or was cancelled (its error already saved): the document's status after it. Sync."""
-    document_repository.end_unfinished_detection(document_id, has_report=detection_results.has_report(document_id))
+    document_repository.end_unfinished_detection(
+        document_id, has_report=detection_results.has_report(document_id), **_stamped(),
+    )
 
 
 async def run_detection(document_id: str) -> dict:
@@ -684,9 +700,16 @@ async def _run_detection(document_id: str) -> dict:
         await asyncio.to_thread(trace.flush, document_id)
         await asyncio.to_thread(end_unfinished_run, document_id)
         raise
+    stamp = current_run_stamp.get()
+    if stamp is not None and not await asyncio.to_thread(document_repository.holds_detection, document_id, stamp):
+        # Replaced by a newer run: its report and findings (and the officer's verdicts on them) stand.
+        logger.warning("Document %s: this detection run was replaced; its report is not saved", document_id)
+        trace.record(document_id, "detection_superseded")
+        await asyncio.to_thread(trace.flush, document_id)
+        raise DetectionSuperseded(document_id)
     # The report must be saved before the status says "detected", or a snapshot can show detected with no report.
     await asyncio.to_thread(detection_results.save_report, document_id, result)
     await _store_findings(document_id, final.get("case_id"), result)
     await asyncio.to_thread(trace.flush, document_id)
-    await asyncio.to_thread(document_repository.mark_detected, document_id)
+    await asyncio.to_thread(document_repository.mark_detected, document_id, **_stamped())
     return result

@@ -24,7 +24,7 @@ _LIST_COLUMNS = (
 # A case's list of runs: when, how it ended, its score and how many findings, without the result itself.
 _RUN_LIST_COLUMNS = (
     "run_id, status, fingerprint, started_at, finished_at, risk_score:result->risk->score, "
-    "risk_level:result->risk->level, findings:result->findings"
+    "risk_level:result->risk->level, finding_count:result->finding_count"
 )
 
 
@@ -177,13 +177,27 @@ def fail_if_running(run_id: str, error: str) -> bool:
 
 def finish_run(analysis: CaseAnalysis) -> bool:
     """
-    Writes a run's outcome only while it is still the case's newest run.
-    A run that was replaced in the meantime is recorded as superseded and
-    its result is dropped, so a result over outdated inputs is never published.
+    Writes a run's outcome only while it is still running (the sweeper may have failed it) and still the case's
+    newest run. A run replaced in the meantime is recorded as superseded and its result dropped, so a result over
+    outdated inputs is never published. Whether it was published.
     """
     current = latest_run_id(analysis.case_id)
     superseded = current is not None and current != analysis.run_id
+    if not _write_outcome(analysis, superseded):
+        return False
+    if superseded:
+        return False
+    # A run inserted between the read above and the write: this result is already outdated.
+    if latest_run_id(analysis.case_id) != analysis.run_id:
+        supabase_client.table(_TABLE).update({"status": "superseded", "result": {}}) \
+            .eq("run_id", analysis.run_id).eq("status", analysis.status).execute()
+        return False
+    return True
+
+
+def _write_outcome(analysis: CaseAnalysis, superseded: bool) -> bool:
     result = {} if superseded else {
+        "finding_count": len(analysis.findings),
         "findings": [f.model_dump(mode="json") for f in analysis.findings],
         "confidence": analysis.confidence,
         "outlook": analysis.outlook.model_dump(mode="json") if analysis.outlook else None,
@@ -195,15 +209,15 @@ def finish_run(analysis: CaseAnalysis) -> bool:
         "adverse_media": analysis.adverse_media.model_dump(mode="json") if analysis.adverse_media else None,
         "audit": analysis.audit.model_dump(mode="json"),
     }
-    supabase_client.table(_TABLE).update({
+    written = supabase_client.table(_TABLE).update({
         "status": "superseded" if superseded else analysis.status,
         # What the run read, which may differ from what it was asked for (service.run_requested).
         "fingerprint": analysis.fingerprint,
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "error": analysis.error,
         "result": result,
-    }).eq("run_id", analysis.run_id).execute()
-    return not superseded
+    }).eq("run_id", analysis.run_id).eq("status", "running").execute()
+    return bool(written.data)
 
 
 def get_latest(case_id: str) -> CaseAnalysis | None:
@@ -233,8 +247,16 @@ def get_latest_summary(case_id: str) -> CaseAnalysis | None:
 
 
 def list_runs(case_id: str) -> list[dict[str, Any]]:
-    """Every run of the case, newest first: status, times, fingerprint, score, level and findings (no trace)."""
+    """Every run of the case, newest first: status, times, fingerprint, score, level and finding count (no trace)."""
     rows = fetch_all(lambda: supabase_client.table(_TABLE).select(_RUN_LIST_COLUMNS).eq("case_id", case_id), "run_id")
+    # A run stored before the count was: counted from its findings, read for those runs only.
+    uncounted = [str(row["run_id"]) for row in rows if row.get("finding_count") is None and row.get("status") == "complete"]
+    if uncounted:
+        found = supabase_client.table(_TABLE).select("run_id, findings:result->findings").in_("run_id", uncounted) \
+            .execute().data or []
+        counts = {str(_row(r)["run_id"]): len(_row(r).get("findings") or []) for r in found}
+        rows = [{**row, "finding_count": counts.get(str(row["run_id"]), 0)} if str(row["run_id"]) in counts else row
+                for row in rows]
     return sorted(rows, key=lambda row: str(row["started_at"]), reverse=True)
 
 

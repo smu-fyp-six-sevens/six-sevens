@@ -53,7 +53,7 @@ from ...sg_time import today_sg
 from ..shared.check_result import CheckResult
 from .date_parsing import date_in_period, parse_date_parts
 from ..font_consistency import ExtractedField
-from ..numerical_validation.common import officer_appointed, officer_role, _apply_needs_review, _as_number, _confidence_by_name, _fields_by_name, _parse_field_date, _rows, _skip_missing
+from ..numerical_validation.common import officer_appointed, officer_role, apply_needs_review, as_number, confidence_by_name, fields_by_name, parse_field_date, table_rows, skip_missing
 from ..numerical_validation.identity_company import _UEN_RE, _is_forward_looking_date_field, _looks_like_date_field
 from ..numerical_validation.models import Severity, SkippedCheck
 from ..external_validation.reference_checks.tax import _noa_year
@@ -209,7 +209,7 @@ def extract_labeled_dates(ctx: _Ctx, confidences: dict[str, float]) -> list[Extr
     for name, value in ctx.fields.items():
         if not isinstance(value, str) or not _looks_like_date_field_for_extraction(name):
             continue
-        parsed = _parse_field_date(value)
+        parsed = parse_field_date(value)
         if parsed is None:
             continue
         extracted.append(ExtractedDate(
@@ -220,7 +220,7 @@ def extract_labeled_dates(ctx: _Ctx, confidences: dict[str, float]) -> list[Extr
 
     period = _statement_period(ctx)
     for row_field, subfields in _ROW_DATE_LABELS.items():
-        rows = _rows(ctx.fields.get(row_field))
+        rows = table_rows(ctx.fields.get(row_field))
         for i, row in enumerate(rows):
             for subfield, label in subfields:
                 raw = row.get(subfield)
@@ -229,7 +229,7 @@ def extract_labeled_dates(ctx: _Ctx, confidences: dict[str, float]) -> list[Extr
                     raw = officer_appointed(row)
                 if not isinstance(raw, str):
                     continue
-                parsed = date_in_period(raw, *period) if row_field == "transactions" else _parse_field_date(raw)
+                parsed = date_in_period(raw, *period) if row_field == "transactions" else parse_field_date(raw)
                 if parsed is None:
                     continue
                 extracted.append(ExtractedDate(
@@ -243,7 +243,7 @@ def extract_labeled_dates(ctx: _Ctx, confidences: dict[str, float]) -> list[Extr
 
 def _statement_period(ctx: _Ctx) -> tuple[date | None, date | None]:
     """The statement period, which gives a transaction's year when the row prints only "23 AUG"."""
-    return _parse_field_date(ctx.fields.get("statement_period_start")), _parse_field_date(ctx.fields.get("statement_period_end"))
+    return parse_field_date(ctx.fields.get("statement_period_start")), parse_field_date(ctx.fields.get("statement_period_end"))
 
 
 def _has_any_date_like_field(ctx: _Ctx) -> bool:
@@ -255,7 +255,7 @@ def _has_any_date_like_field(ctx: _Ctx) -> bool:
         if isinstance(value, str) and _looks_like_date_field_for_extraction(name):
             return True
     for row_field in _ROW_DATE_LABELS:
-        if _rows(ctx.fields.get(row_field)):
+        if table_rows(ctx.fields.get(row_field)):
             return True
     return False
 
@@ -276,11 +276,11 @@ def _check_date_valid(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | None
         if isinstance(value, str) and _looks_like_date_field(name)
     }
     if not date_fields:
-        return [], _skip_missing("GEN.DATE_VALID", "(no date-like fields)")
+        return [], skip_missing("GEN.DATE_VALID", "(no date-like fields)")
 
     findings = []
     for name, raw in date_fields.items():
-        parsed = _parse_field_date(raw)
+        parsed = parse_field_date(raw)
         if parsed is None:
             # A date printed without a year or a day ("31/03", "September 2026") is real, just not
             # complete enough to check against today.
@@ -305,11 +305,11 @@ def _check_nric_birthyear(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | 
     or later, the two digits after the prefix must match the birth year."""
     values = _need(ctx, "ID.NRIC_BIRTHYEAR", "nric_number", "date_of_birth")
     if values is None:
-        return [], _skip_missing("ID.NRIC_BIRTHYEAR", "nric_number", "date_of_birth")
+        return [], skip_missing("ID.NRIC_BIRTHYEAR", "nric_number", "date_of_birth")
     nric, dob_raw = values
-    dob = _parse_field_date(dob_raw)
+    dob = parse_field_date(dob_raw)
     if not isinstance(nric, str) or dob is None:
-        return [], _skip_missing("ID.NRIC_BIRTHYEAR", "nric_number", "date_of_birth")
+        return [], skip_missing("ID.NRIC_BIRTHYEAR", "nric_number", "date_of_birth")
     match = _NRIC_RE.match(nric.strip().upper())
     if not match or match.group(1) not in ("S", "T") or dob.year < 1968:
         return [], None
@@ -329,11 +329,11 @@ def _check_nric_prefix_vs_birth(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCh
     """ID.PREFIX_VS_BIRTH. S is for births before 2000, T from 2000 on."""
     values = _need(ctx, "ID.PREFIX_VS_BIRTH", "nric_number", "date_of_birth")
     if values is None:
-        return [], _skip_missing("ID.PREFIX_VS_BIRTH", "nric_number", "date_of_birth")
+        return [], skip_missing("ID.PREFIX_VS_BIRTH", "nric_number", "date_of_birth")
     nric, dob_raw = values
-    dob = _parse_field_date(dob_raw)
+    dob = parse_field_date(dob_raw)
     if not isinstance(nric, str) or dob is None:
-        return [], _skip_missing("ID.PREFIX_VS_BIRTH", "nric_number", "date_of_birth")
+        return [], skip_missing("ID.PREFIX_VS_BIRTH", "nric_number", "date_of_birth")
     match = _NRIC_RE.match(nric.strip().upper())
     if not match or match.group(1) not in ("S", "T"):
         return [], None
@@ -369,21 +369,21 @@ def _check_period_bounds(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | N
     period, in a consistent order."""
     values = _need(ctx, "BS.PERIOD_BOUNDS", "transactions", "statement_period_start", "statement_period_end")
     if values is None:
-        return [], _skip_missing(
+        return [], skip_missing(
             "BS.PERIOD_BOUNDS", "transactions", "statement_period_start", "statement_period_end"
         )
     rows, start_raw, end_raw = values
-    start, end = _parse_field_date(start_raw), _parse_field_date(end_raw)
+    start, end = parse_field_date(start_raw), parse_field_date(end_raw)
     if start is None or end is None:
-        return [], _skip_missing("BS.PERIOD_BOUNDS", "statement_period_start/.end")
+        return [], skip_missing("BS.PERIOD_BOUNDS", "statement_period_start/.end")
 
     findings = []
     dates: list[date] = []
-    for i, row in enumerate(_rows(rows)):
+    for i, row in enumerate(table_rows(rows)):
         raw = row.get("date")
         # "23 AUG" takes its year from the period; one no year of the period can place is outside it, and
         # is reported against the period's closing year.
-        txn_date = date_in_period(raw, start, end) or _parse_field_date(raw, default_year=end.year)
+        txn_date = date_in_period(raw, start, end) or parse_field_date(raw, default_year=end.year)
         if txn_date is None:
             continue
         dates.append(txn_date)
@@ -421,10 +421,10 @@ def _check_fs_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | N
     within a reasonable window."""
     values = _need(ctx, "FS.DATE_LOGIC", "financial_year_end", "signing_date")
     if values is None:
-        return [], _skip_missing("FS.DATE_LOGIC", "financial_year_end", "signing_date")
-    fye, signing = (_parse_field_date(v) for v in values)
+        return [], skip_missing("FS.DATE_LOGIC", "financial_year_end", "signing_date")
+    fye, signing = (parse_field_date(v) for v in values)
     if fye is None or signing is None:
-        return [], _skip_missing("FS.DATE_LOGIC", "financial_year_end/signing_date (unparseable)")
+        return [], skip_missing("FS.DATE_LOGIC", "financial_year_end/signing_date (unparseable)")
     if signing < fye:
         return [_finding(
             "FS.DATE_LOGIC", "inconsistent",
@@ -455,12 +455,12 @@ def _check_noa_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | 
     any previous assessment it refers to."""
     values = _need(ctx, "NOA.DATE_LOGIC", "noa_date", "year_of_assessment")
     if values is None:
-        return [], _skip_missing("NOA.DATE_LOGIC", "noa_date", "year_of_assessment")
+        return [], skip_missing("NOA.DATE_LOGIC", "noa_date", "year_of_assessment")
     noa_date_raw, ya_raw = values
-    noa_date_val = _parse_field_date(noa_date_raw)
+    noa_date_val = parse_field_date(noa_date_raw)
     year = _noa_year(ctx.fields.get("year_of_assessment"))
     if noa_date_val is None or year is None:
-        return [], _skip_missing("NOA.DATE_LOGIC", "noa_date/year_of_assessment (unparseable)")
+        return [], skip_missing("NOA.DATE_LOGIC", "noa_date/year_of_assessment (unparseable)")
 
     findings = []
     if noa_date_val.year < year:
@@ -470,7 +470,7 @@ def _check_noa_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | 
             f"({year})",
             field="noa_date", stated=noa_date_val.isoformat(),
         ))
-    previous = _parse_field_date(ctx.fields.get("previous_assessment_date"))
+    previous = parse_field_date(ctx.fields.get("previous_assessment_date"))
     if previous is not None and noa_date_val < previous:
         findings.append(_finding(
             "NOA.DATE_LOGIC", "inconsistent",
@@ -494,10 +494,10 @@ def _check_payslip_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedChec
     period."""
     values = _need(ctx, "PAY.DATE_LOGIC", "pay_period_end", "pay_date")
     if values is None:
-        return [], _skip_missing("PAY.DATE_LOGIC", "pay_period_end", "pay_date")
-    period_end, pay_date_val = (_parse_field_date(v) for v in values)
+        return [], skip_missing("PAY.DATE_LOGIC", "pay_period_end", "pay_date")
+    period_end, pay_date_val = (parse_field_date(v) for v in values)
     if period_end is None or pay_date_val is None:
-        return [], _skip_missing("PAY.DATE_LOGIC", "pay_period_end/pay_date (unparseable)")
+        return [], skip_missing("PAY.DATE_LOGIC", "pay_period_end/pay_date (unparseable)")
     if not (period_end <= pay_date_val <= period_end + timedelta(days=45)):
         return [_finding(
             "PAY.DATE_LOGIC", "inconsistent",
@@ -521,12 +521,12 @@ def _check_cr_earliest_account(ctx: _Ctx) -> tuple[list[DateFinding], SkippedChe
     the earliest opening date among the accounts."""
     values = _need(ctx, "CR.EARLIEST_ACCOUNT", "accounts", "earliest_account_date")
     if values is None:
-        return [], _skip_missing("CR.EARLIEST_ACCOUNT", "accounts", "earliest_account_date")
+        return [], skip_missing("CR.EARLIEST_ACCOUNT", "accounts", "earliest_account_date")
     rows, stated_raw = values
-    opening_dates = [d for d in (_parse_field_date(r.get("date_opened")) for r in _rows(rows)) if d]
-    stated = _parse_field_date(stated_raw)
+    opening_dates = [d for d in (parse_field_date(r.get("date_opened")) for r in table_rows(rows)) if d]
+    stated = parse_field_date(stated_raw)
     if not opening_dates or stated is None:
-        return [], _skip_missing("CR.EARLIEST_ACCOUNT", "accounts[].date_opened (unparseable)")
+        return [], skip_missing("CR.EARLIEST_ACCOUNT", "accounts[].date_opened (unparseable)")
     earliest = min(opening_dates)
     if stated != earliest:
         return [_finding(
@@ -543,14 +543,14 @@ def _check_cr_age_at_opening(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck
     credit, using the DOB printed in the report itself."""
     values = _need(ctx, "CR.AGE_AT_OPENING", "accounts", "date_of_birth")
     if values is None:
-        return [], _skip_missing("CR.AGE_AT_OPENING", "accounts", "date_of_birth")
+        return [], skip_missing("CR.AGE_AT_OPENING", "accounts", "date_of_birth")
     rows, dob_raw = values
-    dob = _parse_field_date(dob_raw)
+    dob = parse_field_date(dob_raw)
     if dob is None:
-        return [], _skip_missing("CR.AGE_AT_OPENING", "date_of_birth (unparseable)")
+        return [], skip_missing("CR.AGE_AT_OPENING", "date_of_birth (unparseable)")
     findings = []
-    for i, row in enumerate(_rows(rows)):
-        opened = _parse_field_date(row.get("date_opened"))
+    for i, row in enumerate(table_rows(rows)):
+        opened = parse_field_date(row.get("date_opened"))
         if opened is None:
             continue
         # Age in whole years, by birthday: days / 365.25 puts someone on their 21st birthday a fraction short of 21.
@@ -582,11 +582,11 @@ def _check_cr_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | N
     """
     values = _need(ctx, "CR.DATE_LOGIC", "accounts")
     if values is None:
-        return [], _skip_missing("CR.DATE_LOGIC", "accounts")
-    enquiry_date = _parse_field_date(ctx.fields.get("report_date"))
+        return [], skip_missing("CR.DATE_LOGIC", "accounts")
+    enquiry_date = parse_field_date(ctx.fields.get("report_date"))
     findings = []
-    for i, row in enumerate(_rows(values[0])):
-        opened, closed = _parse_field_date(row.get("date_opened")), _parse_field_date(row.get("date_closed"))
+    for i, row in enumerate(table_rows(values[0])):
+        opened, closed = parse_field_date(row.get("date_opened")), parse_field_date(row.get("date_closed"))
         if opened and closed and closed < opened:
             findings.append(_finding(
                 "CR.DATE_LOGIC", "inconsistent",
@@ -629,10 +629,10 @@ def _check_loan_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck |
     """LOAN.DATE_LOGIC. Acceptance on or after offer, within validity."""
     values = _need(ctx, "LOAN.DATE_LOGIC", "offer_date", "acceptance_date")
     if values is None:
-        return [], _skip_missing("LOAN.DATE_LOGIC", "offer_date", "acceptance_date")
-    offer, acceptance = (_parse_field_date(v) for v in values)
+        return [], skip_missing("LOAN.DATE_LOGIC", "offer_date", "acceptance_date")
+    offer, acceptance = (parse_field_date(v) for v in values)
     if offer is None or acceptance is None:
-        return [], _skip_missing("LOAN.DATE_LOGIC", "offer_date/acceptance_date (unparseable)")
+        return [], skip_missing("LOAN.DATE_LOGIC", "offer_date/acceptance_date (unparseable)")
     if acceptance < offer:
         return [_finding(
             "LOAN.DATE_LOGIC", "inconsistent",
@@ -640,7 +640,7 @@ def _check_loan_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck |
             f"({offer.isoformat()})",
             field="acceptance_date", stated=acceptance.isoformat(),
         )], None
-    validity_days = _as_number(ctx.fields.get("offer_validity_days")) or 30
+    validity_days = as_number(ctx.fields.get("offer_validity_days")) or 30
     if (acceptance - offer).days > validity_days:
         return [_finding(
             "LOAN.DATE_LOGIC", "inconsistent",
@@ -663,10 +663,10 @@ def _check_poa_period_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck 
     """POA.PERIOD_LOGIC. Billing period ends on or before the bill date."""
     values = _need(ctx, "POA.PERIOD_LOGIC", "billing_period_end", "bill_date")
     if values is None:
-        return [], _skip_missing("POA.PERIOD_LOGIC", "billing_period_end", "bill_date")
-    period_end, bill_date_val = (_parse_field_date(v) for v in values)
+        return [], skip_missing("POA.PERIOD_LOGIC", "billing_period_end", "bill_date")
+    period_end, bill_date_val = (parse_field_date(v) for v in values)
     if period_end is None or bill_date_val is None:
-        return [], _skip_missing("POA.PERIOD_LOGIC", "billing_period_end/bill_date (unparseable)")
+        return [], skip_missing("POA.PERIOD_LOGIC", "billing_period_end/bill_date (unparseable)")
     if period_end > bill_date_val:
         return [_finding(
             "POA.PERIOD_LOGIC", "impossible",
@@ -681,10 +681,10 @@ def _check_poa_due_date(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | No
     """POA.DUE_DATE. Due date after bill date, within a normal window."""
     values = _need(ctx, "POA.DUE_DATE", "bill_date", "due_date")
     if values is None:
-        return [], _skip_missing("POA.DUE_DATE", "bill_date", "due_date")
-    bill_date_val, due_date_val = (_parse_field_date(v) for v in values)
+        return [], skip_missing("POA.DUE_DATE", "bill_date", "due_date")
+    bill_date_val, due_date_val = (parse_field_date(v) for v in values)
     if bill_date_val is None or due_date_val is None:
-        return [], _skip_missing("POA.DUE_DATE", "bill_date/due_date (unparseable)")
+        return [], skip_missing("POA.DUE_DATE", "bill_date/due_date (unparseable)")
     if not (bill_date_val < due_date_val <= bill_date_val + timedelta(days=60)):
         return [_finding(
             "POA.DUE_DATE", "inconsistent",
@@ -700,10 +700,10 @@ def _check_poa_contract_term(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck
     contract term."""
     values = _need(ctx, "POA.CONTRACT_TERM", "bill_date", "contract_end_date")
     if values is None:
-        return [], _skip_missing("POA.CONTRACT_TERM", "bill_date", "contract_end_date")
-    bill_date_val, end_date_val = (_parse_field_date(v) for v in values)
+        return [], skip_missing("POA.CONTRACT_TERM", "bill_date", "contract_end_date")
+    bill_date_val, end_date_val = (parse_field_date(v) for v in values)
     if bill_date_val is None or end_date_val is None:
-        return [], _skip_missing("POA.CONTRACT_TERM", "bill_date/contract_end_date (unparseable)")
+        return [], skip_missing("POA.CONTRACT_TERM", "bill_date/contract_end_date (unparseable)")
     if (end_date_val - bill_date_val).days > 365 * 5:
         return [_finding(
             "POA.CONTRACT_TERM", "signal",
@@ -729,11 +729,11 @@ def _check_coi_event_after_issue(ctx: _Ctx) -> tuple[list[DateFinding], SkippedC
     after the certificate's own issue date."""
     values = _need(ctx, "COI.EVENT_AFTER_ISSUE", "certificate_date")
     if values is None:
-        return [], _skip_missing("COI.EVENT_AFTER_ISSUE", "certificate_date")
-    issue_date = _parse_field_date(values[0])
+        return [], skip_missing("COI.EVENT_AFTER_ISSUE", "certificate_date")
+    issue_date = parse_field_date(values[0])
     if issue_date is None:
-        return [], _skip_missing("COI.EVENT_AFTER_ISSUE", "certificate_date (unparseable)")
-    name_change = _parse_field_date(ctx.fields.get("company_former_name_change_date"))
+        return [], skip_missing("COI.EVENT_AFTER_ISSUE", "certificate_date (unparseable)")
+    name_change = parse_field_date(ctx.fields.get("company_former_name_change_date"))
     if name_change and name_change > issue_date:
         return [_finding(
             "COI.EVENT_AFTER_ISSUE", "impossible",
@@ -748,11 +748,11 @@ def _check_coi_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | 
     """COI.DATE_LOGIC. Any name change must be dated after incorporation."""
     values = _need(ctx, "COI.DATE_LOGIC", "incorporation_date")
     if values is None:
-        return [], _skip_missing("COI.DATE_LOGIC", "incorporation_date")
-    incorporation = _parse_field_date(values[0])
-    name_change = _parse_field_date(ctx.fields.get("company_former_name_change_date"))
+        return [], skip_missing("COI.DATE_LOGIC", "incorporation_date")
+    incorporation = parse_field_date(values[0])
+    name_change = parse_field_date(ctx.fields.get("company_former_name_change_date"))
     if incorporation is None:
-        return [], _skip_missing("COI.DATE_LOGIC", "incorporation_date (unparseable)")
+        return [], skip_missing("COI.DATE_LOGIC", "incorporation_date (unparseable)")
     if name_change and name_change < incorporation:
         return [_finding(
             "COI.DATE_LOGIC", "inconsistent",
@@ -768,13 +768,13 @@ def _check_coi_uen_year(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | No
     year."""
     values = _need(ctx, "COI.UEN_YEAR", "uen", "incorporation_date")
     if values is None:
-        return [], _skip_missing("COI.UEN_YEAR", "uen", "incorporation_date")
+        return [], skip_missing("COI.UEN_YEAR", "uen", "incorporation_date")
     uen_raw, incorporation_raw = values
-    incorporation = _parse_field_date(incorporation_raw)
+    incorporation = parse_field_date(incorporation_raw)
     uen = str(uen_raw).strip().upper()
     match = _UEN_RE.match(uen)
     if incorporation is None or not match:
-        return [], _skip_missing("COI.UEN_YEAR", "uen/incorporation_date (unparseable)")
+        return [], skip_missing("COI.UEN_YEAR", "uen/incorporation_date (unparseable)")
     year_prefix = int(match.group(1))
     if year_prefix != incorporation.year:
         return [_finding(
@@ -802,14 +802,14 @@ def _check_acra_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck |
     date."""
     values = _need(ctx, "ACRA.DATE_LOGIC", "incorporation_date")
     if values is None:
-        return [], _skip_missing("ACRA.DATE_LOGIC", "incorporation_date")
-    incorporation = _parse_field_date(values[0])
+        return [], skip_missing("ACRA.DATE_LOGIC", "incorporation_date")
+    incorporation = parse_field_date(values[0])
     if incorporation is None:
-        return [], _skip_missing("ACRA.DATE_LOGIC", "incorporation_date (unparseable)")
+        return [], skip_missing("ACRA.DATE_LOGIC", "incorporation_date (unparseable)")
 
     findings = []
-    for officer in _rows(ctx.fields.get("officers")):
-        appointed = _parse_field_date(officer_appointed(officer))
+    for officer in table_rows(ctx.fields.get("officers")):
+        appointed = parse_field_date(officer_appointed(officer))
         if appointed and appointed < incorporation:
             findings.append(_finding(
                 "ACRA.DATE_LOGIC", "inconsistent",
@@ -818,10 +818,10 @@ def _check_acra_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck |
                 field="officers",
             ))
 
-    document_date = _parse_field_date(ctx.fields.get("document_date"))
+    document_date = parse_field_date(ctx.fields.get("document_date"))
     if document_date:
         for name in ("last_agm_date", "last_annual_return_date"):
-            value = _parse_field_date(ctx.fields.get(name))
+            value = parse_field_date(ctx.fields.get(name))
             if value and value > document_date:
                 findings.append(_finding(
                     "ACRA.DATE_LOGIC", "inconsistent",
@@ -837,10 +837,10 @@ def _check_acra_filing_vs_fye(ctx: _Ctx) -> tuple[list[DateFinding], SkippedChec
     stated financial year end."""
     values = _need(ctx, "ACRA.FILING_VS_FYE", "financial_year_end", "last_agm_date")
     if values is None:
-        return [], _skip_missing("ACRA.FILING_VS_FYE", "financial_year_end", "last_agm_date")
-    fye, agm = (_parse_field_date(v) for v in values)
+        return [], skip_missing("ACRA.FILING_VS_FYE", "financial_year_end", "last_agm_date")
+    fye, agm = (parse_field_date(v) for v in values)
     if fye is None or agm is None:
-        return [], _skip_missing("ACRA.FILING_VS_FYE", "financial_year_end/last_agm_date (unparseable)")
+        return [], skip_missing("ACRA.FILING_VS_FYE", "financial_year_end/last_agm_date (unparseable)")
     if not (fye <= agm <= fye + timedelta(days=180)):
         return [_finding(
             "ACRA.FILING_VS_FYE", "implausible",
@@ -859,15 +859,15 @@ def _check_acra_secretary_timing(ctx: _Ctx) -> tuple[list[DateFinding], SkippedC
     half."""
     values = _need(ctx, "ACRA.SECRETARY_TIMING", "officers", "incorporation_date")
     if values is None:
-        return [], _skip_missing("ACRA.SECRETARY_TIMING", "officers", "incorporation_date")
+        return [], skip_missing("ACRA.SECRETARY_TIMING", "officers", "incorporation_date")
     rows, incorporation_raw = values
-    incorporation = _parse_field_date(incorporation_raw)
+    incorporation = parse_field_date(incorporation_raw)
     if incorporation is None:
-        return [], _skip_missing("ACRA.SECRETARY_TIMING", "incorporation_date (unparseable)")
-    secretary = next((o for o in _rows(rows) if "secretary" in officer_role(o).lower()), None)
+        return [], skip_missing("ACRA.SECRETARY_TIMING", "incorporation_date (unparseable)")
+    secretary = next((o for o in table_rows(rows) if "secretary" in officer_role(o).lower()), None)
     if secretary is None:
         return [], None  # ACRA.OFFICERS already reports a missing secretary
-    appointed = _parse_field_date(officer_appointed(secretary))
+    appointed = parse_field_date(officer_appointed(secretary))
     if appointed and (appointed - incorporation).days > 180:
         return [_finding(
             "ACRA.SECRETARY_TIMING", "inconsistent",
@@ -893,13 +893,13 @@ def _check_const_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck 
     incorporation."""
     values = _need(ctx, "CONST.DATE_LOGIC", "incorporation_date")
     if values is None:
-        return [], _skip_missing("CONST.DATE_LOGIC", "incorporation_date")
-    incorporation = _parse_field_date(values[0])
+        return [], skip_missing("CONST.DATE_LOGIC", "incorporation_date")
+    incorporation = parse_field_date(values[0])
     if incorporation is None:
-        return [], _skip_missing("CONST.DATE_LOGIC", "incorporation_date (unparseable)")
+        return [], skip_missing("CONST.DATE_LOGIC", "incorporation_date (unparseable)")
     findings = []
     for name in ("adoption_date", "execution_date"):
-        value = _parse_field_date(ctx.fields.get(name))
+        value = parse_field_date(ctx.fields.get(name))
         if value and value < incorporation:
             findings.append(_finding(
                 "CONST.DATE_LOGIC", "inconsistent",
@@ -922,10 +922,10 @@ def _check_nric_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck |
     plausible age, and not in the future."""
     values = _need(ctx, "ID.DATE_LOGIC", "date_of_issue", "date_of_birth")
     if values is None:
-        return [], _skip_missing("ID.DATE_LOGIC", "date_of_issue", "date_of_birth")
-    issue, dob = (_parse_field_date(v) for v in values)
+        return [], skip_missing("ID.DATE_LOGIC", "date_of_issue", "date_of_birth")
+    issue, dob = (parse_field_date(v) for v in values)
     if issue is None or dob is None:
-        return [], _skip_missing("ID.DATE_LOGIC", "date_of_issue/date_of_birth (unparseable)")
+        return [], skip_missing("ID.DATE_LOGIC", "date_of_issue/date_of_birth (unparseable)")
     findings = []
     if issue < dob:
         findings.append(_finding(
@@ -961,10 +961,10 @@ def _check_passport_validity_period(ctx: _Ctx) -> tuple[list[DateFinding], Skipp
     type — 10 years for an adult Singapore passport."""
     values = _need(ctx, "ID.VALIDITY_PERIOD", "date_of_issue", "date_of_expiry")
     if values is None:
-        return [], _skip_missing("ID.VALIDITY_PERIOD", "date_of_issue", "date_of_expiry")
-    issue, expiry = (_parse_field_date(v) for v in values)
+        return [], skip_missing("ID.VALIDITY_PERIOD", "date_of_issue", "date_of_expiry")
+    issue, expiry = (parse_field_date(v) for v in values)
     if issue is None or expiry is None:
-        return [], _skip_missing("ID.VALIDITY_PERIOD", "date_of_issue/date_of_expiry (unparseable)")
+        return [], skip_missing("ID.VALIDITY_PERIOD", "date_of_issue/date_of_expiry (unparseable)")
     years = (expiry - issue).days / 365.25
     if abs(years - 10) > 0.1:
         return [_finding(
@@ -980,10 +980,10 @@ def _check_passport_expired(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck 
     """ID.EXPIRED."""
     values = _need(ctx, "ID.EXPIRED", "date_of_expiry")
     if values is None:
-        return [], _skip_missing("ID.EXPIRED", "date_of_expiry")
-    expiry = _parse_field_date(values[0])
+        return [], skip_missing("ID.EXPIRED", "date_of_expiry")
+    expiry = parse_field_date(values[0])
     if expiry is None:
-        return [], _skip_missing("ID.EXPIRED", "date_of_expiry (unparseable)")
+        return [], skip_missing("ID.EXPIRED", "date_of_expiry (unparseable)")
     if expiry < ctx.today:
         return [_finding(
             "ID.EXPIRED", "signal", f"Passport expired on {expiry.isoformat()}",
@@ -1005,10 +1005,10 @@ def _check_fatca_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck 
     not in the future."""
     values = _need(ctx, "FATCA.DATE_LOGIC", "declaration_date")
     if values is None:
-        return [], _skip_missing("FATCA.DATE_LOGIC", "declaration_date")
-    declaration = _parse_field_date(values[0])
+        return [], skip_missing("FATCA.DATE_LOGIC", "declaration_date")
+    declaration = parse_field_date(values[0])
     if declaration is None:
-        return [], _skip_missing("FATCA.DATE_LOGIC", "declaration_date (unparseable)")
+        return [], skip_missing("FATCA.DATE_LOGIC", "declaration_date (unparseable)")
     findings = []
     if declaration > ctx.today:
         findings.append(_finding(
@@ -1016,7 +1016,7 @@ def _check_fatca_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck 
             f"Declaration date ({declaration.isoformat()}) is in the future",
             field="declaration_date", stated=declaration.isoformat(),
         ))
-    form_version = _parse_field_date(ctx.fields.get("form_version_date"))
+    form_version = parse_field_date(ctx.fields.get("form_version_date"))
     if form_version and declaration < form_version:
         findings.append(_finding(
             "FATCA.DATE_LOGIC", "inconsistent",
@@ -1071,10 +1071,10 @@ def check_date_anomalies(
     Works from extracted_fields alone — no file download or re-ingestion.
     extracted_fields is trusted as already human-reviewed by the time this
     runs, so there's no need to re-derive or corroborate anything from the
-    document's own raw text (see _apply_needs_review).
+    document's own raw text (see apply_needs_review).
     """
-    fields = _fields_by_name(extracted_fields)
-    confidences = _confidence_by_name(extracted_fields)
+    fields = fields_by_name(extracted_fields)
+    confidences = confidence_by_name(extracted_fields)
     ctx = _Ctx(fields=fields, document_type=document_type, today=today_sg())
 
     dates_extracted = extract_labeled_dates(ctx, confidences)
@@ -1096,7 +1096,7 @@ def check_date_anomalies(
         if skip is not None:
             skipped.append(skip)
 
-    findings = _apply_needs_review(findings, confidences)
+    findings = apply_needs_review(findings, confidences)
 
     return DateAnomalyResult(
         document_id=document_id,

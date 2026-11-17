@@ -28,6 +28,22 @@ def _finding(raw: Any) -> dict | None:
     }
 
 
+def severity_counts(findings: Any) -> dict[str, int]:
+    """How many of a report's findings carry each severity (the Documents list's anomaly counts)."""
+    counts = dict.fromkeys(_SEVERITIES, 0)
+    for finding in findings if isinstance(findings, list) else []:
+        severity = finding.get("severity") if isinstance(finding, dict) else None
+        counts[severity if severity in _SEVERITIES else "medium"] += 1
+    return counts
+
+
+def read_counts(raw: Any) -> dict[str, int] | None:
+    """Stored counts as written by detection_results.save_report, or None for a report saved before them."""
+    if not isinstance(raw, dict) or not all(isinstance(raw.get(s), int) for s in _SEVERITIES):
+        return None
+    return {s: raw[s] for s in _SEVERITIES}
+
+
 def read_report(raw: Any) -> dict | None:
     """The report with its expected keys present, or None when `raw` is not a report at all."""
     if not isinstance(raw, dict):

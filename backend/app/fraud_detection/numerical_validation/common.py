@@ -17,11 +17,11 @@ from .models import NumericalFinding, Severity, SkippedCheck
 # ---------------------------------------------------------------------------
 
 
-def _fields_by_name(fields: list[ExtractedField] | None) -> dict[str, Any]:
+def fields_by_name(fields: list[ExtractedField] | None) -> dict[str, Any]:
     return {f.field_name: decode_field_value(f.field_value) for f in fields or []}
 
 
-def _confidence_by_name(fields: list[ExtractedField] | None) -> dict[str, float]:
+def confidence_by_name(fields: list[ExtractedField] | None) -> dict[str, float]:
     return {
         f.field_name: f.confidence
         for f in fields or []
@@ -30,7 +30,7 @@ def _confidence_by_name(fields: list[ExtractedField] | None) -> dict[str, float]
 
 
 _CURRENCY_SYMBOLS = r"\$|€|£|¥|₹"
-_CURRENCY_WORDS = r"SGD|USD|EUR|GBP|MYR|AUD|HKD|JPY|CNY|RMB|IDR|THB|PHP|INR"
+CURRENCY_WORDS = r"SGD|USD|EUR|GBP|MYR|AUD|HKD|JPY|CNY|RMB|IDR|THB|PHP|INR"
 
 # A rate/percentage's decorative suffix — doc_gen_scripts' own loan-letter
 # templates render e.g. "6.00% per annum, fixed" / "6.50% per annum" — must
@@ -54,14 +54,14 @@ _DEBIT_CREDIT_SUFFIX_RE = re.compile(r"(.*?)(DR|CR)\.?", re.IGNORECASE)
 _COMMA_DECIMAL_RE = re.compile(r"\(?-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{1,2}\)?")
 
 
-def _as_number(value: Any) -> float | None:
+def as_number(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
         return float(value)
     if isinstance(value, str):
         text = _RATE_SUFFIX_RE.sub("", value)
-        cleaned = re.sub(rf"\s|{_CURRENCY_SYMBOLS}|{_CURRENCY_WORDS}", "", text, flags=re.I)
+        cleaned = re.sub(rf"\s|{_CURRENCY_SYMBOLS}|{CURRENCY_WORDS}", "", text, flags=re.I)
         marker = None
         if suffixed := _DEBIT_CREDIT_SUFFIX_RE.fullmatch(cleaned):
             cleaned, marker = suffixed.group(1), suffixed.group(2).upper()
@@ -80,12 +80,12 @@ def _as_number(value: Any) -> float | None:
     return None
 
 
-def _field_number(row: dict, key: str) -> float | None:
+def field_number(row: dict, key: str) -> float | None:
     """One numeric value from a row (a line item, account, holding...)."""
-    return _as_number(row.get(key))
+    return as_number(row.get(key))
 
 
-def _rows(value: Any) -> list[dict]:
+def table_rows(value: Any) -> list[dict]:
     if not isinstance(value, list):
         return []
     return [row for row in value if isinstance(row, dict)]
@@ -119,24 +119,24 @@ def row_amount(row: dict | None, *, prior: bool = False) -> float | None:
     """The amount of one statement row (this year's, or the prior year's column)."""
     if row is None:
         return None
-    return _as_number(row.get("amount_prior_year" if prior else "amount"))
+    return as_number(row.get("amount_prior_year" if prior else "amount"))
 
 
-def _money(amount: float) -> str:
+def format_money(amount: float) -> str:
     return f"{amount:,.2f}"
 
 
-_MONEY_TOLERANCE = 0.011
+MONEY_TOLERANCE = 0.011
 
 # Below this, a financial-statement arithmetic mismatch is still always
 # flagged (never silently suppressed as "just rounding") — this only
-# controls whether _materiality_note adds a "this is small" qualifier, so
+# controls whether materiality_note adds a "this is small" qualifier, so
 # the reviewing agent/officer can weigh a $200-on-$2.4M gap differently
 # from a $200,000 one, rather than the check deciding that for them.
 _MATERIALITY_THRESHOLD_PCT = 0.1
 
 
-def _materiality_note(diff: float, base: float) -> str | None:
+def materiality_note(diff: float, base: float) -> str | None:
     if not base:
         return None
     pct = abs(diff) / abs(base) * 100
@@ -149,7 +149,7 @@ def _materiality_note(diff: float, base: float) -> str | None:
     return None
 
 
-def _parse_field_date(value: Any, default_year: int | None = None) -> date | None:
+def parse_field_date(value: Any, default_year: int | None = None) -> date | None:
     """A complete date from an extracted field's own value, in any form a document prints it (see
     fraud_detection/dates/date_parsing.py). A printed date with no year takes default_year if given."""
     return parse_date(value, default_year)
@@ -163,7 +163,7 @@ def _parse_field_date(value: Any, default_year: int | None = None) -> date | Non
 
 class _ReviewableFinding(Protocol):
     """
-    The minimal shape _apply_needs_review needs — NumericalFinding and
+    The minimal shape apply_needs_review needs — NumericalFinding and
     date_anomalies.DateFinding are separate (structurally identical)
     Pydantic classes, not a shared base class, since date_anomalies.py
     already imports this function from here and a reverse import would be
@@ -180,7 +180,7 @@ class _ReviewableFinding(Protocol):
 FindingT = TypeVar("FindingT", bound=_ReviewableFinding)
 
 
-def _apply_needs_review(
+def apply_needs_review(
     findings: list[FindingT],
     confidences: dict[str, float],
 ) -> list[FindingT]:
@@ -230,7 +230,7 @@ def _apply_needs_review(
 CheckResult = tuple[list[NumericalFinding], SkippedCheck | None]
 
 
-def _finding(
+def new_finding(
     code: str, severity: Severity, summary: str, *,
     field: str | None = None, stated: str | None = None, expected: str | None = None,
     severity_note: str | None = None, also_fields: list[str] | None = None,
@@ -247,7 +247,7 @@ def skipped(*, reason: str) -> SkippedCheck:
     return SkippedCheck(check_code="", reason=reason)
 
 
-def _skip_missing(code: str, *names: str) -> SkippedCheck:
+def skip_missing(code: str, *names: str) -> SkippedCheck:
     return SkippedCheck(check_code=code, reason=f"Required field(s) not extracted: {', '.join(names)}")
 
 

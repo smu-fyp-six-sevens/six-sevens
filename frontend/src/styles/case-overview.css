@@ -29,7 +29,7 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--white);
-  box-shadow: 0 1px 2px rgb(18 32 61 / 5%);
+  box-shadow: 0 1px 2px var(--ink-a05);
 }
 .case-overview-topline { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .case-overview-risk {
@@ -48,7 +48,7 @@
 .case-overview-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .case-overview-stat { display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: 14px 15px; }
 .case-overview-stat--interactive { border: 1px solid var(--line); color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.case-overview-stat--interactive:hover { border-color: var(--steel); box-shadow: 0 2px 8px rgb(18 32 61 / 10%); }
+.case-overview-stat--interactive:hover { border-color: var(--steel); box-shadow: 0 2px 8px var(--ink-a10); }
 .case-overview-stat--interactive .case-overview-stat-label { display: flex; justify-content: space-between; gap: 6px; }
 .case-overview-stat-arrow { color: var(--steel); transition: transform .15s ease; }
 .case-overview-stat--interactive:hover .case-overview-stat-arrow { transform: translateX(2px); }

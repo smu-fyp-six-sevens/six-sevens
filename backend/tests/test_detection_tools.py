@@ -348,7 +348,7 @@ def test_layout_rendering_owns_both_image_tools() -> None:
 
 def test_with_ids_keeps_a_finding_missing_its_summary() -> None:
     # Dropping it would let a flagged document read as clean.
-    [finding] = tools._with_ids("fake_tool", [{"detail": "x"}])
+    [finding] = tools.with_ids("fake_tool", [{"detail": "x"}])
     assert finding["id"] == "fake_tool-1"
     assert finding["detail"] == "x"
     assert finding["summary"]

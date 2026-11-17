@@ -8,10 +8,12 @@ type Schemas = components['schemas'];
 export type BulkUploadItemResult = Schemas['BulkUploadItemResult'];
 export type BulkUploadResponse = Schemas['BulkUploadResponse'];
 
-// The case-status WebSocket adds the two detection flags (case_service._build_case_snapshot).
+// The case-status WebSocket adds the detection flags and counts (case_service._build_case_snapshot).
 export type DocumentRecord = Schemas['DocumentRecord'] & {
   has_detection_report?: boolean;
   has_detection_error?: boolean;
+  // A scanned document's findings by severity; null when not scanned or not stored with the report.
+  detection_counts?: Record<DetectionSeverity, number> | null;
 };
 
 export type CaseMatchComparison = Schemas['FieldComparison'];

@@ -185,7 +185,7 @@ def _is_nothing_to_check(reason: str) -> bool:
     return any(pattern.match(reason) for pattern in _NOTHING_TO_CHECK_REASONS)
 
 
-def _result(tool_name: str, findings: list[dict], *, unable: str | None = None) -> dict:
+def tool_result(tool_name: str, findings: list[dict], *, unable: str | None = None) -> dict:
     truncated = max(0, len(findings) - MAX_FINDINGS)
     nothing_to_check = unable is not None and _is_nothing_to_check(unable)
     return {
@@ -198,7 +198,7 @@ def _result(tool_name: str, findings: list[dict], *, unable: str | None = None) 
     }
 
 
-def _with_ids(tool_name: str, findings: list[dict]) -> list[dict]:
+def with_ids(tool_name: str, findings: list[dict]) -> list[dict]:
     # "summary" is part of every tool's contract (module docstring): the lead's review prompt and the
     # frontend both read it. A finding without one is still reported, with a placeholder, because
     # dropping it would let a flagged document read as clean.
@@ -252,12 +252,12 @@ async def font_consistency_tool(document_id: Annotated[str, InjectedState("docum
     """Checks the document's rendered text for font, font-size and emphasis inconsistencies — text that deviates from the surrounding row/region or from how the document renders the same kind of field elsewhere (a classic sign of edited text). Only meaningful for PDFs with native text."""
     file_bytes = await _file_bytes(document_id)
     if file_bytes is None:
-        return _result("font_consistency_tool", [], unable="Document file is not available in storage")
+        return tool_result("font_consistency_tool", [], unable="Document file is not available in storage")
 
     fields = await _extracted_fields(document_id)
     result = await run_cpu(check_font_consistency, document_id, file_bytes, fields)
     if result.unable_to_assess:
-        return _result(
+        return tool_result(
             "font_consistency_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
         )
 
@@ -282,7 +282,7 @@ async def font_consistency_tool(document_id: Annotated[str, InjectedState("docum
         }
         for anomaly in result.anomalies
     ]
-    return _result("font_consistency_tool", _with_ids("font_consistency_tool", findings))
+    return tool_result("font_consistency_tool", with_ids("font_consistency_tool", findings))
 
 
 @tool
@@ -290,7 +290,7 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
     """Checks the document's text positioning for indentation, alignment, margin and paragraph-spacing that clash with the rest of the document, and for overlapping/overlaid text blocks — all classic signs of an inserted, edited, or pasted-over clause. Works on PDFs and, through OCR, on photos and scans (PNG/JPEG); on a recognised form such as an NRIC it also compares each field with the form's standard layout."""
     file_bytes = await _file_bytes(document_id)
     if file_bytes is None:
-        return _result("layout_anomalies_tool", [], unable="Document file is not available in storage")
+        return tool_result("layout_anomalies_tool", [], unable="Document file is not available in storage")
 
     # The type selects a layout profile; an unknown document gets the generic checks.
     document = await _document(document_id)
@@ -302,7 +302,7 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
         getattr(document, "classification_confidence", None),
     )
     if result.unable_to_assess:
-        return _result(
+        return tool_result(
             "layout_anomalies_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
         )
 
@@ -319,7 +319,7 @@ async def layout_anomalies_tool(document_id: Annotated[str, InjectedState("docum
         }
         for anomaly in result.anomalies
     ]
-    return _result("layout_anomalies_tool", _with_ids("layout_anomalies_tool", findings))
+    return tool_result("layout_anomalies_tool", with_ids("layout_anomalies_tool", findings))
 
 
 # Text a reader can't see is never a design choice a genuine document needs explained away, so it can be rated
@@ -334,11 +334,11 @@ async def hidden_text_tool(document_id: Annotated[str, InjectedState("document_i
         result = await _guard_result(document_id)
     except Exception as exc:
         logger.exception("hidden_text_tool failed for %s", document_id)
-        return _result("hidden_text_tool", [], unable=f"Could not run the hidden text check: {type(exc).__name__}")
+        return tool_result("hidden_text_tool", [], unable=f"Could not run the hidden text check: {type(exc).__name__}")
     if result is None:
-        return _result("hidden_text_tool", [], unable="Document or file not found")
+        return tool_result("hidden_text_tool", [], unable="Document or file not found")
     if "hidden_text" not in (result.get("checks_run") or []):
-        return _result("hidden_text_tool", [], unable=(
+        return tool_result("hidden_text_tool", [], unable=(
             f"The hidden text check could not run: {result['error']}" if result.get("error")
             else "Hidden text is checked in PDFs only; this file has no text layer to hide text in"
         ))
@@ -357,7 +357,7 @@ async def hidden_text_tool(document_id: Annotated[str, InjectedState("document_i
         for span in result.get("spans") or []
         if span.get("where") == "hidden" and span.get("caught_by") == "hidden_text"
     ]
-    return _result("hidden_text_tool", _with_ids("hidden_text_tool", findings))
+    return tool_result("hidden_text_tool", with_ids("hidden_text_tool", findings))
 
 
 def _layout_page_sizes(file_bytes: bytes) -> list[list[float]]:
@@ -373,16 +373,16 @@ async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")
     """Finds words in the document that look misspelled (after ignoring legal/financial terms, names and the document's own extracted values). Genuine typos in a formal issued document can indicate tampering or forgery."""
     document = await _document(document_id)
     if document is None:
-        return _result("spelling_tool", [], unable="Document not found")
+        return tool_result("spelling_tool", [], unable="Document not found")
 
     file_bytes = await _file_bytes(document_id)
     if file_bytes is None:
-        return _result("spelling_tool", [], unable="Document file is not available in storage")
+        return tool_result("spelling_tool", [], unable="Document file is not available in storage")
 
     fields = await _extracted_fields(document_id)
     result = await check_spelling_anomalies(document_id, file_bytes, document.filename, fields)
     if result.unable_to_assess:
-        return _result("spelling_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+        return tool_result("spelling_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
 
     # Where each word sits, for the preview to highlight. Only a PDF's own text has positions.
     word_locations = (
@@ -413,7 +413,7 @@ async def spelling_tool(document_id: Annotated[str, InjectedState("document_id")
         }
         for anomaly in result.anomalies
     ]
-    return _result("spelling_tool", _with_ids("spelling_tool", findings))
+    return tool_result("spelling_tool", with_ids("spelling_tool", findings))
 
 
 _MAX_WORD_LOCATIONS = 5
@@ -503,16 +503,16 @@ async def page_consistency_tool(document_id: Annotated[str, InjectedState("docum
     """Checks that a multi-page document's pages belong together: the printed page numbers run without gaps or repeats, the balance carried forward from one page is the balance the next page brings forward, identifiers (account number, holder name, UEN) are the same on every page that prints them, no page is a different size or a scan among digital pages, and no page is a copy of another. Catches a page deleted, swapped in from another statement, or duplicated, even when every page looks genuine on its own. Single-page documents have nothing to check."""
     document = await _document(document_id)
     if document is None:
-        return _result("page_consistency_tool", [], unable="Document not found")
+        return tool_result("page_consistency_tool", [], unable="Document not found")
 
     file_bytes = await _file_bytes(document_id)
     if file_bytes is None:
-        return _result("page_consistency_tool", [], unable="Document file is not available in storage")
+        return tool_result("page_consistency_tool", [], unable="Document file is not available in storage")
 
     fields = await _extracted_fields(document_id)
     result = await check_page_consistency(document_id, file_bytes, document.filename, fields)
     if result.unable_to_assess:
-        return _result("page_consistency_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+        return tool_result("page_consistency_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
 
     findings = [
         {
@@ -533,7 +533,7 @@ async def page_consistency_tool(document_id: Annotated[str, InjectedState("docum
         }
         for finding in result.findings
     ]
-    output = _result("page_consistency_tool", _with_ids("page_consistency_tool", findings))
+    output = tool_result("page_consistency_tool", with_ids("page_consistency_tool", findings))
     output.update(
         pages_checked=result.pages_checked,
         skipped=[{"check": s.check_code, "reason": s.reason} for s in result.skipped_checks],
@@ -546,14 +546,14 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
     """Checks the dates extracted from the document for logical problems: dates in the future, an expiry before its issue date, a certificate dated before the company existed, a birth date after issue."""
     document = await _document(document_id)
     if document is None:
-        return _result("date_consistency_tool", [], unable="Document not found")
+        return tool_result("date_consistency_tool", [], unable="Document not found")
 
     fields = await _extracted_fields(document_id)
     result = await asyncio.to_thread(
         check_date_anomalies, document_id, fields, document.document_type
     )
     if result.unable_to_assess:
-        return _result(
+        return tool_result(
             "date_consistency_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
         )
 
@@ -569,7 +569,7 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
         }
         for finding in result.findings
     ]
-    return _result("date_consistency_tool", _with_ids("date_consistency_tool", findings))
+    return tool_result("date_consistency_tool", with_ids("date_consistency_tool", findings))
 
 
 # --- Digital Authenticity ---------------------------------------------------
@@ -596,11 +596,11 @@ async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")
     """Inspects the file's embedded metadata (author, creation/modification dates, producing software) for signs of editing: consumer editing software in the producer chain, or a modification date well after creation."""
     document = await _document_with_metadata(document_id)
     if document is None:
-        return _result("metadata_tool", [], unable="Document not found")
+        return tool_result("metadata_tool", [], unable="Document not found")
 
     result = await asyncio.to_thread(check_metadata_anomalies, document_id, document.metadata, document.document_type)
     if result.unable_to_assess:
-        return _result("metadata_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+        return tool_result("metadata_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
 
     findings = [
         {
@@ -614,7 +614,7 @@ async def metadata_tool(document_id: Annotated[str, InjectedState("document_id")
         for anomaly in result.anomalies
     ]
     return {
-        **_result("metadata_tool", _with_ids("metadata_tool", findings)),
+        **tool_result("metadata_tool", with_ids("metadata_tool", findings)),
         "observed_metadata": _observed_metadata(result.extracted_metadata),
     }
 
@@ -686,14 +686,14 @@ async def prompt_injection_tool(document_id: Annotated[str, InjectedState("docum
         result = await _guard_result(document_id)
     except Exception as exc:
         logger.exception("prompt_injection_tool failed for %s", document_id)
-        return _result("prompt_injection_tool", [], unable=f"Could not run the content guard: {type(exc).__name__}")
+        return tool_result("prompt_injection_tool", [], unable=f"Could not run the content guard: {type(exc).__name__}")
     if result is None:
-        return _result("prompt_injection_tool", [], unable="Document or file not found")
+        return tool_result("prompt_injection_tool", [], unable="Document or file not found")
     if not result.get("checks_run"):
-        return _result("prompt_injection_tool", [], unable=f"The content guard could not run: {result.get('error') or 'unknown'}")
+        return tool_result("prompt_injection_tool", [], unable=f"The content guard could not run: {result.get('error') or 'unknown'}")
     findings = [_injection_finding(span) for span in result.get("spans") or [] if span.get("caught_by") == "dictionary"]
     return {
-        **_result("prompt_injection_tool", _with_ids("prompt_injection_tool", findings)),
+        **tool_result("prompt_injection_tool", with_ids("prompt_injection_tool", findings)),
         "guard_risk": result.get("risk"),
         "checks_run": result.get("checks_run"),
     }
@@ -711,11 +711,11 @@ async def image_manipulation_tool(document_id: Annotated[str, InjectedState("doc
     """Compares the resolution and compression of the images in the file against each other — the images embedded in a PDF, or a standalone PNG/JPEG upload — and checks each for signs of having been enlarged. A region drawn at a very different DPI, compressed differently, or pasted over an original image is a classic sign of a spliced-in photo, signature or figure. Works on PDFs and image uploads."""
     file_bytes = await _file_bytes(document_id)
     if file_bytes is None:
-        return _result("image_manipulation_tool", [], unable="Document file is not available in storage")
+        return tool_result("image_manipulation_tool", [], unable="Document file is not available in storage")
 
     result = await run_cpu(check_image_manipulation, document_id, file_bytes)
     if result.unable_to_assess:
-        return _result(
+        return tool_result(
             "image_manipulation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
         )
 
@@ -736,7 +736,7 @@ async def image_manipulation_tool(document_id: Annotated[str, InjectedState("doc
         }
         for indicator in result.indicators
     ]
-    return _result("image_manipulation_tool", _with_ids("image_manipulation_tool", findings))
+    return tool_result("image_manipulation_tool", with_ids("image_manipulation_tool", findings))
 
 
 @tool
@@ -744,11 +744,11 @@ async def image_tampering_tool(document_id: Annotated[str, InjectedState("docume
     """Looks for images edited into the file after it was produced: an image painted over with a replacement drawn on top (the original is often still in the file underneath), a replacement stretched, squashed or rotated out of proportion, a visible seam or halo around a pasted region, or a replacement whose brightness, colour, sharpness or noise differs from the original it hides. Works on PDFs and image uploads; on an image upload only pasted-region seams can be checked."""
     file_bytes = await _file_bytes(document_id)
     if file_bytes is None:
-        return _result("image_tampering_tool", [], unable="Document file is not available in storage")
+        return tool_result("image_tampering_tool", [], unable="Document file is not available in storage")
 
     result = await run_cpu(check_image_tampering, document_id, file_bytes)
     if result.unable_to_assess:
-        return _result(
+        return tool_result(
             "image_tampering_tool", [], unable=result.unable_to_assess_reason or "Unable to assess"
         )
 
@@ -768,7 +768,7 @@ async def image_tampering_tool(document_id: Annotated[str, InjectedState("docume
         }
         for indicator in result.indicators
     ]
-    return _result("image_tampering_tool", _with_ids("image_tampering_tool", findings))
+    return tool_result("image_tampering_tool", with_ids("image_tampering_tool", findings))
 
 
 # --- Digital Authenticity: AI generation --------------------------------------
@@ -792,11 +792,11 @@ async def ai_generation_tool(document_id: Annotated[str, InjectedState("document
     """Scores the photographs, scans and image uploads in the file for traces of AI generation: periodic upsampling peaks in the image spectrum, too little or unnatural sensor noise, compression history (double compression, error level analysis, quantisation tables), missing camera metadata, and any provenance the file declares (C2PA manifest, IPTC digital source type, a generator's own tags). Reports images scoring medium or high, each with the indicators that drove its score. Logos and other flat graphics are not scored. Works on PDFs (their embedded images) and image uploads."""
     file_bytes = await _file_bytes(document_id)
     if file_bytes is None:
-        return _result("ai_generation_tool", [], unable="Document file is not available in storage")
+        return tool_result("ai_generation_tool", [], unable="Document file is not available in storage")
 
     result = await run_cpu(check_ai_generation, document_id, file_bytes)
     if result.unable_to_assess:
-        return _result("ai_generation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
+        return tool_result("ai_generation_tool", [], unable=result.unable_to_assess_reason or "Unable to assess")
 
     def contributors(indicators: list[AIIndicator]) -> list[dict]:
         return [
@@ -831,4 +831,4 @@ async def ai_generation_tool(document_id: Annotated[str, InjectedState("document
             "severity_hint": "high" if provenance.strength >= result.config.high_threshold else "medium",
             "summary": _with_indicator("AI Generation", f"The file's own metadata declares an AI source: {provenance.detail}"),
         })
-    return _result("ai_generation_tool", _with_ids("ai_generation_tool", findings))
+    return tool_result("ai_generation_tool", with_ids("ai_generation_tool", findings))

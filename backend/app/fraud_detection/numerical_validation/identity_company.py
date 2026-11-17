@@ -9,14 +9,14 @@ from typing import Any
 from .common import (
     officer_role,
     skipped,
-    _field_number,
-    _MONEY_TOLERANCE,
+    field_number,
+    MONEY_TOLERANCE,
     CheckResult,
-    _as_number,
-    _finding,
-    _money,
-    _parse_field_date,
-    _rows,
+    as_number,
+    new_finding,
+    format_money,
+    parse_field_date,
+    table_rows,
 )
 from ...sg_time import today_sg
 from ..shared.field_values import also_printed_in, describe_path, text_values
@@ -85,7 +85,7 @@ def _check_nric_checksum(*, fields: dict[str, Any]) -> CheckResult:
         prefix, digits, letter = value[0], value[1:8], value[8]
         expected = _nric_expected_letter(prefix, digits)
         if expected and expected != letter:
-            findings.append(_finding(
+            findings.append(new_finding(
                 "ID.NRIC_CHECKSUM", "impossible",
                 f"{value} in {describe_path(fields, paths[0])} has an invalid check letter — expected {expected}, "
                 f"got {letter}{also_printed_in(fields, paths[1:])}",
@@ -118,14 +118,14 @@ def _check_uen_format(*, uen: Any, today: date) -> CheckResult:
 
     match = _UEN_RE.match(uen)
     if not match:
-        return [_finding(
+        return [new_finding(
             "ID.UEN_FORMAT", "impossible", f"{uen} does not match any valid UEN format",
             field="uen", stated=uen,
         )], None
 
     year_prefix = int(match.group(1))
     if not 1965 <= year_prefix <= today.year:
-        return [_finding(
+        return [new_finding(
             "ID.UEN_FORMAT", "impossible",
             f"{uen}'s year prefix ({year_prefix}) is not a plausible registration year",
             field="uen", stated=uen,
@@ -169,7 +169,7 @@ def _check_amount_parse(*, fields: dict[str, Any]) -> CheckResult:
 
     findings = []
     for name, raw in amount_fields.items():
-        if _as_number(raw) is None:
+        if as_number(raw) is None:
             findings.append(NumericalFinding(
                 check_code="GEN.AMOUNT_PARSE", severity="signal", field=name, stated=str(raw),
                 needs_review=True,
@@ -282,7 +282,7 @@ def _check_mrz_format(*, mrz: Any) -> CheckResult:
     lines = _mrz_lines(mrz)
     if len(lines) != 2 or any(len(ln) != 44 for ln in lines):
         shapes = ", ".join(f"{len(ln)} chars" for ln in lines) or "no lines"
-        return [_finding(
+        return [new_finding(
             "ID.MRZ_FORMAT", "impossible",
             f"MRZ must be two lines of 44 characters each; got {len(lines)} line(s) ({shapes})",
             field="mrz", stated=str(mrz)[:100],
@@ -309,7 +309,7 @@ def _check_mrz_checkdigits(*, mrz: Any) -> CheckResult:
             continue  # optional field; an all-filler value is valid with check digit 0 too
         expected = _mrz_check_digit(value)
         if str(expected) != digit:
-            findings.append(_finding(
+            findings.append(new_finding(
                 "ID.MRZ_CHECKDIGITS", "impossible",
                 f"MRZ check digit for {label} is invalid (expected {expected}, got {digit})",
                 field="mrz",
@@ -318,7 +318,7 @@ def _check_mrz_checkdigits(*, mrz: Any) -> CheckResult:
     composite_input = line2[0:10] + line2[13:20] + line2[21:43]
     composite_expected = _mrz_check_digit(composite_input)
     if str(composite_expected) != line2[43]:
-        findings.append(_finding(
+        findings.append(new_finding(
             "ID.MRZ_CHECKDIGITS", "impossible",
             f"MRZ composite check digit is invalid (expected {composite_expected}, got {line2[43]})",
             field="mrz",
@@ -340,16 +340,16 @@ def _check_mrz_vs_viz(
     mrz_passport_no = _mrz_field(line2, 0, 9)
     stated_passport_no = str(passport_number or "").replace(" ", "").upper()
     if stated_passport_no and mrz_passport_no and not _same_identifier(mrz_passport_no, stated_passport_no):
-        findings.append(_finding(
+        findings.append(new_finding(
             "ID.MRZ_VS_VIZ", "inconsistent",
             f"MRZ passport number ({mrz_passport_no}) does not match the printed passport number ({stated_passport_no})",
             field="passport_number", stated=stated_passport_no, expected=mrz_passport_no,
         ))
 
     mrz_dob = _mrz_date(line2[13:19])
-    stated_dob = _parse_field_date(date_of_birth)
+    stated_dob = parse_field_date(date_of_birth)
     if mrz_dob and stated_dob and mrz_dob != stated_dob:
-        findings.append(_finding(
+        findings.append(new_finding(
             "ID.MRZ_VS_VIZ", "inconsistent",
             f"MRZ date of birth ({mrz_dob.isoformat()}) does not match the printed date of birth "
             f"({stated_dob.isoformat()})",
@@ -357,9 +357,9 @@ def _check_mrz_vs_viz(
         ))
 
     mrz_expiry = _mrz_date(line2[21:27])
-    stated_expiry = _parse_field_date(date_of_expiry)
+    stated_expiry = parse_field_date(date_of_expiry)
     if mrz_expiry and stated_expiry and mrz_expiry != stated_expiry:
-        findings.append(_finding(
+        findings.append(new_finding(
             "ID.MRZ_VS_VIZ", "inconsistent",
             f"MRZ expiry date ({mrz_expiry.isoformat()}) does not match the printed expiry date "
             f"({stated_expiry.isoformat()})",
@@ -369,7 +369,7 @@ def _check_mrz_vs_viz(
     mrz_personal_no = _mrz_field(line2, 28, 42)
     stated_nric = str(nric_number or "").strip().upper()
     if stated_nric and mrz_personal_no and not _same_identifier(mrz_personal_no, stated_nric):
-        findings.append(_finding(
+        findings.append(new_finding(
             "ID.MRZ_VS_VIZ", "inconsistent",
             f"MRZ personal number ({mrz_personal_no}) does not match the printed national ID number ({stated_nric})",
             field="nric_number", stated=stated_nric, expected=mrz_personal_no,
@@ -385,13 +385,13 @@ def _check_mrz_vs_viz(
 @check(code="ACRA.SHARE_SUM", applies=("certificate_of_incumbency",))
 def _check_acra_share_sum(*, shareholders: Any, issued_shares: Num) -> CheckResult:
     """Shareholders' shares must add up to issued shares."""
-    shares = [_field_number(r, "shares") for r in _rows(shareholders)]
+    shares = [field_number(r, "shares") for r in table_rows(shareholders)]
     numeric_shares = [s for s in shares if s is not None]
     if not shares or len(numeric_shares) != len(shares):
         return [], skipped(reason="shareholder share counts not all readable")
     total = sum(numeric_shares)
-    if abs(total - issued_shares) > _MONEY_TOLERANCE:
-        return [_finding(
+    if abs(total - issued_shares) > MONEY_TOLERANCE:
+        return [new_finding(
             "ACRA.SHARE_SUM", "impossible",
             f"Shareholders' shares sum to {total:,.0f}, but issued shares states {issued_shares:,.0f}",
             field="issued_shares", stated=f"{issued_shares:,.0f}", expected=f"{total:,.0f}",
@@ -405,11 +405,11 @@ def _capital_per_share(code: str, share_capital: float, issued_shares: float) ->
         return [], skipped(reason="issued shares is zero")
     per_share = share_capital / issued_shares
     if not 0.01 <= per_share <= 1_000_000:
-        return [_finding(
+        return [new_finding(
             code, "inconsistent",
-            f"Share capital {_money(share_capital)} / {issued_shares:,.0f} shares implies {per_share:,.4f} per share, "
+            f"Share capital {format_money(share_capital)} / {issued_shares:,.0f} shares implies {per_share:,.4f} per share, "
             "which is not internally consistent with a par-value or no-par-value structure",
-            field="share_capital", stated=_money(share_capital),
+            field="share_capital", stated=format_money(share_capital),
         )], None
     return [], None
 
@@ -424,13 +424,13 @@ def _check_acra_capital_per_share(*, share_capital: Num, issued_shares: Num) -> 
 def _check_acra_officers(*, officers: Any) -> CheckResult:
     """At least one director and one secretary must be listed among the officers. The date-logic checks for
     officers live in date_anomalies.py."""
-    rows = _rows(officers)
+    rows = table_rows(officers)
     findings = []
     if not any("director" in officer_role(o).lower() for o in rows):
-        findings.append(_finding("ACRA.OFFICERS", "inconsistent", "No director is listed among the officers",
+        findings.append(new_finding("ACRA.OFFICERS", "inconsistent", "No director is listed among the officers",
                                  field="officers"))
     if not any("secretary" in officer_role(o).lower() for o in rows):
-        findings.append(_finding("ACRA.OFFICERS", "inconsistent", "No secretary is listed among the officers",
+        findings.append(new_finding("ACRA.OFFICERS", "inconsistent", "No secretary is listed among the officers",
                                  field="officers"))
     return findings, None
 
@@ -444,14 +444,14 @@ def _check_acra_officers(*, officers: Any) -> CheckResult:
 def _check_const_subscriber_sum(*, subscribers: Any, issued_shares: Num) -> CheckResult:
     """Subscribers' shares must add up to issued shares. Only run when every subscriber has a share count: a
     partial list would always fail for an innocent reason."""
-    subscriber_rows = _rows(subscribers)
-    shares = [_field_number(r, "shares") for r in subscriber_rows]
+    subscriber_rows = table_rows(subscribers)
+    shares = [field_number(r, "shares") for r in subscriber_rows]
     numeric_shares = [s for s in shares if s is not None]
     if not subscriber_rows or len(numeric_shares) != len(shares):
         return [], skipped(reason="subscriber share counts incomplete")
     total = sum(numeric_shares)
-    if abs(total - issued_shares) > _MONEY_TOLERANCE:
-        return [_finding(
+    if abs(total - issued_shares) > MONEY_TOLERANCE:
+        return [new_finding(
             "CONST.SUBSCRIBER_SUM", "impossible",
             f"Subscriber shareholdings sum to {total:,.0f}, but the constitution states {issued_shares:,.0f} "
             "issued shares",
@@ -469,11 +469,11 @@ def _check_const_capital_per_share(*, share_capital: Num, issued_shares: Num) ->
 @check(code="CONST.QUORUM", applies=("company_constitution",))
 def _check_const_quorum(*, subscribers: Any, quorum: Num) -> CheckResult:
     """Quorum for general meetings must not exceed the number of subscribers."""
-    count = len(_rows(subscribers))
+    count = len(table_rows(subscribers))
     if count == 0:
         return [], skipped(reason="no subscribers listed")
     if quorum > count:
-        return [_finding(
+        return [new_finding(
             "CONST.QUORUM", "inconsistent",
             f"Quorum ({quorum:.0f}) is larger than the number of subscribers ({count})",
             field="quorum", stated=f"{quorum:.0f}", expected=f"<= {count}",
@@ -490,19 +490,19 @@ def _check_const_quorum(*, subscribers: Any, quorum: Num) -> CheckResult:
 def _check_fatca_tin_or_reason(*, tax_residences: Any) -> CheckResult:
     """Each tax residence row must have either a TIN, or exactly one reason code for not having one."""
     findings = []
-    for i, row in enumerate(_rows(tax_residences)):
+    for i, row in enumerate(table_rows(tax_residences)):
         tin = row.get("tin")
         reasons = row.get("no_tin_reason")
         has_tin = bool(tin and str(tin).strip())
         reason_count = len(reasons) if isinstance(reasons, list) else (1 if reasons else 0)
         if has_tin and reason_count:
-            findings.append(_finding(
+            findings.append(new_finding(
                 "FATCA.TIN_OR_REASON", "inconsistent",
                 f"Tax residence {i + 1} has both a TIN and a no-TIN reason code",
                 field=f"tax_residences[{i}]",
             ))
         elif not has_tin and reason_count != 1:
-            findings.append(_finding(
+            findings.append(new_finding(
                 "FATCA.TIN_OR_REASON", "inconsistent",
                 f"Tax residence {i + 1} has no TIN and {reason_count} reason code(s) — exactly one is required",
                 field=f"tax_residences[{i}]",
@@ -514,12 +514,12 @@ def _check_fatca_tin_or_reason(*, tax_residences: Any) -> CheckResult:
 def _check_fatca_tin_format(*, tax_residences: Any) -> CheckResult:
     """A Singapore TIN must be in UEN format."""
     findings = []
-    for i, row in enumerate(_rows(tax_residences)):
+    for i, row in enumerate(table_rows(tax_residences)):
         if str(row.get("country", "")).strip().lower() not in ("singapore", "sg"):
             continue
         tin = row.get("tin")
         if tin and not (_UEN_RE.match(str(tin).upper()) or _UEN_BUSINESS_RE.match(str(tin).upper())):
-            findings.append(_finding(
+            findings.append(new_finding(
                 "FATCA.TIN_FORMAT", "inconsistent",
                 f"Tax residence {i + 1}'s Singapore TIN ({tin}) is not a valid UEN format",
                 field=f"tax_residences[{i}].tin", stated=str(tin),
@@ -534,14 +534,14 @@ def _check_fatca_entity_type(*, entity_type: Any, controlling_persons: Any = Non
     types = entity_type if isinstance(entity_type, list) else [entity_type]
     findings = []
     if len(types) != 1:
-        findings.append(_finding(
+        findings.append(new_finding(
             "FATCA.ENTITY_TYPE", "inconsistent",
             f"{len(types)} entity type(s) selected; exactly one is required",
             field="entity_type",
         ))
     elif str(types[0]).strip().upper() in ("D", "M"):
-        if not _rows(controlling_persons):
-            findings.append(_finding(
+        if not table_rows(controlling_persons):
+            findings.append(new_finding(
                 "FATCA.ENTITY_TYPE", "inconsistent",
                 f"Entity type {types[0]} requires the controlling persons section, which is empty",
                 field="controlling_persons",
@@ -555,13 +555,13 @@ def _check_fatca_us_person(*, specified_us_person: Any, us_tin: Any = None) -> C
     answer = str(specified_us_person).strip().lower()
     has_tin = bool(us_tin and str(us_tin).strip())
     if answer in ("no", "n") and has_tin:
-        return [_finding(
+        return [new_finding(
             "FATCA.US_PERSON", "inconsistent",
             "Specified US Person is answered No, but a US TIN is provided",
             field="us_tin",
         )], None
     if answer in ("yes", "y") and not has_tin:
-        return [_finding(
+        return [new_finding(
             "FATCA.US_PERSON", "inconsistent",
             "Specified US Person is answered Yes, but no US TIN is provided",
             field="us_tin",

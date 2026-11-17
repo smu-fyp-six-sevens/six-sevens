@@ -55,7 +55,8 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from ...fraud_detection.numerical_validation.common import _CURRENCY_WORDS, _as_number, _money, _rows
+from ... import identifiers
+from ...fraud_detection.numerical_validation.common import CURRENCY_WORDS, as_number, format_money, table_rows
 from ...fraud_detection.shared.field_values import decode_field_value
 from ...models import (
     DocumentRecord,
@@ -81,7 +82,7 @@ _NON_TRADE_RE = re.compile(
 
 # The name in a description like "Funds Trf - FAST MERIDIAN LOGISTICS
 # SERVICES SGD 22,065 EBACT6317..." is what's printed before the amount.
-_NAME_BEFORE_AMOUNT_RE = re.compile(rf"(.+?)\s+(?:{_CURRENCY_WORDS})\s*\d[\d,]*(?:\.\d+)?\b", re.IGNORECASE)
+_NAME_BEFORE_AMOUNT_RE = re.compile(rf"(.+?)\s+(?:{CURRENCY_WORDS})\s*\d[\d,]*(?:\.\d+)?\b", re.IGNORECASE)
 # Payment channel words that come before the name, never part of it.
 _CHANNEL_WORDS = frozenset({
     "-", "CR", "DR", "FAST", "FUNDS", "GIRO", "IBG", "INWARD", "MEPS", "OTHER", "OUTWARD",
@@ -114,14 +115,11 @@ def _sentence(text: str) -> str:
     return text if text.endswith(".") else f"{text}."
 
 
-def _normalise(text: str) -> str:
-    return " ".join(re.sub(r"[^A-Z0-9]+", " ", text.upper()).split())
-
-
 def _is_trade(description: str, company_name: str | None) -> bool:
     if _NON_TRADE_RE.search(description):
         return False
-    return not (company_name and _normalise(company_name) in _normalise(description))
+    # A transfer to or from the company's own account is not trade.
+    return not identifiers.mentions_company(description, company_name)
 
 
 def _recommend_for_statement(document: DocumentRecord) -> list[SupportingDocumentRecommendation]:
@@ -129,8 +127,8 @@ def _recommend_for_statement(document: DocumentRecord) -> list[SupportingDocumen
     company_name = fields.get("company_name")
     supplier_payments: list[RecommendationItem] = []
     customer_receipts: list[RecommendationItem] = []
-    for row in _rows(decode_field_value(fields.get("transactions"))):
-        amount = _as_number(row.get("amount"))
+    for row in table_rows(decode_field_value(fields.get("transactions"))):
+        amount = as_number(row.get("amount"))
         description = str(row.get("description") or "").strip()
         if amount is None or abs(amount) < LARGE_TRANSACTION_AMOUNT or not _is_trade(description, company_name):
             continue
@@ -140,15 +138,15 @@ def _recommend_for_statement(document: DocumentRecord) -> list[SupportingDocumen
         if amount < 0:
             supplier_payments.append(RecommendationItem(
                 date=date, description=description, amount=amount, counterparty=counterparty,
-                reason=_sentence(f"Payment of {_money(-amount)}{on_date} to {counterparty or 'a supplier'}"),
+                reason=_sentence(f"Payment of {format_money(-amount)}{on_date} to {counterparty or 'a supplier'}"),
             ))
         else:
             customer_receipts.append(RecommendationItem(
                 date=date, description=description, amount=amount, counterparty=counterparty,
-                reason=_sentence(f"Receipt of {_money(amount)}{on_date} from {counterparty or 'a customer'}"),
+                reason=_sentence(f"Receipt of {format_money(amount)}{on_date} from {counterparty or 'a customer'}"),
             ))
 
-    threshold = _money(LARGE_TRANSACTION_AMOUNT)
+    threshold = format_money(LARGE_TRANSACTION_AMOUNT)
     recommendations: list[SupportingDocumentRecommendation] = []
     groups: list[tuple[Literal["purchase_order", "sales_invoice"], list[RecommendationItem], str]] = [
         ("purchase_order", supplier_payments, "supplier payment"),
@@ -194,7 +192,7 @@ _LIABILITY_SECTIONS = {"current_liabilities", "non_current_liabilities"}
 
 def _with_prior_year(amount: float, prior: float | None) -> str:
     """ "1,257,340.00 (prior year: 883,160.00)" """
-    return _money(amount) + (f" (prior year: {_money(prior)})" if prior is not None else "")
+    return format_money(amount) + (f" (prior year: {format_money(prior)})" if prior is not None else "")
 
 
 def _borrowing_growth(document: DocumentRecord, rows: list[dict]) -> list[SupportingDocumentRecommendation]:
@@ -208,8 +206,8 @@ def _borrowing_growth(document: DocumentRecord, rows: list[dict]) -> list[Suppor
             or _NOT_BANK_LENDER_RE.search(label)
         ):
             continue
-        amount = _as_number(row.get("amount"))
-        prior = _as_number(row.get("amount_prior_year"))
+        amount = as_number(row.get("amount"))
+        prior = as_number(row.get("amount_prior_year"))
         if amount is None or prior is None:
             return []
         lines.append((label, amount, prior))
@@ -248,7 +246,7 @@ def _related_party_balances(document: DocumentRecord, rows: list[dict]) -> list[
     items: list[RecommendationItem] = []
     for row in rows:
         label = str(row.get("label") or "").strip()
-        amount = _as_number(row.get("amount"))
+        amount = as_number(row.get("amount"))
         if (
             amount is None
             or amount <= 0
@@ -257,7 +255,7 @@ def _related_party_balances(document: DocumentRecord, rows: list[dict]) -> list[
             or _OWED_BY_COMPANY_RE.search(label)
         ):
             continue
-        prior = _as_number(row.get("amount_prior_year"))
+        prior = as_number(row.get("amount_prior_year"))
         items.append(RecommendationItem(
             description=label, amount=amount, prior_amount=prior,
             reason=_sentence(f"{label}: {_with_prior_year(amount, prior)}"),
@@ -279,7 +277,7 @@ def _related_party_balances(document: DocumentRecord, rows: list[dict]) -> list[
 
 
 def _recommend_for_financial_statement(document: DocumentRecord) -> list[SupportingDocumentRecommendation]:
-    rows = _rows(decode_field_value((document.extracted_fields or {}).get("balance_sheet_items")))
+    rows = table_rows(decode_field_value((document.extracted_fields or {}).get("balance_sheet_items")))
     return _related_party_balances(document, rows) + _borrowing_growth(document, rows)
 
 

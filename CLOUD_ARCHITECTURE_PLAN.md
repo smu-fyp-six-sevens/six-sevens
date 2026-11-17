@@ -51,7 +51,7 @@ Steps 1–6 before the final presentation (2026-11-20); the rest if time is left
 
 The sensibility checks are built (`HOW_IT_WORKS.md`, "Sensibility checks on each agent run"). Open:
 
-- **Tests:** `PENDING_TESTS.md` rows 36, 37 and 39 (the rest are in `tests/test_evals.py`), then one real run per run kind (a payslip, a bank statement, a case) to see the checks on a live trace.
+- **Tests:** `PENDING_TESTS.md` rows 29, 30 and 31 (the rest are in `tests/test_evals.py`), then one real run per run kind (a payslip, a bank statement, a case) to see the checks on a live trace.
 - **Tune from real runs:** the overconfidence gap (0.3); the expected-checks table (`evals/detection.py`: today only Content Validation's numerical checks on income documents and bank statements, and Digital Authenticity's metadata check); the field-name rules for dates and amounts (`evals/extraction.py`). A check that warns on most runs is noise: change or drop it.
 - **Extraction rerun:** records no `extraction` step, so its field checks don't run (only its second look is checked).
 

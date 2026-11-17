@@ -8,9 +8,9 @@ from ...numerical_validation.registry import Num, check
 from ..sg_reference.gst import possible_rates
 from ...numerical_validation.common import (
     CheckResult,
-    _finding,
-    _money,
-    _parse_field_date,
+    new_finding,
+    format_money,
+    parse_field_date,
     skipped,
 )
 
@@ -20,7 +20,7 @@ def _check_gst(
     *, gst_amount: Num, charges_before_gst: Num, bill_date: Any = None, billing_period_end: Any = None,
 ) -> CheckResult:
     """GST on a utility bill must be the rate in force on the bill date times the charges before GST."""
-    when = _parse_field_date(bill_date) or _parse_field_date(billing_period_end)
+    when = parse_field_date(bill_date) or parse_field_date(billing_period_end)
     if when is None:
         return [], skipped(reason="Required field(s) not extracted: bill_date or billing_period_end")
     rates = possible_rates(when)
@@ -32,9 +32,9 @@ def _check_gst(
         return [], None
     applied = gst_amount / charges_before_gst
     expected = sorted(rates)[-1]
-    return [_finding(
+    return [new_finding(
         "POA.GST", "inconsistent",
-        f"GST of {_money(gst_amount)} is {applied:.2%} of the charges ({_money(charges_before_gst)}), but the "
+        f"GST of {format_money(gst_amount)} is {applied:.2%} of the charges ({format_money(charges_before_gst)}), but the "
         f"GST rate on {when.isoformat()} is {' or '.join(f'{r:.0%}' for r in sorted(rates))}",
-        field="gst_amount", stated=_money(gst_amount), expected=_money(expected * charges_before_gst),
+        field="gst_amount", stated=format_money(gst_amount), expected=format_money(expected * charges_before_gst),
     )], None

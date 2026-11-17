@@ -110,6 +110,16 @@ def test_transfer_between_the_companys_own_accounts_is_not_trade() -> None:
     assert recommend_supporting_documents([_statement([own_transfer])]) == []
 
 
+def test_an_own_account_transfer_is_recognised_however_the_suffix_is_written() -> None:
+    own_transfer = {**SUPPLIER_PAYMENT, "description": "IBG TRANSFER TO ANCHORPOINT INSURANCE BROKERS PTE. LTD. SGD 50,000"}
+    statement = _statement([own_transfer], company_name="Anchorpoint Insurance Brokers Private Limited")
+
+    assert recommend_supporting_documents([statement]) == []
+    # Another company that only shares the first word is still trade.
+    other = {**SUPPLIER_PAYMENT, "description": "IBG TRANSFER TO ANCHORPOINT LOGISTICS PTE LTD SGD 50,000"}
+    assert recommend_supporting_documents([_statement([other], company_name="Anchorpoint Insurance Brokers Private Limited")])
+
+
 def test_amounts_and_transactions_given_as_strings_are_read() -> None:
     rows = [{**SUPPLIER_PAYMENT, "amount": "-22,064.76"}]
 

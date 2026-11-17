@@ -31,7 +31,7 @@ from ..auth import CurrentUser
 from ..events import officer_event, types
 from ..models import (
     FALSE_ALARM_REASONS, SET_ASIDE_REASONS,
-    CaseFindingReviews, CaseRecord, CaseStage, DetectionMetrics, FindingReview, ReportMissedIssueRequest,
+    CaseFindingReviews, CaseRecord, CaseStage, DetectionMetrics, DocumentRecord, FindingReview, ReportMissedIssueRequest,
     SetFindingVerdictsRequest, SignOffRequest, UpdateMissedIssueRequest,
 )
 from ._dependencies import bad_gateway_on_error, get_case_or_404, get_editable_case_or_404, to_thread_or_502
@@ -91,6 +91,10 @@ async def _feedback_context(case: CaseRecord, document_id: str | None) -> tuple[
     if document_id is None:
         return None, names_in(None, [case.company_name])
     document = await asyncio.to_thread(document_repository.get_document, document_id, include_fields=True)
+    return _context_of(case, document)
+
+
+def _context_of(case: CaseRecord, document: DocumentRecord | None) -> tuple[str | None, list[str]]:
     if document is None:
         return None, names_in(None, [case.company_name])
     return document.document_type, names_in(document.extracted_fields, [case.company_name])
@@ -102,6 +106,17 @@ async def _save_feedback(**values) -> None:
         await asyncio.to_thread(feedback_repository.save, **values)
     except Exception:
         logger.exception("Failed to save feedback %s", values.get("source_key"))
+
+
+async def _feedback_batch(to_save: list[dict], to_withdraw: list[str]) -> None:
+    """A group's feedback in two writes; like _save_feedback, a failure never fails the review."""
+    try:
+        if to_withdraw:
+            await asyncio.to_thread(feedback_repository.withdraw_many, to_withdraw)
+        if to_save:
+            await asyncio.to_thread(feedback_repository.save_many, to_save)
+    except Exception:
+        logger.exception("Failed to save the feedback of %d verdicts", len(to_save) + len(to_withdraw))
 
 
 async def _withdraw_feedback(source_key: str) -> None:
@@ -202,13 +217,28 @@ async def set_finding_verdicts(
     the rest (wrong); a null verdict clears the mark. Any officer can change a verdict; the latest one stands.
     Every finding is looked up before anything is written, so a bad entry saves nothing."""
     with bad_gateway_on_error(_SAVE_FAILED, "Failed to save verdicts on case %s", case_id):
+        # Each document read once (with its fields, for the feedback), and each group's findings in one query.
+        documents: dict[str, DocumentRecord] = {}
+        in_case: dict[UUID, str] = {}
+        for item in request.verdicts:
+            if item.document_id is not None and item.document_id not in in_case:
+                document = await asyncio.to_thread(document_repository.get_document, str(item.document_id))
+                if document is None or document.case_id != case_id:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found in this case")
+                documents[str(item.document_id)] = document
+                in_case[item.document_id] = str(item.document_id)
+        groups: dict[tuple[str, str | None], list[str]] = {}
+        for item in request.verdicts:
+            groups.setdefault((item.scope, in_case.get(item.document_id) if item.document_id else None), []).append(item.fingerprint)
+        current: dict[tuple[str, str | None, str], dict] = {}
+        for (scope, document_id), fingerprints in groups.items():
+            rows = await asyncio.to_thread(findings_repository.find_current_many, case_id, scope, document_id, fingerprints)
+            current.update({(scope, document_id, fingerprint): row for fingerprint, row in rows.items()})
         targets: list[tuple[str, str | None, str]] = []
         found: list[dict] = []
         for item in request.verdicts:
-            document_id = await _document_in_case(case_id, item.document_id)
-            row = await asyncio.to_thread(
-                findings_repository.find_current, case_id, item.scope, document_id, item.fingerprint,
-            )
+            document_id = in_case.get(item.document_id) if item.document_id else None
+            row = current.get((item.scope, document_id, item.fingerprint))
             if row is None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -217,23 +247,30 @@ async def set_finding_verdicts(
             _check_reason(item.verdict, item.reason, row)
             targets.append((item.scope, document_id, row["id"]))
             found.append(row)
+        # One write per distinct (verdict, reason, note): a group is mostly ticks and unticks.
+        writes: dict[tuple[str | None, str | None, str | None], list[str]] = {}
         for (_, _, row_id), item in zip(targets, request.verdicts):
-            await asyncio.to_thread(findings_repository.set_verdict, row_id, item.verdict, user, item.reason, item.note)
+            writes.setdefault((item.verdict, item.reason, item.note), []).append(row_id)
+        for (verdict, reason, note), row_ids in writes.items():
+            await asyncio.to_thread(findings_repository.set_verdicts, row_ids, verdict, user, reason, note)
         contexts: dict[str | None, tuple[str | None, list[str]]] = {}
+        to_save: list[dict] = []
+        to_withdraw: list[str] = []
         for (scope, document_id, _), item, row in zip(targets, request.verdicts, found):
             key = feedback_repository.verdict_key(case_id, document_id, item.fingerprint)
             if item.verdict is None:
-                await _withdraw_feedback(key)
+                to_withdraw.append(key)
                 continue
             if document_id not in contexts:
-                contexts[document_id] = await _feedback_context(case, document_id)
+                contexts[document_id] = _context_of(case, documents.get(document_id or ""))
             document_type, names = contexts[document_id]
-            await _save_feedback(
+            to_save.append(dict(
                 source_key=key, case_id=case_id, document_id=document_id, scope=scope, kind="verdict",
                 check_name=row["check_name"], check_code=row.get("check_code"), document_type=document_type,
                 verdict=item.verdict, reason=item.reason, summary=row.get("summary") or "", note=item.note, reviewer=user,
                 names=names,
-            )
+            ))
+        await _feedback_batch(to_save, to_withdraw)
         reviews = await _case_reviews(case_id)
     await _record_saved(
         case_id, [(scope, document_id, item.verdict) for (scope, document_id, _), item in zip(targets, request.verdicts)],

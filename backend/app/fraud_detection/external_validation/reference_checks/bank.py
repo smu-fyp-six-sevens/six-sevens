@@ -10,7 +10,7 @@ from ...numerical_validation.registry import check
 from ..sg_reference.banks import bank_reference
 from ...numerical_validation.common import (
     CheckResult,
-    _finding,
+    new_finding,
     _skip_reference,
     skipped,
 )
@@ -64,7 +64,7 @@ def _check_account_number_format(*, bank_name: Any, account_number: Any) -> Chec
     if len(digits) in lengths:
         return [], None
     allowed = " or ".join(str(n) for n in lengths)
-    return [_finding(
+    return [new_finding(
         "BS.ACCOUNT_NUMBER_FORMAT", "inconsistent",
         f"Account number {account_number} has {len(digits)} digits, but {bank_name} account numbers have {allowed}",
         field="account_number", stated=str(account_number), expected=f"{allowed} digits",
@@ -103,7 +103,7 @@ def _check_bank_identifiers(
         stated_norm = stated_full[:length]
         expected_norm = alnum(str(expected))[:length]
         if stated_norm != expected_norm:
-            findings.append(_finding(
+            findings.append(new_finding(
                 "BS.BANK_IDENTIFIERS", "impossible",
                 f"The statement prints {bank_name}'s {label} as {stated}, but the bank's actual {label} is {expected}",
                 field=field_name, stated=str(stated), expected=str(expected),

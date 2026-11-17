@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from ..numerical_validation.common import _MONEY_TOLERANCE, _money, _rows
+from ..numerical_validation.common import MONEY_TOLERANCE, format_money, table_rows
 from ..numerical_validation.models import SkippedCheck
 from ..numerical_validation.statements import _is_newest_first
 from .models import CheckOutcome, Evidence, Place
@@ -86,7 +86,7 @@ def read_carries(page: PageView) -> _Carries:
 
 
 def _differs(a: float, b: float) -> bool:
-    return abs(a - b) > _MONEY_TOLERANCE
+    return abs(a - b) > MONEY_TOLERANCE
 
 
 def check_carry_forward(pages: list[PageView], transactions: object, placed: list[PlacedRow]) -> CheckOutcome:
@@ -99,7 +99,7 @@ def check_carry_forward(pages: list[PageView], transactions: object, placed: lis
     if not boundaries:
         outcome.skipped.append(SkippedCheck(check_code=CODE, reason="No balance brought or carried forward between pages"))
         return outcome
-    rows = _rows(transactions)
+    rows = table_rows(transactions)
     if rows and _is_newest_first(rows):
         outcome.skipped.append(SkippedCheck(
             check_code=CODE, reason="Transactions are listed newest first; carry lines are only read oldest first",
@@ -122,8 +122,8 @@ def check_carry_forward(pages: list[PageView], transactions: object, placed: lis
         if carried is not None and last_row is not None and _differs(carried, last_row.balance):
             outcome.evidence.append(Evidence(
                 CODE, "impossible", key, (before,),
-                f"Page {before} carries forward {_money(carried)}, but its last balance is {_money(last_row.balance)}",
-                stated=_money(carried), expected=_money(last_row.balance), places=carried_at,
+                f"Page {before} carries forward {format_money(carried)}, but its last balance is {format_money(last_row.balance)}",
+                stated=format_money(carried), expected=format_money(last_row.balance), places=carried_at,
             ))
         opening = (
             first_row.balance - first_row.amount
@@ -132,8 +132,8 @@ def check_carry_forward(pages: list[PageView], transactions: object, placed: lis
         if brought is not None and opening is not None and _differs(brought, opening):
             outcome.evidence.append(Evidence(
                 CODE, "impossible", key, (after,),
-                f"Page {after} brings forward {_money(brought)}, but its first transaction starts from {_money(opening)}",
-                stated=_money(brought), expected=_money(opening), places=brought_at,
+                f"Page {after} brings forward {format_money(brought)}, but its first transaction starts from {format_money(opening)}",
+                stated=format_money(brought), expected=format_money(opening), places=brought_at,
             ))
 
         # B. Carried against brought across the boundary, where the rows don't already show the break.
@@ -145,7 +145,7 @@ def check_carry_forward(pages: list[PageView], transactions: object, placed: lis
             if not rows_break:
                 outcome.evidence.append(Evidence(
                     CODE, "impossible", key, pages_involved,
-                    f"Page {before} carries forward {_money(carried)}, but page {after} brings forward {_money(brought)}",
-                    stated=_money(brought), expected=_money(carried), places=carried_at + brought_at,
+                    f"Page {before} carries forward {format_money(carried)}, but page {after} brings forward {format_money(brought)}",
+                    stated=format_money(brought), expected=format_money(carried), places=carried_at + brought_at,
                 ))
     return outcome

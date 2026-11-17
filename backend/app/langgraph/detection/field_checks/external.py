@@ -8,7 +8,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from ....fraud_detection.external_validation.runner import run_external_validation
-from ..tools import _result, _with_ids, document_fields
+from ..tools import tool_result, with_ids, document_fields
 from .bindings import BindingArg, binding_problems, to_bindings
 
 TOOL_NAME = "external_validation_tool"
@@ -23,10 +23,10 @@ async def external_validation_tool(
     """Checks the document's facts against outside references that apply to this document type: live ACRA (UEN exists, name, status, incorporation date, registered address), OneMap and HDB addresses, and published tables (CPF rates and ceilings, GST rate, IRAS tax rules, a bank's published identifiers and account format, public holidays for GIRO dates). Pass `bindings` for the inputs named in the external check menu; never invent a role, field or row."""
     fields = await document_fields(document_id)
     if not fields:
-        return _result(TOOL_NAME, [], unable="No fields are extracted for this document")
+        return tool_result(TOOL_NAME, [], unable="No fields are extracted for this document")
     outcome = await run_external_validation(document_id, document_type, fields, to_bindings(bindings))
     if outcome.unable_to_assess:
-        return _result(TOOL_NAME, [], unable=outcome.unable_to_assess_reason or "Unable to assess")
+        return tool_result(TOOL_NAME, [], unable=outcome.unable_to_assess_reason or "Unable to assess")
 
     findings = [
         {
@@ -41,7 +41,7 @@ async def external_validation_tool(
         }
         for finding in outcome.findings
     ]
-    result = _result(TOOL_NAME, _with_ids(TOOL_NAME, findings))
+    result = tool_result(TOOL_NAME, with_ids(TOOL_NAME, findings))
     result.update(
         skipped=[{"check": s.check_code, "reason": s.reason} for s in outcome.skipped_checks],
         bindings_applied=outcome.bindings_applied,

@@ -330,17 +330,20 @@ async def test_a_search_past_the_time_limit_is_failed_not_waited_on() -> None:
 # --- Which company is searched: the one its documents name, not the case's free-text title --------------------
 
 
-def _doc(doc_id: str, kind: str, status: str = "detected"):
+def _doc(doc_id: str, kind: str, status: str = "detected", fields: dict | None = None):
     document = MagicMock()
     document.id, document.document_type, document.status.value = doc_id, kind, status
+    document.extracted_fields = fields
     return document
 
 
 def _company_on_file(documents, fields: dict[str, dict]):
     from app.case_pipeline import service
 
-    with patch.object(service.extracted_fields_repository, "get_extracted_fields_dict", side_effect=lambda i: fields.get(i, {})):
-        return service._company_on_file(documents)
+    # The fields list_documents attached.
+    for document in documents:
+        document.extracted_fields = fields.get(document.id)
+    return service._company_on_file(documents)
 
 
 def test_the_business_profile_names_the_company_before_the_certificate() -> None:
@@ -391,12 +394,11 @@ async def test_the_case_name_is_searched_only_when_no_document_names_the_company
 
     case = MagicMock(company_name="Case 67")
     trace = MagicMock()
-    for documents, fields in [
-        ([_doc("profile", "certificate_of_incumbency")], {"profile": {"company_name": "Acme Trading Pte. Ltd."}}),
-        ([_doc("payslip", "payslip")], {}),
+    for documents in [
+        [_doc("profile", "certificate_of_incumbency", fields={"company_name": "Acme Trading Pte. Ltd."})],
+        [_doc("payslip", "payslip")],
     ]:
         with (
-            patch.object(service.extracted_fields_repository, "get_extracted_fields_dict", side_effect=lambda i, f=fields: f.get(i, {})),
             patch.object(service.case_repository, "get_case", return_value=case),
             patch.object(service.repository, "latest_adverse_media", return_value=None),
             patch.object(service, "run_adverse_media_check", side_effect=check),

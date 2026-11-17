@@ -1,6 +1,10 @@
 import type { ReactNode } from 'react';
 import { caseStageTone, type StatusTone } from '../utils/caseStages';
 
+// The marks cut out of a filled shape (SVG attributes can't read a CSS variable; a style can).
+const WHITE_FILL = { fill: 'var(--white)' };
+const WHITE_STROKE = { stroke: 'var(--white)' };
+
 // What each group of stages means, as a shape, so the mark reads without its colour: an empty ring for nothing yet,
 // a half-filled ring for the system at work, a dot for the officer's turn, a warning triangle for a case that can't
 // go on, a tick for analysed, a lock for finalised, a cross for failed. Drawn in the stage's tone (currentColor).
@@ -16,14 +20,14 @@ const SHAPES: Record<StatusTone, ReactNode> = {
   blocked: (
     <>
       <path d="M7 1 L13.3 12.6 H0.7 Z" fill="currentColor" />
-      <rect x="6.2" y="5" width="1.6" height="4" rx="0.6" fill="#fff" />
-      <circle cx="7" cy="10.6" r="0.95" fill="#fff" />
+      <rect x="6.2" y="5" width="1.6" height="4" rx="0.6" style={WHITE_FILL} />
+      <circle cx="7" cy="10.6" r="0.95" style={WHITE_FILL} />
     </>
   ),
   done: (
     <>
       <circle cx="7" cy="7" r="6" fill="currentColor" />
-      <path d="M4.2 7.2 6.2 9.1 9.9 5.1" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4.2 7.2 6.2 9.1 9.9 5.1" fill="none" style={WHITE_STROKE} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </>
   ),
   closed: (
@@ -35,7 +39,7 @@ const SHAPES: Record<StatusTone, ReactNode> = {
   failed: (
     <>
       <circle cx="7" cy="7" r="6" fill="currentColor" />
-      <path d="M4.8 4.8 9.2 9.2M9.2 4.8 4.8 9.2" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M4.8 4.8 9.2 9.2M9.2 4.8 4.8 9.2" style={WHITE_STROKE} strokeWidth="1.7" strokeLinecap="round" />
     </>
   ),
 };

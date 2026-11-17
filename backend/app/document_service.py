@@ -95,7 +95,7 @@ def present(document: DocumentRecord, fields: list) -> DocumentRecord:
 # --- Reads (sync: run on a worker thread) ---------------------------------------------------------------------
 
 
-def list_documents(case_id: str | None, doc_status: DocumentStatus | None) -> list[DocumentRecord]:
+def list_documents(case_id: str, doc_status: DocumentStatus | None) -> list[DocumentRecord]:
     return document_repository.list_documents(case_id, doc_status)
 
 

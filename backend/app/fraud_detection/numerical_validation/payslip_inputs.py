@@ -27,7 +27,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from .common import _as_number, _rows
+from .common import as_number, table_rows
 
 # A deduction line that is the employee's CPF. "Contribution" alone also names the self-help
 # group funds (CDAC, SINDA, MBMF, ECF), so those are excluded below.
@@ -96,13 +96,13 @@ class WageSplit:
 
 def split_earnings(earnings_items: Any) -> WageSplit | None:
     """The earnings lines split by CPF treatment, or None if any amount can't be read."""
-    rows = _rows(earnings_items)
+    rows = table_rows(earnings_items)
     if not rows:
         return None
     totals: dict[str, float] = {kind: 0.0 for kind in WAGE_TYPES}
     lines: dict[str, list[str]] = {kind: [] for kind in WAGE_TYPES}
     for row in rows:
-        amount = _as_number(row.get("amount"))
+        amount = as_number(row.get("amount"))
         if amount is None:
             return None
         label = _label(row).strip() or "(unlabelled line)"
@@ -157,8 +157,8 @@ def wage_scenarios(
 def basic_pay_from_earnings(earnings_items: Any) -> float | None:
     """Basic pay from the earnings lines labelled as basic pay, or None if there is no such line."""
     amounts = [
-        amount for row in _rows(earnings_items)
-        if _BASIC_RE.search(_label(row)) and (amount := _as_number(row.get("amount"))) is not None and amount > 0
+        amount for row in table_rows(earnings_items)
+        if _BASIC_RE.search(_label(row)) and (amount := as_number(row.get("amount"))) is not None and amount > 0
     ]
     return round(sum(amounts), 2) if amounts else None
 
@@ -176,11 +176,11 @@ def employee_cpf_from_deductions(deductions_items: Any) -> float | None:
     split ordinary and additional wage CPF into two lines). Deductions may be extracted as
     negatives.
     """
-    rows = _rows(deductions_items)
+    rows = table_rows(deductions_items)
     labelled = any(row.get("category") for row in rows)
     amounts = []
     for row in rows:
-        amount = _as_number(row.get("amount"))
+        amount = as_number(row.get("amount"))
         if amount is None:
             continue
         if labelled:

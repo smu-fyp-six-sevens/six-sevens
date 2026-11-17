@@ -22,7 +22,7 @@ from typing import Any
 
 from ...cpu_pool import run_cpu
 from ..font_consistency import ExtractedField
-from ..numerical_validation.common import _fields_by_name
+from ..numerical_validation.common import fields_by_name
 from .carry_forward import check_carry_forward
 from .duplicates import check_duplicates
 from .identity import check_header_identity
@@ -108,4 +108,4 @@ async def check_page_consistency(
     document_id: str, file_bytes: bytes, filename: str, extracted_fields: list[ExtractedField] | None = None,
 ) -> PageConsistencyResult:
     """Cross-page consistency of one document (see the module docstring)."""
-    return await run_cpu(_check, document_id, file_bytes, filename, _fields_by_name(extracted_fields))
+    return await run_cpu(_check, document_id, file_bytes, filename, fields_by_name(extracted_fields))

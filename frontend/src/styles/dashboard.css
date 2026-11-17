@@ -97,7 +97,7 @@
 .role-switch { border-color: var(--line); }
 .role-switch { background: var(--stone-94); }
 .role-switch button { color: var(--ink-soft); }
-.role-switch button.selected { color: var(--steel-dark); box-shadow: 0 1px 3px rgba(20, 35, 60, .07); }
+.role-switch button.selected { color: var(--steel-dark); box-shadow: 0 1px 3px var(--ink-a08); }
 .dashboard-stat-card, .dashboard-panel { border-color: var(--line); box-shadow: 0 1px 3px var(--ink-a05); }
 .stat-number, .panel-heading h2 { color: var(--ink); }
 .dashboard-stat-card .stat-caption, .panel-heading p { color: var(--ink-soft); }
@@ -415,8 +415,9 @@ button.case-cost-row:focus-visible { outline: 2px solid var(--steel); outline-of
 .case-cost-case strong { display: flex; align-items: center; gap: 7px; color: var(--ink); font-size: 13.5px; }
 .case-cost-case > span { overflow: hidden; color: var(--ink-soft); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
 .case-cost-risk { font-size: 11.5px; font-weight: 600; }
-.case-cost-risk.risk-score-critical, .case-cost-risk.risk-score-high { color: var(--red-46); }
-.case-cost-risk.risk-score-medium { color: var(--orange-32); }
+.case-cost-risk.risk-score-critical { color: var(--risk-critical); }
+.case-cost-risk.risk-score-high { color: var(--risk-high); }
+.case-cost-risk.risk-score-medium { color: var(--risk-medium-text); }
 .case-cost-risk.risk-score-low { color: var(--green-40); }
 .case-cost-measure { display: grid; grid-template-columns: minmax(0, 1fr) 62px; align-items: center; gap: 10px; }
 .case-cost-track { position: relative; height: 8px; border-radius: 4px; background: var(--slate-94); }
@@ -463,9 +464,9 @@ button.case-cost-row:focus-visible { outline: 2px solid var(--steel); outline-of
 .check-row .flag-pill-severity { justify-self: start; }
 .check-track { position: relative; height: 10px; border-radius: 5px; background: var(--slate-94); }
 .check-track i { display: block; height: 100%; border-radius: inherit; animation: risk-overview-in .7s cubic-bezier(.2, .8, .2, 1) backwards; transform-origin: left; }
-.check-bar--high { background: var(--red-43); }
-.check-bar--medium { background: var(--orange-74); }
-.check-bar--low { background: var(--orange-91); box-shadow: inset 0 0 0 1px var(--orange-75); }
+.check-bar--high { background: var(--risk-high); }
+.check-bar--medium { background: var(--risk-medium); }
+.check-bar--low { background: var(--risk-medium-tint); box-shadow: inset 0 0 0 1px var(--risk-low); }
 .check-figure { color: var(--ink-soft); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .check-figure strong { color: var(--ink); font-size: 14px; }
 .check-figure small { margin-left: 6px; color: var(--text-muted); font-size: 11.5px; }

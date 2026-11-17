@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from .common import _MONEY_TOLERANCE, _materiality_note, _money
+from .common import MONEY_TOLERANCE, materiality_note, format_money
 from .models import NumericalFinding
 
 Role = Literal["income", "expense", "skip"]
@@ -36,10 +36,10 @@ def _finding(check_code: str, field: str, summary: str, *, stated: float, expect
         check_code=check_code,
         severity="impossible",
         field=field,
-        stated=_money(stated),
-        expected=_money(expected),
+        stated=format_money(stated),
+        expected=format_money(expected),
         needs_review=needs_review,
-        severity_note=_materiality_note(expected - stated, expected),
+        severity_note=materiality_note(expected - stated, expected),
         summary=summary,
     )
 
@@ -50,15 +50,15 @@ def profit_cast_finding(
 ) -> NumericalFinding | None:
     """Revenue plus each line's effect must equal profit for the year."""
     expected = revenue + sum(line.effect for line in lines)
-    if abs(expected - profit) <= _MONEY_TOLERANCE:
+    if abs(expected - profit) <= MONEY_TOLERANCE:
         return None
     breakdown = " ".join(
-        f"{'+' if line.effect > 0 else '-'} {line.label} {_money(abs(line.effect))}" for line in lines
+        f"{'+' if line.effect > 0 else '-'} {line.label} {format_money(abs(line.effect))}" for line in lines
     )
     return _finding(
         "FS.IS_CAST", profit_field,
-        f"Income statement ({year}) does not cast: revenue {_money(revenue)} {breakdown} = "
-        f"{_money(expected)}, but profit for the year shows {_money(profit)}",
+        f"Income statement ({year}) does not cast: revenue {format_money(revenue)} {breakdown} = "
+        f"{format_money(expected)}, but profit for the year shows {format_money(profit)}",
         stated=profit, expected=expected, needs_review=needs_review,
     )
 
@@ -68,11 +68,11 @@ def section_total_finding(
 ) -> NumericalFinding | None:
     """The rows of one balance sheet section must sum to its stated total."""
     total = sum(amounts)
-    if abs(total - stated) <= _MONEY_TOLERANCE:
+    if abs(total - stated) <= MONEY_TOLERANCE:
         return None
     return _finding(
         "FS.BS_CAST", total_field,
-        f"{section.capitalize()} items sum to {_money(total)}, but the stated total is {_money(stated)}",
+        f"{section.capitalize()} items sum to {format_money(total)}, but the stated total is {format_money(stated)}",
         stated=stated, expected=total, needs_review=needs_review,
     )
 
@@ -82,11 +82,11 @@ def identity_finding(
 ) -> NumericalFinding | None:
     """Total assets must equal total liabilities plus total equity."""
     expected = liabilities + equity
-    if abs(assets - expected) <= _MONEY_TOLERANCE:
+    if abs(assets - expected) <= MONEY_TOLERANCE:
         return None
     return _finding(
         "FS.BALANCES", assets_field,
-        f"Total assets ({year}) {_money(assets)} does not equal total liabilities {_money(liabilities)} "
-        f"+ total equity {_money(equity)} ({_money(expected)})",
+        f"Total assets ({year}) {format_money(assets)} does not equal total liabilities {format_money(liabilities)} "
+        f"+ total equity {format_money(equity)} ({format_money(expected)})",
         stated=assets, expected=expected, needs_review=needs_review,
     )

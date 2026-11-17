@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from app.fraud_detection.shared.field_catalogue import array_rows
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation.runner import Binding, ROW_ROLES, benford_summary, run_numerical_checks
-from app.fraud_detection.numerical_validation.common import _as_number
+from app.fraud_detection.numerical_validation.common import as_number
 from app.fraud_detection.numerical_validation.identity_company import _mrz_check_digit, _nric_expected_letter
 from app.fraud_detection.numerical_validation.statements import BENFORD_MIN_SAMPLE, _benford
 
@@ -921,7 +921,7 @@ def test_cr_amortisation_reads_a_newest_first_history_in_date_order() -> None:
 
 def test_loan_rate_band_runs_against_a_reference_rate_formula() -> None:
     # Previously silently skipped for every overdraft facility, since
-    # _as_number couldn't parse this shape at all — 6.72 is within the
+    # as_number couldn't parse this shape at all — 6.72 is within the
     # 5-15% overdraft band, so this should run and find nothing wrong.
     result = _run(
         [_field("interest_rate", "Bank's Prime Rate + 2.50% (currently 6.72% p.a.)"),
@@ -1519,14 +1519,14 @@ def test_a_genuine_fee_heavy_statement_is_not_flagged_for_its_cents() -> None:
     ("1,234.56 DR", -1234.56), ("1,234.56 CR", 1234.56), ("-20 DR", -20.0), ("-20 CR", 20.0), ("500.00dr.", -500.0),
 ])
 def test_dr_and_cr_amounts_are_read_with_their_sign(text: str, expected: float) -> None:
-    assert _as_number(text) == expected
+    assert as_number(text) == expected
 
 
 @pytest.mark.parametrize(("text", "expected"), [
     ("1.234,56", 1234.56), ("1234,56", 1234.56), ("1,234", 1234.0), ("1,234,567.89", 1234567.89), ("12.345.678,9", 12345678.9),
 ])
 def test_decimal_commas_are_read_as_decimals_and_thousands_commas_are_not(text: str, expected: float) -> None:
-    assert _as_number(text) == expected
+    assert as_number(text) == expected
 
 
 def test_a_dr_row_reconciles_its_running_balance() -> None:

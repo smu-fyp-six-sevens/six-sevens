@@ -21,10 +21,6 @@
       "min": 1,
       "secrets": [
         {
-          "env": "SUPABASE_PUBLISHABLE_KEY",
-          "id": "supabase-publishable-key"
-        },
-        {
           "env": "SUPABASE_SECRET_KEY",
           "id": "supabase-secret-key"
         },
@@ -58,10 +54,6 @@
       "min": 1,
       "secrets": [
         {
-          "env": "SUPABASE_PUBLISHABLE_KEY",
-          "id": "supabase-publishable-key"
-        },
-        {
           "env": "SUPABASE_SECRET_KEY",
           "id": "supabase-secret-key"
         },
@@ -90,10 +82,6 @@
       "min": 1,
       "secrets": [
         {
-          "env": "SUPABASE_PUBLISHABLE_KEY",
-          "id": "supabase-publishable-key"
-        },
-        {
           "env": "SUPABASE_SECRET_KEY",
           "id": "supabase-secret-key"
         },
@@ -119,10 +107,6 @@
       "memory": "4Gi",
       "min": 1,
       "secrets": [
-        {
-          "env": "SUPABASE_PUBLISHABLE_KEY",
-          "id": "supabase-publishable-key"
-        },
         {
           "env": "SUPABASE_SECRET_KEY",
           "id": "supabase-secret-key"
@@ -156,10 +140,6 @@
       "memory": "4Gi",
       "min": 1,
       "secrets": [
-        {
-          "env": "SUPABASE_PUBLISHABLE_KEY",
-          "id": "supabase-publishable-key"
-        },
         {
           "env": "SUPABASE_SECRET_KEY",
           "id": "supabase-secret-key"

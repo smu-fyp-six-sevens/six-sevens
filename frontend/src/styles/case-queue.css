@@ -104,7 +104,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--white);
-  box-shadow: 0 8px 24px rgba(18, 32, 61, 0.12);
+  box-shadow: 0 8px 24px var(--ink-a12);
 }
 
 .kebab-menu-item {

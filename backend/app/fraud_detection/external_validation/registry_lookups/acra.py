@@ -20,7 +20,7 @@ from typing import Any
 
 from ....config import settings
 from ....identifiers import company_names_match, uen_key
-from ...numerical_validation.common import _parse_field_date
+from ...numerical_validation.common import parse_field_date
 from ...numerical_validation.models import SkippedCheck
 from .datagov import collection, dataset_name, datastore_search
 from .http import LookupUnavailable
@@ -103,7 +103,7 @@ async def lookup_entity(uen: str) -> tuple[AcraEntity | None, datetime | None]:
         if record is not None:
             return AcraEntity(
                 uen=record["uen"], name=record["name"], status=record["status"],
-                incorporation_date=_parse_field_date(record.get("incorporation_date")),
+                incorporation_date=parse_field_date(record.get("incorporation_date")),
                 postal_code=record.get("postal_code"), address=record.get("address", ""),
                 former_names=tuple(record.get("former_names") or ()),
             ), datetime.now(timezone.utc)
@@ -130,7 +130,7 @@ async def lookup_entity(uen: str) -> tuple[AcraEntity | None, datetime | None]:
         uen=uen,
         name=name,
         status=_value(detail, "entity_status_description") or _value(basic, "uen_status_desc"),
-        incorporation_date=_parse_field_date(_value(detail, "registration_incorporation_date")
+        incorporation_date=parse_field_date(_value(detail, "registration_incorporation_date")
                                              or _value(basic, "uen_issue_date")),
         postal_code=postal or None,
         address=address,
@@ -217,7 +217,7 @@ def _name_findings(entity: AcraEntity, stated: Any) -> list[RegistryFinding]:
 
 
 def _date_findings(entity: AcraEntity, stated: Any) -> list[RegistryFinding]:
-    stated_date = _parse_field_date(stated)
+    stated_date = parse_field_date(stated)
     if stated_date is None or entity.incorporation_date is None or stated_date == entity.incorporation_date:
         return []
     return [_finding(

@@ -213,18 +213,44 @@ def find_current(case_id: str, scope: ReviewScope, document_id: str | None, fing
     return rows[0] if rows else None
 
 
+def find_current_many(
+    case_id: str, scope: ReviewScope, document_id: str | None, fingerprints: list[str],
+) -> dict[str, dict[str, Any]]:
+    """find_current for one group's fingerprints in one read: fingerprint -> row, missing when a later run replaced it."""
+    query = (
+        service_supabase_client().table(TABLE).select(
+            "id, document_id, check_name, check_code, summary, agent_decision, severity, fingerprint",
+        ).eq("case_id", case_id).eq("scope", scope).in_("fingerprint", list(dict.fromkeys(fingerprints)))
+    )
+    query = query.eq("document_id", document_id) if document_id is not None else query.is_("document_id", "null")
+    rows = cast(list[dict[str, Any]], query.execute().data or [])
+    found: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        found.setdefault(str(row["fingerprint"]), row)
+    return found
+
+
 def set_verdict(
     row_id: str, verdict: ReviewVerdict | None, reviewer: str, reason: str | None = None, note: str | None = None,
 ) -> None:
     """The officer's verdict on one finding, replacing any earlier one; None clears it. `reason` is why a false alarm is one."""
+    set_verdicts([row_id], verdict, reviewer, reason, note)
+
+
+def set_verdicts(
+    row_ids: list[str], verdict: ReviewVerdict | None, reviewer: str, reason: str | None = None, note: str | None = None,
+) -> None:
+    """set_verdict for many findings given the same verdict, reason and note: one write."""
     values: dict[str, Any] = (
         {"verdict": verdict, "review_reason": reason, "review_note": note, "reviewer": reviewer, "reviewed_at": _now()}
         if verdict is not None
         else {"verdict": None, "reviewer": None, "review_note": None, "review_reason": None, "reviewed_at": None}
     )
-    result = service_supabase_client().table(TABLE).update({**values, "updated_at": _now()}).eq("id", row_id).execute()
-    if not result.data:
-        raise RuntimeError(f"Finding {row_id} was not updated")
+    wanted = set(row_ids)
+    result = service_supabase_client().table(TABLE).update({**values, "updated_at": _now()}).in_("id", list(wanted)).execute()
+    updated = {str(row["id"]) for row in cast(list[dict[str, Any]], result.data or [])}
+    if updated != {str(row_id) for row_id in wanted}:
+        raise RuntimeError(f"Finding {', '.join(sorted(wanted - updated))} was not updated")
 
 
 def add_missed(

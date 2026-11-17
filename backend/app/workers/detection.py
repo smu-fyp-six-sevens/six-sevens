@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from .. import audit, detection_results, document_repository, events, metrics
@@ -14,7 +14,7 @@ from ..config import settings
 from ..events import Event, Stopwatch, types
 from ..events.envelope import Outcome, officer_of
 from ..langgraph import trace as langgraph_trace
-from ..langgraph.detection.graph import end_unfinished_run, run_detection
+from ..langgraph.detection.graph import DetectionSuperseded, current_run_stamp, end_unfinished_run, run_detection
 from ..models import DocumentStatus
 from ..snapshots import push_case_snapshot
 from . import recovery
@@ -55,12 +55,15 @@ async def run(
     detail: dict[str, Any] = {}
     meter = recovery.Meter()
     started = False
+    # The claim's stamp: the run writes its report and status only while the document still carries it.
+    stamp = datetime.now(timezone.utc) if start_from is not None else None
+    stamp_token = current_run_stamp.set(stamp)
     try:
         # The cancel event is the flag: the audit trail shows one made through another instance.
         async with _runs.slot(document_id, lambda: _cancel_requested_since(document_id, timer.started_at), _slots):
             if start_from is not None and not await asyncio.to_thread(
                 document_repository.update_status, document_id, DocumentStatus.DETECTING,
-                expected_current_statuses=list(start_from),
+                processing_started_at=stamp, expected_current_statuses=list(start_from),
             ):
                 logger.info("Document %s is no longer waiting for detection; ignoring the repeat", document_id)
                 return
@@ -69,6 +72,8 @@ async def run(
                 result = await run_detection(document_id)
         detail = {"verdict": result.get("verdict"), "findings": len(result.get("findings") or [])}
         metrics.detection_verdicts.labels(str(detail["verdict"] or "none")).inc()
+    except DetectionSuperseded:
+        outcome, detail = "cancelled", {"error": "Replaced by a newer run of the same document"}
     except asyncio.CancelledError:
         by_officer = _runs.cancelled_by_officer(document_id)
         # Not an Exception, so run_detection's own handler never ran; revert DETECTING -> APPROVED here.
@@ -87,6 +92,7 @@ async def run(
         logger.exception("Fraud detection failed for approved document %s", document_id)
         outcome, detail = "failed", {"error": f"{type(exc).__name__}: {exc}"[:300]}
     finally:
+        current_run_stamp.reset(stamp_token)
         if case_id and started:
             # Every ending writes the document's status last, which Realtime reports.
             await push_case_snapshot(case_id, realtime_covers=True)
@@ -138,8 +144,38 @@ async def on_requested(event: Event) -> None:
 
 
 async def on_cancel_requested(event: Event) -> None:
-    """Interrupts the run if it is in this process."""
-    _runs.cancel(event.document_id)
+    """Interrupts the run if it is in this process; otherwise ends a run that was lost (_end_lost_run)."""
+    if event.document_id is None:
+        return
+    if _runs.is_running(event.document_id):
+        _runs.cancel(event.document_id)
+        return
+    await _end_lost_run(event.document_id, event.case_id)
+
+
+async def _end_lost_run(document_id: str, case_id: str | None) -> None:
+    """
+    A document left detecting by a run that died (a restart mid-scan): ended as an officer's cancel would end it.
+    In one process a run not here is lost; with Pub/Sub it may be live on another instance, which sees the cancel
+    flag itself, so only a claim older than a live run can be is ended. The claim's stamp guards the write.
+    """
+    document = await asyncio.to_thread(document_repository.get_document, document_id, include_fields=False)
+    if document is None or document.status != DocumentStatus.DETECTING or document.processing_started_at is None:
+        return
+    claimed = document.processing_started_at
+    age = (datetime.now(timezone.utc) - claimed).total_seconds()
+    if settings.EVENT_TRANSPORT == "pubsub" and age < settings.STUCK_RUNNING_SECONDS:
+        return
+    reason = "Cancelled by loan officer"
+    langgraph_trace.record(document_id, "detection_error", error=reason)
+    await asyncio.to_thread(detection_results.save_error, document_id, reason)
+    await asyncio.to_thread(langgraph_trace.flush, document_id)
+    ended = await asyncio.to_thread(
+        document_repository.end_unfinished_detection, document_id,
+        has_report=await asyncio.to_thread(detection_results.has_report, document_id), run_stamp=claimed,
+    )
+    if ended and case_id:
+        await push_case_snapshot(case_id, realtime_covers=True)
 
 
 async def on_recovery_requested(event: Event) -> None:
@@ -153,6 +189,9 @@ async def on_recovery_requested(event: Event) -> None:
     document_id = event.document_id
     if event.detail.get("stage") == DocumentStatus.APPROVED.value:
         await _recover_unstarted(event, document_id)
+        return
+    if _runs.is_running(document_id):
+        logger.info("Detection for document %s is still running here; nothing to recover", document_id)
         return
     reverted = await asyncio.to_thread(
         document_repository.update_status, document_id, DocumentStatus.APPROVED,
@@ -172,7 +211,9 @@ async def on_recovery_requested(event: Event) -> None:
         if event.case_id:
             await push_case_snapshot(event.case_id, realtime_covers=True)
         return
-    await run(document_id, event.case_id)
+    # Claimed like any run: a redelivered recovery that reverted again finds this one's claim, and the older run,
+    # if it was alive after all, finds its stamp gone and saves nothing.
+    await run(document_id, event.case_id, start_from=[DocumentStatus.APPROVED])
     await _report_recovery(event, document_id)
 
 

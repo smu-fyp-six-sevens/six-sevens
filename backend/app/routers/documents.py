@@ -84,9 +84,8 @@ class ContentGuardResponse(BaseModel):
 
 
 @router.get("", response_model=list[DocumentRecord])
-async def list_documents(
-    case_id: str | None = None, doc_status: DocumentStatus | None = None
-) -> list[DocumentRecord]:
+async def list_documents(case_id: str, doc_status: DocumentStatus | None = None) -> list[DocumentRecord]:
+    """A case's documents (required: every document in every case, with all their fields, is too large to send)."""
     return await to_thread_or_502(
         document_service.list_documents, case_id, doc_status,
         detail="Failed to list documents. Check Supabase table access.",

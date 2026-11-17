@@ -20,6 +20,7 @@ from .case_pipeline.models import CaseAnalysis
 from .case_pipeline.readiness import is_ready_for_analysis, unapproved_requirements
 from .case_pipeline.risk import store as risk_store
 from .config import settings
+from .langgraph import detection_report
 from .langgraph.extraction_prompts import EXTRACTION_SCHEMAS
 
 from .mapper import (
@@ -469,6 +470,16 @@ def build_case_snapshot(case_id: str, *, documents_changed: bool = True) -> dict
     return first_result
 
 
+def _detection_counts(report: dict[str, Any] | None) -> dict[str, int] | None:
+    """A scanned document's findings by severity, so the Documents list shows them with the list (None: not scanned,
+    or a light read of a report saved before counts were stored; the page then reads that report itself)."""
+    if report is None:
+        return None
+    if "findings" in report:
+        return detection_report.severity_counts(report["findings"])
+    return report.get("severity_counts")
+
+
 def _build_case_snapshot(case_id: str, *, documents_changed: bool = True) -> dict | None:
     reused = None if documents_changed else _document_reads.get(case_id)
     case_read = _submit(case_repository.get_case, case_id)
@@ -532,6 +543,7 @@ def _build_case_snapshot(case_id: str, *, documents_changed: bool = True) -> dic
         dump = document.model_dump(mode="json")
         dump["has_detection_report"] = document.id in detected_ids
         dump["has_detection_error"] = document.id in failed_ids
+        dump["detection_counts"] = _detection_counts(reports.get(document.id))
         document_dumps.append(dump)
     return {
         "type": "snapshot",

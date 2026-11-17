@@ -6,7 +6,7 @@
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: 14px;
-  box-shadow: 0 1px 2px var(--ink-a04), 0 8px 24px rgba(18, 32, 61, 0.06);
+  box-shadow: 0 1px 2px var(--ink-a04), 0 8px 24px var(--ink-a06);
   text-align: center;
 }
 

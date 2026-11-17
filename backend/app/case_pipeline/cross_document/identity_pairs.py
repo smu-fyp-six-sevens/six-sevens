@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 
 from ...identifiers import COMPANY_ONLY_DOCUMENT_TYPES, Person, id_key, individual_names_match, linked_people
-from ...fraud_detection.numerical_validation.common import _parse_field_date
+from ...fraud_detection.numerical_validation.common import parse_field_date
 from ...fraud_detection.shared.field_values import decode_field_value
 from .evidence import CaseContext, DocView
 
@@ -76,7 +76,7 @@ def _stated(view: DocView, name: str) -> str | None:
 def _same_attribute(check: str, a: str, b: str) -> bool | None:
     """Whether two statements of one personal detail agree; None when they cannot be compared."""
     if check == "individual_dob":
-        first, second = _parse_field_date(a), _parse_field_date(b)
+        first, second = parse_field_date(a), parse_field_date(b)
         return None if first is None or second is None else first == second
     if check == "individual_sex":
         return a[:1].lower() == b[:1].lower()

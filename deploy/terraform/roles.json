@@ -16,7 +16,6 @@
       "public": true,
       "publishes": true,
       "secrets": [
-        "SUPABASE_PUBLISHABLE_KEY",
         "SUPABASE_SECRET_KEY",
         "AUTH_USERS",
         "AUTH_SECRET_KEY",
@@ -43,7 +42,6 @@
       "public": false,
       "publishes": true,
       "secrets": [
-        "SUPABASE_PUBLISHABLE_KEY",
         "SUPABASE_SECRET_KEY",
         "ANTHROPIC_API_KEY"
       ],
@@ -69,7 +67,6 @@
       "public": false,
       "publishes": true,
       "secrets": [
-        "SUPABASE_PUBLISHABLE_KEY",
         "SUPABASE_SECRET_KEY",
         "ANTHROPIC_API_KEY",
         "DATA_GOV_SG_API_KEY",
@@ -98,7 +95,6 @@
       "public": false,
       "publishes": true,
       "secrets": [
-        "SUPABASE_PUBLISHABLE_KEY",
         "SUPABASE_SECRET_KEY",
         "ANTHROPIC_API_KEY"
       ],
@@ -123,7 +119,6 @@
       "public": true,
       "publishes": true,
       "secrets": [
-        "SUPABASE_PUBLISHABLE_KEY",
         "SUPABASE_SECRET_KEY",
         "AUTH_SECRET_KEY",
         "GATEWAY_SECRET"

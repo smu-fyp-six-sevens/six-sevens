@@ -450,7 +450,7 @@
 }
 
 .case-nav-item.active {
-  background: rgba(53, 95, 150, 0.14);
+  background: var(--steel-a14);
   color: var(--steel-dark);
   font-weight: 600;
 }

@@ -82,7 +82,7 @@
 .notes-textarea:focus-visible {
   outline: none;
   border-color: var(--steel);
-  box-shadow: 0 0 0 3px rgba(53, 95, 150, 0.18);
+  box-shadow: 0 0 0 3px var(--steel-a18);
 }
 
 .notes-composer-actions {

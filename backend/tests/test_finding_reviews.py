@@ -129,10 +129,17 @@ def repos():
         findings_repo.list_reviews_for_case.return_value = [_review()]
         findings_repo.list_sign_offs.return_value = []
         # Every fingerprint names a current finding, whose row id is "row:<fingerprint>".
-        findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+        findings_repo.find_current_many.side_effect = _rows(lambda fingerprint: {
             "id": f"row:{fingerprint}", "check_name": fingerprint.split(":")[0], "summary": "A finding",
-        }
+        })
         yield findings_repo, document_repo
+
+
+def _rows(make):
+    """find_current_many from one row per fingerprint (None: a newer run replaced it)."""
+    return lambda case_id, scope, document_id, fingerprints: {
+        fingerprint: row for fingerprint in fingerprints if (row := make(fingerprint)) is not None
+    }
 
 
 _VERDICT = {
@@ -143,16 +150,20 @@ _VERDICTS = f"/cases/{CASE_ID}/finding-reviews/verdicts"
 
 
 def test_a_group_review_saves_every_finding_signed_by_the_officer_and_returns_the_metrics(repos) -> None:
-    findings_repo, _ = repos
+    findings_repo, document_repo = repos
     response = client.put(_VERDICTS, json={"verdicts": [
         _VERDICT, {**_VERDICT, "fingerprint": "spelling_tool:1", "verdict": "wrong", "reason": "tool_misread"},
     ]})
     assert response.status_code == 200
-    assert [c.args for c in findings_repo.set_verdict.call_args_list] == [
-        ("row:numerical_checks_tool:PAY.NET:1", "correct", TEST_USER, None, None),
-        ("row:spelling_tool:1", "wrong", TEST_USER, "tool_misread", None),
+    assert [c.args for c in findings_repo.set_verdicts.call_args_list] == [
+        (["row:numerical_checks_tool:PAY.NET:1"], "correct", TEST_USER, None, None),
+        (["row:spelling_tool:1"], "wrong", TEST_USER, "tool_misread", None),
     ]
-    findings_repo.find_current.assert_any_call(CASE_ID, "document", DOCUMENT_ID, "spelling_tool:1")
+    # The group's findings in one read, its document checked once.
+    findings_repo.find_current_many.assert_called_once_with(
+        CASE_ID, "document", DOCUMENT_ID, ["numerical_checks_tool:PAY.NET:1", "spelling_tool:1"],
+    )
+    document_repo.get_document.assert_called_once()
     assert response.json()["case"]["precision"] == 1.0
 
 
@@ -173,7 +184,16 @@ def test_a_null_verdict_clears_the_mark(repos) -> None:
     findings_repo, _ = repos
     response = client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": None}]})
     assert response.status_code == 200
-    findings_repo.set_verdict.assert_called_once_with("row:numerical_checks_tool:PAY.NET:1", None, TEST_USER, None, None)
+    findings_repo.set_verdicts.assert_called_once_with(["row:numerical_checks_tool:PAY.NET:1"], None, TEST_USER, None, None)
+
+
+def test_a_group_with_the_same_verdict_on_every_finding_is_one_write(repos) -> None:
+    findings_repo, _ = repos
+    response = client.put(_VERDICTS, json={"verdicts": [_VERDICT, {**_VERDICT, "fingerprint": "spelling_tool:1"}]})
+    assert response.status_code == 200
+    findings_repo.set_verdicts.assert_called_once_with(
+        ["row:numerical_checks_tool:PAY.NET:1", "row:spelling_tool:1"], "correct", TEST_USER, None, None,
+    )
 
 
 def test_a_review_must_name_a_document_in_the_case(repos) -> None:
@@ -183,18 +203,16 @@ def test_a_review_must_name_a_document_in_the_case(repos) -> None:
     assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "scope": "case"}]}).status_code == 422
     document_repo.get_document.return_value = _document(case_id=OTHER_CASE_ID)
     assert client.put(_VERDICTS, json={"verdicts": [_VERDICT]}).status_code == 404
-    findings_repo.set_verdict.assert_not_called()
+    findings_repo.set_verdicts.assert_not_called()
 
 
 def test_a_group_with_a_finding_a_newer_run_replaced_saves_nothing(repos) -> None:
     findings_repo, _ = repos
-    findings_repo.find_current.side_effect = (
-        lambda case_id, scope, document_id, fingerprint: None if fingerprint == "gone:1" else {"id": "row"}
-    )
+    findings_repo.find_current_many.side_effect = _rows(lambda fingerprint: None if fingerprint == "gone:1" else {"id": "row"})
     response = client.put(_VERDICTS, json={"verdicts": [_VERDICT, {**_VERDICT, "fingerprint": "gone:1"}]})
     assert response.status_code == 409
     assert "newer run" in response.json()["detail"]
-    findings_repo.set_verdict.assert_not_called()
+    findings_repo.set_verdicts.assert_not_called()
     assert client.put(_VERDICTS, json={"verdicts": []}).status_code == 422
 
 
@@ -202,7 +220,7 @@ def test_a_case_finding_is_looked_up_without_a_document(repos) -> None:
     findings_repo, document_repo = repos
     response = client.put(_VERDICTS, json={"verdicts": [{"scope": "case", "fingerprint": "xd:1", "verdict": "correct"}]})
     assert response.status_code == 200
-    findings_repo.find_current.assert_called_once_with(CASE_ID, "case", None, "xd:1")
+    findings_repo.find_current_many.assert_called_once_with(CASE_ID, "case", None, ["xd:1"])
     document_repo.get_document.assert_not_called()
 
 
@@ -314,7 +332,7 @@ def test_a_saved_review_is_recorded_per_document_with_the_officer(repos, publish
 
 def test_a_review_that_fails_to_save_records_nothing(repos, published_events) -> None:
     findings_repo, _ = repos
-    findings_repo.set_verdict.side_effect = RuntimeError("supabase down")
+    findings_repo.set_verdicts.side_effect = RuntimeError("supabase down")
     assert client.put(_VERDICTS, json={"verdicts": [_VERDICT]}).status_code == 502
     assert published_events == []
 
@@ -357,7 +375,7 @@ def test_a_case_created_without_reviews_takes_none(repos, method, path, body) ->
     assert response.status_code == 409
     assert response.json()["detail"] == "This case was created without finding reviews."
     findings_repo.list_reviews_for_case.assert_not_called()
-    findings_repo.set_verdict.assert_not_called()
+    findings_repo.set_verdicts.assert_not_called()
     findings_repo.add_missed.assert_not_called()
 
 
@@ -374,11 +392,11 @@ def test_every_verdict_is_saved_as_feedback_and_clearing_one_withdraws_it(repos)
             {**_VERDICT, "fingerprint": "gone_tool:1", "verdict": None},
         ]})
     assert response.status_code == 200
-    saved = [c.kwargs for c in feedback_repo.save.call_args_list]
+    [saved] = [c.args[0] for c in feedback_repo.save_many.call_args_list]
     assert [(k["verdict"], k["reason"], k["note"], k["check_name"]) for k in saved] == [
         ("wrong", "other", "Stamp is a watermark", "numerical_checks_tool"), ("correct", None, None, "spelling_tool"),
     ]
-    feedback_repo.withdraw.assert_called_once_with("v:gone_tool:1")
+    feedback_repo.withdraw_many.assert_called_once_with(["v:gone_tool:1"])
 
 
 def test_a_reason_goes_with_a_false_alarm_only(repos) -> None:
@@ -393,41 +411,41 @@ def test_a_false_alarm_must_say_why_and_other_needs_a_note(repos) -> None:
     assert client.put(_VERDICTS, json={"verdicts": [wrong]}).status_code == 422
     assert client.put(_VERDICTS, json={"verdicts": [{**wrong, "reason": "other"}]}).status_code == 422
     assert client.put(_VERDICTS, json={"verdicts": [{**wrong, "reason": "other", "note": "   "}]}).status_code == 422
-    findings_repo.set_verdict.assert_not_called()
+    findings_repo.set_verdicts.assert_not_called()
     response = client.put(_VERDICTS, json={"verdicts": [{**wrong, "reason": "other", "note": "  Stamp is a watermark  "}]})
     assert response.status_code == 200
-    assert findings_repo.set_verdict.call_args.args[3:] == ("other", "Stamp is a watermark")
+    assert findings_repo.set_verdicts.call_args.args[3:] == ("other", "Stamp is a watermark")
 
 
 @pytest.mark.parametrize("set_aside", [{"agent_decision": "dismissed"}, {"agent_decision": "accepted", "severity": "info"}])
 def test_agreeing_with_the_agents_that_a_finding_is_set_aside_needs_no_reason(repos, set_aside) -> None:
     """Unticking a set-aside finding saves "wrong" (a false alarm, as the agents said): nothing to give a reason for."""
     findings_repo, _ = repos
-    findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+    findings_repo.find_current_many.side_effect = _rows(lambda fingerprint: {
         "id": f"row:{fingerprint}", "check_name": "spelling_tool", "summary": "A finding", **set_aside,
-    }
+    })
     response = client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "wrong"}]})
 
     assert response.status_code == 200
-    assert findings_repo.set_verdict.call_args.args[1:] == ("wrong", TEST_USER, None, None)
+    assert findings_repo.set_verdicts.call_args.args[1:] == ("wrong", TEST_USER, None, None)
 
 
 def test_a_false_alarm_on_a_finding_the_agents_kept_still_needs_a_reason(repos) -> None:
     findings_repo, _ = repos
-    findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+    findings_repo.find_current_many.side_effect = _rows(lambda fingerprint: {
         "id": f"row:{fingerprint}", "check_name": "spelling_tool", "summary": "A finding",
         "agent_decision": "accepted", "severity": "medium",
-    }
+    })
     response = client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "wrong"}]})
 
     assert response.status_code == 422 and "needs a reason" in response.json()["detail"]
-    findings_repo.set_verdict.assert_not_called()
+    findings_repo.set_verdicts.assert_not_called()
 
 
 def _set_aside_rows(findings_repo) -> None:
-    findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+    findings_repo.find_current_many.side_effect = _rows(lambda fingerprint: {
         "id": f"row:{fingerprint}", "check_name": "spelling_tool", "summary": "A finding", "agent_decision": "dismissed",
-    }
+    })
 
 
 def test_saying_a_set_aside_finding_is_real_needs_a_reason_from_its_own_list(repos) -> None:
@@ -440,15 +458,15 @@ def test_saying_a_set_aside_finding_is_real_needs_a_reason_from_its_own_list(rep
     assert client.put(_VERDICTS, json={"verdicts": [real]}).status_code == 422
     assert client.put(_VERDICTS, json={"verdicts": [{**real, "reason": "tool_misread"}]}).status_code == 422
     assert client.put(_VERDICTS, json={"verdicts": [{**real, "reason": "other"}]}).status_code == 422  # other needs a note
-    findings_repo.set_verdict.assert_not_called()
+    findings_repo.set_verdicts.assert_not_called()
 
     response = client.put(_VERDICTS, json={"verdicts": [{**real, "reason": "explanation_not_valid"}]})
     assert response.status_code == 200
-    assert findings_repo.set_verdict.call_args.args[1:] == ("correct", TEST_USER, "explanation_not_valid", None)
+    assert findings_repo.set_verdicts.call_args.args[1:] == ("correct", TEST_USER, "explanation_not_valid", None)
 
     response = client.put(_VERDICTS, json={"verdicts": [{**real, "reason": "other", "note": "Same payee on three documents"}]})
     assert response.status_code == 200
-    assert findings_repo.set_verdict.call_args.args[3:] == ("other", "Same payee on three documents")
+    assert findings_repo.set_verdicts.call_args.args[3:] == ("other", "Same payee on three documents")
 
 
 def test_a_set_aside_finding_left_alone_takes_no_reason(repos) -> None:
@@ -461,9 +479,9 @@ def test_a_set_aside_finding_left_alone_takes_no_reason(repos) -> None:
 
 def test_a_kept_finding_found_real_takes_no_reason_and_a_set_aside_reason_does_not_fit_a_false_alarm(repos) -> None:
     findings_repo, _ = repos
-    findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+    findings_repo.find_current_many.side_effect = _rows(lambda fingerprint: {
         "id": f"row:{fingerprint}", "check_name": "spelling_tool", "summary": "A finding", "agent_decision": "accepted",
-    }
+    })
 
     assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "correct"}]}).status_code == 200
     assert client.put(_VERDICTS, json={"verdicts": [{**_VERDICT, "verdict": "correct", "reason": "explanation_not_valid"}]}).status_code == 422
@@ -473,17 +491,17 @@ def test_a_kept_finding_found_real_takes_no_reason_and_a_set_aside_reason_does_n
 
 def test_a_group_mixing_both_saves_nothing_when_one_kept_finding_lacks_a_reason(repos) -> None:
     findings_repo, _ = repos
-    findings_repo.find_current.side_effect = lambda case_id, scope, document_id, fingerprint: {
+    findings_repo.find_current_many.side_effect = _rows(lambda fingerprint: {
         "id": f"row:{fingerprint}", "check_name": "spelling_tool", "summary": "A finding",
         "agent_decision": "dismissed" if fingerprint == "set-aside:1" else "accepted",
-    }
+    })
     response = client.put(_VERDICTS, json={"verdicts": [
         {**_VERDICT, "fingerprint": "set-aside:1", "verdict": "wrong"},
         {**_VERDICT, "fingerprint": "kept:1", "verdict": "wrong"},
     ]})
 
     assert response.status_code == 422
-    findings_repo.set_verdict.assert_not_called()
+    findings_repo.set_verdicts.assert_not_called()
 
 
 def test_a_missed_issue_needs_a_note_and_is_saved_as_feedback(repos) -> None:
@@ -515,5 +533,5 @@ def test_deleting_a_missed_issue_or_clearing_a_verdict_withdraws_its_feedback(re
 def test_feedback_that_fails_to_save_never_fails_the_review(repos) -> None:
     with patch("app.routers.finding_reviews.feedback_repository") as feedback_repo:
         feedback_repo.verdict_key.return_value = "v:x"
-        feedback_repo.save.side_effect = RuntimeError("db down")
+        feedback_repo.save_many.side_effect = RuntimeError("db down")
         assert client.put(_VERDICTS, json={"verdicts": [_VERDICT]}).status_code == 200

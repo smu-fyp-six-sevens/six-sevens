@@ -21,7 +21,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from ...config import settings
 from ...cpu_pool import queue_clock
 from ..tool_spans import traced_tool_call
-from .tools import _result
+from .tools import tool_result
 
 logger = logging.getLogger("classifier_pipeline.langgraph.detection.tool_timeout")
 
@@ -106,7 +106,7 @@ def guard_tool(tool: BaseTool) -> BaseTool:
             else:
                 reason = f"Execution timeout: no result within {seconds:g} seconds."
             logger.error("%s did not finish: %s", tool.name, reason)
-            return _result(tool.name, [], unable=reason)
+            return tool_result(tool.name, [], unable=reason)
 
     tool.coroutine = limited
     _originals[limited] = original
