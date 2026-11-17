@@ -205,6 +205,9 @@ def prometheus_metrics() -> Response:
     body, content_type = metrics.exposition()
     return Response(content=body, media_type=content_type)
 
+# Inside CORS, so its refusals carry CORS headers too.
+app.middleware("http")(auth.session_cookies)
+
 if settings.CORS_IN_APP:
     app.add_middleware(
         CORSMiddleware,
@@ -258,6 +261,7 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
+    # For scripts and probes, which send it as a bearer header; the browser uses the HttpOnly cookie set beside it.
     token: str
     username: str
 
@@ -265,7 +269,7 @@ class LoginResponse(BaseModel):
 if "api" in ROLES:
 
     @app.post("/auth/login", response_model=LoginResponse)
-    async def login(body: LoginRequest) -> LoginResponse:
+    async def login(body: LoginRequest, response: Response) -> LoginResponse:
         # The password hash is deliberately slow, so it runs off the event loop.
         username = await asyncio.to_thread(auth.verify_credentials, body.username, body.password)
         if username is None:
@@ -278,4 +282,11 @@ if "api" in ROLES:
                 detail="Invalid username or password",
             )
         await events.record(events.Event(type=types.AUTH_LOGIN, actor_type="user", actor=username))
-        return LoginResponse(token=auth.create_token(username), username=username)
+        token = auth.create_token(username)
+        auth.set_session_cookie(response, token)
+        return LoginResponse(token=token, username=username)
+
+    @app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+    async def logout(response: Response) -> None:
+        """Clears the session cookie. Open like /auth/login: signing out needs no valid session."""
+        auth.clear_session_cookie(response)

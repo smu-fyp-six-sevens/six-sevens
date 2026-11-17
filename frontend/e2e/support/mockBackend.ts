@@ -505,19 +505,27 @@ export class MockBackend {
     const json = (data: unknown, status = 200) =>
       route.fulfill({ status, headers: corsHeaders(), contentType: 'application/json', body: JSON.stringify(data) });
 
-    if (this.sessionExpired && path !== '/auth/login') {
+    if (this.sessionExpired && path !== '/auth/login' && path !== '/auth/logout') {
       return json({ detail: 'Invalid or expired token' }, 401);
+    }
+    // Like auth.session_cookies: a write without the CSRF header is refused (the page always sends it).
+    if (!['GET', 'HEAD'].includes(method) && !request.headers()['x-requested-with']) {
+      return json({ detail: 'Missing X-Requested-With header' }, 403);
     }
 
     // --- auth -------------------------------------------------------------
     if (method === 'POST' && path === '/auth/login') {
       const { username, password } = (body ?? {}) as { username?: string; password?: string };
       if (username === this.credentials.username && password === this.credentials.password) {
-        // Shaped like the real token: base64url({"sub": username}) + "." + signature.
+        // Shaped like the real token: base64url({"sub": username}) + "." + signature. The real backend also sets
+        // the HttpOnly session cookie; the page never reads either.
         const payload = Buffer.from(JSON.stringify({ sub: username })).toString('base64url');
         return json({ token: `${payload}.test-signature`, username });
       }
       return json({ detail: 'Invalid username or password' }, 401);
+    }
+    if (method === 'POST' && path === '/auth/logout') {
+      return route.fulfill({ status: 204, headers: corsHeaders() });
     }
     if (method === 'POST' && path === '/ws/tickets') {
       return json({ ticket: 'test-ticket' });
@@ -581,6 +589,27 @@ export class MockBackend {
           purpose: 'Assesses evidence and counter-evidence for proposed hypotheses.', limitations: 'May return inconclusive.',
           model: 'claude-sonnet', prompt_version: 'case-analysis-v1', tools: ['Cross-document evidence tools'],
           access_summary: ['Read approved case facts and test results'], call_budget: '20 calls across case-analysis agents per run', owner: null,
+          prompt_options: [],
+        },
+        {
+          id: 'evidence_requests', name: 'Evidence request recommender', group: 'Case analysis',
+          purpose: 'Recommends the additional documents to ask the client for.', limitations: 'Only suggests; code re-scores.',
+          model: 'claude-haiku', prompt_version: 'requests-v2-case-context', tools: [],
+          access_summary: ['Read the case findings and document list'], call_budget: 'One call per case analysis', owner: null,
+          prompt_options: [],
+        },
+        {
+          id: 'case_summary', name: 'Case summary writer', group: 'Case analysis',
+          purpose: 'Writes the case summary from the findings.', limitations: 'Never sets the score.',
+          model: 'claude-haiku', prompt_version: 'v1', tools: [],
+          access_summary: ['Read the case findings and score'], call_budget: 'One call per case analysis', owner: null,
+          prompt_options: [],
+        },
+        {
+          id: 'adverse_media', name: 'Adverse media check', group: 'Case analysis',
+          purpose: 'Searches trusted sites for recent negative news about the company.', limitations: 'A note only, never scored.',
+          model: 'claude-haiku', prompt_version: 'v1', tools: ['web_search'],
+          access_summary: ['Read the company name', 'Search the web'], call_budget: 'One call per case analysis', owner: null,
           prompt_options: [],
         },
       ];
@@ -1147,10 +1176,16 @@ const MINIMAL_PDF =
   '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
   '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n';
 
+// The page sends its session cookie (credentials: 'include'), and a browser refuses a credentialed reply that names
+// no exact origin, as Kong's does (playwright.config.ts serves the app here).
+const PAGE_ORIGIN = 'http://localhost:5174';
+
 function corsHeaders(): Record<string, string> {
   return {
-    'access-control-allow-origin': '*',
-    'access-control-allow-headers': '*',
-    'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+    'access-control-allow-origin': PAGE_ORIGIN,
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-headers': 'Content-Type, X-Requested-With, X-Request-ID',
+    'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+    vary: 'Origin',
   };
 }

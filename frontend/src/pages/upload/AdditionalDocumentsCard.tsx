@@ -7,8 +7,8 @@ const formatMoney = (value: number) =>
   value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // "+54,080.00 (+18.3%)"
-function formatChange(previous: number | null, current: number): string {
-  if (previous == null) return '';
+function formatChange(previous: number | null, current: number | null): string {
+  if (previous == null || current == null) return '';
   const increase = current - previous;
   const sign = increase >= 0 ? '+' : '-';
   const percent = previous ? ` (${sign}${Math.abs((increase / previous) * 100).toFixed(1)}%)` : '';
@@ -33,7 +33,7 @@ function BreakdownTable({ total }: { total: RecommendationItem }) {
           <tr key={index} className={line === total ? 'supporting-document-breakdown-total' : undefined}>
             <th scope="row">{line.description}</th>
             <td>{line.prior_amount == null ? '' : formatMoney(line.prior_amount)}</td>
-            <td>{formatMoney(line.amount)}</td>
+            <td>{line.amount == null ? '' : formatMoney(line.amount)}</td>
             <td>{formatChange(line.prior_amount, line.amount)}</td>
           </tr>
         ))}

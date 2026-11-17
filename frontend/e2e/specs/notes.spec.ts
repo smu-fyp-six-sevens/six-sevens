@@ -10,7 +10,7 @@ import { loadFixture } from '../support/fixtures';
 test.describe('Case and document notes @SCRUM-81', () => {
   test('an officer can edit and delete their own notes, but not another officer\'s', async ({ page, backend }) => {
     // A token naming the mock backend's officer, so the page knows which notes are theirs.
-    await page.addInitScript(() => localStorage.setItem('authToken', `${btoa(JSON.stringify({ sub: 'officer' }))}.sig`));
+    await page.addInitScript(() => localStorage.setItem('authUser', 'officer'));
     const fixture = loadFixture(backend, 'anchorpoint');
     const note = (id: string, author: string, body: string) => ({
       id,
@@ -52,7 +52,7 @@ test.describe('Case and document notes @SCRUM-81', () => {
   });
 
   test('deleting a note that has replies keeps the replies under a placeholder', async ({ page, backend }) => {
-    await page.addInitScript(() => localStorage.setItem('authToken', `${btoa(JSON.stringify({ sub: 'officer' }))}.sig`));
+    await page.addInitScript(() => localStorage.setItem('authUser', 'officer'));
     const fixture = loadFixture(backend, 'anchorpoint');
     const row = { case_id: fixture.case.id, document_id: null, edited_at: null, deleted_at: null };
     backend.notes.push(
@@ -160,7 +160,7 @@ test.describe('Attach officer notes @sprint4 @SCRUM-81', () => {
 
   test('CM-036 a note on an approved document can be added to and replied to while the document stays locked @CM-036', async ({ page, backend }) => {
     // A token naming the mock backend's officer, so the page knows the note is theirs to edit.
-    await page.addInitScript(() => localStorage.setItem('authToken', `${btoa(JSON.stringify({ sub: 'officer' }))}.sig`));
+    await page.addInitScript(() => localStorage.setItem('authUser', 'officer'));
     const fixture = loadFixture(backend, 'anchorpoint');
     const payslip = fixture.document('Payslip');
     payslip.status = 'approved';

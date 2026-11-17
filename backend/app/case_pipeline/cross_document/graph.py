@@ -12,6 +12,7 @@ from langgraph.graph import END, StateGraph
 from ...llm_io import probability
 from ..models import CrossDocFinding, Hypothesis
 from .agents import adjudicate, gather_evidence, hypothesise
+from .bias import has_protected_text
 from .deterministic import brief, restates_a_code_finding, run_deterministic_checks
 from .evidence import CaseContext
 from .feedback import ids_by_category, load_feedback, render as render_feedback
@@ -30,6 +31,8 @@ class AnalysisState(TypedDict, total=False):
     tool_calls: list[dict[str, Any]]
     consistent_checks: list[str]
     agent_decisions: list[dict[str, Any]]
+    # Hypotheses the judge couldn't settle, with the document it says would: what the evidence requests start from.
+    open_questions: list[dict[str, str]]
 
 
 def _consistent_line(context: CaseContext, call: dict[str, Any]) -> str | None:
@@ -83,6 +86,7 @@ def _finalise_node(state: AnalysisState) -> dict:
     tool_calls: list[dict[str, Any]] = []
     consistent: list[str] = []
     agent_decisions: list[dict[str, Any]] = []
+    open_questions: list[dict[str, str]] = []
     hypotheses = state.get("hypotheses") or []
     agent_decisions.append({
         "agent": "hypothesis_planner",
@@ -124,13 +128,28 @@ def _finalise_node(state: AnalysisState) -> dict:
         else:
             # Kept only as a count and a reason in the run's audit, never against the case.
             discarded.append(reason)
+            question = _open_question(hypothesis, verdict)
+            if question is not None:
+                open_questions.append(question)
     return {
         "findings": findings,
         "discarded": discarded,
         "tool_calls": tool_calls,
         "consistent_checks": consistent,
         "agent_decisions": agent_decisions,
+        "open_questions": open_questions,
     }
+
+
+def _open_question(hypothesis: Hypothesis, verdict: dict[str, Any] | None) -> dict[str, str] | None:
+    """An unsettled hypothesis and the document the judge says would settle it; None when it names none."""
+    if verdict is None or verdict.get("conclusive") is True:
+        return None
+    document = " ".join(str(verdict.get("would_settle_with") or "").split())[:200]
+    # Claims were screened before testing; the judge's own words are screened again before they reach a request.
+    if not document or has_protected_text(f"{hypothesis.claim} {document}"):
+        return None
+    return {"question": hypothesis.claim[:300], "would_settle_with": document}
 
 
 def build_cross_document_graph():

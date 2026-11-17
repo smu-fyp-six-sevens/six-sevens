@@ -9,7 +9,7 @@ test.describe('AI agents registry', () => {
     await expect(page).toHaveURL('/agents');
     await expect(page.getByRole('heading', { name: 'Know Your Agents' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Agent Registry' })).toBeVisible();
-    await expect(page.getByText('8 roles')).toBeVisible();
+    await expect(page.getByText('11 roles')).toBeVisible();
     for (const name of ['Document classifier', 'Field extractor', 'Detection lead', 'Layout & Rendering Analyst', 'Hypothesis planner']) {
       await expect(page.getByRole('button', { name: new RegExp(`^${name},`) })).toBeVisible();
     }

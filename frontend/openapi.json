@@ -7240,11 +7240,18 @@
         "type": "object"
       },
       "RecommendationItem": {
-        "description": "One thing a supporting document is requested for: a bank statement\ntransaction, or a line of a financial statement.",
+        "description": "One thing a supporting document is requested for: a bank statement\ntransaction, a line of a financial statement, a month no statement\ncovers, or an address the documents disagree on.",
         "properties": {
           "amount": {
-            "title": "Amount",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
           },
           "breakdown": {
             "items": {
@@ -7844,7 +7851,11 @@
               "purchase_order",
               "sales_invoice",
               "related_party_repayment_evidence",
-              "bank_loan_evidence"
+              "bank_loan_evidence",
+              "current_address_evidence",
+              "missing_statement_months",
+              "customer_contract",
+              "facility_letter"
             ],
             "title": "Document Type",
             "type": "string"
@@ -8914,6 +8925,18 @@
           }
         },
         "summary": "Login"
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "description": "Clears the session cookie. Open like /auth/login: signing out needs no valid session.",
+        "operationId": "logout_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout"
       }
     },
     "/cases": {

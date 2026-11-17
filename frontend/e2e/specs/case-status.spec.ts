@@ -78,7 +78,7 @@ test.describe('Track case status @SCRUM-80', () => {
   });
 
   test('a finalised case is view-only, but notes can still be added @SCRUM-80', async ({ page, backend }) => {
-    await page.addInitScript(() => localStorage.setItem('authToken', `${btoa(JSON.stringify({ sub: 'officer' }))}.sig`));
+    await page.addInitScript(() => localStorage.setItem('authUser', 'officer'));
     seedCase(backend, { status: 'finalised' });
     const document = makeDocument({
       id: 'doc-acme', case_id: 'case-acme', filename: 'bank-statement.pdf', status: 'analyzed',

@@ -19,7 +19,8 @@ Open cloud work only: delete an item once it's done, and this file once it's emp
 
 ## Open decisions
 
-1. **Argo CD:** replace Cloud Deploy or run beside it, and how image digests reach git (CI commits them to a values file, or Argo CD Image Updater).
+1. **Argo CD** (deprioritised, so only if it's picked up): replace Cloud Deploy or run beside it, and how image digests reach git (CI commits them to a values file, or Argo CD Image Updater).
+2. **Phase 6 timing:** remove Cloud Run before the demo (the table says by 2026-11-18) or after it, keeping it as the fallback until then.
 
 ## To do
 
@@ -30,17 +31,19 @@ Open cloud work only: delete an item once it's done, and this file once it's emp
 
 ## Stage 2 (after the supervisor's feedback, 2026-10-26)
 
-Steps 1–6 before the final presentation (2026-11-20); the rest if time is left.
+**Before the final presentation (2026-11-20):** only 1 and 2. The rest after it.
 
-1. **Load test, the rest:** the same run on the compose stack (`deploy/loadtest/compose.yaml`, Pub/Sub emulator; the one-process result is in `HOW_IT_WORKS.md` §9); for the presentation, a live run on production with the Workloads page and Grafana showing a second detection-worker being added.
-2. **Tune autoscaling** (KEDA, pod sizes) from the results, recording before and after.
-3. **Failure tests** on production (above).
+1. **Live load run for the presentation:** on production, with the Workloads page and Grafana showing a second detection-worker being added (the one-process load test is done: `HOW_IT_WORKS.md` §9).
+2. **Failure tests** on production (above).
+3. **Tune autoscaling** (KEDA, pod sizes) from the results, recording before and after.
 4. **Accuracy from officer verdicts** (below).
-5. **Supply-chain extras left:** Trivy's high findings blocking (it reports only today); CodeQL and GitHub's own attestations need a paid plan on a private repository.
-6. **Argo CD** (above).
-7. **Event contracts:** every event type checked against a schema in CI, so no service can publish what another can't read.
-8. **Architecture decision records:** one short page per big decision (events over direct calls, GKE over Cloud Run, Claude only, the score set by code, no staging), in `docs/adr/`.
-9. **Shared rate budget** (above).
+5. **Load test on the compose stack** (`deploy/loadtest/compose.yaml`, Pub/Sub emulator).
+6. **Event contracts:** every event type checked against a schema in CI, so no service can publish what another can't read.
+7. **Architecture decision records:** one short page per big decision (events over direct calls, GKE over Cloud Run, Claude only, the score set by code, no staging), in `docs/adr/`.
+8. **Shared rate budget** (above).
+9. **Argo CD** (above): deprioritised (2026-11-17), at most closer to the end, since it adds cost.
+
+**Decided (2026-11-17):** Trivy blocks on our backend images only (built: `HOW_IT_WORKS.md` §9); CodeQL and GitHub's own attestations are skipped (they need a paid plan on a private repository; signing, SBOMs and SLSA provenance are built instead).
 
 **Not doing:** staging (decided; its design is in `HOW_IT_WORKS.md` §9); nightly evals or model-comparison runs (they spend tokens).
 

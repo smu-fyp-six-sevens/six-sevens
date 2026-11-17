@@ -1,6 +1,6 @@
 # Kong DB-less routes (HOW_IT_WORKS.md §9), rendered by render.sh at start.
 # Rate limits count per Kong instance (policy: local): login and upload per client address (render.sh sets the
-# real-IP header), the token-spending routes per officer (their bearer token).
+# real-IP header), the token-spending routes per officer (their session cookie).
 # ${API_URL}, ${AUDIT_URL}: upstreams (http://api:8000 locally, https://<service>.run.app on Cloud Run).
 # ${PRESERVE_HOST}: false on Cloud Run, which routes by Host. ${CORS_ORIGINS}: the frontend origins, quoted.
 # ${GATEWAY_SECRET}: the shared secret the upstreams check (Secret Manager on Cloud Run; a fixed value in compose).
@@ -31,7 +31,8 @@ services:
         plugins:
           - name: rate-limiting
             config: { minute: 60, policy: local }
-      # Routes that spend Claude tokens: limited per officer (their token), so a stolen token can't loop them.
+      # Routes that spend Claude tokens: limited per officer (their session cookie; a script without one counts by
+      # address), so a stolen session can't loop them. The cookie is renewed at most hourly (auth.RENEW_AFTER_SECONDS).
       - name: token-spending
         paths:
           - "~/documents/[^/]+/retry$"
@@ -44,7 +45,7 @@ services:
         preserve_host: ${PRESERVE_HOST}
         plugins:
           - name: rate-limiting
-            config: { minute: 10, hour: 60, policy: local, limit_by: header, header_name: Authorization }
+            config: { minute: 10, hour: 60, policy: local, limit_by: header, header_name: Cookie }
       # The on-demand checks (routers/detection.py); some run vision.
       - name: on-demand-checks
         paths: ["~/documents/[^/]+/detection/[a-z-]+$"]
@@ -54,7 +55,7 @@ services:
         preserve_host: ${PRESERVE_HOST}
         plugins:
           - name: rate-limiting
-            config: { minute: 30, hour: 300, policy: local, limit_by: header, header_name: Authorization }
+            config: { minute: 30, hour: 300, policy: local, limit_by: header, header_name: Cookie }
       # Workers' push endpoints and every service's metrics are never reachable through the gateway.
       - name: internal-only
         paths: ["/push", "/metrics"]
@@ -75,7 +76,8 @@ plugins:
     config:
       origins: [${CORS_ORIGINS}]
       methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
-      headers: [Authorization, Content-Type, X-Request-ID]
+      # X-Requested-With: the backend's CSRF guard on cookie-authenticated writes (backend app/auth.py).
+      headers: [Authorization, Content-Type, X-Request-ID, X-Requested-With]
       exposed_headers: [X-Request-ID, Content-Disposition]
       credentials: true
       max_age: 600

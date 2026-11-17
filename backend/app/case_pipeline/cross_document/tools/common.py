@@ -32,11 +32,13 @@ MAX_ROWS = 10
 COMPUTED_TOOLS = frozenset({
     "transaction_stats", "query_transactions", "top_counterparties", "monthly_flow", "compare_periods",
     "find_repeated_transactions", "card_usage_tool", "recurring_payment_amounts",
+    "counterparty_round_trips", "customer_concentration", "statement_coverage",
 })
 # Tools whose very job is to relate documents to each other.
 CROSS_DOCUMENT_TOOLS = frozenset({
     "get_business_profile", "compare_identifiers", "compare_people", "compare_linked_people", "compare_periods",
     "company_name_consistency_tool", "address_consistency_tool",
+    "salary_credit_match", "revenue_vs_bank_credits", "assessed_income_vs_profit", "statement_coverage",
 })
 
 

@@ -1,56 +1,68 @@
-// Shared bearer-token auth (see backend/app/auth.py) — every backend route
-// except /health and /auth/login requires this. authFetch is a drop-in
-// replacement for fetch() that attaches the token and, on a 401 (missing,
-// expired, or never-logged-in), clears it and bounces to /login.
+// The session lives in an HttpOnly cookie the backend sets at login (backend/app/auth.py), so no script on the page
+// can read it. authFetch is a drop-in replacement for fetch() that sends the cookie and the X-Requested-With header
+// the backend requires on a write (its CSRF guard), and on a 401 (expired or never signed in) forgets the officer and
+// bounces to /login. Every request renews the session, so an officer at work is never signed out.
 
 export const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
-const TOKEN_KEY = 'authToken';
+// Who is signed in, for display only (the header, note authorship): never a credential.
+const USERNAME_KEY = 'authUser';
 
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+// A token an earlier build kept in localStorage: dropped, so it can't be read from there any more.
+try {
+  localStorage.removeItem('authToken');
+} catch {
+  // storage unavailable (private mode): nothing stored to drop
 }
 
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-}
-
-// Who the backend issued the token to (the "sub" in its payload), or null when there is no
-// token or it isn't one of ours. Display only: the backend reads the token itself.
 export function getUsername(): string | null {
   try {
-    const payload = getToken()?.split('.')[0];
-    if (!payload) return null;
-
-    const { sub } = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
-
-    return typeof sub === 'string' && sub ? sub : null;
+    return localStorage.getItem(USERNAME_KEY) || null;
   } catch {
     return null;
   }
 }
 
-export async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const token = getToken();
-  const headers = new Headers(options.headers);
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
+export function isSignedIn(): boolean {
+  return getUsername() !== null;
+}
 
+export function rememberSignIn(username: string): void {
+  localStorage.setItem(USERNAME_KEY, username);
+}
+
+export function forgetSignIn(): void {
+  localStorage.removeItem(USERNAME_KEY);
+}
+
+/** Every call to the backend: the session cookie and the CSRF header travel with it. */
+export function apiInit(options: RequestInit = {}): RequestInit {
+  const headers = new Headers(options.headers);
+  headers.set('X-Requested-With', 'fetch');
+  return { ...options, headers, credentials: 'include' };
+}
+
+/** Clears the session cookie (the backend's job: the page can't touch an HttpOnly cookie), then forgets the officer. */
+export async function signOut(): Promise<void> {
+  try {
+    await fetch(`${apiBaseUrl}/auth/logout`, apiInit({ method: 'POST' }));
+  } catch (error) {
+    console.error('Sign-out request failed:', error);
+  }
+  forgetSignIn();
+}
+
+export async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
   // fetch only throws when the request never got a response (server down, offline) or was aborted. No response is
   // handed on as a failed response (status 0), so the caller's assertOk words it like a 5xx; an abort still throws.
-  const response = await fetch(`${apiBaseUrl}${path}`, { ...options, headers }).catch((error: unknown) => {
+  const response = await fetch(`${apiBaseUrl}${path}`, apiInit(options)).catch((error: unknown) => {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
     console.error(`No response from ${path}:`, error);
     return Response.error();
   });
 
   if (response.status === 401) {
-    clearToken();
+    forgetSignIn();
     if (window.location.pathname !== '/login') {
       window.location.assign('/login');
     }

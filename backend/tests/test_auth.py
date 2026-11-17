@@ -150,7 +150,9 @@ def test_an_unknown_name_still_runs_one_hash(monkeypatch: pytest.MonkeyPatch):
 
 # The only routes that answer without a login: probes and the login itself. Pub/Sub's /push and /metrics are not in
 # the API schema; the socket takes a ticket.
-_PUBLIC_ROUTES = {("GET", "/health"), ("GET", "/healthz"), ("GET", "/health/db"), ("POST", "/auth/login")}
+_PUBLIC_ROUTES = {
+    ("GET", "/health"), ("GET", "/healthz"), ("GET", "/health/db"), ("POST", "/auth/login"), ("POST", "/auth/logout"),
+}
 _METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 
 
@@ -199,3 +201,144 @@ def test_a_token_with_another_purpose_is_refused():
     other = auth._signed({"purpose": "reset", "sub": "alice", "exp": int(time.time()) + 60})
     with pytest.raises(HTTPException):
         require_auth(f"Bearer {other}")
+
+
+# --- The session cookie (the browser's credential) ---------------------------------------------------------------
+
+def _cookie_client() -> TestClient:
+    # A client of its own, so no cookie leaks into the other tests' shared one.
+    return TestClient(app)
+
+
+def _session_header(token: str) -> dict[str, str]:
+    # Sent by hand: the cookie is Secure, which an HTTP test client won't send back by itself.
+    return {"Cookie": f"{auth.SESSION_COOKIE}={token}"}
+
+
+@pytest.fixture
+def whoami():
+    seen: list[str] = []
+
+    @app.get("/_whoami_cookie")
+    def read(user: auth.CurrentUser) -> dict:
+        seen.append(user)
+        return {"user": user}
+
+    @app.post("/_whoami_cookie")
+    def write(user: auth.CurrentUser) -> dict:
+        seen.append(user)
+        return {"user": user}
+
+    yield seen
+    app.router.routes[:] = [r for r in app.router.routes if getattr(r, "path", None) != "/_whoami_cookie"]
+
+
+def test_login_sets_an_httponly_secure_strict_cookie_holding_the_token():
+    response = _cookie_client().post("/auth/login", json={"username": "demo", "password": "s3cret"})
+    assert response.status_code == 200
+    header = response.headers["set-cookie"]
+    assert header.startswith(f"{auth.SESSION_COOKIE}={response.json()['token']};")
+    lowered = header.lower()
+    assert "httponly" in lowered and "secure" in lowered and "samesite=strict" in lowered and "path=/" in lowered
+    assert f"max-age={auth.TOKEN_TTL_SECONDS}" in lowered
+    assert "domain=" not in lowered  # host-only: the API's own host
+
+
+def test_a_failed_login_sets_no_cookie():
+    response = _cookie_client().post("/auth/login", json={"username": "demo", "password": "wrong"})
+    assert response.status_code == 401
+    assert "set-cookie" not in response.headers
+
+
+def test_the_cookie_alone_unlocks_a_read(whoami):
+    token = auth.create_token("demo")
+    response = _cookie_client().get("/_whoami_cookie", headers=_session_header(token))
+    assert response.status_code == 200
+    assert whoami == ["demo"]
+
+
+def test_a_forged_or_expired_cookie_is_refused(whoami, monkeypatch: pytest.MonkeyPatch):
+    client_ = _cookie_client()
+    assert client_.get("/_whoami_cookie", headers=_session_header("forged.token")).status_code == 401
+    monkeypatch.setattr(auth, "TOKEN_TTL_SECONDS", -1)
+    expired = auth.create_token("demo")
+    assert client_.get("/_whoami_cookie", headers=_session_header(expired)).status_code == 401
+    assert whoami == []
+
+
+def test_a_websocket_ticket_in_the_cookie_is_refused(whoami):
+    ticket = auth.create_ws_ticket("demo", "case-1")
+    assert _cookie_client().get("/_whoami_cookie", headers=_session_header(ticket)).status_code == 401
+
+
+def test_a_cookie_write_without_the_csrf_header_is_refused_before_the_route_runs(whoami):
+    response = _cookie_client().post("/_whoami_cookie", headers=_session_header(auth.create_token("demo")))
+    assert response.status_code == 403
+    assert whoami == []
+
+
+def test_a_cookie_write_with_the_csrf_header_goes_through(whoami):
+    headers = {**_session_header(auth.create_token("demo")), "X-Requested-With": "fetch"}
+    assert _cookie_client().post("/_whoami_cookie", headers=headers).status_code == 200
+    assert whoami == ["demo"]
+
+
+def test_a_bearer_write_needs_no_csrf_header(whoami):
+    # A browser never adds a bearer header by itself, so a script's call isn't forgeable cross-site.
+    headers = {"Authorization": f"Bearer {auth.create_token('demo')}"}
+    assert _cookie_client().post("/_whoami_cookie", headers=headers).status_code == 200
+
+
+def test_a_bearer_header_wins_over_the_cookie(whoami, two_accounts):
+    headers = {**_session_header(auth.create_token("demo")), "Authorization": f"Bearer {auth.create_token('bob')}"}
+    assert _cookie_client().get("/_whoami_cookie", headers=headers).status_code == 200
+    assert whoami == ["bob"]
+
+
+def test_a_malformed_authorization_header_is_not_saved_by_the_cookie(whoami):
+    headers = {**_session_header(auth.create_token("demo")), "Authorization": "Basic abc"}
+    assert _cookie_client().get("/_whoami_cookie", headers=headers).status_code == 401
+
+
+def test_a_fresh_session_is_not_renewed(whoami):
+    response = _cookie_client().get("/_whoami_cookie", headers=_session_header(auth.create_token("demo")))
+    assert "set-cookie" not in response.headers
+
+
+def test_an_aging_session_is_renewed_so_an_officer_at_work_stays_signed_in(whoami):
+    issued = int(time.time()) - auth.RENEW_AFTER_SECONDS - 5
+    old = auth._signed({"purpose": "login", "sub": "demo", "iat": issued, "exp": issued + auth.TOKEN_TTL_SECONDS})
+
+    response = _cookie_client().get("/_whoami_cookie", headers=_session_header(old))
+
+    assert response.status_code == 200
+    fresh = response.headers["set-cookie"].split(";", 1)[0].split("=", 1)[1]
+    payload = auth._login_payload(fresh)
+    assert payload is not None and payload["sub"] == "demo"
+    assert payload["exp"] >= time.time() + auth.TOKEN_TTL_SECONDS - 5  # a full idle window from now
+
+
+def test_a_refused_request_renews_nothing(whoami, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(auth, "RENEW_AFTER_SECONDS", 0)
+    response = _cookie_client().post("/_whoami_cookie", headers=_session_header(auth.create_token("demo")))
+    assert response.status_code == 403
+    assert "set-cookie" not in response.headers
+
+
+def test_a_bearer_request_is_never_given_a_cookie(whoami, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(auth, "RENEW_AFTER_SECONDS", 0)
+    headers = {"Authorization": f"Bearer {auth.create_token('demo')}"}
+    response = _cookie_client().get("/_whoami_cookie", headers=headers)
+    assert "set-cookie" not in response.headers
+
+
+def test_logout_clears_the_cookie_even_without_a_session():
+    response = _cookie_client().post("/auth/logout")
+    assert response.status_code == 204
+    header = response.headers["set-cookie"].lower()
+    assert header.startswith(f"{auth.SESSION_COOKIE}=") and "max-age=0" in header
+
+
+def test_logout_needs_no_csrf_header():
+    response = _cookie_client().post("/auth/logout", headers=_session_header(auth.create_token("demo")))
+    assert response.status_code == 204

@@ -5,12 +5,10 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 ## Handover documentation
 
 - **CPF rates each January.** *Issue:* the 2027 CPF table is a placeholder (2026's rates), so 2027 payslips skip the CPF checks unless `CPF_USE_PROVISIONAL_RATES` is on. CPF publishes new rates and ceilings every year, so GLDB's team will need to repeat this. *Do:* when CPF publishes 2027, replace the five 2027 rows and the ceiling in `fraud_detection/external_validation/sg_reference/cpf.py` and remove the date from `PROVISIONAL_RATE_TABLES`; write the yearly steps into the handover documentation.
-- **Supabase is in Seoul, not Singapore.** *Issue:* the project is in `ap-northeast-2`, so case data and files leave Singapore (PDPA, MAS outsourcing). A project's region can't be changed. *Do (after the demo, or by GLDB):* a new Supabase project in `ap-southeast-1`; `backend/sql/schema.sql` plus a copy of the data (`dr_drill.py`'s dump, restored there), the Storage files copied, Realtime and grants set up again; then the new `SUPABASE_URL` and secret key in Secret Manager and `backend/.env`, and restart the pods. About half a day, with a short write freeze.
 - **Database recovery steps.** *Issue:* the 1-hour recovery target (RTO) for losing the database isn't written up as steps. The drill (`HOW_IT_WORKS.md` §9) copied and restored it in 10 seconds; the rest of the hour is loading it into Supabase, updating the Supabase URL and key in Secret Manager if it's a new project, and restarting the pods. Not covered: uploaded files (Supabase Storage isn't in the copy), and how much data could be lost (RPO) depends on the Supabase plan (free: no self-service backups, only our own copies; Pro: daily backups). *Do:* write the recovery steps, the files caveat and the plan's backups into the handover documentation.
 
 ## Security
 
-- **Login token in `localStorage`.** *Issue:* the 7-day token sits in `localStorage`, so an injected script could read it (the CSP now makes that much harder). *Do:* a shorter token (`TOKEN_TTL_SECONDS` in `auth.py`, for example 12 hours).
 
 ## Product
 
@@ -34,7 +32,7 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 ## Case analysis (design: `HOW_IT_WORKS.md`, Step 6)
 
 - **Cancel the outdated run.** *Issue:* a replaced run finishes anyway and spends its calls; only its result is dropped (`superseded`).
-- **Reminder: make the case analysis and the recommended documents more powerful.** *Issue:* the analysis tests at most three hypotheses in one plan-then-judge pass, with the tools it has today; recommended documents come from three fixed rules (large trade transactions, related-party balances, borrowings up 40%). *Ideas:* more cross-document tools (salary credits against payslips, CPF against payroll, invoices against statement receipts); a follow-up round when a verdict is inconclusive; each recommended document tied to the finding it would settle, ranked by how far it could move the score. Measure with the case-analysis evals before and after.
+- **The case analysis, what's left after the playbook (2026-11-17).** *Done:* cross-document measures and tools, the planner's candidates and case overview, open questions from the judge, more request rules, ranking (`HOW_IT_WORKS.md`, Step 6). *Open:* CPF against payroll and invoices against statement receipts as tools; a follow-up round when a verdict is inconclusive (decided against for now: it adds a Sonnet call); storing the loan request (amount, purpose) on the case so hypotheses can test scale. Measure with the case-analysis evals before and after (they spend tokens).
 - **Debounce** (5–10 s) before an automatic start, for a burst of officer changes.
 - **Dismissing a cross-document finding** (officer, with a reason; leaves the score, kept on record).
 - **No follow-up round** in plan-then-judge: add one if evals show low recall.
@@ -57,7 +55,6 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 ## Cloud operations
 
-- **Remove the unused publishable Supabase key:** the code no longer lists it (`roles.json`, the chart's values, the kind smoke test). Push and let the GKE deploy go green first (pods mount their secrets at start), then `terraform apply` in `deploy/terraform`: it deletes the secret and Cloud Run's references to it.
 - **Make Snyk blocking again** when its quota resets: delete the two `continue-on-error: true` lines in `.github/workflows/ci-cd.yml`, and "temporarily non-blocking" from CLAUDE.md, README and `HOW_IT_WORKS.md` §9.
 - **Frontend fully non-root:** `nginx-unprivileged` on 8080 (change `nginx.conf`, compose and the chart's `templates/frontend.yaml` port, with `runAsNonRoot`, together; `run.tf`'s `container_port` too while Cloud Run exists).
 - **Dead letters:** an event that failed delivery 5 times lands in `domain-events-dead-letter-pull`, and the alert email says so. Nothing reads them. *Do (no code change):* when the email comes, look without removing them (`gcloud pubsub subscriptions pull domain-events-dead-letter-pull --limit=10 --project fyp-six-sevens`), check the worker's logs for why, redo the action in the app if the sweeper hasn't (for example "Run detection again"), then remove them (the same command with `--auto-ack`).

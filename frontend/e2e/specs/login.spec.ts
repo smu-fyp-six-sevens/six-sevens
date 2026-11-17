@@ -5,7 +5,8 @@ import { makeCase } from '../support/mockBackend';
 /**
  * Signing in, and what happens without a session: the real login form against the mock's /auth/login (it
  * accepts only backend.credentials and answers anything else with 401, like routers/auth), and the redirects
- * App.tsx's RequireAuth and lib/api.ts's authFetch make when there is no token or the API rejects it.
+ * App.tsx's RequireAuth and lib/api.ts's authFetch make when nobody is signed in or the API rejects the session.
+ * The session is an HttpOnly cookie the page can't see: it keeps only the officer's name, never a token.
  */
 
 const signIn = async (page: Page, username: string, password: string) => {
@@ -13,6 +14,7 @@ const signIn = async (page: Page, username: string, password: string) => {
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: /Sign in/ }).click();
 };
+const storedName = (page: Page) => page.evaluate(() => localStorage.getItem('authUser'));
 const storedToken = (page: Page) => page.evaluate(() => localStorage.getItem('authToken'));
 
 test.describe('Signed out', () => {
@@ -25,17 +27,25 @@ test.describe('Signed out', () => {
 
     await expect(page.getByRole('alert')).toContainText('Invalid username or password.');
     await expect(page).toHaveURL('/login');
-    expect(await storedToken(page)).toBeNull();
+    expect(await storedName(page)).toBeNull();
     expect(backend.requestsTo('POST', '/auth/login')).toHaveLength(1);
   });
 
-  test('the right password signs in and opens the case queue', async ({ page, backend }) => {
+  test('the right password signs in and opens the case queue, keeping no token where a script could read it', async ({ page, backend }) => {
     await page.goto('/login');
 
     await signIn(page, backend.credentials.username, backend.credentials.password);
 
     await expect(page).toHaveURL('/cases');
-    expect(await storedToken(page)).not.toBeNull();
+    expect(await storedName(page)).toBe(backend.credentials.username);
+    expect(await storedToken(page)).toBeNull();
+  });
+
+  test('a token an earlier build stored is removed on load', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('authToken', 'old-token'));
+    await page.goto('/login');
+
+    expect(await storedToken(page)).toBeNull();
   });
 
   test('opening a case without signing in goes to the sign-in page instead', async ({ page, backend }) => {
@@ -56,9 +66,19 @@ test('an expired session sends the officer back to sign in', async ({ page, back
 
   await page.goto('/cases');
 
-  // authFetch got a 401, cleared the token and left for the sign-in page. (The test's own token is put back on
-  // every page load by support/test.ts, so the cleared token itself can't be checked here.)
+  // authFetch got a 401, forgot the officer and left for the sign-in page. (support/test.ts puts the name back on
+  // every page load, so the cleared name itself can't be checked here.)
   await expect(page).toHaveURL('/login');
   await expect(page.getByRole('button', { name: /Sign in/ })).toBeVisible();
   expect(backend.requestsTo('GET', /^\/cases/)).not.toHaveLength(0);
+});
+
+test('signing out asks the backend to clear the session cookie, then shows the sign-in page', async ({ page, backend }) => {
+  await page.goto('/cases');
+
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+
+  await expect(page).toHaveURL('/login');
+  expect(backend.requestsTo('POST', '/auth/logout')).toHaveLength(1);
 });

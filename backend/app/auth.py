@@ -1,13 +1,19 @@
 """
 A few named accounts (env-configured), gating every route except /health, /health/db,
-/auth/login, /metrics and /push. The signed-in username travels in the bearer token and is what the
+/auth/login, /metrics and /push. The signed-in username travels in the token and is what the
 audit trail records as the actor. No roles, resets or lockouts by design: this is
 a small demo deployment, not a product with an account system.
 
 Token = base64url(payload_json) + "." + base64url(hmac_sha256(secret, payload_b64)),
-where payload is {"purpose": "login", "sub": <username>, "exp": <unix_ts>} (a WebSocket ticket is
-the same with purpose "ws"; _signed and _unsigned make and read both). Verified via constant-time
+where payload is {"purpose": "login", "sub": <username>, "iat": <unix_ts>, "exp": <unix_ts>} (a WebSocket
+ticket is the same with purpose "ws"; _signed and _unsigned make and read both). Verified via constant-time
 comparison; no external JWT dependency needed for something this small.
+
+The browser holds the token in an HttpOnly cookie (SESSION_COOKIE), so page scripts can't read it. Scripts and
+probes send it as a bearer header instead. A session ends after TOKEN_TTL_SECONDS without a request: every request
+on a token older than RENEW_AFTER_SECONDS gets a fresh cookie (session_cookies), so an officer at work is never
+signed out. A request authenticated by the cookie that changes something must carry X-Requested-With, which a
+browser only sends cross-origin after a CORS check Kong allows for the frontend alone: that is the CSRF guard.
 """
 from __future__ import annotations
 
@@ -20,12 +26,22 @@ import time
 from contextvars import ContextVar
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 
 from . import passwords
 from .config import settings
 
-TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
+# Idle limit: a session ends this long after its last request, never in the middle of work.
+TOKEN_TTL_SECONDS = 12 * 60 * 60
+# How old a token gets before a request swaps it for a fresh one. Kong's per-officer rate limits count per cookie
+# value, so renewing on every request would reset them.
+RENEW_AFTER_SECONDS = 60 * 60
+SESSION_COOKIE = "six_session"
+CSRF_HEADER = "x-requested-with"
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+# The only cookie-authenticated writes that need no CSRF header: signing in (no session yet) and out.
+_CSRF_EXEMPT = frozenset({"/auth/login", "/auth/logout"})
 
 # Short-lived, single-use tickets for the case status WebSocket (see
 # routers/ws.py) — a browser's native WebSocket API can't set a custom
@@ -80,7 +96,8 @@ _LOGIN_PURPOSE = "login"
 
 
 def create_token(username: str) -> str:
-    return _signed({"purpose": _LOGIN_PURPOSE, "sub": username, "exp": int(time.time()) + TOKEN_TTL_SECONDS})
+    now = int(time.time())
+    return _signed({"purpose": _LOGIN_PURPOSE, "sub": username, "iat": now, "exp": now + TOKEN_TTL_SECONDS})
 
 
 def verify_credentials(username: str, password: str) -> str | None:
@@ -93,9 +110,9 @@ def verify_credentials(username: str, password: str) -> str | None:
     return username if matched and stored is not None else None
 
 
-def _verify_token(token: str) -> str | None:
+def _login_payload(token: str) -> dict | None:
     """
-    The username the token was issued to, or None if it is forged, expired, has no username, or is a WebSocket
+    The payload of a valid login token, or None if it is forged, expired, has no username, or is a WebSocket
     ticket (which names its officer too, so only its purpose tells them apart). A token from before tokens carried
     a purpose has none, and still counts.
     """
@@ -110,7 +127,59 @@ def _verify_token(token: str) -> str | None:
 
     if not isinstance(username, str) or not username or time.time() >= exp:
         return None
-    return username
+    return payload
+
+
+def _verify_token(token: str) -> str | None:
+    """The username the token was issued to, or None (see _login_payload)."""
+    payload = _login_payload(token)
+    return payload["sub"] if payload is not None else None
+
+
+def set_session_cookie(response: Response, token: str) -> None:
+    # Host-only (no Domain): sent to the API's own host and nowhere else.
+    response.set_cookie(
+        SESSION_COOKIE, token, max_age=TOKEN_TTL_SECONDS, path="/", httponly=True,
+        secure=settings.AUTH_COOKIE_SECURE, samesite="strict",
+    )
+
+
+def clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        SESSION_COOKIE, path="/", httponly=True, secure=settings.AUTH_COOKIE_SECURE, samesite="strict",
+    )
+
+
+def _needs_renewal(token: str) -> str | None:
+    """The username to issue a fresh token to, when a valid token is old enough to swap; else None."""
+    payload = _login_payload(token)
+    if payload is None:
+        return None
+    try:
+        issued = int(payload.get("iat") or 0)
+    except (TypeError, ValueError):
+        issued = 0
+    return payload["sub"] if time.time() - issued >= RENEW_AFTER_SECONDS else None
+
+
+async def session_cookies(request: Request, call_next):
+    """
+    HTTP middleware: refuses a cookie-authenticated write without the CSRF header, and renews an aging session
+    cookie on the way out. Requests that carry a bearer header are left alone: a browser never adds one by itself.
+    """
+    cookie = request.cookies.get(SESSION_COOKIE)
+    bearer = (request.headers.get("authorization") or "").startswith("Bearer ")
+    if (
+        cookie and not bearer and request.method not in _SAFE_METHODS
+        and request.url.path not in _CSRF_EXEMPT and not request.headers.get(CSRF_HEADER)
+    ):
+        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": "Missing X-Requested-With header"})
+    response = await call_next(request)
+    if cookie and not bearer and response.status_code < 400 and request.url.path not in _CSRF_EXEMPT:
+        username = _needs_renewal(cookie)
+        if username is not None:
+            set_session_cookie(response, create_token(username))
+    return response
 
 
 def create_ws_ticket(username: str | None = None, case_id: str | None = None) -> str:
@@ -149,15 +218,25 @@ def consume_ws_ticket(ticket: str, case_id: str | None = None) -> str | None:
     return str(payload.get("sub") or "unknown")
 
 
-def require_auth(authorization: str | None = Header(default=None)) -> str:
-    """Rejects a request without a valid token; returns the signed-in username."""
-    if not authorization or not authorization.startswith("Bearer "):
+def require_auth(
+    authorization: str | None = Header(default=None),
+    # Out of the schema: it's the browser's own credential, not something a client fills in.
+    session: str | None = Cookie(default=None, alias=SESSION_COOKIE, include_in_schema=False),
+) -> str:
+    """Rejects a request without a valid token (bearer header, else the session cookie); returns the username."""
+    # Called directly (tests), an omitted argument is FastAPI's marker, not None.
+    authorization = authorization if isinstance(authorization, str) else None
+    session = session if isinstance(session, str) else None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+    elif session and not authorization:
+        token = session
+    else:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or malformed Authorization header",
         )
 
-    token = authorization.removeprefix("Bearer ").strip()
     username = _verify_token(token)
     if username is None:
         raise HTTPException(

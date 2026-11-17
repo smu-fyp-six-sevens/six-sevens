@@ -23,11 +23,21 @@ def build_additional_documents(
     """
     Every agent request is kept; the ones the outlook re-scored carry their score, the rest are labelled as
     having no effect. Checklist items never affect the score. Duplicates by title are merged, agent first.
+    Ranked by what the officer gains: the requests that would lower the score most first, then the other agent
+    requests, then the checklist rules.
     """
     by_id = {f.finding_id: f for f in risk.contributing_findings}
     scored = {r.title: r for r in outlook.requests if r.source == "agent"}
+
+    def gain(request: EvidenceRequest) -> tuple[int, int]:
+        hit = scored.get(request.title)
+        if hit is None or hit.score_if_supports is None:
+            return (1, 0)
+        return (0, hit.score_if_supports)
+
     items: dict[str, AdditionalDocument] = {}
-    for request in requests:
+    # sorted() is stable: requests that gain the same keep the model's order.
+    for request in sorted(requests, key=gain):
         addressed = [a for a in dict.fromkeys(resolve_finding_id(x, by_id) for x in request.addresses) if a]
         hit = scored.get(request.title)
         items.setdefault(_key(request.title), AdditionalDocument(

@@ -480,14 +480,15 @@ class CaseRisk(BaseModel):
 class RecommendationItem(BaseModel):
     """
     One thing a supporting document is requested for: a bank statement
-    transaction, or a line of a financial statement.
+    transaction, a line of a financial statement, a month no statement
+    covers, or an address the documents disagree on.
     """
 
     date: str | None = None
     # The transaction description or line label, as printed.
     description: str
-    # Signed as extracted: negative for a payment out, positive for a receipt.
-    amount: float
+    # Signed as extracted: negative for a payment out, positive for a receipt. None for an item with no amount.
+    amount: float | None = None
     # A financial statement line's prior-year figure, where it has one.
     prior_amount: float | None = None
     # The supplier paid or customer paying, when the statement names one.
@@ -505,7 +506,8 @@ class SupportingDocumentRecommendation(BaseModel):
     """
 
     document_type: Literal[
-        "purchase_order", "sales_invoice", "related_party_repayment_evidence", "bank_loan_evidence"
+        "purchase_order", "sales_invoice", "related_party_repayment_evidence", "bank_loan_evidence",
+        "current_address_evidence", "missing_statement_months", "customer_contract", "facility_letter",
     ]
     # What to ask for, e.g. "Purchase Order".
     title: str

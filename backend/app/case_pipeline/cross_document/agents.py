@@ -32,6 +32,7 @@ from ...langgraph.tool_spans import traced_tool_call
 from ...run_context import spend_model_call
 from ...llm_io import forced_args, message_text, parse_json_object, probability, salvage_list, was_cut_off
 from ..models import Hypothesis, PlannedCheck
+from . import playbook
 from .bias import has_protected_text
 from .evidence import CaseContext, render_dossier
 from .tools import COMPUTED_TOOLS, CROSS_DOCUMENT_TOOLS, build_tools
@@ -39,7 +40,7 @@ from .tools import COMPUTED_TOOLS, CROSS_DOCUMENT_TOOLS, build_tools
 
 logger = logging.getLogger("classifier_pipeline.case_pipeline.agents")
 
-PROMPT_VERSION = "cross-doc-v10-feedback"
+PROMPT_VERSION = "cross-doc-v11-playbook"
 MAX_HYPOTHESES = 3
 MAX_CHECKS_PER_HYPOTHESIS = 4
 # One call to plan and one to judge, each retried once when the reply doesn't call its tool.
@@ -52,6 +53,9 @@ _TRACE_RESULT_CHARS = 700
 # Hard bounds on what each model call reads (about 4 characters a token), on top of the output caps above.
 MAX_PLAN_INPUT_CHARS = 30_000
 MAX_ESTABLISHED_CHARS = 5_000
+# Small on purpose (about 800 tokens together): they come out of the dossier's share, so a run costs what it did.
+MAX_OVERVIEW_CHARS = 1_500
+MAX_CANDIDATE_CHARS = 1_800
 MAX_JUDGE_EVIDENCE_CHARS = 12_000
 
 
@@ -87,7 +91,15 @@ Payment patterns (the same payee and amount repeated, a different card on almost
 
 Be terse: a claim is one sentence. For each hypothesis list the checks to run, at most {max_checks}, using only the tools above. Run everything you need up front: you will not see results before judging. Include at least one check that could show the claim is wrong (refutation_probe true), and it must look at something the claim does not already rest on: a different document or a different field. Reading back the same fields again is not a test.
 
+Use the case overview: what each document speaks for, and what is not on file. Start from the candidates below: code computed them from the documents, strongest first. Propose the ones worth testing, sharpened into a specific claim with its checks, and add a stronger idea of your own only if you have one. A "routine" candidate is a cross-check, worth a hypothesis only when something else points the same way. A candidate is a lead, never evidence: its numbers must come back from the checks you plan.
+
 Answer only by calling submit_hypotheses (not submit_verdicts), with an empty list when nothing looks off.
+
+Case overview:
+{overview}
+
+Candidates computed by code:
+{candidates}
 
 Documents:
 {dossier}"""
@@ -95,7 +107,7 @@ Documents:
 _JUDGE_INSTRUCTIONS = """For each hypothesis decide whether it is conclusive: the evidence is sufficient to prove it AND the refutation check did not refute it. Suspicion, a plausible story, a missing document or an unavailable result is not conclusive. If unsure, it is not conclusive. A hypothesis that touches rule 1 is never conclusive. A claim about one document's own figures that no computed measure or second document supports is never conclusive here. A refutation check that merely restates the claim, or re-reads the fields it rests on, has not tested it: then the hypothesis is not conclusive. Include a confidence score from 0 to 1 for every verdict, including inconclusive verdicts. Use 0 when confidence cannot be assessed.
 severity is low, medium or high and only matters when conclusive. category is behavioural_anomaly or unsupported_claim. citations are ref ids from the evidence below.
 summary, rationale and probe_summary are read by a loan officer: write plain sentences about the documents, and never name a tool, a flag (such as ADDRESS_MISMATCH) or a ref id in them; those belong only in citations. Say "cross-check", not "refutation check".
-Keep every field short: the reply has a hard length limit. For a hypothesis that is not conclusive, give a one-sentence summary and leave rationale, citations and probe_summary empty.
+Keep every field short: the reply has a hard length limit. For a hypothesis that is not conclusive, give a one-sentence summary and leave rationale, citations and probe_summary empty, and name in would_settle_with the one document the client could realistically supply that would settle it either way, as specifically as the evidence allows (which months, which counterparty, which transaction); leave it empty when no document would, or when the hypothesis touches rule 1.
 
 Answer only by calling submit_verdicts (not submit_hypotheses).
 
@@ -167,6 +179,10 @@ _VERDICT_TOOL: dict[str, Any] = {
                         "rationale": {"type": "string", "description": "Why the evidence proves it, two sentences at most."},
                         "citations": {"type": "array", "items": {"type": "string"}},
                         "probe_summary": {"type": "string", "description": "What the refutation check returned."},
+                        "would_settle_with": {
+                            "type": "string",
+                            "description": "Not conclusive only: the one document that would settle it, specific.",
+                        },
                     },
                     "required": ["id", "conclusive", "confidence", "summary"],
                 },
@@ -267,15 +283,21 @@ async def hypothesise(context: CaseContext) -> tuple[list[Hypothesis], float]:
     if not context.docs:
         return [], 0.0
     established = context.established[:MAX_ESTABLISHED_CHARS]
-    dossier = fence(render_dossier(context, max_chars=MAX_PLAN_INPUT_CHARS - len(established)), "case_dossier")
+    case_overview = playbook.overview(context)[:MAX_OVERVIEW_CHARS]
+    leads = playbook.render(context)[:MAX_CANDIDATE_CHARS]
+    budget = MAX_PLAN_INPUT_CHARS - len(established) - len(case_overview) - len(leads)
+    dossier = fence(render_dossier(context, max_chars=budget), "case_dossier")
     if established:
         dossier += "\n\nChecks already run by code (facts; never restate them as hypotheses):\n" + fence(
             established, "code_checks"
         )
+    context.note("playbook", overview=case_overview, candidates=leads)
     messages = [
         _system_message(context),
         HumanMessage(content=_PLAN_INSTRUCTIONS.format(
             limit=MAX_HYPOTHESES, max_checks=MAX_CHECKS_PER_HYPOTHESIS, dossier=dossier,
+            overview=fence(case_overview or "(none)", "case_overview"),
+            candidates=fence(leads or "(none: nothing computed points anywhere)", "candidates"),
         ) + context.feedback_text),
     ]
     response, args = await _ask_for_tool(

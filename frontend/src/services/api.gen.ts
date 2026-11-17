@@ -182,6 +182,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout
+         * @description Clears the session cookie. Open like /auth/login: signing out needs no valid session.
+         */
+        post: operations["logout_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases": {
         parameters: {
             query?: never;
@@ -4203,11 +4223,12 @@ export interface components {
         /**
          * RecommendationItem
          * @description One thing a supporting document is requested for: a bank statement
-         *     transaction, or a line of a financial statement.
+         *     transaction, a line of a financial statement, a month no statement
+         *     covers, or an address the documents disagree on.
          */
         RecommendationItem: {
             /** Amount */
-            amount: number;
+            amount: number | null;
             /** Breakdown */
             breakdown: components["schemas"]["RecommendationItem"][];
             /** Counterparty */
@@ -4423,7 +4444,7 @@ export interface components {
              * Document Type
              * @enum {string}
              */
-            document_type: "purchase_order" | "sales_invoice" | "related_party_repayment_evidence" | "bank_loan_evidence";
+            document_type: "purchase_order" | "sales_invoice" | "related_party_repayment_evidence" | "bank_loan_evidence" | "current_address_evidence" | "missing_statement_months" | "customer_contract" | "facility_letter";
             /** Items */
             items: components["schemas"]["RecommendationItem"][];
             /** Reason */
@@ -4978,6 +4999,24 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    logout_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

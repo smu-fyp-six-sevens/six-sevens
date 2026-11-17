@@ -47,15 +47,28 @@ Source of wealth borrowing growth:
 - Every line needs a prior-year figure, and the prior total must be above
   zero — otherwise there's nothing to compare against.
 
+Bank statement coverage, concentration and loans (the measures are cross_document/signals.py's):
+- Months between the company's statements that none covers: the statements for those months.
+- Half or more of a statement's receipts (of at least CONCENTRATION_MIN_CREDITS) from one named
+  customer: the contract or the invoices behind them.
+- Loan repayments on a company statement while the case has no facility letter: the letter.
+
+From the case analysis's own findings:
+- Documents that disagree on an address (ADDRESS_MISMATCH): a bank statement from the last three
+  months showing the current address.
+
 An empty list means nothing in the case needs further evidence.
 """
 
 from __future__ import annotations
 
 import re
+from datetime import date
 from typing import Literal
 
 from ... import identifiers
+from ..cross_document import signals
+from ..models import CrossDocFinding
 from ...fraud_detection.numerical_validation.common import CURRENCY_WORDS, as_number, format_money, table_rows
 from ...fraud_detection.shared.field_values import decode_field_value
 from ...models import (
@@ -281,21 +294,147 @@ def _recommend_for_financial_statement(document: DocumentRecord) -> list[Support
     return _related_party_balances(document, rows) + _borrowing_growth(document, rows)
 
 
-def recommend_supporting_documents(
-    documents: list[DocumentRecord],
+def _month_name(month: str) -> str:
+    """ "2026-05" -> "May 2026" """
+    return date(int(month[:4]), int(month[5:]), 1).strftime("%B %Y")
+
+
+def _address_mismatch(
+    findings: list[CrossDocFinding], documents: list[DocumentRecord],
 ) -> list[SupportingDocumentRecommendation]:
-    """documents: the case's documents with plain {field_name: value} extracted_fields."""
-    recommendations: list[SupportingDocumentRecommendation] = []
-    for document in documents:
-        if not counts_towards_checklist(document):
+    """
+    The documents disagree on an address (case analysis, ADDRESS_MISMATCH): a recent bank statement showing the
+    current one settles which is right. One recommendation for every such finding.
+    """
+    by_id = {d.id: d for d in documents}
+    items: list[RecommendationItem] = []
+    source: DocumentRecord | None = None
+    for finding in findings:
+        if "ADDRESS_MISMATCH" not in finding.breach_flags:
             continue
+        cited = next((by_id[i] for i in finding.document_ids if i in by_id), None)
+        if cited is None:
+            continue
+        source = source or cited
+        items.append(RecommendationItem(description=finding.summary, reason=_sentence(finding.summary)))
+    if source is None:
+        return []
+    return [SupportingDocumentRecommendation(
+        document_type="current_address_evidence",
+        title="Recent Bank Statement Showing the Current Address",
+        reason="The case's documents give different addresses.",
+        request=(
+            "Request a bank statement from the last three months showing the current address, to confirm which "
+            f"address is right for {'this difference' if len(items) == 1 else 'these differences'}:"
+        ),
+        source_document_id=source.id,
+        source_filename=source.filename,
+        items=items,
+    )]
+
+
+def _missing_statement_months(statements: list[DocumentRecord]) -> list[SupportingDocumentRecommendation]:
+    """Months between the company's statements that none covers: the statements for those months."""
+    if len(statements) < 2:
+        return []
+    missing = signals.missing_months([signals.covered_months(s.extracted_fields or {}) for s in statements])
+    if not missing:
+        return []
+    latest = statements[-1]
+    names = [_month_name(m) for m in missing]
+    return [SupportingDocumentRecommendation(
+        document_type="missing_statement_months",
+        title=f"Bank Statements for {', '.join(names)}",
+        reason=f"The company's bank statements leave {len(missing)} month{'s' if len(missing) > 1 else ''} uncovered.",
+        request=f"Request the bank statement{'s' if len(missing) > 1 else ''} for:",
+        source_document_id=latest.id,
+        source_filename=latest.filename,
+        items=[RecommendationItem(description=m, reason=f"No statement covers {_month_name(m)}.") for m in missing],
+    )]
+
+
+def _customer_concentration(document: DocumentRecord) -> list[SupportingDocumentRecommendation]:
+    """Over half of a company statement's receipts from one named customer: the contract or invoices behind them."""
+    fields = document.extracted_fields or {}
+    share = signals.concentration(fields, fields.get("company_name") or signals.value(fields, "entity_name"))
+    if (
+        not share.get("available") or share["credits"] < signals.CONCENTRATION_MIN_CREDITS
+        or share["top_share"] < signals.CONCENTRATION_SHARE or share["top_counterparty"] == "(unnamed)"
+    ):
+        return []
+    customer = share["top_counterparty"]
+    return [SupportingDocumentRecommendation(
+        document_type="customer_contract",
+        title=f"Contract or Invoices with {customer}",
+        reason=(
+            f"{document.filename} shows {share['top_share']:.0%} of the company's receipts coming from one customer."
+        ),
+        request="Request the contract, or the invoices, behind these receipts:",
+        source_document_id=document.id,
+        source_filename=document.filename,
+        items=[RecommendationItem(
+            description=customer, amount=share["top_total"], counterparty=customer,
+            reason=_sentence(
+                f"{format_money(share['top_total'])} of {format_money(share['total_credits'])} received from {customer}"
+            ),
+        )],
+    )]
+
+
+_MAX_REPAYMENT_ITEMS = 5
+
+
+def _facility_letter(document: DocumentRecord) -> list[SupportingDocumentRecommendation]:
+    """Loan repayments on a company statement while the case has no facility letter: the letter for that loan."""
+    repayments = signals.loan_repayments(document.extracted_fields or {})
+    if not repayments:
+        return []
+    items = []
+    for movement in repayments[:_MAX_REPAYMENT_ITEMS]:
+        on_date = f" on {movement.day.strftime('%d/%m/%Y')}" if movement.day else ""
+        to = movement.counterparty or "a lender"
+        items.append(RecommendationItem(
+            date=movement.day.isoformat() if movement.day else None, description=movement.description,
+            amount=movement.amount, counterparty=movement.counterparty or None,
+            reason=_sentence(f"Repayment of {format_money(-movement.amount)}{on_date} to {to}"),
+        ))
+    count = len(repayments)
+    return [SupportingDocumentRecommendation(
+        document_type="facility_letter",
+        title="Facility Letter",
+        reason=f"{document.filename} shows {count} loan repayment{'s' if count > 1 else ''}, and the case has no facility letter.",
+        request="Request the facility letter for the loan behind these repayments:",
+        source_document_id=document.id,
+        source_filename=document.filename,
+        items=items,
+    )]
+
+
+def recommend_supporting_documents(
+    documents: list[DocumentRecord], findings: list[CrossDocFinding] | None = None,
+) -> list[SupportingDocumentRecommendation]:
+    """
+    documents: the case's documents with plain {field_name: value} extracted_fields. findings: the run's
+    cross-document findings, for the requests a finding makes (a recent statement for an address difference).
+    """
+    recommendations: list[SupportingDocumentRecommendation] = []
+    counted = [d for d in documents if counts_towards_checklist(d)]
+    has_facility_letter = any(d.document_type == DocumentType.LIST_OF_LOANS.value for d in counted)
+    company_statements: list[DocumentRecord] = []
+    for document in counted:
         if document.document_type == DocumentType.BANK_STATEMENT.value:
             if not is_personal_bank_statement(document.document_type, document.extracted_fields):
+                company_statements.append(document)
                 recommendations.extend(_recommend_for_statement(document))
+                recommendations.extend(_customer_concentration(document))
+                if not has_facility_letter:
+                    recommendations.extend(_facility_letter(document))
         # Only a company's own financial statement: personal source of wealth
         # (e.g. a brokerage statement) fulfils source_of_personal_wealth instead.
         elif DocumentType.SOURCE_OF_WEALTH.value in compute_fulfilled_requirements(
             document.document_type, document.extracted_fields
         ):
             recommendations.extend(_recommend_for_financial_statement(document))
+    recommendations.extend(_missing_statement_months(company_statements))
+    recommendations.extend(_address_mismatch(findings or [], documents))
     return recommendations

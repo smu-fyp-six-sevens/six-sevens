@@ -99,8 +99,9 @@ jobs:
             build frontend-gke frontend/Dockerfile --build-arg VITE_API_URL="https://api.${{ vars.GKE_DOMAIN || 'sixsevens.me' }}"
           fi
 
-      # Free scanning in place of Artifact Analysis's paid on-push scans. Report only for now (a scanner error
-      # can't stop a deploy either): add --exit-code 1 and drop continue-on-error once a run shows the findings.
+      # Free scanning in place of Artifact Analysis's paid on-push scans. Our backend images block on a fixable high
+      # or critical finding; Kong, the frontend and Grafana only report (their findings come from upstream images).
+      # A scanner that can't run (install, database download) only warns: it can't stop a deploy.
       - uses: aquasecurity/setup-trivy@v0.3.1
         continue-on-error: true
         with:
@@ -108,16 +109,30 @@ jobs:
           cache: true
 
       - name: Scan every image (Trivy)
-        continue-on-error: true
         timeout-minutes: 10
         run: |
-          images="$BACKEND_ROLES"
-          for entry in $OTHER_SERVICES; do images="$images ${entry%%=*}"; done
-          for image in $images; do
+          if ! command -v trivy >/dev/null; then echo "::warning::Trivy isn't installed; images not scanned"; exit 0; fi
+          failed=""
+          scan() {
+            image=$1; blocking=$2
             echo "::group::$image"
-            trivy image --quiet --scanners vuln --ignore-unfixed --severity HIGH,CRITICAL "$REGISTRY/$image:$GITHUB_SHA"
+            # Exit code 3 means findings; anything else non-zero is the scanner itself failing.
+            set +e
+            trivy image --quiet --scanners vuln --ignore-unfixed --severity HIGH,CRITICAL --exit-code 3 \
+              "$REGISTRY/$image:$GITHUB_SHA"
+            rc=$?
+            set -e
             echo "::endgroup::"
-          done
+            if [ "$rc" = 3 ] && [ "$blocking" = yes ]; then failed="$failed $image"
+            elif [ "$rc" = 3 ]; then echo "::warning::$image has fixable high or critical findings (report only)"
+            elif [ "$rc" != 0 ]; then echo "::warning::Trivy couldn't scan $image (exit $rc)"; fi
+          }
+          for role in $BACKEND_ROLES; do scan "$role" yes; done
+          for entry in $OTHER_SERVICES; do scan "${entry%%=*}" no; done
+          if [ -n "$failed" ]; then
+            echo "::error::Fixable high or critical findings in:$failed (the tables above say which packages)"
+            exit 1
+          fi
 
   deploy:
     needs: build

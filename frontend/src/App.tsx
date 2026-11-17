@@ -23,7 +23,7 @@ const UploadPage = lazy(loadUploadPage);
 const DocumentDetailsPage = lazy(loadDocumentDetailsPage);
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const AgentDirectoryPage = lazy(() => import('./pages/AgentDirectoryPage'));
-import { getToken } from './lib/api';
+import { isSignedIn } from './lib/api';
 import { LoadErrorState } from './components/LoadErrorState';
 import DocumentTitle from './components/DocumentTitle';
 
@@ -202,7 +202,8 @@ function LoginRoute({ onLoggedIn }: { onLoggedIn: () => void }) {
 }
 
 export default function App() {
-  const [isAuthed, setIsAuthed] = useState(() => getToken() !== null);
+  // Whether someone signed in on this browser; the cookie itself is checked by the backend on the first call.
+  const [isAuthed, setIsAuthed] = useState(isSignedIn);
 
   return (
     <BrowserRouter>

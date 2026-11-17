@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { apiBaseUrl, setToken } from '../lib/api';
+import { apiBaseUrl, apiInit, rememberSignIn } from '../lib/api';
 import { Icon } from '../components/Icon';
 
 interface LoginPageProps {
@@ -20,11 +20,12 @@ export default function LoginPage({ onLoggedIn }: LoginPageProps) {
 
     try {
       // fetch only throws when the request never got a response (server down, offline).
-      const response = await fetch(`${apiBaseUrl}/auth/login`, {
+      // apiInit: credentials 'include', so the browser keeps the session cookie the response sets.
+      const response = await fetch(`${apiBaseUrl}/auth/login`, apiInit({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
-      }).catch(() => {
+      })).catch(() => {
         throw new Error("Couldn't reach the server. Check your connection and try again.");
       });
 
@@ -32,8 +33,9 @@ export default function LoginPage({ onLoggedIn }: LoginPageProps) {
         throw new Error('Invalid username or password.');
       }
 
-      const data = (await response.json()) as { token: string };
-      setToken(data.token);
+      // The token in the body is for scripts; the page relies on the cookie and keeps only the name.
+      const data = (await response.json()) as { username: string };
+      rememberSignIn(data.username);
       onLoggedIn();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed.');

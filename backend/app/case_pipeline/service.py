@@ -28,6 +28,7 @@ from ..models import CaseStage, DocumentRecord
 from ..run_context import end_run, start_run
 from . import repository, state
 from .adverse_media import former_names_of, reuse_recent, run_adverse_media_check
+from .cross_document import playbook
 from .cross_document.evidence import build_context
 from .cross_document.agents import PROMPT_VERSION
 from .cross_document.graph import run_cross_document_analysis
@@ -302,10 +303,13 @@ async def _analyse(
             score_without_cross_document=document_only.score, level_without_cross_document=document_only.level,
             score_without_dedupe=without_dedupe.score, level_without_dedupe=without_dedupe.level,
         )
-        requests, request_status = await propose_requests_with_status(risk)
-        supporting_documents = recommend_supporting_documents(documents)
+        open_questions = result.get("open_questions") or []
+        requests, request_status = await propose_requests_with_status(
+            risk, overview=playbook.overview(context), open_questions=open_questions,
+        )
+        supporting_documents = recommend_supporting_documents(documents, findings)
         trace.record("evidence_requests", proposed=[r.model_dump() for r in requests],
-                     supporting_documents=[s.title for s in supporting_documents])
+                     open_questions=open_questions, supporting_documents=[s.title for s in supporting_documents])
         outlook = build_outlook(risk, requests)
         trace.record("outlook", **outlook_trace(risk, requests, outlook))
         additional = build_additional_documents(risk, requests, outlook, supporting_documents, request_status)

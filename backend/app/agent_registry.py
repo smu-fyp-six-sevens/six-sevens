@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from .config import settings
 from .case_pipeline.cross_document.agents import MAX_MODEL_CALLS_PER_RUN, PROMPT_VERSION
+from .case_pipeline.risk.outlook import PROMPT_VERSION as REQUESTS_PROMPT_VERSION
 from .langgraph.extraction_prompts import KNOWN_DOCUMENT_TYPES
 
 
@@ -160,5 +161,30 @@ def _list_agents() -> list[AgentRecord]:
             tools=["Cross-document evidence tools"],
             access_summary=["Read approved case facts and test results", "Return supported, refuted or inconclusive decisions"],
             call_budget=case_budget,
+        ),
+        AgentRecord(
+            id="evidence_requests", name="Evidence request recommender", group="Case analysis",
+            purpose="Recommends the additional documents to ask the client for, tied to the findings and open questions they would settle.",
+            limitations="Only suggests; code decides which findings a document can reduce and re-scores the case, and the officer decides what to request.",
+            model=settings.LANGGRAPH_HAIKU_MODEL, prompt_version=REQUESTS_PROMPT_VERSION, tools=[],
+            access_summary=["Read the case's scored findings, its document list and the open questions",
+                            "Return document requests"],
+            call_budget="One call per case analysis",
+        ),
+        AgentRecord(
+            id="case_summary", name="Case summary writer", group="Case analysis",
+            purpose="Writes the case's plain-language summary from the findings, the score and the checks that ran.",
+            limitations="Restates existing findings only and never sets the score; it is told which checks could not run, so it can't call them clear.",
+            model=settings.LANGGRAPH_HAIKU_MODEL, prompt_version=PROMPT_V1, tools=[],
+            access_summary=["Read the case's findings, score and check outcomes", "Return a structured summary"],
+            call_budget="One call per case analysis",
+        ),
+        AgentRecord(
+            id="adverse_media", name="Adverse media check", group="Case analysis",
+            purpose="Searches trusted news and regulator sites for recent serious negative news about the company.",
+            limitations="A due-diligence note only: never a finding or part of the score. Limited to a few searches on a fixed list of sites; many large news sites can't be searched.",
+            model=settings.LANGGRAPH_HAIKU_MODEL, prompt_version=PROMPT_V1, tools=["web_search"],
+            access_summary=["Read the company's name and former names", "Search the web on trusted sites"],
+            call_budget="One call per case analysis, at most 3 searches, cached 24 hours",
         ),
     ]

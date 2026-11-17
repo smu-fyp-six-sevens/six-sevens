@@ -8,7 +8,9 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# upgrade: the base image's own packages get their security fixes before Debian rebuilds the image (Trivy).
 RUN apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
         libimage-exiftool-perl \
         libgl1 \
@@ -41,6 +43,8 @@ COPY backend/tests ./tests
 # --- what every role ships: no dev injection tool ---
 FROM deps AS runtime
 RUN rm -rf ./app/injection ./app/routers/injection.py ./document_templates ./documents_generated
+# pip is only for building: it carries its own old copies of urllib3, msgpack and setuptools (Trivy findings).
+RUN python -m pip uninstall -y pip
 # Runs as a non-root user. It may write only ./data (the land-use index, built below) and its home (font caches).
 RUN useradd --create-home --uid 10001 app && mkdir -p ./data && chown app ./data
 ENV LAND_USE_RUNTIME_REBUILD=false

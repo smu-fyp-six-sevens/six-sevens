@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useDismiss } from './useDismiss';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { clearToken, getUsername } from '../lib/api';
+import { getUsername, signOut } from '../lib/api';
 import { officerLabel } from '../lib/officers';
 import { searchCases } from '../services/uploadService';
 import { toCaseRecord, type CaseRecord } from '../utils/caseRecord';
@@ -218,8 +218,7 @@ function AccountMenu() {
             role="menuitem"
             className="officer-menu-item"
             onClick={() => {
-              clearToken();
-              window.location.assign('/login');
+              void signOut().then(() => window.location.assign('/login'));
             }}
           >
             Sign out

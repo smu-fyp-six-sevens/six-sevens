@@ -88,6 +88,9 @@ class Settings:
     # AUTH_SECRET_KEY signs bearer tokens; outside local dev an empty one stops startup (main.check_signing_key).
     AUTH_USERS: dict[str, str] = _users(_str("AUTH_USERS"))
     AUTH_SECRET_KEY: str = _str("AUTH_SECRET_KEY")
+    # The session cookie's Secure flag (auth.py). Browsers accept it on http://localhost too; false only for a client
+    # that won't send a Secure cookie over plain HTTP.
+    AUTH_COOKIE_SECURE: bool = _bool("AUTH_COOKIE_SECURE", True)
     # The commit an image was built from (backend/Dockerfile's GIT_COMMIT build argument), for agent_versions.py.
     GIT_COMMIT: str = _str("GIT_COMMIT", "local")
 

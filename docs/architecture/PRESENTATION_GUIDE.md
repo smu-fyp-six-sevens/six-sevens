@@ -212,7 +212,7 @@ This is diagram page 5.
 ## 11. Limits to say before anyone asks
 
 - **All test documents are made up.** GLDB can't share real ones, so real fraud may look different.
-- **Not everything stays in Singapore.** The cluster and the image registry do, but the database and files are in Supabase's Seoul region (a project's region can't be changed in place), and Claude calls go to the Anthropic API. For a bank, the database would move to Singapore: a new Supabase project there and a copy of the data (the restore drill does that copy).
+- **Claude calls leave Singapore** (the Anthropic API). The cluster and the image registry stay in Singapore.
 - **Claude cost uses list prices.** The real bill is exact but a few hours behind.
 - **One cluster, no staging.** To save money, most services run one copy; a bank would run at least two.
 
