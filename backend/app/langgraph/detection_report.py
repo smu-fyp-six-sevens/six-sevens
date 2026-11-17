@@ -30,7 +30,7 @@ def _finding(raw: Any) -> dict | None:
 
 def severity_counts(findings: Any) -> dict[str, int]:
     """How many of a report's findings carry each severity (the Documents list's anomaly counts)."""
-    counts = dict.fromkeys(_SEVERITIES, 0)
+    counts: dict[str, int] = dict.fromkeys(_SEVERITIES, 0)
     for finding in findings if isinstance(findings, list) else []:
         severity = finding.get("severity") if isinstance(finding, dict) else None
         counts[severity if severity in _SEVERITIES else "medium"] += 1

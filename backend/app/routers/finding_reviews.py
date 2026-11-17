@@ -32,6 +32,7 @@ from ..events import officer_event, types
 from ..models import (
     FALSE_ALARM_REASONS, SET_ASIDE_REASONS,
     CaseFindingReviews, CaseRecord, CaseStage, DetectionMetrics, DocumentRecord, FindingReview, ReportMissedIssueRequest,
+    ReviewScope, ReviewVerdict,
     SetFindingVerdictsRequest, SignOffRequest, UpdateMissedIssueRequest,
 )
 from ._dependencies import bad_gateway_on_error, get_case_or_404, get_editable_case_or_404, to_thread_or_502
@@ -227,7 +228,7 @@ async def set_finding_verdicts(
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found in this case")
                 documents[str(item.document_id)] = document
                 in_case[item.document_id] = str(item.document_id)
-        groups: dict[tuple[str, str | None], list[str]] = {}
+        groups: dict[tuple[ReviewScope, str | None], list[str]] = {}
         for item in request.verdicts:
             groups.setdefault((item.scope, in_case.get(item.document_id) if item.document_id else None), []).append(item.fingerprint)
         current: dict[tuple[str, str | None, str], dict] = {}
@@ -248,7 +249,7 @@ async def set_finding_verdicts(
             targets.append((item.scope, document_id, row["id"]))
             found.append(row)
         # One write per distinct (verdict, reason, note): a group is mostly ticks and unticks.
-        writes: dict[tuple[str | None, str | None, str | None], list[str]] = {}
+        writes: dict[tuple[ReviewVerdict | None, str | None, str | None], list[str]] = {}
         for (_, _, row_id), item in zip(targets, request.verdicts):
             writes.setdefault((item.verdict, item.reason, item.note), []).append(row_id)
         for (verdict, reason, note), row_ids in writes.items():
