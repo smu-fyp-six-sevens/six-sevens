@@ -1,0 +1,27 @@
+{
+  "filename": "POR_NRIC_20260921.pdf",
+  "files": [
+    "POR_NRIC_20260921.pdf"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [
+    "proof_of_address"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S9313308J",
+    "individual_name": "Wong Teck Huat",
+    "date_of_birth": "1993-02-27",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "F",
+    "individual_address": "230G Tampines Street 21, #03-58, Singapore 521230",
+    "date_of_issue": "2021-06-28",
+    "document_side": "single"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

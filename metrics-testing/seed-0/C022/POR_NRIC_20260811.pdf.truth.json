@@ -1,0 +1,27 @@
+{
+  "filename": "POR_NRIC_20260811.pdf",
+  "files": [
+    "POR_NRIC_20260811.pdf"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [
+    "proof_of_address"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7389497B",
+    "individual_name": "Teo Wan Ting",
+    "date_of_birth": "1973-09-28",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "F",
+    "individual_address": "1E Cantonment Road, #16-62, Singapore 085501",
+    "date_of_issue": "2022-05-20",
+    "document_side": "single"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

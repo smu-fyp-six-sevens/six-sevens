@@ -1,0 +1,27 @@
+{
+  "filename": "POR_NRIC_20260810.pdf",
+  "files": [
+    "POR_NRIC_20260810.pdf"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [
+    "proof_of_address"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S7141634H",
+    "individual_name": "Teo Kai Wen",
+    "date_of_birth": "1971-12-23",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "M",
+    "individual_address": "248 Pasir Ris Street 21, #08-69, Singapore 510248",
+    "date_of_issue": "2019-10-23",
+    "document_side": "single"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

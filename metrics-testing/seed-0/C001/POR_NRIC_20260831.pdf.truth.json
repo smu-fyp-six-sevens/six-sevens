@@ -1,0 +1,27 @@
+{
+  "filename": "POR_NRIC_20260831.pdf",
+  "files": [
+    "POR_NRIC_20260831.pdf"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [
+    "proof_of_address"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S0801500G",
+    "individual_name": "Heng Wan Ting",
+    "date_of_birth": "1963-08-05",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "M",
+    "individual_address": "454 Clementi Avenue 3, #05-63, Singapore 120454",
+    "date_of_issue": "2025-02-10",
+    "document_side": "single"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

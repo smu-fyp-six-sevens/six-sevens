@@ -271,7 +271,33 @@ def generate_proof_of_address(case_id: str, out: Path, only_individuals=None) ->
                     print("Personal bank statement (proof of address) generation failed:", e)
 
             elif "nric" in template:
-                pass
+                # The holder's NRIC (front and back on one sheet) is their proof of address: the back carries it.
+                # Drawn with the same seed as their ID document, so where that is an NRIC too, the two agree. The
+                # NRIC-Passport row supplies date of birth and nationality, which this tab doesn't carry.
+                try:
+                    nric_path = out / str(r.get("Filename") or f"{individual}_ProofAddress_NRIC.pdf")
+                    identity = next(
+                        (row for row in _openpyxl_case_rows("NRIC-Passport", case_id, key="Case ID (auto)")
+                         if str(row.get("Individual ID")) == individual),
+                        {},
+                    )
+                    person = next(
+                        (row for row in _openpyxl_case_rows("Individuals", case_id)
+                         if str(row.get("Individual ID")) == individual),
+                        {},
+                    )
+                    persona = build_nric_persona(
+                        {**identity, "Individual ID": individual,
+                         "Individual Name (auto)": r.get("Individual Name (auto)") or identity.get("Individual Name (auto)"),
+                         "NRIC/Passport No. (auto)": r.get("NRIC/Passport No. (auto)") or identity.get("NRIC/Passport No. (auto)")},
+                        str(person.get("Residential Address") or ""),
+                    )
+                    generate_nric_card(str(nric_path), redact_photo=True, **persona)
+                    truth.record(nric_path, "nric", truth.nric(persona, "single"),
+                                 derived={"document_side"}, also_acceptable=["proof_of_address"])
+                    print("Wrote", nric_path)
+                except Exception as e:
+                    print("NRIC (proof of address) generation failed:", e)
 
 
 def generate_for_case(case_id: str) -> None:
@@ -455,8 +481,7 @@ def generate_for_case(case_id: str) -> None:
                 print("COI generation failed:", e)
 
     # 8) Proof of Address — Template varies per individual row: Utility Bill,
-    # Bank Statement, or NRIC (the last is a no-op here: that individual's address is
-    # already evidenced by the NRIC/Passport document generated in section 4).
+    # Bank Statement, or NRIC (a front-and-back NRIC sheet under the row's own filename).
     generate_proof_of_address(case_id, out)
 
     # 9) Certificate of Incumbency

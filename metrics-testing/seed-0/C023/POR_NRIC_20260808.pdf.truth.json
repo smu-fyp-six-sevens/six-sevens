@@ -1,0 +1,27 @@
+{
+  "filename": "POR_NRIC_20260808.pdf",
+  "files": [
+    "POR_NRIC_20260808.pdf"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [
+    "proof_of_address"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S6848680G",
+    "individual_name": "Arun s/o Pillai",
+    "date_of_birth": "1968-10-01",
+    "country": "Singapore",
+    "race": "Indian",
+    "sex": "F",
+    "individual_address": "329 Bukit Batok Street 33, #09-395, Singapore 650329",
+    "date_of_issue": "2025-04-07",
+    "document_side": "single"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

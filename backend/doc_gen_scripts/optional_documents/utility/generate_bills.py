@@ -312,7 +312,8 @@ def generate_utility_bill(
             ("Balance Brought Forward from Previous Bill", _money(previous_balance)),
             (f"Payment Received on/before {payment_received_date.strftime('%d %b %Y')} - Thank You",
              f"-{_money(payment_received_amount)}"),
-            ("Outstanding Balance", _money(0.00)),
+            # What the previous bill still owes after the payment: zero only when it was paid in full.
+            ("Outstanding Balance", _money(round(previous_balance - payment_received_amount, 2))),
             ("Current Charges", _money(current_charges)),
         ]
         for label, value in charges_rows:

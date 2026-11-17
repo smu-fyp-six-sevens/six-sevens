@@ -2,37 +2,37 @@
   "summary": {
     "extraction": {
       "key_fields": {
-        "correct": 68,
-        "total": 68,
-        "accuracy": 1.0
+        "correct": 70,
+        "total": 71,
+        "accuracy": 0.9859
       },
       "all_fields": {
-        "correct": 124,
-        "total": 131,
-        "accuracy": 0.9466
+        "correct": 130,
+        "total": 133,
+        "accuracy": 0.9774
       },
       "all_fields_any_name": {
-        "correct": 125,
-        "total": 131,
-        "accuracy": 0.9542
+        "correct": 130,
+        "total": 133,
+        "accuracy": 0.9774
       },
       "table_rows": {
-        "found": 87,
-        "total": 92,
-        "rate": 0.9457
+        "found": 57,
+        "total": 58,
+        "rate": 0.9828
       },
       "key_fields_by_seed": {
         "0": {
-          "correct": 68,
-          "total": 68,
-          "accuracy": 1.0
+          "correct": 70,
+          "total": 71,
+          "accuracy": 0.9859
         }
       },
       "key_fields_by_document_type": {
         "bank_statement": {
-          "correct": 4,
+          "correct": 3,
           "total": 4,
-          "accuracy": 1.0
+          "accuracy": 0.75
         },
         "certificate_of_incorporation": {
           "correct": 6,
@@ -50,16 +50,11 @@
           "accuracy": 1.0
         },
         "credit_report": {
-          "correct": 7,
-          "total": 7,
+          "correct": 6,
+          "total": 6,
           "accuracy": 1.0
         },
         "fatca_crs_declaration": {
-          "correct": 5,
-          "total": 5,
-          "accuracy": 1.0
-        },
-        "list_of_loans": {
           "correct": 5,
           "total": 5,
           "accuracy": 1.0
@@ -70,8 +65,13 @@
           "accuracy": 1.0
         },
         "nric": {
-          "correct": 12,
-          "total": 12,
+          "correct": 5,
+          "total": 5,
+          "accuracy": 1.0
+        },
+        "passport": {
+          "correct": 14,
+          "total": 14,
           "accuracy": 1.0
         },
         "payslip": {
@@ -80,8 +80,8 @@
           "accuracy": 1.0
         },
         "proof_of_address": {
-          "correct": 2,
-          "total": 2,
+          "correct": 4,
+          "total": 4,
           "accuracy": 1.0
         },
         "source_of_wealth": {
@@ -91,13 +91,13 @@
         }
       },
       "key_fields_on_forged_documents": {
-        "correct": 0,
-        "total": 0,
-        "accuracy": null
+        "correct": 12,
+        "total": 12,
+        "accuracy": 1.0
       },
       "classification": {
-        "correct": 15,
-        "total": 15,
+        "correct": 14,
+        "total": 14,
         "accuracy": 1.0
       },
       "classification_by_document_type": {
@@ -131,19 +131,19 @@
           "total": 1,
           "accuracy": 1.0
         },
-        "list_of_loans": {
-          "correct": 1,
-          "total": 1,
-          "accuracy": 1.0
-        },
         "notice_of_assessment": {
           "correct": 1,
           "total": 1,
           "accuracy": 1.0
         },
         "nric": {
-          "correct": 4,
-          "total": 4,
+          "correct": 1,
+          "total": 1,
+          "accuracy": 1.0
+        },
+        "passport": {
+          "correct": 2,
+          "total": 2,
           "accuracy": 1.0
         },
         "payslip": {
@@ -152,8 +152,8 @@
           "accuracy": 1.0
         },
         "proof_of_address": {
-          "correct": 1,
-          "total": 1,
+          "correct": 2,
+          "total": 2,
           "accuracy": 1.0
         },
         "source_of_wealth": {
@@ -166,49 +166,98 @@
       "documents_not_uploaded": []
     },
     "risk": {
-      "correct": 1,
+      "correct": 0,
       "total": 1,
-      "accuracy": 1.0,
+      "accuracy": 0.0,
       "by_seed": {
-        "0": 1.0
+        "0": 0.0
       },
       "confusion": {
-        "Low -> Low": 1
+        "High -> Critical": 1
       },
-      "wrong": [],
+      "wrong": [
+        {
+          "seed": 0,
+          "case_id": "C008",
+          "expected": "High",
+          "system": "Critical",
+          "system_level": "Critical",
+          "score": 86
+        }
+      ],
       "clean_cases_rated_above_low": {
         "count": 0,
-        "total": 1,
-        "rate": 0.0
+        "total": 0,
+        "rate": null
       }
     },
     "detection": {
       "forged_documents_flagged": {
-        "flagged": 0,
-        "total": 0,
-        "accuracy": null
+        "flagged": 1,
+        "total": 2,
+        "accuracy": 0.5
       },
       "by_seed": {
-        "0": null
+        "0": 0.5
       },
       "forgeries_caught_by_the_right_check": {
-        "caught": 0,
-        "total": 0,
-        "rate": null
+        "caught": 1,
+        "total": 3,
+        "rate": 0.3333
       },
       "forgeries_where_a_finding_names_the_changed_value": {
-        "named": 0,
-        "total": 0,
-        "rate": null
+        "named": 1,
+        "total": 1,
+        "rate": 1.0
       },
-      "right_check_by_dimension": {},
+      "right_check_by_dimension": {
+        "Date Anomalies": {
+          "caught": 1,
+          "total": 1
+        },
+        "Metadata": {
+          "caught": 0,
+          "total": 1
+        },
+        "Misalignment": {
+          "caught": 0,
+          "total": 1
+        }
+      },
       "clean_documents_flagged": {
-        "flagged": 0,
-        "total": 15,
-        "rate": 0.0
+        "flagged": 2,
+        "total": 12,
+        "rate": 0.1667
       },
-      "false_positives": [],
-      "missed": [],
+      "false_positives": [
+        {
+          "seed": 0,
+          "case_id": "C008",
+          "filename": "IBS_BalanceSheet_Audited.pdf",
+          "tool": "numerical_checks_tool",
+          "severity": "high",
+          "summary": "Equity items sum to 1,000,000.00, but the stated total is 2,287,900.00"
+        },
+        {
+          "seed": 0,
+          "case_id": "C008",
+          "filename": "SP_Utilities_IBS.pdf",
+          "tool": "numerical_checks_tool",
+          "severity": "high",
+          "summary": "Previous balance 592.65 - payment 454.13 = 138.52, but outstanding balance shows 0.00"
+        },
+        {
+          "seed": 0,
+          "case_id": "C008",
+          "filename": "SP_Utilities_IBS.pdf",
+          "tool": "numerical_checks_tool",
+          "severity": "high",
+          "summary": "Outstanding balance 0.00 + current charges 573.08 = 573.08, but total payable shows 711.60"
+        }
+      ],
+      "missed": [
+        "0: C008/CreditReport_CBS_20260808.pdf"
+      ],
       "clean_documents_never_scanned": [],
       "forged_documents_never_scanned": []
     }
@@ -217,623 +266,13 @@
     {
       "seed": 0,
       "cases_scored": [
-        "C001"
+        "C008"
       ],
-      "cases_without_results": [
-        "C002",
-        "C003",
-        "C004",
-        "C005",
-        "C006",
-        "C007",
-        "C008",
-        "C009",
-        "C010",
-        "C011",
-        "C012",
-        "C013",
-        "C014",
-        "C015",
-        "C016",
-        "C017",
-        "C018",
-        "C019",
-        "C020",
-        "C021",
-        "C022",
-        "C023",
-        "C024",
-        "C025",
-        "C026",
-        "C027",
-        "C028",
-        "C029",
-        "C030"
-      ],
+      "cases_without_results": [],
       "extraction": [
         {
-          "case_id": "C001",
-          "filename": "BA_BalanceSheet_Audited.pdf",
-          "document_type": "source_of_wealth",
-          "classified_as": [
-            "source_of_wealth"
-          ],
-          "classified_correctly": true,
-          "acceptable_types": [
-            "source_of_wealth"
-          ],
-          "classification_confidence": 0.97,
-          "forged": false,
-          "uploaded": true,
-          "not_scored_officer_edited": [],
-          "fields": [
-            {
-              "field": "company_name",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "Brightwave Analytics Pte Ltd",
-              "extracted": null
-            },
-            {
-              "field": "uen",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "201298459R",
-              "extracted": null
-            },
-            {
-              "field": "financial_year_end",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "2026-03-31",
-              "extracted": null
-            },
-            {
-              "field": "signing_date",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "2026-07-20",
-              "extracted": null
-            },
-            {
-              "field": "revenue",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 3561000.0,
-              "extracted": null
-            },
-            {
-              "field": "profit_for_the_year",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 502200.0,
-              "extracted": null
-            },
-            {
-              "field": "profit_for_the_year_prior_year",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 329700.0,
-              "extracted": null
-            },
-            {
-              "field": "total_assets",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 3346900.0,
-              "extracted": null
-            },
-            {
-              "field": "total_liabilities",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 1405000.0,
-              "extracted": null
-            },
-            {
-              "field": "total_equity",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 1941900.0,
-              "extracted": null
-            },
-            {
-              "field": "share_capital",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 500000.0,
-              "extracted": null
-            },
-            {
-              "field": "total_current_assets",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 2140500.0,
-              "extracted": null
-            },
-            {
-              "field": "total_non_current_assets",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 1206400.0,
-              "extracted": null
-            },
-            {
-              "field": "total_current_liabilities",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 747500.0,
-              "extracted": null
-            },
-            {
-              "field": "total_non_current_liabilities",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 657500.0,
-              "extracted": null
-            },
-            {
-              "field": "retained_earnings_closing",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 1441900.0,
-              "extracted": null
-            },
-            {
-              "field": "retained_earnings_closing_prior_year",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 939700.0,
-              "extracted": null
-            },
-            {
-              "field": "total_assets_prior_year",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 2631600.0,
-              "extracted": null
-            },
-            {
-              "field": "total_liabilities_prior_year",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 1191900.0,
-              "extracted": null
-            },
-            {
-              "field": "total_equity_prior_year",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 1439700.0,
-              "extracted": null
-            }
-          ]
-        },
-        {
-          "case_id": "C001",
-          "filename": "BA_Constitution.pdf",
-          "document_type": "company_constitution",
-          "classified_as": [
-            "company_constitution"
-          ],
-          "classified_correctly": true,
-          "acceptable_types": [
-            "company_constitution"
-          ],
-          "classification_confidence": 0.97,
-          "forged": false,
-          "uploaded": true,
-          "not_scored_officer_edited": [],
-          "fields": [
-            {
-              "field": "company_name",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "Brightwave Analytics Pte Ltd",
-              "extracted": null
-            },
-            {
-              "field": "uen",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "201298459R",
-              "extracted": null
-            },
-            {
-              "field": "incorporation_date",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "2012-12-12",
-              "extracted": null
-            },
-            {
-              "field": "company_address",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "21 Media Circle, #03-05, Singapore 138562",
-              "extracted": null
-            },
-            {
-              "field": "share_capital",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 500000.0,
-              "extracted": null
-            },
-            {
-              "field": "issued_shares",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 500000,
-              "extracted": null
-            },
-            {
-              "field": "subscribers",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": true,
-              "rows_found": 2,
-              "rows_total": 2,
-              "expected": "[2 rows]",
-              "extracted": null
-            },
-            {
-              "field": "quorum",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 2,
-              "extracted": null
-            },
-            {
-              "field": "adoption_date",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "2012-12-12",
-              "extracted": null
-            }
-          ]
-        },
-        {
-          "case_id": "C001",
-          "filename": "BankStmt_BA_2026-05to08.pdf",
-          "document_type": "bank_statement",
-          "classified_as": [
-            "bank_statement"
-          ],
-          "classified_correctly": true,
-          "acceptable_types": [
-            "bank_statement"
-          ],
-          "classification_confidence": 0.97,
-          "forged": false,
-          "uploaded": true,
-          "not_scored_officer_edited": [],
-          "fields": [
-            {
-              "field": "bank_name",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "DBS Bank Ltd",
-              "extracted": null
-            },
-            {
-              "field": "account_number",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "7255566196",
-              "extracted": null
-            },
-            {
-              "field": "company_name",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "BRIGHTWAVE ANALYTICS PTE LTD",
-              "extracted": null
-            },
-            {
-              "field": "company_address",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "21 MEDIA CIRCLE, #03-05, SINGAPORE 138562",
-              "extracted": null
-            },
-            {
-              "field": "entity_type",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "corporate",
-              "extracted": null
-            },
-            {
-              "field": "statement_period_start",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "2026-05-01",
-              "extracted": null
-            },
-            {
-              "field": "statement_period_end",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "2026-08-31",
-              "extracted": null
-            },
-            {
-              "field": "opening_balance",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 59122.78,
-              "extracted": null
-            },
-            {
-              "field": "ledger_balance",
-              "key": false,
-              "correct": false,
-              "correct_any_name": false,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 57557.76,
-              "extracted": null
-            },
-            {
-              "field": "transactions",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": true,
-              "rows_found": 50,
-              "rows_total": 50,
-              "expected": "[50 rows]",
-              "extracted": null
-            }
-          ]
-        },
-        {
-          "case_id": "C001",
-          "filename": "BrightwaveAnalytics_FATCA_CRS.pdf",
-          "document_type": "fatca_crs_declaration",
-          "classified_as": [
-            "fatca_crs_declaration"
-          ],
-          "classified_correctly": true,
-          "acceptable_types": [
-            "fatca_crs_declaration"
-          ],
-          "classification_confidence": 0.97,
-          "forged": false,
-          "uploaded": true,
-          "not_scored_officer_edited": [],
-          "fields": [
-            {
-              "field": "company_name",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "Brightwave Analytics Pte Ltd",
-              "extracted": null
-            },
-            {
-              "field": "company_address",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "21 Media Circle, #03-05, Singapore 138562",
-              "extracted": null
-            },
-            {
-              "field": "tin",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "201298459R",
-              "extracted": null
-            },
-            {
-              "field": "declaration_date",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "2026-09-01",
-              "extracted": null
-            },
-            {
-              "field": "country_of_incorporation",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "Singapore",
-              "extracted": null
-            },
-            {
-              "field": "tax_residences",
-              "key": false,
-              "correct": false,
-              "correct_any_name": false,
-              "is_table": true,
-              "rows_found": 0,
-              "rows_total": 1,
-              "expected": "[1 rows]",
-              "extracted": [
-                "Singapore"
-              ]
-            },
-            {
-              "field": "controlling_persons",
-              "key": false,
-              "correct": false,
-              "correct_any_name": false,
-              "is_table": true,
-              "rows_found": 0,
-              "rows_total": 1,
-              "expected": "[1 rows]",
-              "extracted": null
-            }
-          ]
-        },
-        {
-          "case_id": "C001",
-          "filename": "BrightwaveAnalytics_Incorporation_Cert.pdf",
+          "case_id": "C008",
+          "filename": "ACRA_CertIncorp_201651600K.pdf",
           "document_type": "certificate_of_incorporation",
           "classified_as": [
             "certificate_of_incorporation"
@@ -843,7 +282,7 @@
             "certificate_of_incorporation"
           ],
           "classification_confidence": 0.97,
-          "forged": false,
+          "forged": true,
           "uploaded": true,
           "not_scored_officer_edited": [],
           "fields": [
@@ -855,7 +294,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "Brightwave Analytics Pte Ltd",
+              "expected": "Ironleaf Building Services Pte Ltd",
               "extracted": null
             },
             {
@@ -866,7 +305,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "201298459R",
+              "expected": "201651600K",
               "extracted": null
             },
             {
@@ -877,7 +316,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2012-12-12",
+              "expected": "2061-05-18",
               "extracted": null
             },
             {
@@ -888,7 +327,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "Private company limited by shares",
+              "expected": "Limited Exempt Private Company",
               "extracted": null
             },
             {
@@ -910,21 +349,43 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2012-12-12",
+              "expected": "2019-04-04",
+              "extracted": null
+            },
+            {
+              "field": "company_former_name",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Nexus Oak Manufacturing Pte. Ltd.",
+              "extracted": null
+            },
+            {
+              "field": "company_former_name_change_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2019-03-03",
               "extracted": null
             }
           ]
         },
         {
-          "case_id": "C001",
-          "filename": "BrightwaveAnalytics_NOA_YA2025.pdf",
-          "document_type": "notice_of_assessment",
+          "case_id": "C008",
+          "filename": "BankStmt_IBS_2026-04to07.pdf",
+          "document_type": "bank_statement",
           "classified_as": [
-            "notice_of_assessment"
+            "bank_statement"
           ],
           "classified_correctly": true,
           "acceptable_types": [
-            "notice_of_assessment"
+            "bank_statement"
           ],
           "classification_confidence": 0.97,
           "forged": false,
@@ -932,98 +393,131 @@
           "not_scored_officer_edited": [],
           "fields": [
             {
+              "field": "bank_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Oversea-Chinese Banking Corporation Limited",
+              "extracted": null
+            },
+            {
+              "field": "account_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2009377808",
+              "extracted": null
+            },
+            {
               "field": "company_name",
               "key": true,
-              "correct": true,
-              "correct_any_name": true,
+              "correct": false,
+              "correct_any_name": false,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "Brightwave Analytics Pte Ltd",
-              "extracted": null
+              "expected": "IRONLEAF BUILDING SERVICES PTE LTD",
+              "extracted": "IRONLEAF BUILDING"
             },
             {
-              "field": "tax_reference_number",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "201298459R",
-              "extracted": null
-            },
-            {
-              "field": "company_address",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "21 Media Circle, #03-05, Singapore 138562",
-              "extracted": null
-            },
-            {
-              "field": "year_of_assessment",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "2025",
-              "extracted": null
-            },
-            {
-              "field": "noa_date",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "2025-11-17",
-              "extracted": null
-            },
-            {
-              "field": "eci",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 584100,
-              "extracted": null
-            },
-            {
-              "field": "tax_payable",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 41872.0,
-              "extracted": null
-            },
-            {
-              "field": "previous_assessment_date",
+              "field": "entity_type",
               "key": false,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2025-07-08",
+              "expected": "corporate",
+              "extracted": null
+            },
+            {
+              "field": "statement_period_start",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-04-01",
+              "extracted": null
+            },
+            {
+              "field": "statement_period_end",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-07-31",
+              "extracted": null
+            },
+            {
+              "field": "opening_balance",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 54950.16,
+              "extracted": null
+            },
+            {
+              "field": "ledger_balance",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 65454.41,
+              "extracted": null
+            },
+            {
+              "field": "total_credits",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 176308.42,
+              "extracted": null
+            },
+            {
+              "field": "total_debits",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 165804.17,
+              "extracted": null
+            },
+            {
+              "field": "transactions",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": true,
+              "rows_found": 50,
+              "rows_total": 50,
+              "expected": "[50 rows]",
               "extracted": null
             }
           ]
         },
         {
-          "case_id": "C001",
-          "filename": "BusinessProfile_BA_20260831.pdf",
+          "case_id": "C008",
+          "filename": "BusinessProfile_IBS_20260808.pdf",
           "document_type": "certificate_of_incumbency",
           "classified_as": [
             "certificate_of_incumbency"
@@ -1045,7 +539,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "BRIGHTWAVE ANALYTICS PTE LTD",
+              "expected": "IRONLEAF BUILDING SERVICES PTE LTD",
               "extracted": null
             },
             {
@@ -1056,7 +550,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "201298459R",
+              "expected": "201651600K",
               "extracted": null
             },
             {
@@ -1067,7 +561,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2012-12-12",
+              "expected": "2016-05-18",
               "extracted": null
             },
             {
@@ -1078,7 +572,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "PRIVATE COMPANY LIMITED BY SHARES",
+              "expected": "LIMITED EXEMPT PRIVATE COMPANY",
               "extracted": null
             },
             {
@@ -1089,7 +583,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "21 MEDIA CIRCLE, #03-05, SINGAPORE 138562",
+              "expected": "31 WOODLANDS CLOSE, #01-09, SINGAPORE 737855",
               "extracted": null
             },
             {
@@ -1100,7 +594,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": 500000.0,
+              "expected": 1000000.0,
               "extracted": null
             },
             {
@@ -1137,6 +631,17 @@
               "extracted": null
             },
             {
+              "field": "company_former_name",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "NEXUS OAK MANUFACTURING PTE. LTD.",
+              "extracted": null
+            },
+            {
               "field": "document_date",
               "key": false,
               "correct": true,
@@ -1144,7 +649,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2026-08-28",
+              "expected": "2026-07-28",
               "extracted": null
             },
             {
@@ -1155,7 +660,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2025-10-28",
+              "expected": "2026-05-05",
               "extracted": null
             },
             {
@@ -1166,7 +671,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2025-11-10",
+              "expected": "2026-06-09",
               "extracted": null
             },
             {
@@ -1177,23 +682,23 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2025-06-30",
+              "expected": "2025-12-31",
               "extracted": null
             }
           ]
         },
         {
-          "case_id": "C001",
-          "filename": "CBR_BA_2026-08-29.pdf",
-          "document_type": "credit_report",
+          "case_id": "C008",
+          "filename": "ChuaZY_Passport_scan.png",
+          "document_type": "passport",
           "classified_as": [
-            "credit_report"
+            "passport"
           ],
           "classified_correctly": true,
           "acceptable_types": [
-            "credit_report"
+            "passport"
           ],
-          "classification_confidence": 0.97,
+          "classification_confidence": 0.85,
           "forged": false,
           "uploaded": true,
           "not_scored_officer_edited": [],
@@ -1206,18 +711,18 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "Lakshmi d/o Rajendran",
+              "expected": "Chua Zhen Yu",
               "extracted": null
             },
             {
-              "field": "id_number",
+              "field": "passport_number",
               "key": true,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "S8427269H",
+              "expected": "E8811377H",
               "extracted": null
             },
             {
@@ -1228,7 +733,113 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "1984-02-13",
+              "expected": "1975-06-20",
+              "extracted": null
+            },
+            {
+              "field": "date_of_expiry",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2029-10-10",
+              "extracted": null
+            },
+            {
+              "field": "date_of_issue",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2019-10-10",
+              "extracted": null
+            },
+            {
+              "field": "place_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singapore",
+              "extracted": null
+            },
+            {
+              "field": "sex",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "M",
+              "extracted": null
+            },
+            {
+              "field": "nric_number",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S7580953J",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C008",
+          "filename": "CreditReport_CBS_20260808.pdf",
+          "document_type": "credit_report",
+          "classified_as": [
+            "credit_report"
+          ],
+          "classified_correctly": true,
+          "acceptable_types": [
+            "credit_report"
+          ],
+          "classification_confidence": 0.97,
+          "forged": true,
+          "uploaded": true,
+          "not_scored_officer_edited": [],
+          "fields": [
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Chua Zhen Yu",
+              "extracted": null
+            },
+            {
+              "field": "id_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "S7580953J",
+              "extracted": null
+            },
+            {
+              "field": "date_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "1975-06-20",
               "extracted": null
             },
             {
@@ -1250,7 +861,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "4 Toh Yi Drive, #04-11, Singapore 590004",
+              "expected": "354B Admiralty Drive, #11-360, Singapore 752354",
               "extracted": null
             },
             {
@@ -1261,18 +872,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2026-09-01",
-              "extracted": null
-            },
-            {
-              "field": "defaults",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "[0 rows]",
+              "expected": "2026-08-10",
               "extracted": null
             },
             {
@@ -1289,15 +889,15 @@
           ]
         },
         {
-          "case_id": "C001",
-          "filename": "FacilityLetter_BA_1.pdf",
-          "document_type": "list_of_loans",
+          "case_id": "C008",
+          "filename": "FATCA_CRS_Entity_90175.pdf",
+          "document_type": "fatca_crs_declaration",
           "classified_as": [
-            "list_of_loans"
+            "fatca_crs_declaration"
           ],
           "classified_correctly": true,
           "acceptable_types": [
-            "list_of_loans"
+            "fatca_crs_declaration"
           ],
           "classification_confidence": 0.97,
           "forged": false,
@@ -1312,7 +912,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "Brightwave Analytics Pte Ltd",
+              "expected": "Ironleaf Building Services Pte Ltd",
               "extracted": null
             },
             {
@@ -1323,29 +923,91 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "21 Media Circle, #03-05, Singapore 138562",
+              "expected": "31 Woodlands Close, #01-09, Singapore 737855",
               "extracted": null
             },
             {
-              "field": "individual_name",
+              "field": "tin",
               "key": true,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "Lakshmi d/o Rajendran",
+              "expected": "201651600K",
               "extracted": null
             },
             {
-              "field": "loan_amount",
+              "field": "declaration_date",
               "key": true,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": 290000.0,
+              "expected": "2026-08-10",
+              "extracted": null
+            },
+            {
+              "field": "country_of_incorporation",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singapore",
+              "extracted": null
+            },
+            {
+              "field": "tax_residences",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": true,
+              "rows_found": 1,
+              "rows_total": 1,
+              "expected": "[1 rows]",
+              "extracted": null
+            },
+            {
+              "field": "controlling_persons",
+              "key": false,
+              "correct": false,
+              "correct_any_name": false,
+              "is_table": true,
+              "rows_found": 0,
+              "rows_total": 1,
+              "expected": "[1 rows]",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C008",
+          "filename": "IBS_BalanceSheet_Audited.pdf",
+          "document_type": "source_of_wealth",
+          "classified_as": [
+            "source_of_wealth"
+          ],
+          "classified_correctly": true,
+          "acceptable_types": [
+            "source_of_wealth"
+          ],
+          "classification_confidence": 0.97,
+          "forged": false,
+          "uploaded": true,
+          "not_scored_officer_edited": [],
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Ironleaf Building Services Pte Ltd",
               "extracted": null
             },
             {
@@ -1356,65 +1018,442 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "201298459R",
+              "expected": "201651600K",
               "extracted": null
             },
             {
-              "field": "facility_type",
+              "field": "financial_year_end",
               "key": false,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "Overdraft",
+              "expected": "2025-12-31",
               "extracted": null
             },
             {
-              "field": "offer_date",
+              "field": "signing_date",
               "key": false,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2026-09-01",
+              "expected": "2026-05-07",
               "extracted": null
             },
             {
-              "field": "interest_rate",
-              "key": false,
-              "correct": false,
-              "correct_any_name": false,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 7.41,
-              "extracted": "Bank's Prime Rate + 2.50% (currently 7.41% p.a.)"
-            },
-            {
-              "field": "review_date",
+              "field": "revenue",
               "key": false,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2027-09-01",
+              "expected": 3976000.0,
+              "extracted": null
+            },
+            {
+              "field": "profit_for_the_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 414400.0,
+              "extracted": null
+            },
+            {
+              "field": "profit_for_the_year_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 493500.0,
+              "extracted": null
+            },
+            {
+              "field": "total_assets",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 3756400.0,
+              "extracted": null
+            },
+            {
+              "field": "total_liabilities",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1468500.0,
+              "extracted": null
+            },
+            {
+              "field": "total_equity",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 2287900.0,
+              "extracted": null
+            },
+            {
+              "field": "share_capital",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1000000.0,
+              "extracted": null
+            },
+            {
+              "field": "total_current_assets",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1938700.0,
+              "extracted": null
+            },
+            {
+              "field": "total_non_current_assets",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1817700.0,
+              "extracted": null
+            },
+            {
+              "field": "total_current_liabilities",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1468500.0,
+              "extracted": null
+            },
+            {
+              "field": "total_non_current_liabilities",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 0,
+              "extracted": null
+            },
+            {
+              "field": "retained_earnings_closing",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1287900.0,
+              "extracted": null
+            },
+            {
+              "field": "retained_earnings_closing_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 873500.0,
+              "extracted": null
+            },
+            {
+              "field": "total_assets_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 3019900.0,
+              "extracted": null
+            },
+            {
+              "field": "total_liabilities_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1146400.0,
+              "extracted": null
+            },
+            {
+              "field": "total_equity_prior_year",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1873500.0,
               "extracted": null
             }
           ]
         },
         {
-          "case_id": "C001",
-          "filename": "HengWT_Salary_Slip_20260831.pdf",
-          "document_type": "payslip",
+          "case_id": "C008",
+          "filename": "IBS_Constitution.pdf",
+          "document_type": "company_constitution",
           "classified_as": [
-            "payslip"
+            "company_constitution"
           ],
           "classified_correctly": true,
           "acceptable_types": [
-            "payslip"
+            "company_constitution"
+          ],
+          "classification_confidence": 0.97,
+          "forged": false,
+          "uploaded": true,
+          "not_scored_officer_edited": [],
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Ironleaf Building Services Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "uen",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201651600K",
+              "extracted": null
+            },
+            {
+              "field": "incorporation_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-05-18",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "31 Woodlands Close, #01-09, Singapore 737855",
+              "extracted": null
+            },
+            {
+              "field": "share_capital",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1000000.0,
+              "extracted": null
+            },
+            {
+              "field": "issued_shares",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1000000,
+              "extracted": null
+            },
+            {
+              "field": "subscribers",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": true,
+              "rows_found": 2,
+              "rows_total": 2,
+              "expected": "[2 rows]",
+              "extracted": null
+            },
+            {
+              "field": "quorum",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 2,
+              "extracted": null
+            },
+            {
+              "field": "adoption_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2016-05-18",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C008",
+          "filename": "IRAS_NOA_Company_20250807.pdf",
+          "document_type": "notice_of_assessment",
+          "classified_as": [
+            "notice_of_assessment"
+          ],
+          "classified_correctly": true,
+          "acceptable_types": [
+            "notice_of_assessment"
+          ],
+          "classification_confidence": 0.97,
+          "forged": false,
+          "uploaded": true,
+          "not_scored_officer_edited": [],
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Ironleaf Building Services Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "tax_reference_number",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "201651600K",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "31 Woodlands Close, #01-09, Singapore 737855",
+              "extracted": null
+            },
+            {
+              "field": "year_of_assessment",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025",
+              "extracted": null
+            },
+            {
+              "field": "noa_date",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025-08-07",
+              "extracted": null
+            },
+            {
+              "field": "eci",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 478300,
+              "extracted": null
+            },
+            {
+              "field": "tax_payable",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 31943.0,
+              "extracted": null
+            },
+            {
+              "field": "previous_assessment_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2025-07-15",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C008",
+          "filename": "Iskandar_Passport_scan.jpg",
+          "document_type": "passport",
+          "classified_as": [
+            "passport"
+          ],
+          "classified_correctly": true,
+          "acceptable_types": [
+            "passport"
           ],
           "classification_confidence": 0.85,
           "forged": false,
@@ -1429,146 +1468,40 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "Heng Wan Ting",
+              "expected": "Iskandar bin Hamzah",
               "extracted": null
             },
             {
-              "field": "company_name",
+              "field": "passport_number",
               "key": true,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "Brightwave Analytics Pte Ltd",
+              "expected": "K5885423Z",
               "extracted": null
             },
             {
-              "field": "company_address",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "21 Media Circle, #03-05, Singapore 138562",
-              "extracted": null
-            },
-            {
-              "field": "net_pay",
+              "field": "date_of_birth",
               "key": true,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": 3462.04,
+              "expected": "1970-11-14",
               "extracted": null
             },
             {
-              "field": "basic_pay",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 3290.0,
-              "extracted": null
-            },
-            {
-              "field": "total_earnings",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 4020.0,
-              "extracted": null
-            },
-            {
-              "field": "total_deductions",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 557.96,
-              "extracted": null
-            },
-            {
-              "field": "employee_cpf",
-              "key": false,
-              "correct": false,
-              "correct_any_name": false,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": 502.0,
-              "extracted": null
-            },
-            {
-              "field": "pay_date",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "2026-08-31",
-              "extracted": null
-            },
-            {
-              "field": "pay_period_end",
-              "key": false,
-              "correct": false,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "2026-08-31",
-              "extracted": null
-            }
-          ]
-        },
-        {
-          "case_id": "C001",
-          "filename": "NRIC_1500_back.png",
-          "document_type": "nric",
-          "classified_as": [
-            "nric"
-          ],
-          "classified_correctly": true,
-          "acceptable_types": [
-            "nric"
-          ],
-          "classification_confidence": 0.85,
-          "forged": false,
-          "uploaded": true,
-          "not_scored_officer_edited": [],
-          "fields": [
-            {
-              "field": "nric_number",
+              "field": "date_of_expiry",
               "key": true,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "S0801500G",
-              "extracted": null
-            },
-            {
-              "field": "individual_address",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "454 Clementi Avenue 3, #05-63, Singapore 120454",
+              "expected": "2033-12-13",
               "extracted": null
             },
             {
@@ -1579,32 +1512,55 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2025-02-10",
+              "expected": "2023-12-13",
               "extracted": null
             },
             {
-              "field": "document_side",
+              "field": "place_of_birth",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Singapore",
+              "extracted": null
+            },
+            {
+              "field": "sex",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "M",
+              "extracted": null
+            },
+            {
+              "field": "nric_number",
               "key": false,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "back",
+              "expected": "S7032675B",
               "extracted": null
             }
           ]
         },
         {
-          "case_id": "C001",
-          "filename": "NRIC_1500_front.png",
+          "case_id": "C008",
+          "filename": "POR_NRIC_20260808.pdf",
           "document_type": "nric",
           "classified_as": [
             "nric"
           ],
           "classified_correctly": true,
           "acceptable_types": [
-            "nric"
+            "nric",
+            "proof_of_address"
           ],
           "classification_confidence": 0.97,
           "forged": false,
@@ -1619,7 +1575,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "S0801500G",
+              "expected": "S7580953J",
               "extracted": null
             },
             {
@@ -1630,7 +1586,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "Heng Wan Ting",
+              "expected": "Chua Zhen Yu",
               "extracted": null
             },
             {
@@ -1641,7 +1597,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "1963-08-05",
+              "expected": "1975-06-20",
               "extracted": null
             },
             {
@@ -1678,46 +1634,6 @@
               "extracted": null
             },
             {
-              "field": "document_side",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "front",
-              "extracted": null
-            }
-          ]
-        },
-        {
-          "case_id": "C001",
-          "filename": "NRIC_7269_back.jpeg",
-          "document_type": "nric",
-          "classified_as": [
-            "nric"
-          ],
-          "classified_correctly": true,
-          "acceptable_types": [
-            "nric"
-          ],
-          "classification_confidence": 0.85,
-          "forged": false,
-          "uploaded": true,
-          "not_scored_officer_edited": [],
-          "fields": [
-            {
-              "field": "nric_number",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "S8427269H",
-              "extracted": null
-            },
-            {
               "field": "individual_address",
               "key": true,
               "correct": true,
@@ -1725,7 +1641,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "4 Toh Yi Drive, #04-11, Singapore 590004",
+              "expected": "354B Admiralty Drive, #11-360, Singapore 752354",
               "extracted": null
             },
             {
@@ -1736,7 +1652,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2020-08-07",
+              "expected": "2025-04-27",
               "extracted": null
             },
             {
@@ -1747,119 +1663,23 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "back",
+              "expected": "single",
               "extracted": null
             }
           ]
         },
         {
-          "case_id": "C001",
-          "filename": "NRIC_7269_front.jpeg",
-          "document_type": "nric",
-          "classified_as": [
-            "nric"
-          ],
-          "classified_correctly": true,
-          "acceptable_types": [
-            "nric"
-          ],
-          "classification_confidence": 0.97,
-          "forged": false,
-          "uploaded": true,
-          "not_scored_officer_edited": [],
-          "fields": [
-            {
-              "field": "nric_number",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "S8427269H",
-              "extracted": null
-            },
-            {
-              "field": "individual_name",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "Lakshmi d/o Rajendran",
-              "extracted": null
-            },
-            {
-              "field": "date_of_birth",
-              "key": true,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "1984-02-13",
-              "extracted": null
-            },
-            {
-              "field": "country",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "Singapore",
-              "extracted": null
-            },
-            {
-              "field": "race",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "Indian",
-              "extracted": null
-            },
-            {
-              "field": "sex",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "F",
-              "extracted": null
-            },
-            {
-              "field": "document_side",
-              "key": false,
-              "correct": true,
-              "correct_any_name": true,
-              "is_table": false,
-              "rows_found": 0,
-              "rows_total": 0,
-              "expected": "front",
-              "extracted": null
-            }
-          ]
-        },
-        {
-          "case_id": "C001",
-          "filename": "POR_BankStmt_20260831.pdf",
+          "case_id": "C008",
+          "filename": "POR_UtilityBill_20260808.pdf",
           "document_type": "proof_of_address",
           "classified_as": [
-            "bank_statement"
+            "proof_of_address"
           ],
           "classified_correctly": true,
           "acceptable_types": [
-            "bank_statement",
             "proof_of_address"
           ],
-          "classification_confidence": 0.97,
+          "classification_confidence": 1.0,
           "forged": false,
           "uploaded": true,
           "not_scored_officer_edited": [],
@@ -1872,7 +1692,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "LAKSHMI D/O RAJENDRAN",
+              "expected": "Iskandar bin Hamzah",
               "extracted": null
             },
             {
@@ -1883,7 +1703,7 @@
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "4 TOH YI DRIVE, #04-11, SINGAPORE 590004",
+              "expected": "318A Yishun Avenue 9, #03-319, Singapore 761318",
               "extracted": null
             },
             {
@@ -1898,323 +1718,271 @@
               "extracted": null
             },
             {
-              "field": "account_number",
+              "field": "bill_date",
               "key": false,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "839-828201-417",
+              "expected": "2026-08-07",
               "extracted": null
             },
             {
-              "field": "statement_period_start",
+              "field": "billing_period_end",
               "key": false,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2026-05-01",
+              "expected": "2026-07-31",
               "extracted": null
             },
             {
-              "field": "statement_period_end",
+              "field": "total_payable",
               "key": false,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": "2026-08-31",
+              "expected": 233.47,
               "extracted": null
             },
             {
-              "field": "opening_balance",
+              "field": "due_date",
               "key": false,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": 3535.16,
+              "expected": "2026-08-21",
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C008",
+          "filename": "Payslip_Jul2026_Iskandar.pdf",
+          "document_type": "payslip",
+          "classified_as": [
+            "payslip"
+          ],
+          "classified_correctly": true,
+          "acceptable_types": [
+            "payslip"
+          ],
+          "classification_confidence": 0.97,
+          "forged": false,
+          "uploaded": true,
+          "not_scored_officer_edited": [],
+          "fields": [
+            {
+              "field": "individual_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Iskandar bin Hamzah",
               "extracted": null
             },
             {
-              "field": "ledger_balance",
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Ironleaf Building Services Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "net_pay",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 7291.22,
+              "extracted": null
+            },
+            {
+              "field": "basic_pay",
               "key": false,
               "correct": true,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,
               "rows_total": 0,
-              "expected": 35589.24,
+              "expected": 8310.0,
               "extracted": null
             },
             {
-              "field": "transactions",
+              "field": "employee_cpf",
               "key": false,
               "correct": false,
               "correct_any_name": false,
-              "is_table": true,
-              "rows_found": 31,
-              "rows_total": 34,
-              "expected": "[34 rows]",
-              "extracted": [
-                {
-                  "date": null,
-                  "amount": null,
-                  "balance": 3535.16,
-                  "description": "BALANCE B/F",
-                  "counterparty": null
-                },
-                {
-                  "date": "02 MAY",
-                  "amount": -220.0,
-                  "balance": 3315.16,
-                  "description": "ATM WITHDRAWAL",
-                  "counterparty": null
-                },
-                {
-                  "date": "02 MAY",
-                  "amount": -110.29,
-                  "balance": 3204.87,
-                  "description": "PHARMACY CARD PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "08 MAY",
-                  "amount": -30.91,
-                  "balance": 3173.96,
-                  "description": "PHARMACY CARD PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "08 MAY",
-                  "amount": -160.44,
-                  "balance": 3013.52,
-                  "description": "UTILITY BILL PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "15 MAY",
-                  "amount": 8994.51,
-                  "balance": 12008.03,
-                  "description": "PAYROLL CREDIT",
-                  "counterparty": null
-                },
-                {
-                  "date": "31 MAY",
-                  "amount": -130.0,
-                  "balance": 11878.03,
-                  "description": "ATM WITHDRAWAL",
-                  "counterparty": null
-                },
-                {
-                  "date": "31 MAY",
-                  "amount": 3.73,
-                  "balance": 11881.76,
-                  "description": "INTEREST CREDIT",
-                  "counterparty": null
-                },
-                {
-                  "date": "05 JUN",
-                  "amount": -100.9,
-                  "balance": 11780.86,
-                  "description": "UTILITY BILL PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "09 JUN",
-                  "amount": -240.0,
-                  "balance": 11540.86,
-                  "description": "ATM WITHDRAWAL",
-                  "counterparty": null
-                },
-                {
-                  "date": "15 JUN",
-                  "amount": -59.27,
-                  "balance": 11481.59,
-                  "description": "RESTAURANT CARD PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "16 JUN",
-                  "amount": 8994.51,
-                  "balance": 20476.1,
-                  "description": "PAYROLL CREDIT",
-                  "counterparty": null
-                },
-                {
-                  "date": "18 JUN",
-                  "amount": -218.75,
-                  "balance": 20257.35,
-                  "description": "SUPERMARKET CARD PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "26 JUN",
-                  "amount": -90.0,
-                  "balance": 20167.35,
-                  "description": "ATM WITHDRAWAL",
-                  "counterparty": null
-                },
-                {
-                  "date": "30 JUN",
-                  "amount": -501.91,
-                  "balance": 19665.44,
-                  "description": "PHARMACY CARD PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "30 JUN",
-                  "amount": 15.4,
-                  "balance": 19680.84,
-                  "description": "INTEREST CREDIT",
-                  "counterparty": null
-                },
-                {
-                  "date": "05 JUL",
-                  "amount": -15.44,
-                  "balance": 19665.4,
-                  "description": "RETAIL CARD PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "07 JUL",
-                  "amount": -270.0,
-                  "balance": 19395.4,
-                  "description": "ATM WITHDRAWAL",
-                  "counterparty": null
-                },
-                {
-                  "date": "09 JUL",
-                  "amount": -140.0,
-                  "balance": 19255.4,
-                  "description": "ATM WITHDRAWAL",
-                  "counterparty": null
-                },
-                {
-                  "date": "09 JUL",
-                  "amount": -79.3,
-                  "balance": 19176.1,
-                  "description": "UTILITY BILL PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "16 JUL",
-                  "amount": 819.76,
-                  "balance": 19995.86,
-                  "description": "ONLINE TRANSFER",
-                  "counterparty": null
-                },
-                {
-                  "date": "17 JUL",
-                  "amount": -280.0,
-                  "balance": 19715.86,
-                  "description": "ATM WITHDRAWAL",
-                  "counterparty": null
-                },
-                {
-                  "date": "25 JUL",
-                  "amount": 8994.51,
-                  "balance": 28710.37,
-                  "description": "PAYROLL CREDIT",
-                  "counterparty": null
-                },
-                {
-                  "date": "31 JUL",
-                  "amount": -209.02,
-                  "balance": 28501.35,
-                  "description": "PETROL CARD PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "31 JUL",
-                  "amount": 33.35,
-                  "balance": 28534.7,
-                  "description": "INTEREST CREDIT",
-                  "counterparty": null
-                },
-                {
-                  "date": "02 AUG",
-                  "amount": -175.57,
-                  "balance": 28359.13,
-                  "description": "RESTAURANT CARD PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "05 AUG",
-                  "amount": -226.12,
-                  "balance": 28133.01,
-                  "description": "RESTAURANT CARD PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "08 AUG",
-                  "amount": -94.48,
-                  "balance": 28038.53,
-                  "description": "UTILITY BILL PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "17 AUG",
-                  "amount": -90.0,
-                  "balance": 27948.53,
-                  "description": "ATM WITHDRAWAL",
-                  "counterparty": null
-                },
-                {
-                  "date": "19 AUG",
-                  "amount": -290.0,
-                  "balance": 27658.53,
-                  "description": "ATM WITHDRAWAL",
-                  "counterparty": null
-                },
-                {
-                  "date": "19 AUG",
-                  "amount": 8994.51,
-                  "balance": 36653.04,
-                  "description": "PAYROLL CREDIT",
-                  "counterparty": null
-                },
-                {
-                  "date": "25 AUG",
-                  "amount": -339.88,
-                  "balance": 36313.16,
-                  "description": "ONLINE TRANSFER",
-                  "counterparty": null
-                },
-                {
-                  "date": "26 AUG",
-                  "amount": -250.0,
-                  "balance": 36063.16,
-                  "description": "ATM WITHDRAWAL",
-                  "counterparty": null
-                },
-                {
-                  "date": "30 AUG",
-                  "amount": -514.7,
-                  "balance": 35548.46,
-                  "description": "RESTAURANT CARD PAYMENT",
-                  "counterparty": null
-                },
-                {
-                  "date": "31 AUG",
-                  "amount": 40.78,
-                  "balance": 35589.24,
-                  "description": "INTEREST CREDIT",
-                  "counterparty": null
-                },
-                {
-                  "date": null,
-                  "amount": null,
-                  "balance": 35589.24,
-                  "description": "BALANCE C/F",
-                  "counterparty": null
-                }
-              ]
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 1513.0,
+              "extracted": null
+            }
+          ]
+        },
+        {
+          "case_id": "C008",
+          "filename": "SP_Utilities_IBS.pdf",
+          "document_type": "proof_of_address",
+          "classified_as": [
+            "proof_of_address"
+          ],
+          "classified_correctly": true,
+          "acceptable_types": [
+            "proof_of_address"
+          ],
+          "classification_confidence": 1.0,
+          "forged": false,
+          "uploaded": true,
+          "not_scored_officer_edited": [],
+          "fields": [
+            {
+              "field": "company_name",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "Ironleaf Building Services Pte Ltd",
+              "extracted": null
+            },
+            {
+              "field": "company_address",
+              "key": true,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "31 Woodlands Close #01-09, Singapore 737855",
+              "extracted": null
+            },
+            {
+              "field": "entity_type",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "corporate",
+              "extracted": null
+            },
+            {
+              "field": "bill_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-11-08",
+              "extracted": null
+            },
+            {
+              "field": "billing_period_end",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-10-31",
+              "extracted": null
+            },
+            {
+              "field": "total_payable",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 711.6,
+              "extracted": null
+            },
+            {
+              "field": "due_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2026-11-22",
+              "extracted": null
+            },
+            {
+              "field": "previous_balance",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 592.65,
+              "extracted": null
+            },
+            {
+              "field": "payment_received",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 454.13,
+              "extracted": null
+            },
+            {
+              "field": "current_charges",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 573.08,
+              "extracted": null
+            },
+            {
+              "field": "contract_end_date",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": "2030-06-01",
+              "extracted": null
+            },
+            {
+              "field": "usage_this_period",
+              "key": false,
+              "correct": true,
+              "correct_any_name": true,
+              "is_table": false,
+              "rows_found": 0,
+              "rows_total": 0,
+              "expected": 2205,
+              "extracted": null
             }
           ]
         }
@@ -2222,8 +1990,30 @@
       "detection": [
         {
           "seed": 0,
-          "case_id": "C001",
-          "filename": "BA_BalanceSheet_Audited.pdf",
+          "case_id": "C008",
+          "filename": "ACRA_CertIncorp_201651600K.pdf",
+          "forged": true,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "date_consistency_tool",
+            "external_validation_tool",
+            "font_consistency_tool"
+          ],
+          "own_findings": [],
+          "tampering": [
+            {
+              "dimension": "Date Anomalies",
+              "right_check": true,
+              "names_value": true
+            }
+          ]
+        },
+        {
+          "seed": 0,
+          "case_id": "C008",
+          "filename": "BankStmt_IBS_2026-04to07.pdf",
           "forged": false,
           "scanned": true,
           "flagged": false,
@@ -2234,8 +2024,8 @@
         },
         {
           "seed": 0,
-          "case_id": "C001",
-          "filename": "BA_Constitution.pdf",
+          "case_id": "C008",
+          "filename": "BusinessProfile_IBS_20260808.pdf",
           "forged": false,
           "scanned": true,
           "flagged": false,
@@ -2246,8 +2036,8 @@
         },
         {
           "seed": 0,
-          "case_id": "C001",
-          "filename": "BankStmt_BA_2026-05to08.pdf",
+          "case_id": "C008",
+          "filename": "ChuaZY_Passport_scan.png",
           "forged": false,
           "scanned": true,
           "flagged": false,
@@ -2258,8 +2048,31 @@
         },
         {
           "seed": 0,
-          "case_id": "C001",
-          "filename": "BrightwaveAnalytics_FATCA_CRS.pdf",
+          "case_id": "C008",
+          "filename": "CreditReport_CBS_20260808.pdf",
+          "forged": true,
+          "scanned": true,
+          "flagged": false,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [],
+          "own_findings": [],
+          "tampering": [
+            {
+              "dimension": "Misalignment",
+              "right_check": false,
+              "names_value": null
+            },
+            {
+              "dimension": "Metadata",
+              "right_check": false,
+              "names_value": null
+            }
+          ]
+        },
+        {
+          "seed": 0,
+          "case_id": "C008",
+          "filename": "FATCA_CRS_Entity_90175.pdf",
           "forged": false,
           "scanned": true,
           "flagged": false,
@@ -2270,8 +2083,28 @@
         },
         {
           "seed": 0,
-          "case_id": "C001",
-          "filename": "BrightwaveAnalytics_Incorporation_Cert.pdf",
+          "case_id": "C008",
+          "filename": "IBS_BalanceSheet_Audited.pdf",
+          "forged": false,
+          "scanned": true,
+          "flagged": true,
+          "cited_by_cross_document_finding": false,
+          "tools_fired": [
+            "numerical_checks_tool"
+          ],
+          "own_findings": [
+            {
+              "tool": "numerical_checks_tool",
+              "severity": "high",
+              "summary": "Equity items sum to 1,000,000.00, but the stated total is 2,287,900.00"
+            }
+          ],
+          "tampering": []
+        },
+        {
+          "seed": 0,
+          "case_id": "C008",
+          "filename": "IBS_Constitution.pdf",
           "forged": false,
           "scanned": true,
           "flagged": false,
@@ -2282,8 +2115,8 @@
         },
         {
           "seed": 0,
-          "case_id": "C001",
-          "filename": "BrightwaveAnalytics_NOA_YA2025.pdf",
+          "case_id": "C008",
+          "filename": "IRAS_NOA_Company_20250807.pdf",
           "forged": false,
           "scanned": true,
           "flagged": false,
@@ -2294,8 +2127,8 @@
         },
         {
           "seed": 0,
-          "case_id": "C001",
-          "filename": "BusinessProfile_BA_20260831.pdf",
+          "case_id": "C008",
+          "filename": "Iskandar_Passport_scan.jpg",
           "forged": false,
           "scanned": true,
           "flagged": false,
@@ -2306,8 +2139,8 @@
         },
         {
           "seed": 0,
-          "case_id": "C001",
-          "filename": "CBR_BA_2026-08-29.pdf",
+          "case_id": "C008",
+          "filename": "POR_NRIC_20260808.pdf",
           "forged": false,
           "scanned": true,
           "flagged": false,
@@ -2318,8 +2151,8 @@
         },
         {
           "seed": 0,
-          "case_id": "C001",
-          "filename": "FacilityLetter_BA_1.pdf",
+          "case_id": "C008",
+          "filename": "POR_UtilityBill_20260808.pdf",
           "forged": false,
           "scanned": true,
           "flagged": false,
@@ -2330,8 +2163,8 @@
         },
         {
           "seed": 0,
-          "case_id": "C001",
-          "filename": "HengWT_Salary_Slip_20260831.pdf",
+          "case_id": "C008",
+          "filename": "Payslip_Jul2026_Iskandar.pdf",
           "forged": false,
           "scanned": true,
           "flagged": false,
@@ -2342,79 +2175,46 @@
         },
         {
           "seed": 0,
-          "case_id": "C001",
-          "filename": "NRIC_1500_back.png",
+          "case_id": "C008",
+          "filename": "SP_Utilities_IBS.pdf",
           "forged": false,
           "scanned": true,
-          "flagged": false,
+          "flagged": true,
           "cited_by_cross_document_finding": false,
-          "tools_fired": [],
-          "own_findings": [],
-          "tampering": []
-        },
-        {
-          "seed": 0,
-          "case_id": "C001",
-          "filename": "NRIC_1500_front.png",
-          "forged": false,
-          "scanned": true,
-          "flagged": false,
-          "cited_by_cross_document_finding": false,
-          "tools_fired": [],
-          "own_findings": [],
-          "tampering": []
-        },
-        {
-          "seed": 0,
-          "case_id": "C001",
-          "filename": "NRIC_7269_back.jpeg",
-          "forged": false,
-          "scanned": true,
-          "flagged": false,
-          "cited_by_cross_document_finding": false,
-          "tools_fired": [],
-          "own_findings": [],
-          "tampering": []
-        },
-        {
-          "seed": 0,
-          "case_id": "C001",
-          "filename": "NRIC_7269_front.jpeg",
-          "forged": false,
-          "scanned": true,
-          "flagged": false,
-          "cited_by_cross_document_finding": false,
-          "tools_fired": [],
-          "own_findings": [],
-          "tampering": []
-        },
-        {
-          "seed": 0,
-          "case_id": "C001",
-          "filename": "POR_BankStmt_20260831.pdf",
-          "forged": false,
-          "scanned": true,
-          "flagged": false,
-          "cited_by_cross_document_finding": false,
-          "tools_fired": [],
-          "own_findings": [],
+          "tools_fired": [
+            "numerical_checks_tool"
+          ],
+          "own_findings": [
+            {
+              "tool": "numerical_checks_tool",
+              "severity": "high",
+              "summary": "Previous balance 592.65 - payment 454.13 = 138.52, but outstanding balance shows 0.00"
+            },
+            {
+              "tool": "numerical_checks_tool",
+              "severity": "high",
+              "summary": "Outstanding balance 0.00 + current charges 573.08 = 573.08, but total payable shows 711.60"
+            }
+          ],
           "tampering": []
         }
       ],
       "risk": [
         {
           "seed": 0,
-          "case_id": "C001",
-          "expected": "Low",
-          "system": "Low",
-          "system_level": "Low",
-          "score": 0
+          "case_id": "C008",
+          "expected": "High",
+          "system": "Critical",
+          "system_level": "Critical",
+          "score": 86
         }
       ],
       "run_notes": [
-        "C001: officer step on CBR_BA_2026-08-29.pdf: saved the fields unchanged (accounts, total_outstanding_balance, report_date low-confidence)",
-        "C001: officer step on POR_BankStmt_20260831.pdf: saved the fields unchanged (ledger_balance low-confidence)",
-        "C001: BankStmt_BA_2026-05to08.pdf re-uploaded by hand (document 5f540fba-ec71-437c-b52e-c992be6925ea): the first upload was extracted with the generic schema, so its transactions were never read and it couldn't be approved. The re-upload's extraction and scan are scored; the case analysis is the one that ran after it."
+        "C008: officer step on ChuaZY_Passport_scan.png: edited mrz (undone for scoring)",
+        "C008: officer step on IBS_BudgetProposal_202608.pdf: type unrecognised -> unrecognised (undone for scoring)",
+        "C008: officer step on PO-2352_IBS.pdf: type unrecognised -> unrecognised (undone for scoring)",
+        "C008: officer step on POR_UtilityBill_20260808.pdf: type proof_of_address -> proof_of_address (undone for scoring)",
+        "C008: officer step on SP_Utilities_IBS.pdf: type proof_of_address -> proof_of_address (undone for scoring)"
       ]
     }
   ]

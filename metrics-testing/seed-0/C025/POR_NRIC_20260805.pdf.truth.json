@@ -1,0 +1,27 @@
+{
+  "filename": "POR_NRIC_20260805.pdf",
+  "files": [
+    "POR_NRIC_20260805.pdf"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [
+    "proof_of_address"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S0022746C",
+    "individual_name": "Lee Li Ting",
+    "date_of_birth": "1958-03-10",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "M",
+    "individual_address": "221B Tengah Garden Walk, #12-86, Singapore 692221",
+    "date_of_issue": "2024-11-08",
+    "document_side": "single"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

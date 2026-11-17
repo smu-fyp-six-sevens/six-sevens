@@ -1577,3 +1577,24 @@ def test_a_carried_forward_balance_that_does_not_follow_is_flagged() -> None:
     result = _run([_field("transactions", _statement_with_forward_lines(1300.00))], document_type="bank_statement")
     [finding] = _codes(result, "BS.OPEN_CLOSE")
     assert finding.severity == "impossible" and finding.expected == "1,200.00"
+
+
+def test_a_closing_balance_read_without_its_opening_balance_is_counted_as_a_line() -> None:
+    # Seen live (C008): extraction kept "Retained earnings, end of year" but not the opening balance and profit above it,
+    # and the check set the closing balance aside as a subtotal, so equity summed to share capital alone.
+    from app.fraud_detection.numerical_validation.runner import Binding, run_numerical_checks
+
+    def equity(rows: list[dict], total: float) -> list:
+        fields = [_field("balance_sheet_items", rows), _field("total_equity", str(total))]
+        bindings = [Binding(role="equity_row", field="balance_sheet_items", row=i) for i in range(len(rows))]
+        return [f for f in run_numerical_checks("source_of_wealth", fields, bindings).findings if f.check_code == "FS.BS_CAST"]
+
+    closing_only = [{"label": "Share capital", "amount": 1_000_000, "section": "equity"},
+                    {"label": "Retained earnings, end of year", "amount": 1_287_900, "section": "equity"}]
+    with_movements = [{"label": "Share capital", "amount": 1_000_000, "section": "equity"},
+                      {"label": "Retained earnings, beginning of year", "amount": 873_500, "section": "equity"},
+                      {"label": "Add: Profit for the year", "amount": 414_400, "section": "equity"},
+                      {"label": "Retained earnings, end of year", "amount": 1_287_900, "section": "equity"}]
+    assert equity(closing_only, 2_287_900) == []
+    assert equity(with_movements, 2_287_900) == []
+    assert len(equity(with_movements, 2_350_000)) == 1

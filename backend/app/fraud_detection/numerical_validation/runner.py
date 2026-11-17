@@ -137,7 +137,11 @@ def _low_confidence(confidences: dict[str, float], names: list[str]) -> bool:
 
 
 INCOME_TOTAL_WORDS = ("total", "gross profit", "profit from operations", "profit before", "profit for the year")
-SECTION_TOTAL_WORDS = ("total", "end of year")
+SECTION_TOTAL_WORDS = ("total",)
+# A closing balance ("Retained earnings, end of year") is the subtotal of an opening balance and the year's movements.
+# It's left out of a section's sum only when those rows are there too; read on its own, it is the section's line.
+CLOSING_WORDS = ("end of year", "closing")
+OPENING_WORDS = ("beginning of year", "opening", "brought forward", "at 1 ", "at beginning")
 
 
 def _is_total(row: dict, words: tuple[str, ...]) -> bool:
@@ -271,10 +275,12 @@ def _balance_sheet(values: dict[str, Any], plain: dict[str, str], sections: dict
                                                 reason=f"{section}: no total field bound (total_{section})"))
             continue
         stated = as_number(values[total_name])
-        amounts = []
-        for name, index in bound:
-            if 0 <= index < len(arrays[name]) and not _is_total(arrays[name][index], SECTION_TOTAL_WORDS):
-                amounts.append(as_number(arrays[name][index].get("amount")))
+        rows = [arrays[name][index] for name, index in bound if 0 <= index < len(arrays[name])]
+        has_opening = any(_is_total(row, OPENING_WORDS) for row in rows)
+        amounts = [
+            as_number(row.get("amount")) for row in rows
+            if not _is_total(row, SECTION_TOTAL_WORDS) and not (has_opening and _is_total(row, CLOSING_WORDS))
+        ]
         if stated is None or any(a is None for a in amounts) or not amounts:
             outcome.skipped.append(SkippedCheck(check_code="FS.BS_CAST",
                                                 reason=f"{section}: rows or total are not numbers"))
