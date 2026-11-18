@@ -1,31 +1,39 @@
 # Cloud architecture: what's left
 
-Open cloud work only: delete an item once it's done, and this file once it's empty. Updated 2026-11-17. The cloud as built, and why (the GKE design, Helm, releases, decisions, cost, risks): `HOW_IT_WORKS.md` §9. Operations and every problem met: `deploy/terraform/README.md`.
+Open cloud work only: delete an item once it's done, and this file once it's empty. Updated 2026-11-18. The cloud as built, and why (the GKE design, Helm, releases, decisions, cost, risks): `HOW_IT_WORKS.md` §9. Operations and every problem met: `deploy/terraform/README.md`.
 
 ## Status and next steps (read this first)
 
-**Now:** the app runs on GKE at `sixsevens.me`; every consumer pulls its events there. Cloud Run still exists as a fallback, taking no events.
+**Now:** the app runs only on GKE at `sixsevens.me`; every consumer pulls its events there. Cloud Run's services, its push identity and its CI deploy are removed in the code (2026-11-18), waiting for your `terraform apply`.
 
 **Next, in order:**
 
 | # | Step | Who | When |
 |---|---|---|---|
-| 1 | Failure tests (below) | Both | 2026-11-17 or 18 |
-| 2 | Delete Cloud Run (phase 6), with `CODEBASE_AUDIT.md` B1: its services, the push identity and its grants, the Cloud Run deploy in CI, the second frontend image, the Grafana panels moved to GKE (`build_dashboards.py` needs GKE versions of the `service_name`, `run_googleapis_com:*` and cost panels). Rollback: re-apply them from git history | Me to prepare, you to apply | By 2026-11-18 |
-| 3 | After the demo: workers back to scaling from zero (`min` 0 in each worker's `gke` block in `roles.json`, `gen_values.py`, push) | You | 2026-11-20 or 21 |
-| 4 | Delete the cluster | You | Around 2026-12-20 |
+| 1 | Apply phase 6: `terraform plan` should only destroy (the Cloud Run services and their grants, the push identity, `kong-gmp-config`) and update the subscriptions in place; then `terraform apply`, then push | You | 2026-11-18 |
+| 2 | Failure tests: the runbook is in `deploy/terraform/README.md`, "Failure tests"; paste the results and they go in `HOW_IT_WORKS.md` §9 | You run, me to write up | 2026-11-18 or 19 |
+| 3 | After the demo: the backend's push code, with `CODEBASE_AUDIT.md` B1 | Me | After 2026-11-20 |
+| 4 | After the demo: workers back to scaling from zero (`min` 0 in each worker's `gke` block in `roles.json`, `gen_values.py`, push) | You | 2026-11-20 or 21 |
+| 5 | After step 4: Argo CD (below) | Both | From 2026-11-21 |
+| 6 | Delete the cluster | You | Around 2026-12-20 |
 
-**If a worker breaks on GKE:** remove that role from `deploy/terraform/migration.json`, run `gen_values.py`, `terraform apply`, push. Cloud Run takes its work again.
+**If a worker breaks on GKE:** roll back with Cloud Deploy (`deploy/terraform/README.md`). There's no second platform any more.
 
 ## Open decisions
 
-1. **Argo CD** (deprioritised, so only if it's picked up): replace Cloud Deploy or run beside it, and how image digests reach git (CI commits them to a values file, or Argo CD Image Updater).
-2. **Phase 6 timing:** remove Cloud Run before the demo (the table says by 2026-11-18) or after it, keeping it as the fallback until then.
+1. **Argo CD's end state:** replace Cloud Deploy, or keep both (Argo CD watching, Cloud Deploy releasing). The plan below replaces it in steps, so this can wait until its step 7.
 
 ## To do
 
-- **Failure tests** (a deliverable), on production on synthetic cases at a quiet time: kill a worker pod mid-run; flood uploads; stop audit-metrics; a poison message; a lost publish (set a document to `queued` without publishing; the sweeper should recover it). The lost publish writes to the shared database.
-- **Argo CD:** releases pulled from git (GitOps) instead of pushed by Cloud Deploy. Check its vCPU on the free trial's 8 first; move the verify step and one-step rollback over.
+- **Failure tests** (a deliverable): run them from the runbook (`deploy/terraform/README.md`, "Failure tests"), then record the results.
+- **Argo CD** (decided 2026-11-18: after the demo). *Why not before:* the cluster peaks at about 6.9 of the trial's 8 vCPUs under load, and Argo CD adds about 0.85 vCPU, so the demo's second worker could fail to start. Once the workers scale from zero again (step 4), there's room. The files are ready: `deploy/argocd/values.yaml` (smallest install, explicit requests) and `deploy/argocd/application.yaml` (the chart at `main`, automated sync off at first). Steps:
+  1. Binary Authorization: allow `quay.io/argoproj/**` and `public.ecr.aws/docker/library/redis*` (`supply_chain.tf`, beside KEDA's); apply.
+  2. A read-only GitHub deploy key for the repository, registered in Argo CD (`argocd repo add` or a repository secret); the repository is private.
+  3. `deploy/helm/six-sevens/values-gitops.yaml` (committed): `projectId`, `supabaseUrl`, `gateway.address`, which `deploy.yml` passes as `--set` today.
+  4. CI writes the signed digests to `values-images.yaml` and commits it to `main` with `[skip ci]` (the gke job needs `contents: write`; check branch protection allows the bot). Cloud Deploy keeps releasing meanwhile.
+  5. Install (`helm install`, as in `values.yaml`'s header), apply the Application, sync by hand once and check it shows *Synced* with nothing to change against Cloud Deploy's release.
+  6. Move the verify step to an Argo CD `PostSync` hook Job (the same `expect` checks as `deploy/clouddeploy/skaffold.yaml`), and rollback to `argocd app rollback six-sevens` or a revert of `values-images.yaml`.
+  7. Turn automated sync on, and remove the Cloud Deploy release from `deploy.yml` (keeping the build, scan and sign).
 - **Shared Anthropic rate budget:** today each instance caps itself.
 - **Kong behaviour test in CI** (routes, CORS, rate limits, WebSocket upgrade): CI only checks the config parses.
 
@@ -41,7 +49,7 @@ Open cloud work only: delete an item once it's done, and this file once it's emp
 6. **Event contracts:** every event type checked against a schema in CI, so no service can publish what another can't read.
 7. **Architecture decision records:** one short page per big decision (events over direct calls, GKE over Cloud Run, Claude only, the score set by code, no staging), in `docs/adr/`.
 8. **Shared rate budget** (above).
-9. **Argo CD** (above): deprioritised (2026-11-17), at most closer to the end, since it adds cost.
+9. **Argo CD** (above): after the demo, from 2026-11-21.
 
 **Decided (2026-11-17):** Trivy blocks on our backend images only (built: `HOW_IT_WORKS.md` §9); CodeQL and GitHub's own attestations are skipped (they need a paid plan on a private repository; signing, SBOMs and SLSA provenance are built instead).
 

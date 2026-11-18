@@ -6,7 +6,6 @@ supabase_url = "https://your-project.supabase.co"
 # Optional
 # region          = "asia-southeast1"
 # billing_account = "000000-000000-000000"
-# min_instances   = { api = 1, kong = 1, "doc-worker" = 1, "detection-worker" = 1 }  # demo day
 # alert_email            = "you@example.com"   # turns on the alert policies
 # alert_daily_claude_usd = 10
 # billing_export_table   = "gcp_billing_export_v1_XXXXXX_XXXXXX_XXXXXX"  # once the billing export has written

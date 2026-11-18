@@ -323,8 +323,8 @@ jobs:
           docker build -q -f deploy/grafana/Dockerfile .
 
   deploy:
-    # Continuous deployment: every push to main whose checks all pass goes to Cloud Run.
-    name: Deploy to Cloud Run
+    # Continuous deployment: every push to main whose checks all pass goes to GKE.
+    name: Deploy to GKE
     needs: [backend-ci, frontend-ci, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:

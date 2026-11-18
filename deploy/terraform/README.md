@@ -1,4 +1,4 @@
-# Terraform: the Cloud Run deployment
+# Terraform: the cloud deployment (GKE)
 
 Creates everything the services need on GCP (design: `HOW_IT_WORKS.md` §9; open work: `CLOUD_ARCHITECTURE_PLAN.md`). Project `fyp-six-sevens` (number `1076848636975`), region `asia-southeast1`, repo `smu-fyp-six-sevens/six-sevens`. A green push to `main` deploys; `terraform apply` is manual and must come **before** a push that needs new infrastructure.
 
@@ -6,10 +6,9 @@ Creates everything the services need on GCP (design: `HOW_IT_WORKS.md` §9; open
 |---|---|
 | `main.tf` | APIs, Artifact Registry and cleanup, the role table (size, scaling, secrets, env per backend role) |
 | `iam.tf` | One service account per service, secrets and who reads them, publish and metric rights |
-| `pubsub.tf` | `domain-events`, dead-letter topic, one filtered push subscription per role (filters from `subscriptions.json`), the sweeper's scheduler job |
-| `run.tf` | Cloud Run: five backend roles and Kong (each with the Prometheus sidecar), the frontend |
-| `observability.tf` | Grafana (with Google's query proxy), its admin password, Kong's scrape config |
-| `github.tf` | Workload Identity Federation for Actions; the `github-deployer` account |
+| `pubsub.tf` | `domain-events`, dead-letter topic, one filtered subscription per role, pulled on GKE (filters from `subscriptions.json`), the sweeper's scheduler job |
+| `observability.tf` | Grafana's admin password and read rights (Grafana itself runs on GKE) |
+| `github.tf` | Workload Identity Federation for Actions; the `github-deployer` account and its push to the registry |
 | `monitoring.tf` | Budget alert (if `billing_account` set) and four emailed alerts |
 | `billing.tf` | `billing_export` dataset and the `costs` view Grafana reads |
 | `roles.json` | The role table (Terraform and the Helm chart both read it); `migration.json`: the consumers GKE runs |
@@ -18,7 +17,7 @@ Creates everything the services need on GCP (design: `HOW_IT_WORKS.md` §9; open
 | `workload_identity.tf` | GKE: pods act as their role's account; pull rights; KEDA's account |
 | `supply_chain.tf` | GKE: the signing key, Binary Authorization, Cloud Deploy, the deployer's extra rights |
 
-Services start on a placeholder image; the deploy rolls out real images and Terraform ignores image changes. Running locally needs nothing here.
+Terraform makes the cloud pieces; the Helm chart (`deploy/helm`) makes everything inside the cluster, released by the deploy. Running locally needs nothing here. Cloud Run ran the app until 2026-11-18 (phase 6, below).
 
 **Use a fresh terminal:** Terraform (1.16.6, same as CI) is installed with winget; a terminal opened before that can't find it.
 
@@ -32,7 +31,7 @@ gcloud auth application-default login      # tick "Select all" on the consent pa
 gcloud config set project <project-id>
 gcloud services enable cloudresourcemanager.googleapis.com serviceusage.googleapis.com --project <project-id>
 gcloud storage buckets create gs://<project-id>-tfstate --location asia-southeast1 --uniform-bucket-level-access
-cp terraform.tfvars.example terraform.tfvars   # project_id, github_repo, supabase_url; optional billing_account, alert_email, min_instances
+cp terraform.tfvars.example terraform.tfvars   # project_id, github_repo, supabase_url; optional billing_account, alert_email
 terraform init -backend-config="bucket=<project-id>-tfstate"
 terraform apply
 ```
@@ -44,7 +43,7 @@ terraform apply
 
 ## What's running, and where to look
 
-- **Grafana:** URL in the deploy summary; user `admin`, password `terraform output -raw grafana_admin_password`. Dashboards: Status, Services, Pipeline, Agents, Cost. Data appears minutes after traffic; the Cost dashboard's per-namespace rows only after cost allocation (`gke.tf`) has run a day, since the billing export lags.
+- **Grafana:** `https://grafana.sixsevens.me`; user `admin`, password `terraform output -raw grafana_admin_password`. Dashboards: Overview (home), Services, Pipeline, Agents, Cost. Data appears minutes after traffic; the Cost dashboard's per-namespace rows only after cost allocation (`gke.tf`) has run a day, since the billing export lags.
 - **Traces:** Cloud Console → Trace explorer. One upload is one trace across services; Claude spans carry model, tokens and `llm.cost_usd`.
 - **Alerts:** dead-lettered events (10 min); API 5xx over 5% for 10 min; Claude spend over `alert_daily_claude_usd` (default $10) in 24 h; unrecoverable stuck work (30 min); and on GKE (`slo.tf`): the site or API down from more than one region for 10 min, and an SLO's error budget burning 14.4× too fast over 1 h or 6× over 6 h. SLOs and their budgets: Monitoring → SLOs, service `six-sevens`.
 - **Disaster recovery drill:** with Docker running and `SUPABASE_DB_URL` set (Supabase → Connect → Session pooler), `python scripts\dr_drill.py` from `backend\`. It reads production only and restores into a local container (`dr-drill-postgres`, removed after).
@@ -53,25 +52,24 @@ terraform apply
 
 ## Deploying
 
-A push to `main` runs CI and then `deploy.yml` (docs-only pushes run nothing; deploys queue, never cancel halfway). By hand: Actions → **Deploy to Cloud Run**.
+A push to `main` runs CI and then `deploy.yml` (docs-only pushes run nothing; deploys queue, never cancel halfway): build and scan, then the `gke` job (sign, release through Cloud Deploy). By hand: Actions → **Deploy to GKE**.
 
 - Images a commit already has aren't rebuilt; a change under `backend/app` rebuilds the zoning index (~1 min).
-- Only the deploy job failed? **Re-run failed jobs** reuses the images.
-- A failed gateway check rolls every service back; the failing `expect` line says which.
-- After a deploy: log in, create a case, upload, approve, wait for the analysis, read `GET <Kong URL>/audit/events?case_id=<id>`.
-- A changed secret applies on the next revision (next deploy, or `gcloud run services update <service> --region asia-southeast1`). Sizes, scaling, env and secrets change here, never in the workflow.
+- Only the gke job failed? **Re-run failed jobs** reuses the images.
+- A failed rollout or verify step rolls back to the last good release; the verify log's failing `expect` line says which check.
+- After a deploy: log in, create a case, upload, approve, wait for the analysis, read `GET https://api.sixsevens.me/audit/events?case_id=<id>`.
+- A changed secret applies when the pods restart (GKE notes below). Sizes and env live in `roles.json` (`gen_values.py` for the chart), never in the workflow.
 
 ## Notes
 
-- **Scale to zero:** idle instances stop after ~15 min; a cold start takes 10–30 s. For a demo: `min_instances = { api = 1, kong = 1, "doc-worker" = 1, "detection-worker" = 1 }`, apply.
-- **Public:** api, audit-metrics, Kong, frontend (app token) and Grafana (own login). Workers take calls only from `pubsub-push`.
-- **Don't delete** the default compute account or `github-deployer` (used keylessly by the deploy).
-- **Keep in step:** the Prometheus sidecar (`gmp_sidecar_image`), the query proxy (`grafana_proxy_image`; list tags with `curl.exe -s https://gke.gcr.io/v2/prometheus-engine/frontend/tags/list`), and Grafana with its BigQuery plugin.
+- **Public:** only the load balancer: `sixsevens.me`, `api.sixsevens.me` (Kong; the app's session cookie) and `grafana.sixsevens.me` (its own login). Everything else is internal to the cluster.
+- **Don't delete** the default compute account or `github-deployer` (used keylessly by the deploy). The service accounts are still named `run-<service>` from the Cloud Run days; GKE's pods act as them.
+- **Keep in step:** Grafana with its BigQuery plugin; the query proxy beside Grafana (in the chart; list tags with `curl.exe -s https://gke.gcr.io/v2/prometheus-engine/frontend/tags/list`).
 - `versions.tf` bills API calls to this project (`billing_project`, `user_project_override`).
 
 ## Problems met, and their fixes
 
-Fixed in the code unless the fix says otherwise.
+Fixed in the code unless the fix says otherwise. Rows naming Cloud Run, `run.tf` or push delivery are from before phase 6 (2026-11-18).
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -107,11 +105,11 @@ Fixed in the code unless the fix says otherwise.
 - **Debug workers in the IDE:** `PUSH_HOST=host.docker.internal PUSH_PORT=8001 docker compose up --build --scale workers=0`, then uvicorn on :8001 from `backend/` with `ROLE=doc-worker,detection-worker,case-worker EVENT_TRANSPORT=pubsub PUBSUB_EMULATOR_HOST=localhost:8085 GOOGLE_CLOUD_PROJECT=local`. The emulator has no auth, so `/push` takes unsigned requests locally.
 - **Pull delivery (as on GKE):** `EVENT_DELIVERY=pull docker compose up --build`. The subscriptions get no push endpoint and the workers pull them. Switching modes recreates the emulator's subscriptions, so run `docker compose up pubsub-init` again after changing it.
 - **Before a risky change** (real Supabase and Claude): upload → `analyzed`; approve → `detected`; wait for the analysis; read `GET /audit/events?case_id=<id>`. Then `docker compose restart workers` mid-detection (it should still reach `detected`); stop and start audit-metrics (missed events appear); `docker compose run --rm pubsub-init python -m app.events.emulator_setup --poison` (retried, then dead-lettered).
-- **Manual rollback:** `gcloud run services update-traffic <service> --to-revisions=<revision>=100 --region asia-southeast1`. Config changes go in Terraform.
+- **Manual rollback:** see "Rollback of a release" under GKE. Config changes go in Terraform or the chart.
 
 ## GKE
 
-Everything for GKE sits behind `gke_enabled` (Terraform) and the repository variable `GKE_ENABLED`; with both off nothing changes. The move goes one role at a time (`HOW_IT_WORKS.md` §9, "How the move went"). Commands are for cmd, from the repository root unless they say otherwise.
+Everything for GKE sits behind `gke_enabled` (Terraform) and the repository variable `GKE_ENABLED`; since phase 6 it is the only platform, so both stay on. The move went one role at a time (`HOW_IT_WORKS.md` §9, "How the move went"). Commands are for cmd, from the repository root unless they say otherwise.
 
 ### Before phase 1
 
@@ -131,7 +129,7 @@ Everything for GKE sits behind `gke_enabled` (Terraform) and the repository vari
    helm install keda kedacore/keda --version 2.16.1 --namespace keda --create-namespace --set podIdentity.gcp.enabled=true --set podIdentity.gcp.gcpIAMServiceAccount=gke-keda@fyp-six-sevens.iam.gserviceaccount.com
    ```
 7. **Repository variables:** set `GKE_ENABLED=true` and `SUPABASE_URL` (the same URL as `supabase_url`).
-8. **Release:** push a commit, or run Actions → Deploy to Cloud Run. The `gke` job signs the images and releases them through Cloud Deploy. Its verify step needs the certificate `ACTIVE`, so wait for step 4.
+8. **Release:** push a commit, or run Actions → Deploy to GKE. The `gke` job signs the images and releases them through Cloud Deploy. Its verify step needs the certificate `ACTIVE`, so wait for step 4.
 9. **Check:**
    - `kubectl get pods -A`: one each of Kong, api, the frontend, Grafana, and audit-metrics (HTTP only) is running; the workers are at 0.
    - `https://sixsevens.me` loads and logs in.
@@ -142,7 +140,7 @@ Everything for GKE sits behind `gke_enabled` (Terraform) and the repository vari
    - An object the chart no longer renders stays on the cluster: Cloud Deploy applies, it never deletes. A stale KEDA ScaledObject once kept case-worker at 0 against its new minimum. Find leftovers with `kubectl get scaledobject,hpa -A` and delete them by hand (`kubectl -n <ns> delete scaledobject <name>`).
 10. **Then enforce:** set `binauthz_enforce = true` and apply. Once the Cloud Armor logs (Network Security → Cloud Armor → the policy's logs) show no false positives on normal use, set `cloud_armor_preview = false` and apply.
 
-Officers can use `https://sixsevens.me` from here on. Cloud Run's URLs keep working, since both front doors share the database and the topic.
+Officers can use `https://sixsevens.me` from here on.
 
 ### Phases 2–4: move one consumer
 
@@ -154,7 +152,50 @@ The order is audit-metrics, then case-worker, then detection-worker, then doc-wo
 4. Push the two changed files. The release starts the role's pods, which pull the backlog.
 5. **Watch:** `kubectl -n <role> get pods`; the Pipeline and Agents dashboards; `domain-events-dead-letter-pull` stays empty; for audit-metrics, sweeps still run every 5 minutes (`sweep.requested` in the audit trail).
 
-**Rollback:** remove the role from `migration.json`, run `gen_values.py`, apply (push again, in place), then push.
+### Phase 6: remove Cloud Run (prepared 2026-11-18)
+
+The code no longer has `run.tf`, the push identity (`pubsub-push`), the subscriptions' push config, the Cloud Run Grafana, Kong's sidecar config (`kong-gmp-config`), the deployer's Cloud Run rights or the Cloud Run deploy job.
+
+1. From `deploy\terraform`, run `terraform plan`. Expect only **destroys** (the Cloud Run services and their IAM members, `pubsub-push` and its token grant, `kong-gmp-config` and its version and grant, `deployer_run`, `deployer_act_as`, the `run.googleapis.com` API entry, which stays on). The subscriptions shouldn't change: they're already pulled. Nothing may be "must be replaced", and nothing under GKE may change. If a heredoc secret is replaced, a `.tf` file lost its CRLF endings.
+2. `terraform apply`, then push. The deploy builds one `frontend` image (no more `frontend-gke`) and goes straight from build to the gke job.
+3. Check: `gcloud run services list --region asia-southeast1` lists nothing; `https://sixsevens.me` signs in; Grafana's Services and Cost dashboards fill their GKE rows.
+
+**Rollback:** restore the files from git (`git checkout <commit before phase 6> -- deploy/terraform .github/workflows/deploy.yml`), apply, push. The services come back on the placeholder image until the deploy rolls out.
+
+### Failure tests (a deliverable)
+
+On production, at a quiet time, on synthetic documents only, one test at a time (the sweeper runs in audit-metrics, so test 3 pauses it). Uploads spend Claude tokens: about $1–2 for the whole run. Test 5 writes one document's status in the shared database. For each test, note the start time, what you saw and how long recovery took, and screenshot Grafana's Overview; the results go in `HOW_IT_WORKS.md` §9.
+
+**Before:** `gcloud container clusters get-credentials six-sevens --region asia-southeast1`; on `sixsevens.me` create a case named `Failure test <date>`; open Grafana's Overview (last 1 hour) and the case's audit trail.
+
+1. **A worker killed mid-run.** Upload one synthetic payslip, approve it, and once it shows *Detection in progress*:
+   ```
+   kubectl -n detection-worker delete pod -l app.kubernetes.io/name=detection-worker --grace-period=0 --force
+   ```
+   *Expect:* a new pod starts within a minute; the run's message wasn't acked, so it comes back (after its ack deadline, or the sweeper's 10-minute limit for `detecting`); the document reaches *Detection complete*; the audit trail has one `document.detected` and possibly a `recovery.requested`; no `recovery.exhausted`. *Record:* the time from the kill to *Detection complete*.
+2. **A flood of uploads.** Upload 10 synthetic documents in one go, then approve them all together. Watch `kubectl -n doc-worker get pods -w` (then `-n detection-worker`).
+   *Expect:* Overview's "Waiting events by worker" rises; a second pod within about 4 minutes; every document reaches *Detection complete*; no restarts (`RESTARTS` 0, no `OOMKilled`); back to 1 pod about 5 minutes after the queue empties. *Record:* when the second pod appeared, the last document's finish time, the peak backlog.
+3. **audit-metrics stopped.** Pause it (KEDA keeps it at 1 otherwise):
+   ```
+   kubectl -n audit-metrics annotate scaledobject/audit-metrics autoscaling.keda.sh/paused-replicas=0 --overwrite
+   ```
+   Then on the case add a note and rename the case. The audit trail page fails while it's down (audit-metrics serves it): expected. After 5 minutes, resume:
+   ```
+   kubectl -n audit-metrics annotate scaledobject/audit-metrics autoscaling.keda.sh/paused-replicas-
+   ```
+   *Expect:* the officer actions still worked; `audit-metrics-push`'s backlog rose and drained on restart; the note and rename appear in the audit trail with their original times; sweeps resume (`sweep.requested` every 5 minutes). *Record:* the backlog peak and the time to drain. (If `scaledobject/audit-metrics` doesn't exist, use `kubectl -n audit-metrics scale deploy/audit-metrics --replicas=0`, then `--replicas=1`.)
+4. **A poison message.**
+   ```
+   gcloud pubsub topics publish domain-events --message="not an event" --attribute=type=document.approved
+   ```
+   *Expect:* detection-worker and audit-metrics log a malformed message and nack it; after 5 attempts (backoff 10 s to 10 min, so up to about 20 minutes) it is in the dead-letter topic; Overview's "Failed events" shows 1 and the dead-letter alert emails; other work keeps flowing (upload one document meanwhile). Read it, then clear it: `gcloud pubsub subscriptions pull domain-events-dead-letter-pull --limit=5 --auto-ack`. *Record:* the time to dead-letter, and that the upload went through.
+5. **A lost publish.** Take one synthetic document from test 2 that is *Ready for approval* (not approved). In Supabase's SQL editor, with its id:
+   ```sql
+   update documents set status = 'queued', queued_at = now(), processing_started_at = null where id = '<document id>';
+   ```
+   No event is published, as if the api crashed between its write and its publish. *Expect:* within about 10 minutes (the 5-minute limit plus up to one sweep), the audit trail shows the sweeper's `recovery.requested`, the document is processed again and is back to *Ready for approval*; Overview's "Stuck work and recoveries" shows it stuck, then recovered. *Record:* the time from the update to *Ready for approval*.
+
+**After:** delete the test case if you don't want it in the dashboards (its audit events stay).
 
 ### Notes
 
@@ -171,5 +212,5 @@ The order is audit-metrics, then case-worker, then detection-worker, then doc-wo
 - **Rollback of a release:** `gcloud deploy targets rollback prod --delivery-pipeline=six-sevens --region=asia-southeast1`. The deploy does this itself when a rollout fails.
 - **A changed secret:** `kubectl -n <role> rollout restart deploy/<role>`. The add-on mounts secrets as files, which are read at start.
 - **No paid image scanning:** Trivy scans in the deploy instead. Terraform doesn't turn an API off, so Container Scanning was disabled by hand (`gcloud services disable containerscanning.googleapis.com --project fyp-six-sevens`); enabling it again costs about $0.26 per pushed image, build caches included.
-- **Turning it all off:** set `GKE_ENABLED` to false, then `gke_enabled = false` and apply. First empty `migration.json` (and apply), so Cloud Run takes the events again. The KMS key ring stays, since key rings can't be deleted.
+- **Turning it all off:** set `GKE_ENABLED` to false, then `gke_enabled = false` and apply. With Cloud Run gone, nothing serves the app after that. The KMS key ring stays, since key rings can't be deleted.
 - **Usage so far:** `bq query --use_legacy_sql=false "SELECT service, ROUND(SUM(cost),2) AS cost, ROUND(SUM(credits),2) AS credits FROM fyp-six-sevens.billing_export.costs WHERE time >= '2026-11-14' GROUP BY service ORDER BY cost DESC"` (lags a few hours; credits left: console, Billing → Credits). vCPU against the trial's 8: `gcloud compute project-info describe --flatten=quotas --filter="quotas.metric=CPUS_ALL_REGIONS" --format="table(quotas.usage,quotas.limit)"`.

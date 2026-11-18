@@ -1476,7 +1476,7 @@ export interface paths {
          *     because the WebSocket route itself can't use header-based auth — this
          *     plain HTTP route has no such restriction). See auth.py's
          *     WS_TICKET_TTL_SECONDS docstring for why this exists instead of just
-         *     putting the normal bearer token in the WS URL. The ticket opens only `case_id`.
+         *     putting the login token in the WS URL. The ticket opens only `case_id`.
          */
         post: operations["issue_ws_ticket_ws_tickets_post"];
         delete?: never;
@@ -4700,9 +4700,7 @@ export interface operations {
     get_agent_registry_agents_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -4733,9 +4731,7 @@ export interface operations {
             query?: {
                 document_type?: string | null;
             };
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 agent_id: string;
             };
@@ -4766,9 +4762,7 @@ export interface operations {
     list_injection_documents_api_dev_documents_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -4799,9 +4793,7 @@ export interface operations {
     get_document_fields_api_dev_documents__document_id__fields_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -4832,9 +4824,7 @@ export interface operations {
     inject_defect_api_dev_inject_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -4867,9 +4857,7 @@ export interface operations {
     get_case_cost_audit_cases__case_id__cost_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -4902,9 +4890,7 @@ export interface operations {
             query?: {
                 case_id?: string[];
             };
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -4941,9 +4927,7 @@ export interface operations {
                 before?: string | null;
                 type?: string | null;
             };
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -5030,9 +5014,7 @@ export interface operations {
                 risk?: ("Critical" | "High" | "Medium" | "Low" | "unscored")[];
                 q?: string | null;
             };
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -5061,9 +5043,7 @@ export interface operations {
     create_case_cases_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -5096,9 +5076,7 @@ export interface operations {
     get_case_by_number_cases_by_number__number__get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 number: string;
             };
@@ -5129,9 +5107,7 @@ export interface operations {
     case_counts_cases_counts_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -5163,9 +5139,7 @@ export interface operations {
                 q?: string | null;
                 limit?: number;
             };
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -5194,9 +5168,7 @@ export interface operations {
     get_case_cases__case_id__get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5227,9 +5199,7 @@ export interface operations {
     delete_case_cases__case_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5258,9 +5228,7 @@ export interface operations {
     update_case_cases__case_id__patch: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5295,9 +5263,7 @@ export interface operations {
     get_case_analysis_cases__case_id__analysis_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5328,9 +5294,7 @@ export interface operations {
     run_case_analysis_cases__case_id__analysis_run_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5361,9 +5325,7 @@ export interface operations {
     list_case_analysis_runs_cases__case_id__analysis_runs_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5394,9 +5356,7 @@ export interface operations {
     get_case_analysis_run_cases__case_id__analysis_runs__run_id__get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
                 run_id: string;
@@ -5428,9 +5388,7 @@ export interface operations {
     get_case_match_cases__case_id__case_match_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5461,9 +5419,7 @@ export interface operations {
     finalise_case_cases__case_id__finalise_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5494,9 +5450,7 @@ export interface operations {
     get_case_finding_reviews_cases__case_id__finding_reviews_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5527,9 +5481,7 @@ export interface operations {
     report_missed_issue_cases__case_id__finding_reviews_missed_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5564,9 +5516,7 @@ export interface operations {
     sign_off_group_cases__case_id__finding_reviews_sign_offs_put: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5601,9 +5551,7 @@ export interface operations {
     set_finding_verdicts_cases__case_id__finding_reviews_verdicts_put: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5638,9 +5586,7 @@ export interface operations {
     delete_finding_review_cases__case_id__finding_reviews__review_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
                 review_id: string;
@@ -5672,9 +5618,7 @@ export interface operations {
     update_missed_issue_cases__case_id__finding_reviews__review_id__patch: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
                 review_id: string;
@@ -5710,9 +5654,7 @@ export interface operations {
     list_case_notes_cases__case_id__notes_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5743,9 +5685,7 @@ export interface operations {
     add_case_note_cases__case_id__notes_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5780,9 +5720,7 @@ export interface operations {
     delete_case_note_cases__case_id__notes__note_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
                 note_id: string;
@@ -5812,9 +5750,7 @@ export interface operations {
     edit_case_note_cases__case_id__notes__note_id__patch: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
                 note_id: string;
@@ -5850,9 +5786,7 @@ export interface operations {
     download_case_report_cases__case_id__report_pdf_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 case_id: string;
             };
@@ -5887,9 +5821,7 @@ export interface operations {
                 before?: string | null;
                 status?: components["schemas"]["CaseStage"][];
             };
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -5921,9 +5853,7 @@ export interface operations {
                 case_id: string;
                 doc_status?: components["schemas"]["DocumentStatus"] | null;
             };
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -5952,9 +5882,7 @@ export interface operations {
     bulk_approve_documents_documents_bulk_approve_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -5987,9 +5915,7 @@ export interface operations {
     bulk_delete_documents_documents_bulk_delete_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -6022,9 +5948,7 @@ export interface operations {
     bulk_move_documents_documents_bulk_move_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -6057,9 +5981,7 @@ export interface operations {
     upload_documents_batch_documents_upload_batch_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -6092,9 +6014,7 @@ export interface operations {
     get_document_documents__document_id__get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6125,9 +6045,7 @@ export interface operations {
     delete_document_documents__document_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6156,9 +6074,7 @@ export interface operations {
     approve_document_documents__document_id__approve_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6189,9 +6105,7 @@ export interface operations {
     cancel_document_documents__document_id__cancel_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6222,9 +6136,7 @@ export interface operations {
     get_content_guard_documents__document_id__content_guard_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6255,9 +6167,7 @@ export interface operations {
     get_ai_generation_documents__document_id__detection_ai_generation_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6288,9 +6198,7 @@ export interface operations {
     cancel_document_detection_documents__document_id__detection_cancel_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6323,9 +6231,7 @@ export interface operations {
     get_case_match_documents__document_id__detection_case_match_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6356,9 +6262,7 @@ export interface operations {
     get_company_name_consistency_documents__document_id__detection_company_name_consistency_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6389,9 +6293,7 @@ export interface operations {
     get_date_anomalies_documents__document_id__detection_date_anomalies_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6422,9 +6324,7 @@ export interface operations {
     get_external_validation_documents__document_id__detection_external_validation_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6455,9 +6355,7 @@ export interface operations {
     get_font_consistency_documents__document_id__detection_font_consistency_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6488,9 +6386,7 @@ export interface operations {
     get_image_integrity_documents__document_id__detection_image_integrity_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6521,9 +6417,7 @@ export interface operations {
     get_image_manipulation_documents__document_id__detection_image_manipulation_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6554,9 +6448,7 @@ export interface operations {
     get_image_tampering_documents__document_id__detection_image_tampering_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6587,9 +6479,7 @@ export interface operations {
     get_layout_anomalies_documents__document_id__detection_layout_anomalies_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6620,9 +6510,7 @@ export interface operations {
     get_metadata_anomaly_documents__document_id__detection_metadata_anomaly_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6653,9 +6541,7 @@ export interface operations {
     get_numerical_validation_documents__document_id__detection_numerical_validation_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6686,9 +6572,7 @@ export interface operations {
     get_page_consistency_documents__document_id__detection_page_consistency_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6719,9 +6603,7 @@ export interface operations {
     get_document_detection_report_documents__document_id__detection_report_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6754,9 +6636,7 @@ export interface operations {
     retry_document_detection_documents__document_id__detection_retry_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6789,9 +6669,7 @@ export interface operations {
     get_spelling_anomaly_documents__document_id__detection_spelling_anomaly_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6822,9 +6700,7 @@ export interface operations {
     update_document_type_documents__document_id__document_type_patch: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6861,9 +6737,7 @@ export interface operations {
             query?: {
                 inline?: boolean;
             };
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6894,9 +6768,7 @@ export interface operations {
     add_extracted_field_documents__document_id__extracted_fields_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6931,9 +6803,7 @@ export interface operations {
     update_extracted_fields_documents__document_id__extracted_fields_patch: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6968,9 +6838,7 @@ export interface operations {
     delete_extracted_field_documents__document_id__extracted_fields__field_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
                 field_id: string;
@@ -7002,9 +6870,7 @@ export interface operations {
     get_document_langgraph_trace_documents__document_id__langgraph_trace_get: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -7037,9 +6903,7 @@ export interface operations {
     locate_document_values_documents__document_id__locate_values_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -7074,9 +6938,7 @@ export interface operations {
     move_document_documents__document_id__move_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -7111,9 +6973,7 @@ export interface operations {
     process_document_anyway_documents__document_id__process_anyway_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -7144,9 +7004,7 @@ export interface operations {
     reject_document_documents__document_id__reject_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -7177,9 +7035,7 @@ export interface operations {
     retry_document_documents__document_id__retry_post: {
         parameters: {
             query?: never;
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -7212,9 +7068,7 @@ export interface operations {
             query?: {
                 ids?: string[];
             };
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -7309,9 +7163,7 @@ export interface operations {
             query: {
                 case_id: string;
             };
-            header?: {
-                authorization?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };

@@ -6,7 +6,7 @@ import { InfoLabel } from '../../components/InfoTip';
 import { compareFindings, isEligibleForApproval } from './uploadHelpers';
 import { findingScope, useFindingReviews } from './useFindingReviews';
 import type { CaseSection } from './caseSections';
-import { formatUsd, processingTimes } from './processingTimes';
+import { caseProcessingMs, formatDuration, formatUsd, processingTimes } from './processingTimes';
 import { useCaseCost } from './useCaseCost';
 import { CaseOverviewSkeleton } from '../../components/Skeletons';
 import { Icon } from '../../components/Icon';
@@ -120,6 +120,7 @@ export function CaseOverview({
   const analysisStale = Boolean(analysisOverview && (analysisOverview.stale || analysisOverview.status === 'superseded'));
   const { cost, error: timingError, loading: timingLoading } = useCaseCost(caseId);
   const timings = processingTimes(cost?.timings);
+  const caseMs = caseProcessingMs(cost?.timings);
   return (
     <main className="case-overview" aria-label="Case summary dashboard">
       {!snapshotLoaded ? (
@@ -202,6 +203,10 @@ export function CaseOverview({
               <div className="case-overview-panel-heading">
                 <div><h2>Processing Time</h2><p>How long each stage took on this case</p></div>
               </div>
+              <div className="case-overview-timing-total" data-testid="case-processing-total">
+                <span>Whole case<small>automated work, end to end</small></span>
+                <strong>{timingLoading ? '…' : caseMs === null ? '—' : formatDuration(caseMs)}</strong>
+              </div>
               <div className="case-overview-timing-values">
                 {timings.map((metric) => (
                   <div key={metric.label}>
@@ -211,7 +216,7 @@ export function CaseOverview({
                 ))}
               </div>
               <p className="case-overview-metric-note">
-                {timingError ? "Couldn't load the timings." : 'Time the work took, from the audit trail; waiting in the queue is not counted.'}
+                {timingError ? "Couldn't load the timings." : 'From the audit trail. The whole-case time counts runs side by side once and leaves out waits for an officer and in the queue.'}
               </p>
             </article>
 

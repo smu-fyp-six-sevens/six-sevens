@@ -85,7 +85,7 @@ class Settings:
     nothing sensitive (API keys, service role key) is hardcoded.
     """
     # Every account that can log in, in one place (see app/auth.py).
-    # AUTH_SECRET_KEY signs bearer tokens; outside local dev an empty one stops startup (main.check_signing_key).
+    # AUTH_SECRET_KEY signs login tokens; outside local dev an empty one stops startup (main.check_signing_key).
     AUTH_USERS: dict[str, str] = _users(_str("AUTH_USERS"))
     AUTH_SECRET_KEY: str = _str("AUTH_SECRET_KEY")
     # The session cookie's Secure flag (auth.py). Browsers accept it on http://localhost too; false only for a client

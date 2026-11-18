@@ -114,6 +114,11 @@
 .case-overview-cost,
 .case-overview-classification { display: flex; flex-direction: column; }
 .case-overview-metric-tag { flex: none; padding: 3px 9px; border: 1px dashed var(--slate-88); border-radius: 999px; color: var(--text-muted); font-size: 11px; font-weight: 700; }
+/* The whole-case time: the panel's headline figure, above the per-stage rows. */
+.case-overview-timing-total { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; padding: 12px 14px; border: 1px solid var(--steel); border-radius: 8px; background: var(--steel-a08); }
+.case-overview-timing-total span { display: flex; flex-direction: column; gap: 2px; color: var(--ink); font-size: 13px; font-weight: 650; }
+.case-overview-timing-total small { color: var(--ink-soft); font-size: 11px; font-weight: 400; }
+.case-overview-timing-total strong { flex: none; color: var(--steel-dark); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 700; }
 .case-overview-timing-values { display: grid; gap: 8px; }
 .case-overview-timing-values > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; border: 1px solid var(--slate-91); border-radius: 8px; background: var(--slate-97); }
 .case-overview-timing-values span { display: flex; flex-direction: column; gap: 2px; color: var(--ink-soft); font-size: 12px; }
@@ -189,6 +194,12 @@
 
 @media (max-width: 1400px) {
   .case-summary-top { grid-template-columns: 1fr; }
+}
+/* A phone: the dial above its text, so neither runs off the card. */
+@media (max-width: 560px) {
+  .case-overview-risk-body { flex-direction: column; align-items: stretch; gap: 12px; }
+  .case-overview-risk-body .severity-gauge { align-self: center; }
+  .severity-legend { gap: 6px 14px; }
 }
 
 /* Detection Accuracy: precision and recall side by side, then one card per reviewed check. */

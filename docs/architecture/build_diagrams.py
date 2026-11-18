@@ -184,7 +184,7 @@ p2.box("Infrastructure on Google Cloud (Terraform for the cloud, a Helm chart in
 p2.box("Management", 300, 70, 1180, 120, "group")
 for i, label in enumerate([
     S("Terraform", "the cloud pieces, state in GCS"),
-    S("Grafana + Managed Prometheus", "4 dashboards, alerts"),
+    S("Grafana + Managed Prometheus", "5 dashboards (Overview first)<br>alerts · SLOs"),
     S("Cloud Deploy", "a recorded release per deploy<br>verify · one-step rollback"),
     S("Billing", "budget alert · BigQuery export"),
     S("GitHub Actions", "CI + deploy via Workload<br>Identity Federation (no keys)"),
@@ -217,10 +217,10 @@ ROW3 = 790
 sch2 = None
 for i, (label, kind) in enumerate([
     (S("Cloud Scheduler", "sweep every 5 min"), "gcp"),
-    (S("Artifact Registry", "images by digest<br>scanned on push"), "gcp"),
+    (S("Artifact Registry", "images by digest<br>Trivy-scanned in CI"), "gcp"),
     (S("Binary Authorization", "admits only signed,<br>attested images (KMS)"), "gcp"),
     (S("Secret Manager", "mounted as files<br>(GKE add-on)"), "gcp"),
-    (S("Cloud Monitoring", "Managed Prometheus<br>alert policies"), "gcp"),
+    (S("Cloud Monitoring", "Managed Prometheus · alerts<br>uptime checks · 2 SLOs"), "gcp"),
     (S("BigQuery", "billing_export.costs"), "data"),
     (S("Cloud Trace + Logging", "OpenTelemetry spans"), "gcp"),
 ]):
@@ -251,7 +251,7 @@ p2.box(
     "<b>Security</b><br>• Only the load balancer is public: Cloud Armor in front, Kong accepts only Google's front ends, every service is internal (ClusterIP).<br>"
     "• Default-deny network policies per namespace; pods run non-root with a read-only root filesystem and CPU and memory limits.<br>"
     "• Workload Identity: a Google account per role and no Google keys; GitHub deploys through Workload Identity Federation. The one outside key, Anthropic's, sits in Secret Manager.<br>"
-    "• Binary Authorization enforces: only images CI signed (cosign, SBOM attached) can run.",
+    "• Binary Authorization enforces: only images CI signed (cosign, with an SBOM and SLSA provenance) can run; Trivy stops a deploy whose own images have a fixable high finding.",
     260, 890, 1240, 120, "note",
 )
 legend(p2, 1640, 760)
@@ -338,13 +338,13 @@ o_kong = p5.box(S("Kong", "status codes, latency"), 40, 90, 280, 60, "gateway")
 o_svc = p5.box(S("Every backend service", "GET /metrics (prometheus_client)<br>requests · events · stage timings<br>Claude calls/tokens/cost/latency per agent<br>cost per document · tool outcomes · stuck work"), 40, 190, 280, 150, "service")
 SIDE_Y, SIDE_H = 90, 250
 o_side = p5.box(S("Managed Prometheus", "a PodMonitoring per namespace<br>scrapes /metrics every 30 s"), 410, SIDE_Y, 210, SIDE_H, "gcp")
-o_gmp = p5.box(S("Cloud Monitoring", "Managed Prometheus +<br>GKE, load balancer and<br>Pub/Sub metrics"), 690, 170, 220, 90, "gcp")
-o_alert = p5.box(S("Alert policies → email", "dead letters · 5xx &gt; 5%<br>Claude spend/day · recovery gave up"), 1080, 60, 240, 80, "ops")
-o_gra = p5.box(S("Grafana", "Services · Pipeline · Agents · Cost"), 1080, 170, 240, 90, "ops")
-o_bill = p5.box(S("BigQuery billing export", "actual invoice lines"), 690, 310, 220, 80, "data")
+o_gmp = p5.box(S("Cloud Monitoring", "Managed Prometheus +<br>GKE, load balancer and Pub/Sub metrics<br>uptime checks from 3 regions<br>SLOs: 99% API · 95% detections &lt; 3 min"), 690, 160, 220, 110, "gcp")
+o_alert = p5.box(S("Alert policies → email", "site down · SLO budget burning<br>dead letters · 5xx &gt; 5%<br>Claude spend/day · recovery gave up"), 1080, 50, 240, 90, "ops")
+o_gra = p5.box(S("Grafana", "Status · Services · Pipeline<br>Agents · Cost (incl. per case)"), 1080, 170, 240, 90, "ops")
+o_bill = p5.box(S("BigQuery billing export", "invoice lines, by namespace<br>(cloud cost per case)"), 690, 310, 220, 80, "data")
 o_trace = p5.box(S("Cloud Trace", "one trace per upload, across services"), 40, 430, 280, 70, "gcp")
 o_audit = p5.box(S("audit_events", "every action;<br>each run's Claude cost"), 410, 450, 210, 80, "data")
-o_audsvc = p5.box(S("audit-metrics", "sums each run's cost<br>per document and case"), 690, 450, 220, 80, "service")
+o_audsvc = p5.box(S("audit-metrics", "sums each run's cost<br>per document and case<br>(the $5 per-case cap reads it)"), 690, 450, 220, 80, "service")
 o_ui = p5.box(S("App: Claude Cost tab", "per case and per document<br>GET /audit/cases/{id}/cost"), 1080, 450, 240, 80, "ui")
 p5.edge(o_kong, o_side, "scraped<br>(pull)", exit=(1, 0.5), entry=(0, fx(120, SIDE_Y, SIDE_H)))
 p5.edge(o_svc, o_side, "scraped<br>(pull)", exit=(1, 0.5), entry=(0, fx(265, SIDE_Y, SIDE_H)))
@@ -365,7 +365,7 @@ JOB_X, JOB_W, JOB_H = 270, 380, 80
 JOBS = [
     ("Backend", "ruff · pyright (no suppressions)<br>pytest + coverage"),
     ("Frontend", "lint · tsc · build<br>Playwright on the production build"),
-    ("Security", "Checkov · pip-audit · npm audit (blocking)<br>Snyk · Terraform fmt + validate"),
+    ("Security", "Checkov · pip-audit · npm audit · gitleaks (blocking)<br>Snyk · Terraform fmt + validate"),
 ]
 c_gate = p6.box(S("All three green?", "only a push to main deploys;<br>a PR or branch stops here"), 740, 250, 190, 70, "gateway")
 for i, (title, detail) in enumerate(JOBS):
@@ -380,9 +380,9 @@ DEPLOY_Y, DEPLOY_H = 590, 90
 p6.box("deploy.yml · one deploy at a time, never cancelled halfway (that would skip the rollback)", 220, 540, 1560, 380, "group")
 c_run = p6.box(S("Run workflow", "manual"), 40, 600, 160, 60, "user")
 c_auth = p6.box(S("Authenticate", "Workload Identity Federation<br>short-lived tokens, no keys"), 240, DEPLOY_Y, 200, DEPLOY_H, "gcp")
-c_build = p6.box(S("Build 8 images", "5 role targets of one Dockerfile + Kong,<br>frontend, Grafana<br>skipped if this commit's image exists"), 490, DEPLOY_Y, 240, DEPLOY_H, "worker")
-c_ar = p6.box(S("Artifact Registry", "scanned on push"), 780, 605, 170, 60, "gcp")
-c_sign = p6.box(S("Sign and attest", "cosign signature + SBOM (syft)<br>Binary Authorization attestation<br>(one Cloud KMS key)"), 1000, DEPLOY_Y, 260, DEPLOY_H, "worker")
+c_build = p6.box(S("Build 8 images, scan", "5 role targets of one Dockerfile + Kong,<br>frontend, Grafana · Trivy: a fixable high<br>finding in our images stops the deploy"), 490, DEPLOY_Y, 240, DEPLOY_H, "worker")
+c_ar = p6.box(S("Artifact Registry", "images by digest"), 780, 605, 170, 60, "gcp")
+c_sign = p6.box(S("Sign and attest", "cosign signature + SBOM (syft)<br>+ SLSA provenance<br>Binary Authorization attestation<br>(one Cloud KMS key)"), 1000, DEPLOY_Y, 260, DEPLOY_H, "worker")
 ROW_B = 740
 c_render = p6.box(S("Render the chart", "Helm, images by digest"), 1000, ROW_B, 170, 80, "worker")
 c_rel = p6.box(S("Cloud Deploy release", "rolls out to GKE<br>(recorded)"), 1200, ROW_B, 180, 80, "gcp")

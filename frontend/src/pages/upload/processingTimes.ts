@@ -28,6 +28,32 @@ const STAGES: { label: string; type: string; plural: string }[] = [
   { label: 'Case analysis', type: 'case.analysis.completed', plural: 'runs' },
 ];
 
+// The case's automated time end to end: how long any of its runs had it in work (the union of their intervals, each
+// ending when its event was recorded). Runs side by side count once; waits for an officer (approval, a later upload)
+// don't count. The same rule as the dashboard's (backend audit.busy_ms). Null until a run has finished.
+export function caseProcessingMs(timings: CaseCostTiming[] | undefined): number | null {
+  const spans = (timings ?? [])
+    .filter((timing) => STAGES.some((stage) => stage.type === timing.type))
+    .map((timing) => {
+      const end = new Date(timing.occurred_at).getTime();
+      return [end - timing.duration_ms, end] as const;
+    })
+    .filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end))
+    .sort((a, b) => a[0] - b[0]);
+  if (spans.length === 0) return null;
+  let total = 0;
+  let [start, stop] = spans[0];
+  for (const [begin, end] of spans.slice(1)) {
+    if (begin > stop) {
+      total += stop - start;
+      [start, stop] = [begin, end];
+    } else {
+      stop = Math.max(stop, end);
+    }
+  }
+  return total + (stop - start);
+}
+
 // Per stage, the average of its runs (the newest run for the case analysis, which is one per case).
 export function processingTimes(timings: CaseCostTiming[] | undefined): ProcessingTime[] {
   return STAGES.map(({ label, type, plural }) => {

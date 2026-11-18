@@ -1,0 +1,44 @@
+# Argo CD, the smallest install that does GitOps for one chart (CLOUD_ARCHITECTURE_PLAN.md, "Argo CD").
+# NOT INSTALLED: planned for after the demo (2026-11-21), once the workers scale from zero again and the free trial's
+# 8 vCPUs have room. About 0.85 vCPU and 1.4 GiB requested in all.
+#
+#   helm repo add argo https://argoproj.github.io/argo-helm
+#   helm search repo argo/argo-cd              # pin the newest 7.x it lists
+#   helm install argocd argo/argo-cd --version <that 7.x> -n argocd --create-namespace -f deploy/argocd/values.yaml
+#
+# Explicit requests throughout: on Autopilot a container without them is given 0.5 vCPU and 2 GiB.
+
+dex:
+  enabled: false            # no SSO: the admin login, behind a port-forward
+notifications:
+  enabled: false
+applicationSet:
+  enabled: false            # one Application, written by hand (application.yaml)
+
+configs:
+  params:
+    server.insecure: true   # reached only through kubectl port-forward, never exposed
+  cm:
+    timeout.reconciliation: 180s
+
+controller:
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: 250m, memory: 512Mi }
+
+repoServer:
+  resources:
+    requests: { cpu: 250m, memory: 384Mi }
+    limits: { cpu: 250m, memory: 384Mi }
+
+server:
+  service:
+    type: ClusterIP
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits: { cpu: 100m, memory: 192Mi }
+
+redis:
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: 250m, memory: 256Mi }

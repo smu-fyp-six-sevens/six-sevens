@@ -77,7 +77,7 @@ plugins:
       origins: [${CORS_ORIGINS}]
       methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
       # X-Requested-With: the backend's CSRF guard on cookie-authenticated writes (backend app/auth.py).
-      headers: [Authorization, Content-Type, X-Request-ID, X-Requested-With]
+      headers: [Content-Type, X-Request-ID, X-Requested-With]
       exposed_headers: [X-Request-ID, Content-Disposition]
       credentials: true
       max_age: 600

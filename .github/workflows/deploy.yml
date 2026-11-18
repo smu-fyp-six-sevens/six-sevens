@@ -1,8 +1,8 @@
-name: Deploy to Cloud Run
+name: Deploy to GKE
 
 # Runs after CI passes on a push to main (called from ci-cd.yml), or by hand (Actions tab -> "Deploy to
-# Cloud Run" -> "Run workflow"). Terraform (deploy/terraform) owns each service's configuration; this only
-# builds one image per role, rolls it out, checks the gateway, and rolls every service back if the check fails.
+# GKE" -> "Run workflow"). Builds and scans one image per service, then signs them and releases them to GKE
+# through Cloud Deploy, which runs the gateway checks; a failed rollout is rolled back.
 on:
   workflow_call: {}
   workflow_dispatch: {}
@@ -21,12 +21,10 @@ env:
   REGION: ${{ vars.GCP_REGION || 'asia-southeast1' }}
   REGISTRY: ${{ vars.GCP_REGION || 'asia-southeast1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/app
   # The only list of services in this workflow; every step reads it. Adding one: docs/ADDING_A_SERVICE.md.
-  # Backend roles: a target each in backend/Dockerfile; their main container is named "app".
+  # Backend roles: a target each in backend/Dockerfile.
   BACKEND_ROLES: api doc-worker detection-worker case-worker audit-metrics
-  # Other services, as name=Dockerfile. Their main container is named after the service (they have a sidecar),
-  # except the ones in SINGLE_CONTAINER.
+  # Other services, as name=Dockerfile.
   OTHER_SERVICES: kong=deploy/kong/Dockerfile frontend=frontend/Dockerfile grafana=deploy/grafana/Dockerfile
-  SINGLE_CONTAINER: frontend
 
 jobs:
   build:
@@ -64,7 +62,6 @@ jobs:
           # A build secret, so the key stays out of the image layers.
           DATA_GOV_SG_API_KEY: ${{ secrets.DATA_GOV_SG_API_KEY }}
         run: |
-          KONG_URL=$(gcloud run services describe kong --region "$REGION" --format='value(status.url)')
           # build <image> <dockerfile> [buildx args...]: skipped when this commit's image already exists
           # (a rerun), otherwise unchanged layers come from the cache kept in Artifact Registry.
           build() {
@@ -90,14 +87,10 @@ jobs:
             name=${entry%%=*}; file=${entry#*=}
             case "$name" in
               # Vite bakes the API's URL in at build time.
-              frontend) build "$name" "$file" --build-arg VITE_API_URL="$KONG_URL" ;;
+              frontend) build "$name" "$file" --build-arg VITE_API_URL="https://api.${{ vars.GKE_DOMAIN || 'sixsevens.me' }}" ;;
               *) build "$name" "$file" ;;
             esac
           done
-          # GKE's frontend calls the API at its own fixed address (the gke job below).
-          if [ "${{ vars.GKE_ENABLED }}" = "true" ]; then
-            build frontend-gke frontend/Dockerfile --build-arg VITE_API_URL="https://api.${{ vars.GKE_DOMAIN || 'sixsevens.me' }}"
-          fi
 
       # Free scanning in place of Artifact Analysis's paid on-push scans. Our backend images block on a fixable high
       # or critical finding; Kong, the frontend and Grafana only report (their findings come from upstream images).
@@ -134,126 +127,8 @@ jobs:
             exit 1
           fi
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      # As in build: one 10-minute access token for the job.
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOYER_SA }}
-          token_format: access_token
-          access_token_lifetime: 600s
-          create_credentials_file: false
-
-      - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Give gcloud the token
-        run: echo "CLOUDSDK_AUTH_ACCESS_TOKEN=${{ steps.auth.outputs.access_token }}" >> "$GITHUB_ENV"
-
-      - name: Record the revisions now serving
-        run: |
-          : > previous.txt
-          others=""; for entry in $OTHER_SERVICES; do others="$others ${entry%%=*}"; done
-          for svc in $BACKEND_ROLES $others; do
-            # The revision taking traffic, which after a rollback is not the newest one.
-            rev=$(gcloud run services describe "$svc" --region "$REGION" --format='value(status.traffic[0].revisionName)')
-            echo "$svc $rev" >> previous.txt
-          done
-          cat previous.txt
-
-      - name: Roll out the new images
-        run: |
-          # shellcheck disable=SC2086 # the service lists and $container are split into words on purpose
-          # roll <service>...: rolls them out in parallel and fails if any did.
-          roll() {
-            pids=""
-            for svc in "$@"; do
-              # Services with a sidecar need the main container named. Every flag after --container belongs
-              # to that container, so the service-wide ones (--quiet) go before it.
-              case " $BACKEND_ROLES " in
-                *" $svc "*) container="--container app" ;;
-                *) case " $SINGLE_CONTAINER " in *" $svc "*) container="" ;; *) container="--container $svc" ;; esac ;;
-              esac
-              # update keeps the traffic split as it is, and a rollback pins traffic to an old revision,
-              # so traffic is moved to the new revision explicitly.
-              {
-                gcloud run services update "$svc" --region "$REGION" --quiet $container --image "$REGISTRY/$svc:$GITHUB_SHA" &&
-                gcloud run services update-traffic "$svc" --region "$REGION" --quiet --to-latest
-              } &
-              pids="$pids $!"
-            done
-            fail=0
-            for pid in $pids; do wait "$pid" || fail=1; done
-            return $fail
-          }
-          # Every backend role but api first, so the api never publishes to an older consumer; then the rest.
-          consumers=""; for role in $BACKEND_ROLES; do [ "$role" = api ] || consumers="$consumers $role"; done
-          others=""; for entry in $OTHER_SERVICES; do others="$others ${entry%%=*}"; done
-          # shellcheck disable=SC2086 # the lists are split into words on purpose
-          roll $consumers
-          # shellcheck disable=SC2086
-          roll api $others
-
-      - name: Check the gateway (no LLM, no database writes)
-        id: check
-        run: |
-          KONG_URL=$(gcloud run services describe kong --region "$REGION" --format='value(status.url)')
-          FRONTEND_URL=$(gcloud run services describe frontend --region "$REGION" --format='value(status.url)')
-          WORKER_URL=$(gcloud run services describe detection-worker --region "$REGION" --format='value(status.url)')
-          expect() {  # expect <status> <method> <url> [curl args...]
-            want=$1; method=$2; url=$3; shift 3
-            got=$(curl -s -o /dev/null -w '%{http_code}' -X "$method" "$url" "$@")
-            echo "$method $url -> $got (want $want)"
-            [ "$got" = "$want" ]
-          }
-          # /health, not /healthz: Cloud Run's front end reserves paths ending in "z" and answers them itself.
-          expect 200 GET "$KONG_URL/health"
-          # Our app's own reply, not any page that happens to answer 200 (Cloud Run's placeholder does).
-          curl -s "$KONG_URL/health" | grep -q '"status":"ok"'
-          expect 401 GET "$KONG_URL/cases"
-          expect 401 GET "$KONG_URL/audit/events"
-          expect 404 POST "$KONG_URL/push/doc-worker"
-          expect 200 GET "$FRONTEND_URL/"
-          # Only Pub/Sub's identity may invoke a worker.
-          expect 403 POST "$WORKER_URL/push/detection-worker"
-          # api and audit-metrics answer only Kong (its gateway key): called directly, they refuse.
-          API_URL=$(gcloud run services describe api --region "$REGION" --format='value(status.url)')
-          AUDIT_URL=$(gcloud run services describe audit-metrics --region "$REGION" --format='value(status.url)')
-          expect 403 POST "$API_URL/auth/login" -H 'Content-Type: application/json' -d '{"username":"x","password":"x"}'
-          expect 403 GET "$AUDIT_URL/metrics"
-          expect 200 GET "$API_URL/health"
-          # Grafana is up and asks for a login.
-          GRAFANA_URL=$(gcloud run services describe grafana --region "$REGION" --format='value(status.url)')
-          expect 200 GET "$GRAFANA_URL/api/health"
-          expect 401 GET "$GRAFANA_URL/api/dashboards/uid/six-services"
-          # The frontend origin passes CORS.
-          curl -s -o /dev/null -D - -X OPTIONS "$KONG_URL/cases" -H "Origin: $FRONTEND_URL" \
-            -H "Access-Control-Request-Method: GET" | grep -qi "access-control-allow-origin: $FRONTEND_URL"
-
-      - name: Roll back every service
-        if: failure()
-        run: |
-          while read -r svc rev; do
-            [ -n "$rev" ] && gcloud run services update-traffic "$svc" --region "$REGION" --to-revisions "$rev=100" --quiet
-          done < previous.txt
-
-      - name: Summary
-        if: success()
-        run: |
-          {
-            echo "### Deployed $GITHUB_SHA to Cloud Run"
-            echo "- Frontend: $(gcloud run services describe frontend --region "$REGION" --format='value(status.url)')"
-            echo "- API (Kong): $(gcloud run services describe kong --region "$REGION" --format='value(status.url)')"
-            echo "- Grafana: $(gcloud run services describe grafana --region "$REGION" --format='value(status.url)')"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # GKE (HOW_IT_WORKS.md §9, "Releases on GKE"), beside Cloud Run until phase 6 and only once Terraform has made the
-  # cluster (repository variable GKE_ENABLED=true). Signs every image (cosign signature, SBOM and build provenance, and the Binary
+  # GKE (HOW_IT_WORKS.md §9, "Releases on GKE"), once Terraform has made the cluster (repository variable
+  # GKE_ENABLED=true). Signs every image (cosign signature, SBOM and build provenance, and the Binary
   # Authorization attestation, all with one Cloud KMS key), renders the chart with the images by digest, and hands
   # it to Cloud Deploy, which applies it, records it and runs the gateway checks. A failed rollout is rolled back.
   gke:
@@ -344,7 +219,7 @@ jobs:
               --predicate "provenance-$image.json" "$ref" || echo "::warning::provenance attestation failed for $image"
           }
           pids=""
-          for image in $BACKEND_ROLES kong frontend-gke grafana; do
+          for image in $BACKEND_ROLES kong frontend grafana; do
             sign "$image" > "sign-$image.log" 2>&1 &
             pids="$pids $!:$image"
           done
@@ -366,7 +241,7 @@ jobs:
           while read -r image ref; do
             case "$image" in
               kong) args+=(--set "images.kong=$ref") ;;
-              frontend-gke) args+=(--set "images.frontend=$ref") ;;
+              frontend) args+=(--set "images.frontend=$ref") ;;
               grafana) args+=(--set "images.grafana=$ref") ;;
               *) args+=(--set "images.backend.$image=$ref") ;;
             esac

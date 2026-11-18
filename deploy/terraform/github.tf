@@ -34,23 +34,10 @@ resource "google_service_account_iam_member" "deployer_wif" {
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
 }
 
-# Push images, roll out new revisions, and act as each service's runtime account while doing so.
+# Push images. The release itself goes through Cloud Deploy (supply_chain.tf).
 resource "google_artifact_registry_repository_iam_member" "deployer_push" {
   location   = var.region
   repository = google_artifact_registry_repository.app.name
   role       = "roles/artifactregistry.writer"
   member     = "serviceAccount:${google_service_account.deployer.email}"
-}
-
-resource "google_project_iam_member" "deployer_run" {
-  project = var.project_id
-  role    = "roles/run.developer"
-  member  = "serviceAccount:${google_service_account.deployer.email}"
-}
-
-resource "google_service_account_iam_member" "deployer_act_as" {
-  for_each           = google_service_account.role
-  service_account_id = each.value.name
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${google_service_account.deployer.email}"
 }

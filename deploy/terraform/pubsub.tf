@@ -1,4 +1,4 @@
-# One topic, a dead-letter topic, and one filtered push subscription per role (HOW_IT_WORKS.md
+# One topic, a dead-letter topic, and one filtered subscription per role, which its pods pull (HOW_IT_WORKS.md
 # §9). The filters come from the code: backend/app/events/types.py exports subscriptions.json.
 
 locals {
@@ -19,28 +19,16 @@ resource "google_pubsub_topic" "dead_letter" {
   depends_on                 = [google_project_service.apis]
 }
 
+# Named "push" (and "<role>-push") from the Cloud Run days: renaming would recreate the subscriptions and drop
+# their waiting messages.
 resource "google_pubsub_subscription" "push" {
   for_each = local.subscriptions
   name     = "${each.key}-push"
   topic    = google_pubsub_topic.events.id
   filter   = each.value.filter
 
-  # The maximum; a pushed run must finish inside it (detection takes 1-2 minutes), or it is redelivered. A pulled
-  # run's client extends it as it works.
+  # The maximum; the pulling client extends it as a run works.
   ack_deadline_seconds = 600
-
-  # Pushed to Cloud Run until the role moves to GKE (migration.json), then pulled. Removing push_config switches the
-  # same subscription in place (the plan must say "update in-place"), so only one platform gets the role's events.
-  dynamic "push_config" {
-    for_each = contains(local.pull_roles, each.key) ? [] : [1]
-    content {
-      push_endpoint = "${local.url[each.key]}/push/${each.key}"
-      oidc_token {
-        service_account_email = google_service_account.pubsub_push.email
-        audience              = local.url[each.key]
-      }
-    }
-  }
 
   retry_policy {
     minimum_backoff = "10s"

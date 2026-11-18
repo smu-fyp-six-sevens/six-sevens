@@ -15,6 +15,7 @@ None open. The regression fixtures are regenerated from the code, so they catch 
 | # | Sev | In plain words | Fix | Where | Size |
 |---|---|---|---|---|---|
 | 3.1 | Medium | Some tests only check which mock was called, so they pass whatever the code stores | Move `test_sweeper`, `test_case_stage`, `test_doc_worker`, `test_case_auto_analysis`, `test_health`, `test_ws`, `test_realtime_listener` to the in-memory client (`tests/support/fake_supabase.py`); extend the fake (it lacks `or_`) rather than mock | `backend/tests/` | L |
+| 3.2 | Low | Slow: the content guard's image tests run real OCR, 10–20 s each on a laptop (`test_content_guard.py` image tests, `test_regression_content_guard.py`, `test_regression_page_consistency.py`). The attack-in-an-image test now runs only the 4 attacks that address an AI (2026-11-17); the rest are tested as text | Mark the OCR tests and run them on a schedule or by hand, or make OCR itself faster (`CODEBASE_AUDIT.md` 2.3) | `backend/tests/` | S |
 
 ## 4. Overlap (checked 2026-11-16)
 

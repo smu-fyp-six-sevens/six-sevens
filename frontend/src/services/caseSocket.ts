@@ -17,13 +17,11 @@ function reconnectDelay(attempt: number): number {
   return delay / 2 + Math.random() * (delay / 2);
 }
 
-// A browser's native WebSocket can't set an Authorization header on the
-// handshake, so the long-lived bearer token can't safely ride in the
-// connection URL — Cloud Run's default access logging captures full
-// request URLs, which would put that credential in plaintext logs on every
-// connection attempt. Instead, mint a short-lived, single-use ticket via
-// the normal (header-authenticated) POST /ws/tickets first, and only put
-// that in the WS URL. See backend/app/auth.py's WS_TICKET_TTL_SECONDS.
+// A browser's native WebSocket can't set headers on the handshake, and the
+// login token must never ride in the connection URL (access logs capture full
+// request URLs). Instead, mint a short-lived, single-use ticket via the normal
+// (cookie-authenticated) POST /ws/tickets first, and only put that in the WS
+// URL. See backend/app/auth.py's WS_TICKET_TTL_SECONDS.
 // The ticket opens only this case.
 async function fetchWsTicket(caseId: string): Promise<string> {
   const response = await authFetch(`/ws/tickets?${new URLSearchParams({ case_id: caseId })}`, { method: 'POST' });

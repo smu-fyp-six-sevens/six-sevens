@@ -1,6 +1,6 @@
 # Uptime checks and service-level objectives (HOW_IT_WORKS.md §9, "Uptime and SLOs"). GKE only: they watch
 # sixsevens.me. Free or near it: three regions every 5 minutes stay inside the uptime checks' free allowance, and the
-# SLOs read metrics already collected. The Grafana "Status" dashboard shows the same numbers.
+# SLOs read metrics already collected. Grafana's Overview dashboard shows the same numbers.
 
 locals {
   uptime_checks = var.gke_enabled ? {
@@ -96,7 +96,7 @@ resource "google_monitoring_alert_policy" "uptime" {
   }
 
   documentation {
-    content   = "Uptime checks fail from several regions. Check the GKE workloads and the load balancer; the Status dashboard shows when it started."
+    content   = "Uptime checks fail from several regions. Check the GKE workloads and the load balancer; Grafana's Overview shows when it started."
     mime_type = "text/markdown"
   }
 

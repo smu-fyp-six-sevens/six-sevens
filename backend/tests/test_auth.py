@@ -36,7 +36,7 @@ def test_login_issues_token_that_unlocks_protected_routes():
     assert login.status_code == 200
     token = login.json()["token"]
 
-    response = client.get("/cases", headers={"Authorization": f"Bearer {token}"})
+    response = _cookie_client().get("/cases", headers=_session_header(token))
     assert response.status_code != 401
 
 
@@ -46,7 +46,7 @@ def test_protected_route_rejects_missing_token():
 
 
 def test_protected_route_rejects_garbage_token():
-    response = client.get("/cases", headers={"Authorization": "Bearer not-a-real-token"})
+    response = _cookie_client().get("/cases", headers=_session_header("not-a-real-token"))
     assert response.status_code == 401
 
 
@@ -112,7 +112,7 @@ def test_a_protected_route_tells_the_handler_who_is_signed_in(two_accounts):
         seen.append(user)
 
     token = client.post("/auth/login", json={"username": "bob", "password": "bobs-pass"}).json()["token"]
-    client.get("/_whoami", headers={"Authorization": f"Bearer {token}"})
+    _cookie_client().get("/_whoami", headers=_session_header(token))
     assert seen == ["bob"]
 
 
@@ -184,7 +184,7 @@ def test_every_route_but_the_public_ones_needs_a_login(method: str, path: str):
 def test_a_websocket_ticket_is_not_a_login_token():
     ticket = auth.create_ws_ticket("alice", "case-1")
     with pytest.raises(HTTPException) as refused:
-        require_auth(f"Bearer {ticket}")
+        require_auth(ticket)
     assert refused.value.status_code == 401
 
 
@@ -194,13 +194,13 @@ def test_a_login_token_is_not_a_websocket_ticket():
 
 def test_a_login_token_from_before_purposes_still_works():
     old = auth._signed({"sub": "alice", "exp": int(time.time()) + 60})
-    assert require_auth(f"Bearer {old}") == "alice"
+    assert require_auth(old) == "alice"
 
 
 def test_a_token_with_another_purpose_is_refused():
     other = auth._signed({"purpose": "reset", "sub": "alice", "exp": int(time.time()) + 60})
     with pytest.raises(HTTPException):
-        require_auth(f"Bearer {other}")
+        require_auth(other)
 
 
 # --- The session cookie (the browser's credential) ---------------------------------------------------------------
@@ -283,23 +283,6 @@ def test_a_cookie_write_with_the_csrf_header_goes_through(whoami):
     assert whoami == ["demo"]
 
 
-def test_a_bearer_write_needs_no_csrf_header(whoami):
-    # A browser never adds a bearer header by itself, so a script's call isn't forgeable cross-site.
-    headers = {"Authorization": f"Bearer {auth.create_token('demo')}"}
-    assert _cookie_client().post("/_whoami_cookie", headers=headers).status_code == 200
-
-
-def test_a_bearer_header_wins_over_the_cookie(whoami, two_accounts):
-    headers = {**_session_header(auth.create_token("demo")), "Authorization": f"Bearer {auth.create_token('bob')}"}
-    assert _cookie_client().get("/_whoami_cookie", headers=headers).status_code == 200
-    assert whoami == ["bob"]
-
-
-def test_a_malformed_authorization_header_is_not_saved_by_the_cookie(whoami):
-    headers = {**_session_header(auth.create_token("demo")), "Authorization": "Basic abc"}
-    assert _cookie_client().get("/_whoami_cookie", headers=headers).status_code == 401
-
-
 def test_a_fresh_session_is_not_renewed(whoami):
     response = _cookie_client().get("/_whoami_cookie", headers=_session_header(auth.create_token("demo")))
     assert "set-cookie" not in response.headers
@@ -322,13 +305,6 @@ def test_a_refused_request_renews_nothing(whoami, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(auth, "RENEW_AFTER_SECONDS", 0)
     response = _cookie_client().post("/_whoami_cookie", headers=_session_header(auth.create_token("demo")))
     assert response.status_code == 403
-    assert "set-cookie" not in response.headers
-
-
-def test_a_bearer_request_is_never_given_a_cookie(whoami, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(auth, "RENEW_AFTER_SECONDS", 0)
-    headers = {"Authorization": f"Bearer {auth.create_token('demo')}"}
-    response = _cookie_client().get("/_whoami_cookie", headers=headers)
     assert "set-cookie" not in response.headers
 
 

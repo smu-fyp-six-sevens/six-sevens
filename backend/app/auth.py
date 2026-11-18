@@ -9,9 +9,9 @@ where payload is {"purpose": "login", "sub": <username>, "iat": <unix_ts>, "exp"
 ticket is the same with purpose "ws"; _signed and _unsigned make and read both). Verified via constant-time
 comparison; no external JWT dependency needed for something this small.
 
-The browser holds the token in an HttpOnly cookie (SESSION_COOKIE), so page scripts can't read it. Scripts and
-probes send it as a bearer header instead. A session ends after TOKEN_TTL_SECONDS without a request: every request
-on a token older than RENEW_AFTER_SECONDS gets a fresh cookie (session_cookies), so an officer at work is never
+The token travels only in an HttpOnly cookie (SESSION_COOKIE), so page scripts can't read it; a script sends the
+token /auth/login returns as that same cookie (no bearer header is accepted). A session ends after
+TOKEN_TTL_SECONDS without a request: every request on a token older than RENEW_AFTER_SECONDS gets a fresh cookie (session_cookies), so an officer at work is never
 signed out. A request authenticated by the cookie that changes something must carry X-Requested-With, which a
 browser only sends cross-origin after a CORS check Kong allows for the frontend alone: that is the CSRF guard.
 """
@@ -26,7 +26,7 @@ import time
 from contextvars import ContextVar
 from typing import Annotated
 
-from fastapi import Cookie, Depends, Header, HTTPException, Request, Response, status
+from fastapi import Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from . import passwords
@@ -44,12 +44,10 @@ _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 _CSRF_EXEMPT = frozenset({"/auth/login", "/auth/logout"})
 
 # Short-lived, single-use tickets for the case status WebSocket (see
-# routers/ws.py) — a browser's native WebSocket API can't set a custom
-# Authorization header on the handshake, so the long-lived TOKEN_TTL_SECONDS
-# bearer credential can't safely travel as a query param (Cloud Run's default
-# access logging captures full request URLs). A client with a valid bearer
-# token mints one of these via POST /ws/tickets (normal Authorization-header
-# auth) and puts only this in the WS URL instead — 10 seconds is generous for
+# routers/ws.py). The session cookie belongs to the API's host, and the login
+# token must never travel as a query param (access logs capture full request
+# URLs). A signed-in client mints one of these via POST /ws/tickets
+# and puts only this in the WS URL instead — 10 seconds is generous for
 # "mint it, then immediately open the socket" but tight enough that a leaked
 # log line is worthless by the time anyone reads it. Signed, not stored, so any
 # api instance accepts a ticket another minted (api can scale out). Single use
@@ -165,17 +163,16 @@ def _needs_renewal(token: str) -> str | None:
 async def session_cookies(request: Request, call_next):
     """
     HTTP middleware: refuses a cookie-authenticated write without the CSRF header, and renews an aging session
-    cookie on the way out. Requests that carry a bearer header are left alone: a browser never adds one by itself.
+    cookie on the way out.
     """
     cookie = request.cookies.get(SESSION_COOKIE)
-    bearer = (request.headers.get("authorization") or "").startswith("Bearer ")
     if (
-        cookie and not bearer and request.method not in _SAFE_METHODS
+        cookie and request.method not in _SAFE_METHODS
         and request.url.path not in _CSRF_EXEMPT and not request.headers.get(CSRF_HEADER)
     ):
         return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": "Missing X-Requested-With header"})
     response = await call_next(request)
-    if cookie and not bearer and response.status_code < 400 and request.url.path not in _CSRF_EXEMPT:
+    if cookie and response.status_code < 400 and request.url.path not in _CSRF_EXEMPT:
         username = _needs_renewal(cookie)
         if username is not None:
             set_session_cookie(response, create_token(username))
@@ -184,8 +181,7 @@ async def session_cookies(request: Request, call_next):
 
 def create_ws_ticket(username: str | None = None, case_id: str | None = None) -> str:
     """
-    Called from POST /ws/tickets, which sits behind require_auth — only reachable with a valid bearer
-    token already. Signed like the login token but with its own purpose, so neither works as the other.
+    Called from POST /ws/tickets, which sits behind require_auth — only reachable signed in already. Signed like the login token but with its own purpose, so neither works as the other.
     The route names the officer and the case: a leaked ticket opens only that case, and says whose it was.
     """
     return _signed({
@@ -219,25 +215,19 @@ def consume_ws_ticket(ticket: str, case_id: str | None = None) -> str | None:
 
 
 def require_auth(
-    authorization: str | None = Header(default=None),
     # Out of the schema: it's the browser's own credential, not something a client fills in.
     session: str | None = Cookie(default=None, alias=SESSION_COOKIE, include_in_schema=False),
 ) -> str:
-    """Rejects a request without a valid token (bearer header, else the session cookie); returns the username."""
+    """
+    Rejects a request without a valid session cookie; returns the username. The cookie is the only credential: a
+    script logs in and sends the token it gets back as that cookie (deploy/loadtest/run.py).
+    """
     # Called directly (tests), an omitted argument is FastAPI's marker, not None.
-    authorization = authorization if isinstance(authorization, str) else None
     session = session if isinstance(session, str) else None
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.removeprefix("Bearer ").strip()
-    elif session and not authorization:
-        token = session
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or malformed Authorization header",
-        )
+    if not session:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not signed in")
 
-    username = _verify_token(token)
+    username = _verify_token(session)
     if username is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -24,7 +24,7 @@ async def issue_ws_ticket(case_id: str, user: str = Depends(require_auth)) -> di
     because the WebSocket route itself can't use header-based auth — this
     plain HTTP route has no such restriction). See auth.py's
     WS_TICKET_TTL_SECONDS docstring for why this exists instead of just
-    putting the normal bearer token in the WS URL. The ticket opens only `case_id`.
+    putting the login token in the WS URL. The ticket opens only `case_id`.
     """
     return {"ticket": create_ws_ticket(user, case_id)}
 
@@ -36,9 +36,8 @@ async def case_status_socket(websocket: WebSocket, case_id: str, ticket: str = "
     realtime_listener.py's Supabase Realtime subscription via
     case_broadcaster.py rather than polling Supabase itself.
 
-    Auth can't reuse require_auth's Authorization-header check: a browser's
-    native WebSocket API has no way to set custom headers on the handshake,
-    so a short-lived ticket (minted via POST /ws/tickets) travels as a query
+    Auth doesn't reuse require_auth: a browser's native WebSocket API has no
+    way to set custom headers on the handshake, so a short-lived ticket (minted via POST /ws/tickets) travels as a query
     param instead, checked before accept() (rejecting here closes the
     handshake instead of the connection, the standard pattern for WS auth
     failures).

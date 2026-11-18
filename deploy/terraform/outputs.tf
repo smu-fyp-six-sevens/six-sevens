@@ -1,15 +1,15 @@
 output "kong_url" {
-  description = "The API entry point; the frontend's VITE_API_URL."
-  value       = google_cloud_run_v2_service.kong.uri
+  description = "The API entry point (Kong on GKE); the frontend's VITE_API_URL."
+  value       = "https://api.${var.domain}"
 }
 
 output "frontend_url" {
-  value = google_cloud_run_v2_service.frontend.uri
+  value = "https://${var.domain}"
 }
 
 output "grafana_url" {
   description = "Log in as admin with: terraform output -raw grafana_admin_password"
-  value       = google_cloud_run_v2_service.grafana.uri
+  value       = "https://grafana.${var.domain}"
 }
 
 output "grafana_admin_password" {

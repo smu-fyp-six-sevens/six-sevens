@@ -280,7 +280,8 @@ def main() -> None:
     with httpx.Client(base_url=args.api.rstrip("/"), timeout=120) as client:
         token = _check(client.post("/auth/login", json={"username": args.username, "password": password}),
                        "signing in")["token"]
-        client.headers["Authorization"] = f"Bearer {token}"
+        # The session cookie is the only credential; writes with it need the CSRF header (app/auth.py).
+        client.headers.update({"Cookie": f"six_session={token}", "X-Requested-With": "metrics"})
         failures = []
         for case_id in case_ids:
             if case_id not in labels:

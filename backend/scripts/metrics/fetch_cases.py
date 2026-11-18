@@ -234,7 +234,8 @@ def main() -> None:
     failures = []
     with httpx.Client(base_url=args.api.rstrip("/"), timeout=120) as client:
         token = _check(client.post("/auth/login", json={"username": username, "password": password}), "signing in")
-        client.headers["Authorization"] = f"Bearer {token['token']}"
+        # The session cookie is the only credential (app/auth.py).
+        client.headers.update({"Cookie": f"six_session={token['token']}", "X-Requested-With": "metrics"})
         for number in args.cases:
             try:
                 case_id, result = fetch_case(client, number, labels, owners)

@@ -227,7 +227,7 @@ if ROLES & _BEHIND_GATEWAY and settings.GATEWAY_SECRET:
 
 _protected = [Depends(auth.bind_actor)]
 
-# Not in _protected: /health, /healthz, /health/db (a probe can't carry an Authorization header),
+# Not in _protected: /health, /healthz, /health/db (a probe carries no session),
 # /auth/login (it issues the token) and /push (Cloud Run IAM guards it).
 app.include_router(health.router)
 
@@ -239,7 +239,7 @@ if "api" in ROLES:
     app.include_router(detection.router, dependencies=_protected)
     app.include_router(notes.router, dependencies=_protected)
     app.include_router(finding_reviews.router, dependencies=_protected)
-    # The WebSocket can't carry an Authorization header, so it checks its own short-lived ticket (routers/ws.py).
+    # The WebSocket checks its own short-lived ticket (routers/ws.py).
     app.include_router(ws.router)
 
     if IN_PROCESS and importlib.util.find_spec("app.injection") is not None:
@@ -261,7 +261,7 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    # For scripts and probes, which send it as a bearer header; the browser uses the HttpOnly cookie set beside it.
+    # For scripts, which send it back as the session cookie; the browser uses the HttpOnly cookie set beside it.
     token: str
     username: str
 

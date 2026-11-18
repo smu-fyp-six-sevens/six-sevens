@@ -1,15 +1,10 @@
-# One service account per service, with only what it needs (HOW_IT_WORKS.md §9).
+# One service account per service, with only what it needs (HOW_IT_WORKS.md §9). Named run-<name> from the Cloud
+# Run days; GKE's pods act as them (workload_identity.tf), and renaming would recreate every grant.
 
 resource "google_service_account" "role" {
   for_each     = toset(concat(keys(local.roles), ["kong", "frontend", "grafana"]))
   account_id   = "run-${each.key}"
   display_name = "Cloud Run: ${each.key}"
-}
-
-# The identity Pub/Sub signs pushes with; the only principal allowed to invoke the workers.
-resource "google_service_account" "pubsub_push" {
-  account_id   = "pubsub-push"
-  display_name = "Pub/Sub push to workers"
 }
 
 # Secrets: Terraform creates the containers; their values are added by hand (README.md here).
@@ -64,15 +59,9 @@ resource "google_project_iam_member" "metric_writer" {
   member   = "serviceAccount:${google_service_account.role[each.key].email}"
 }
 
-# Pub/Sub's own service agent: mints push tokens, and moves failed messages to the dead-letter topic.
+# Pub/Sub's own service agent: moves failed messages to the dead-letter topic.
 locals {
   pubsub_agent = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
-}
-
-resource "google_service_account_iam_member" "pubsub_token_creator" {
-  service_account_id = google_service_account.pubsub_push.name
-  role               = "roles/iam.serviceAccountTokenCreator"
-  member             = local.pubsub_agent
 }
 
 resource "google_pubsub_topic_iam_member" "dead_letter_publisher" {

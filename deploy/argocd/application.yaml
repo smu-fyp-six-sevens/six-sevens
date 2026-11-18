@@ -1,0 +1,27 @@
+# The one Application: the Helm chart at main, with the image digests CI writes to values-images.yaml.
+# NOT APPLIED: planned for after the demo (CLOUD_ARCHITECTURE_PLAN.md, "Argo CD"). Apply with
+#   kubectl apply -n argocd -f deploy/argocd/application.yaml
+# Starts with automated sync off: compare it against what Cloud Deploy released, then turn sync on.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: six-sevens
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/smu-fyp-six-sevens/six-sevens.git
+    targetRevision: main
+    path: deploy/helm/six-sevens
+    helm:
+      valueFiles:
+        - values-roles.yaml
+        - values-prod.yaml
+        - values-gitops.yaml   # projectId, supabaseUrl, gateway.address: what CI passes as --set today (not secrets)
+        - values-images.yaml   # images by digest, rewritten by CI after it signs them
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    # automated: { prune: true, selfHeal: true }   # on once a manual sync matches Cloud Deploy's release
+    syncOptions:
+      - ServerSideApply=true

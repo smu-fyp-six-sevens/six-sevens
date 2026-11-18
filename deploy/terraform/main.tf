@@ -1,13 +1,5 @@
 locals {
-  # Cloud Run's deterministic URL: known before the service exists, so the push audience and Kong's
-  # upstreams can be set without a dependency cycle.
-  url = { for name in concat(keys(local.roles), ["kong", "frontend", "grafana"]) :
-  name => "https://${name}-${data.google_project.this.number}.${var.region}.run.app" }
-
   registry = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.app.repository_id}"
-
-  # Terraform creates each service on this image; the deploy workflow then rolls out the real ones.
-  placeholder_image = "us-docker.pkg.dev/cloudrun/container/hello"
 
   # The role table (roles.json), shared with the Helm chart (deploy/helm/gen_values.py). Normalised so every role
   # has the same type.
@@ -24,9 +16,6 @@ locals {
     env         = tomap(role.env)
   } }
 
-  # The consumers GKE runs (migration.json): their subscriptions are pulled, not pushed.
-  pull_roles = toset(jsondecode(file("${path.module}/migration.json")).pull_roles)
-
   common_env = merge(local.role_table.common_env, {
     GOOGLE_CLOUD_PROJECT    = var.project_id
     SUPABASE_URL            = var.supabase_url
@@ -41,7 +30,6 @@ resource "google_project_service" "apis" {
     # These two must already be on before the first plan (README.md, one-time setup); listed so they stay on.
     "cloudresourcemanager.googleapis.com",
     "serviceusage.googleapis.com",
-    "run.googleapis.com",
     "pubsub.googleapis.com",
     "artifactregistry.googleapis.com",
     "secretmanager.googleapis.com",

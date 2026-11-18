@@ -17,8 +17,8 @@
   },
   "links": [
     {
-      "title": "Status",
-      "url": "/d/six-status",
+      "title": "Overview",
+      "url": "/d/six-overview",
       "type": "link",
       "icon": "dashboard"
     },
@@ -59,18 +59,18 @@
       {
         "type": "textbox",
         "name": "cpu_price",
-        "label": "USD / vCPU-s",
-        "description": "Cloud Run CPU price (request-based, tier 2).",
-        "query": "0.0000336",
+        "label": "USD / vCPU-hour",
+        "description": "GKE Autopilot pod vCPU price, asia-southeast1 (approximate).",
+        "query": "0.0554",
         "current": {
-          "text": "0.0000336",
-          "value": "0.0000336"
+          "text": "0.0554",
+          "value": "0.0554"
         },
         "options": [
           {
             "selected": true,
-            "text": "0.0000336",
-            "value": "0.0000336"
+            "text": "0.0554",
+            "value": "0.0554"
           }
         ],
         "hide": 0
@@ -78,37 +78,18 @@
       {
         "type": "textbox",
         "name": "mem_price",
-        "label": "USD / GiB-s",
-        "description": "Cloud Run memory price (request-based, tier 2).",
-        "query": "0.0000035",
+        "label": "USD / GiB-hour",
+        "description": "GKE Autopilot pod memory price, asia-southeast1 (approximate).",
+        "query": "0.0061",
         "current": {
-          "text": "0.0000035",
-          "value": "0.0000035"
+          "text": "0.0061",
+          "value": "0.0061"
         },
         "options": [
           {
             "selected": true,
-            "text": "0.0000035",
-            "value": "0.0000035"
-          }
-        ],
-        "hide": 0
-      },
-      {
-        "type": "textbox",
-        "name": "req_price",
-        "label": "USD / request",
-        "description": "Cloud Run request price ($0.40 per million).",
-        "query": "0.0000004",
-        "current": {
-          "text": "0.0000004",
-          "value": "0.0000004"
-        },
-        "options": [
-          {
-            "selected": true,
-            "text": "0.0000004",
-            "value": "0.0000004"
+            "text": "0.0061",
+            "value": "0.0061"
           }
         ],
         "hide": 0
@@ -551,8 +532,497 @@
     {
       "type": "row",
       "title": "Live estimates (selected range, defaults to this month)",
-      "collapsed": false,
-      "panels": [],
+      "collapsed": true,
+      "panels": [
+        {
+          "type": "stat",
+          "title": "Total (estimate)",
+          "description": "Claude + GKE pods + Pub/Sub at list price, before credits. Leaves out the load balancer and the cluster fee; the billed row above has them.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "((sum(increase(llm_cost_usd_total[$__range]))) or vector(0)) + ((sum (sum_over_time(kubernetes_io:container_cpu_request_cores{monitored_resource=\"k8s_container\",namespace_name=~\"api|doc-worker|detection-worker|case-worker|audit-metrics|gateway|frontend|observability\"}[$__range])) / 60 * $cpu_price + sum (sum_over_time(kubernetes_io:container_memory_request_bytes{monitored_resource=\"k8s_container\",namespace_name=~\"api|doc-worker|detection-worker|case-worker|audit-metrics|gateway|frontend|observability\"}[$__range])) / 60 / 1073741824 * $mem_price) or vector(0)) + ((sum(increase(pubsub_googleapis_com:topic_byte_cost[$__range]))) or vector(0)) / 1099511627776 * $pubsub_price",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 10,
+          "gridPos": {
+            "x": 0,
+            "y": 22,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Claude",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "((sum(increase(llm_cost_usd_total[$__range]))) or vector(0))",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 11,
+          "gridPos": {
+            "x": 6,
+            "y": 22,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "stat",
+          "title": "GKE pods (estimate)",
+          "description": "vCPU-hours and GiB-hours the app's pods requested, times the prices above.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "((sum (sum_over_time(kubernetes_io:container_cpu_request_cores{monitored_resource=\"k8s_container\",namespace_name=~\"api|doc-worker|detection-worker|case-worker|audit-metrics|gateway|frontend|observability\"}[$__range])) / 60 * $cpu_price + sum (sum_over_time(kubernetes_io:container_memory_request_bytes{monitored_resource=\"k8s_container\",namespace_name=~\"api|doc-worker|detection-worker|case-worker|audit-metrics|gateway|frontend|observability\"}[$__range])) / 60 / 1073741824 * $mem_price) or vector(0))",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 12,
+          "gridPos": {
+            "x": 12,
+            "y": 22,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Pub/Sub (estimate)",
+          "description": "Billable bytes published and delivered; the first 10 GiB a month are free.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "((sum(increase(pubsub_googleapis_com:topic_byte_cost[$__range]))) or vector(0)) / 1099511627776 * $pubsub_price",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 4
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 13,
+          "gridPos": {
+            "x": 18,
+            "y": 22,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Claude, projected month",
+          "description": "The last 24 hours times 30.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(increase(llm_cost_usd_total[24h])) * 30",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 14,
+          "gridPos": {
+            "x": 0,
+            "y": 26,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Avg per document",
+          "description": "Classify and extract.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(increase(work_llm_cost_usd_sum{work=\"document\"}[$__range])) / sum(increase(work_llm_cost_usd_count{work=\"document\"}[$__range]))",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 15,
+          "gridPos": {
+            "x": 6,
+            "y": 26,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Avg per detection run",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(increase(work_llm_cost_usd_sum{work=\"detection\"}[$__range])) / sum(increase(work_llm_cost_usd_count{work=\"detection\"}[$__range]))",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 16,
+          "gridPos": {
+            "x": 12,
+            "y": 26,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Avg per case analysis",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(increase(work_llm_cost_usd_sum{work=\"case_analysis\"}[$__range])) / sum(increase(work_llm_cost_usd_count{work=\"case_analysis\"}[$__range]))",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 17,
+          "gridPos": {
+            "x": 18,
+            "y": 26,
+            "w": 6,
+            "h": 4
+          }
+        }
+      ],
       "id": 9,
       "gridPos": {
         "x": 0,
@@ -562,498 +1032,247 @@
       }
     },
     {
-      "type": "stat",
-      "title": "Total (estimate)",
-      "description": "Claude + Cloud Run + Pub/Sub at list price, before any free tier.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((sum(increase(llm_cost_usd_total[$__range]))) or vector(0)) + ((sum(increase(run_googleapis_com:container_cpu_allocation_time{monitored_resource=\"cloud_run_revision\"}[$__range]))) or vector(0)) * $cpu_price + ((sum(increase(run_googleapis_com:container_memory_allocation_time{monitored_resource=\"cloud_run_revision\"}[$__range]))) or vector(0)) * $mem_price + ((sum(increase(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\"}[$__range]))) or vector(0)) * $req_price + ((sum(increase(pubsub_googleapis_com:topic_byte_cost[$__range]))) or vector(0)) / 1099511627776 * $pubsub_price",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 2
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 10,
-      "gridPos": {
-        "x": 0,
-        "y": 22,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Claude",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((sum(increase(llm_cost_usd_total[$__range]))) or vector(0))",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 2
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 11,
-      "gridPos": {
-        "x": 6,
-        "y": 22,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Cloud Run (estimate)",
-      "description": "vCPU-seconds and GiB-seconds allocated (sidecars included) and requests, times the prices above.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((sum(increase(run_googleapis_com:container_cpu_allocation_time{monitored_resource=\"cloud_run_revision\"}[$__range]))) or vector(0)) * $cpu_price + ((sum(increase(run_googleapis_com:container_memory_allocation_time{monitored_resource=\"cloud_run_revision\"}[$__range]))) or vector(0)) * $mem_price + ((sum(increase(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\"}[$__range]))) or vector(0)) * $req_price",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 2
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 12,
-      "gridPos": {
-        "x": 12,
-        "y": 22,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Pub/Sub (estimate)",
-      "description": "Billable bytes published and delivered; the first 10 GiB a month are free.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((sum(increase(pubsub_googleapis_com:topic_byte_cost[$__range]))) or vector(0)) / 1099511627776 * $pubsub_price",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 4
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 13,
-      "gridPos": {
-        "x": 18,
-        "y": 22,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Claude, projected month",
-      "description": "The last 24 hours times 30.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(llm_cost_usd_total[24h])) * 30",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 2
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 14,
-      "gridPos": {
-        "x": 0,
-        "y": 26,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Avg per document",
-      "description": "Classify and extract.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(work_llm_cost_usd_sum{work=\"document\"}[$__range])) / sum(increase(work_llm_cost_usd_count{work=\"document\"}[$__range]))",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 3
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 15,
-      "gridPos": {
-        "x": 6,
-        "y": 26,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Avg per detection run",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(work_llm_cost_usd_sum{work=\"detection\"}[$__range])) / sum(increase(work_llm_cost_usd_count{work=\"detection\"}[$__range]))",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 3
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 16,
-      "gridPos": {
-        "x": 12,
-        "y": 26,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Avg per case analysis",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(work_llm_cost_usd_sum{work=\"case_analysis\"}[$__range])) / sum(increase(work_llm_cost_usd_count{work=\"case_analysis\"}[$__range]))",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 3
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 17,
-      "gridPos": {
-        "x": 18,
-        "y": 26,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
       "type": "row",
       "title": "Claude",
-      "collapsed": false,
-      "panels": [],
+      "collapsed": true,
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Spend per hour by model",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (model) (increase(llm_cost_usd_total[1h]))",
+              "legendFormat": "{{model}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 30,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              },
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "interval": "1h",
+          "id": 19,
+          "gridPos": {
+            "x": 0,
+            "y": 31,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "type": "bargauge",
+          "title": "Spend by agent (range)",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sort_desc(sum by (agent) (increase(llm_cost_usd_total[$__range])))",
+              "legendFormat": "{{agent}}",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "showUnfilled": true,
+            "valueMode": "color",
+            "namePlacement": "left",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            }
+          },
+          "id": 20,
+          "gridPos": {
+            "x": 12,
+            "y": 31,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Cost per unit of work, p50 / p95",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.5, sum by (le, work) (rate(work_llm_cost_usd_bucket[6h])))",
+              "legendFormat": "p50 {{work}}"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le, work) (rate(work_llm_cost_usd_bucket[6h])))",
+              "legendFormat": "p95 {{work}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 21,
+          "gridPos": {
+            "x": 0,
+            "y": 39,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "type": "bargauge",
+          "title": "Tokens by kind (range)",
+          "description": "Where the tokens go; the cache_read share is cheap, input and output are not.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (kind) (increase(llm_tokens_total[$__range]))",
+              "legendFormat": "{{kind}} tokens",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "showUnfilled": true,
+            "valueMode": "color",
+            "namePlacement": "left",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            }
+          },
+          "id": 22,
+          "gridPos": {
+            "x": 12,
+            "y": 39,
+            "w": 12,
+            "h": 8
+          }
+        }
+      ],
       "id": 18,
       "gridPos": {
         "x": 0,
@@ -1063,246 +1282,269 @@
       }
     },
     {
-      "type": "timeseries",
-      "title": "Spend per hour by model",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (model) (increase(llm_cost_usd_total[1h]))",
-          "legendFormat": "{{model}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 30,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "normal",
-              "group": "A"
-            }
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "interval": "1h",
-      "id": 19,
-      "gridPos": {
-        "x": 0,
-        "y": 31,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
-      "type": "bargauge",
-      "title": "Spend by agent (range)",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sort_desc(sum by (agent) (increase(llm_cost_usd_total[$__range])))",
-          "legendFormat": "{{agent}}",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "decimals": 3
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "valueMode": "color",
-        "namePlacement": "left",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        }
-      },
-      "id": 20,
-      "gridPos": {
-        "x": 12,
-        "y": 31,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Cost per unit of work, p50 / p95",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.5, sum by (le, work) (rate(work_llm_cost_usd_bucket[6h])))",
-          "legendFormat": "p50 {{work}}"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by (le, work) (rate(work_llm_cost_usd_bucket[6h])))",
-          "legendFormat": "p95 {{work}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 21,
-      "gridPos": {
-        "x": 0,
-        "y": 39,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
-      "type": "bargauge",
-      "title": "Tokens by kind (range)",
-      "description": "Where the tokens go; the cache_read share is cheap, input and output are not.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (kind) (increase(llm_tokens_total[$__range]))",
-          "legendFormat": "{{kind}} tokens",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "decimals": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "valueMode": "color",
-        "namePlacement": "left",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        }
-      },
-      "id": 22,
-      "gridPos": {
-        "x": 12,
-        "y": 39,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
       "type": "row",
-      "title": "Cloud Run",
-      "collapsed": false,
-      "panels": [],
+      "title": "GKE",
+      "collapsed": true,
+      "panels": [
+        {
+          "type": "bargauge",
+          "title": "Estimated pod cost by namespace (range)",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (namespace_name) (sum_over_time(kubernetes_io:container_cpu_request_cores{monitored_resource=\"k8s_container\",namespace_name=~\"api|doc-worker|detection-worker|case-worker|audit-metrics|gateway|frontend|observability\"}[$__range])) / 60 * $cpu_price + sum by (namespace_name) (sum_over_time(kubernetes_io:container_memory_request_bytes{monitored_resource=\"k8s_container\",namespace_name=~\"api|doc-worker|detection-worker|case-worker|audit-metrics|gateway|frontend|observability\"}[$__range])) / 60 / 1073741824 * $mem_price",
+              "legendFormat": "{{namespace_name}}",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "showUnfilled": true,
+            "valueMode": "color",
+            "namePlacement": "left",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            }
+          },
+          "id": 24,
+          "gridPos": {
+            "x": 0,
+            "y": 48,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "vCPU requested by namespace",
+          "description": "What Autopilot bills for, minute by minute.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (namespace_name) (kubernetes_io:container_cpu_request_cores{monitored_resource=\"k8s_container\",namespace_name=~\"api|doc-worker|detection-worker|case-worker|audit-metrics|gateway|frontend|observability\"})",
+              "legendFormat": "{{namespace_name}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              },
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "id": 25,
+          "gridPos": {
+            "x": 12,
+            "y": 48,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "type": "stat",
+          "title": "vCPU requested now",
+          "description": "The free trial allows 8 vCPUs at once, across everything in the project.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(kubernetes_io:container_cpu_request_cores{monitored_resource=\"k8s_container\",namespace_name=~\"api|doc-worker|detection-worker|case-worker|audit-metrics|gateway|frontend|observability\"})",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 6
+                  },
+                  {
+                    "color": "red",
+                    "value": 8
+                  }
+                ]
+              },
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 26,
+          "gridPos": {
+            "x": 0,
+            "y": 56,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Memory requested now",
+          "description": "GiB.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(kubernetes_io:container_memory_request_bytes{monitored_resource=\"k8s_container\",namespace_name=~\"api|doc-worker|detection-worker|case-worker|audit-metrics|gateway|frontend|observability\"}) / 1073741824",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 1
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 27,
+          "gridPos": {
+            "x": 6,
+            "y": 56,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "text",
+          "title": "About these numbers",
+          "options": {
+            "mode": "markdown",
+            "content": "Estimates at list price, before credits and taxes, live within minutes. **Billed cost** is the top row, from Cloud Billing's export (hours behind; empty until the export is turned on, see deploy/terraform/README.md). Claude isn't billed by Google, so its cost is always the app's own count, from each call's tokens and `backend/app/pricing.py`. The GKE prices are Autopilot's **asia-southeast1** list prices, approximate: check Google's pricing page and edit the boxes at the top if they differ."
+          },
+          "id": 28,
+          "gridPos": {
+            "x": 12,
+            "y": 56,
+            "w": 12,
+            "h": 4
+          }
+        }
+      ],
       "id": 23,
       "gridPos": {
         "x": 0,
@@ -1312,604 +1554,338 @@
       }
     },
     {
-      "type": "bargauge",
-      "title": "Estimated cost by service (range)",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (service_name) (increase(run_googleapis_com:container_cpu_allocation_time{monitored_resource=\"cloud_run_revision\"}[$__range])) * $cpu_price + sum by (service_name) (increase(run_googleapis_com:container_memory_allocation_time{monitored_resource=\"cloud_run_revision\"}[$__range])) * $mem_price",
-          "legendFormat": "{{service_name}}",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "decimals": 3
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "valueMode": "color",
-        "namePlacement": "left",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        }
-      },
-      "id": 24,
-      "gridPos": {
-        "x": 0,
-        "y": 48,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "vCPU-seconds per hour by service",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (service_name) (increase(run_googleapis_com:container_cpu_allocation_time{monitored_resource=\"cloud_run_revision\"}[1h]))",
-          "legendFormat": "{{service_name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 30,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "normal",
-              "group": "A"
-            }
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "interval": "1h",
-      "id": 25,
-      "gridPos": {
-        "x": 12,
-        "y": 48,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
-      "type": "stat",
-      "title": "vCPU-seconds used (range)",
-      "description": "The free tier covers 180,000 vCPU-seconds a month per billing account.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(run_googleapis_com:container_cpu_allocation_time{monitored_resource=\"cloud_run_revision\"}[$__range]))",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 140000
-              },
-              {
-                "color": "red",
-                "value": 180000
-              }
-            ]
-          },
-          "decimals": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 26,
-      "gridPos": {
-        "x": 0,
-        "y": 56,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "GiB-seconds used (range)",
-      "description": "The free tier covers 360,000 GiB-seconds a month.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(run_googleapis_com:container_memory_allocation_time{monitored_resource=\"cloud_run_revision\"}[$__range]))",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 280000
-              },
-              {
-                "color": "red",
-                "value": 360000
-              }
-            ]
-          },
-          "decimals": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 27,
-      "gridPos": {
-        "x": 6,
-        "y": 56,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "text",
-      "title": "About these numbers",
-      "options": {
-        "mode": "markdown",
-        "content": "Estimates at list price, before free tiers and taxes, live within minutes. **Billed cost** is the top row, from Cloud Billing's export (hours behind; empty until the export is turned on, see deploy/terraform/README.md). Claude isn't billed by Google, so its cost is always the app's own count. Cloud Run prices default to **asia-southeast1 (tier 2), request-based billing**; edit the boxes at the top if they change. Claude cost is computed in the app from each call's tokens and `backend/app/pricing.py`. Counters from an instance that stopped before its next scrape are slightly under-counted."
-      },
-      "id": 28,
-      "gridPos": {
-        "x": 12,
-        "y": 56,
-        "w": 12,
-        "h": 4
-      }
-    },
-    {
       "type": "row",
       "title": "Per case (range): GKE from the billing export, by namespace (cost allocation, gke.tf)",
-      "collapsed": false,
-      "panels": [],
+      "collapsed": true,
+      "panels": [
+        {
+          "type": "stat",
+          "title": "Cloud cost per case analysed",
+          "description": "Everything Google billed in the range (the cluster, load balancer, Pub/Sub...) over the case analyses that finished in it. The cluster costs money idle, so few cases make each one look expensive.",
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Mixed --"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "grafana-bigquery-datasource",
+                "uid": "bigquery"
+              },
+              "rawSql": "SELECT SUM(net_cost) AS billed FROM billing_export.costs WHERE $__timeFilter(time)",
+              "format": 1,
+              "rawQuery": true,
+              "editorMode": "code",
+              "hide": true
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "clamp_min(sum(increase(stage_duration_seconds_count{stage=\"case.analysis.completed\"}[$__range])), 1)",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false,
+              "hide": true
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "__expr__",
+                "uid": "__expr__"
+              },
+              "type": "math",
+              "expression": "$A / $B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 30,
+          "gridPos": {
+            "x": 0,
+            "y": 61,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Claude cost per case analysed",
+          "description": "Every Claude call in the range (documents, detection and analyses) over the case analyses that finished in it.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "((sum(increase(llm_cost_usd_total[$__range]))) or vector(0)) / clamp_min(sum(increase(stage_duration_seconds_count{stage=\"case.analysis.completed\"}[$__range])), 1)",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 31,
+          "gridPos": {
+            "x": 6,
+            "y": 61,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Case analyses finished (range)",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "((sum(increase(stage_duration_seconds_count{stage=\"case.analysis.completed\"}[$__range]))) or vector(0))",
+              "legendFormat": "__auto",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 32,
+          "gridPos": {
+            "x": 12,
+            "y": 61,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Cluster billed in range",
+          "description": "Lines GKE's cost allocation labelled with a namespace; the cluster's own fee and idle capacity have none.",
+          "datasource": {
+            "type": "grafana-bigquery-datasource",
+            "uid": "bigquery"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "grafana-bigquery-datasource",
+                "uid": "bigquery"
+              },
+              "rawSql": "SELECT SUM(net_cost) AS billed FROM billing_export.costs WHERE $__timeFilter(time) AND namespace IS NOT NULL",
+              "format": 1,
+              "rawQuery": true,
+              "editorMode": "code"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false,
+              "fields": ""
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto",
+            "justifyMode": "auto"
+          },
+          "id": 33,
+          "gridPos": {
+            "x": 18,
+            "y": 61,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "type": "bargauge",
+          "title": "Billed by namespace (range)",
+          "description": "Each service's share of the cluster: the api, each worker, the gateway, Grafana.",
+          "datasource": {
+            "type": "grafana-bigquery-datasource",
+            "uid": "bigquery"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "grafana-bigquery-datasource",
+                "uid": "bigquery"
+              },
+              "rawSql": "SELECT namespace, ROUND(SUM(net_cost), 4) AS cost FROM billing_export.costs WHERE $__timeFilter(time) AND namespace IS NOT NULL GROUP BY namespace ORDER BY cost DESC",
+              "format": 1,
+              "rawQuery": true,
+              "editorMode": "code"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 2,
+              "min": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "displayName": "${__data.fields.namespace}"
+            },
+            "overrides": []
+          },
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "showUnfilled": true,
+            "valueMode": "color",
+            "namePlacement": "left",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": true,
+              "fields": "/^cost$/"
+            }
+          },
+          "id": 34,
+          "gridPos": {
+            "x": 0,
+            "y": 65,
+            "w": 24,
+            "h": 8
+          }
+        }
+      ],
       "id": 29,
       "gridPos": {
         "x": 0,
         "y": 60,
         "w": 24,
         "h": 1
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Cloud cost per case analysed",
-      "description": "Everything Google billed in the range (the cluster, load balancer, Pub/Sub...) over the case analyses that finished in it. The cluster costs money idle, so few cases make each one look expensive.",
-      "datasource": {
-        "type": "datasource",
-        "uid": "-- Mixed --"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "grafana-bigquery-datasource",
-            "uid": "bigquery"
-          },
-          "rawSql": "SELECT SUM(net_cost) AS billed FROM billing_export.costs WHERE $__timeFilter(time)",
-          "format": 1,
-          "rawQuery": true,
-          "editorMode": "code",
-          "hide": true
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "clamp_min(sum(increase(stage_duration_seconds_count{stage=\"case.analysis.completed\"}[$__range])), 1)",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false,
-          "hide": true
-        },
-        {
-          "refId": "C",
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "type": "math",
-          "expression": "$A / $B"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 3
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 30,
-      "gridPos": {
-        "x": 0,
-        "y": 61,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Claude cost per case analysed",
-      "description": "Every Claude call in the range (documents, detection and analyses) over the case analyses that finished in it.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((sum(increase(llm_cost_usd_total[$__range]))) or vector(0)) / clamp_min(sum(increase(stage_duration_seconds_count{stage=\"case.analysis.completed\"}[$__range])), 1)",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 3
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 31,
-      "gridPos": {
-        "x": 6,
-        "y": 61,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Case analyses finished (range)",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((sum(increase(stage_duration_seconds_count{stage=\"case.analysis.completed\"}[$__range]))) or vector(0))",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 32,
-      "gridPos": {
-        "x": 12,
-        "y": 61,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Cluster billed in range",
-      "description": "Lines GKE's cost allocation labelled with a namespace; the cluster's own fee and idle capacity have none.",
-      "datasource": {
-        "type": "grafana-bigquery-datasource",
-        "uid": "bigquery"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "grafana-bigquery-datasource",
-            "uid": "bigquery"
-          },
-          "rawSql": "SELECT SUM(net_cost) AS billed FROM billing_export.costs WHERE $__timeFilter(time) AND namespace IS NOT NULL",
-          "format": 1,
-          "rawQuery": true,
-          "editorMode": "code"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "decimals": 2
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false,
-          "fields": ""
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto",
-        "justifyMode": "auto"
-      },
-      "id": 33,
-      "gridPos": {
-        "x": 18,
-        "y": 61,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "type": "bargauge",
-      "title": "Billed by namespace (range)",
-      "description": "Each service's share of the cluster: the api, each worker, the gateway, Grafana.",
-      "datasource": {
-        "type": "grafana-bigquery-datasource",
-        "uid": "bigquery"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "grafana-bigquery-datasource",
-            "uid": "bigquery"
-          },
-          "rawSql": "SELECT namespace, ROUND(SUM(net_cost), 4) AS cost FROM billing_export.costs WHERE $__timeFilter(time) AND namespace IS NOT NULL GROUP BY namespace ORDER BY cost DESC",
-          "format": 1,
-          "rawQuery": true,
-          "editorMode": "code"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "decimals": 2,
-          "min": 0,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "displayName": "${__data.fields.namespace}"
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "valueMode": "color",
-        "namePlacement": "left",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": true,
-          "fields": "/^cost$/"
-        }
-      },
-      "id": 34,
-      "gridPos": {
-        "x": 0,
-        "y": 65,
-        "w": 24,
-        "h": 8
       }
     }
   ]

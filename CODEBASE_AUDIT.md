@@ -14,6 +14,7 @@ None open.
 |---|---|---|---|---|---|
 | 2.1 | Low | A case is re-read hundreds of times a day by live snapshot builds | Recheck once a few cases are worked in a day | `snapshots.py` | — |
 | 2.2 | Low | Precision/recall figures read every review (`list_reviews`) | Aggregate in SQL once reviews pass the thousands (or store evaluation rows: `CLOUD_ARCHITECTURE_PLAN.md`, "Accuracy from officer verdicts") | `findings_repository.py` | M |
+| 2.3 | Low | The content guard's OCR of an image embedded in a PDF takes several seconds (about 6 s on a laptop for one 1031×84 px strip, 90% of it detection): RapidOCR's detection scales a thin image up until its shortest side is 736 px (`Det.limit_type: min`), and it reads every image up to 12 per document, short ones twice | Time one pass on a doc-worker pod first (the laptop's timings varied 2–3×). Then try 4 onnxruntime threads (twice as fast on the laptop) or `limit_type: max` for the guard's own reader only, checking every attack in `tests/test_content_guard.py` is still caught; ingestion's page OCR keeps its settings | `guardrails/content_guard.py` `_ocr_lines`, `ingestion/ocr_extractor.py` | S |
 
 **Prompt caching:** recheck the cache rates on the case cost card after a few cases (on 2026-11-16: documents 37%, detection 64%, case analysis 9%). Case analysis stays low by design: its two calls share only the tools and the system prompt, and the dossier is sent once.
 
@@ -30,11 +31,11 @@ None open.
 
 ## 4. Backwards compatibility
 
-Code kept only for old data, old links or the platform being retired. The database (and the audit trail) was wiped on 2026-11-15, so a shim for data older than that guards nothing.
+Code kept only for old data, old links or the retired platform (Cloud Run's infrastructure and CI deploy were removed 2026-11-18). The database (and the audit trail) was wiped on 2026-11-15, so a shim for data older than that guards nothing.
 
 | # | In plain words | Remove when | Where | Size |
 |---|---|---|---|---|
-| B1 | Cloud Run's half of the app: push delivery (`EVENT_DELIVERY=push`, the `/push/<role>` routes, `PUSH_AUDIENCE` and its check), the `none` mode and the chart's HTTP-only branch for a consumer not yet moved, the second frontend image, the Cloud Run Terraform and the Cloud Run deploy in CI | Phase 6 (`CLOUD_ARCHITECTURE_PLAN.md`). Switch the local compose stack to pull first (`deploy/compose/pubsub.yaml`; `EVENT_DELIVERY` defaults to `push` in `config.py`). The gateway key (`gateway.py`) stays as a second guard | `events/push.py`, `main.py`, `config.py`, `deploy/compose/`, `deploy/helm/six-sevens/templates/backend.yaml`, `deploy/terraform/run.tf`, `.github/workflows/deploy.yml` | M |
+| B1 | Cloud Run's code left behind: push delivery (`EVENT_DELIVERY=push`, the `/push/<role>` routes, `PUSH_AUDIENCE` and its check), the `none` mode and the chart's HTTP-only branch for a consumer not yet moved, `migration.json` (every consumer is listed; only `gen_values.py` reads it now), and comments naming Cloud Run | After the demo. Switch the local compose stack to pull first (`deploy/compose/pubsub.yaml`; `EVENT_DELIVERY` defaults to `push` in `config.py`). The gateway key (`gateway.py`) stays as a second guard | `events/push.py`, `main.py`, `config.py`, `deploy/compose/`, `deploy/helm/six-sevens/templates/backend.yaml`, `deploy/helm/gen_values.py` | M |
 | B2 | Two names for one Supabase client: `service_supabase_client()` (50 calls) was kept "for the code that used to have its own" client; `supabase_client` (15 imports) is the same object. Not a rename: 47 test files mock `service_supabase_client` as a function (`client.return_value.table…`), so each test's mock setup changes too | One name, with the tests' mocks rewritten | `supabase_client.py:41-46`, its callers and `backend/tests/` | M |
 
 ## 5. Bigger reorganisations (optional, in order)
@@ -58,6 +59,5 @@ Code kept only for old data, old links or the platform being retired. The databa
 
 ## 8. Order
 
-1. B1 with phase 6
-2. 3.6
-3. After the demo: 3.1, 3.2, B2, 3.3
+1. 3.6
+2. After the demo: B1, 3.1, 3.2, B2, 3.3

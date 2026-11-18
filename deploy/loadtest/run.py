@@ -71,7 +71,9 @@ async def _document(client: httpx.AsyncClient, document_id: str, uploaded: float
 
 
 async def _officer(base: str, token: str, index: int, documents: int, timings: Timings, timeout: float) -> None:
-    async with httpx.AsyncClient(base_url=base, headers={"Authorization": f"Bearer {token}"}, timeout=60) as client:
+    # The session cookie is the only credential, and a write with it needs the CSRF header (backend/app/auth.py).
+    headers = {"Cookie": f"six_session={token}", "X-Requested-With": "loadtest"}
+    async with httpx.AsyncClient(base_url=base, headers=headers, timeout=60) as client:
         started = time.monotonic()
         response = await client.post("/cases", json={"company_name": f"Load test {index}"})
         if response.status_code >= 400:

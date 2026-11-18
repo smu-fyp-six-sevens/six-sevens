@@ -15,11 +15,15 @@ def _row(case_id: str, action: str, ms: int, at: str = "2026-10-01T00:00:00Z") -
     return {"id": f"{case_id}-{action}-{at}-{ms}", "case_id": case_id, "action": action, "duration_ms": ms, "occurred_at": at}
 
 
-def test_a_case_total_is_the_average_document_runs_plus_its_latest_analysis() -> None:
+def test_a_case_total_is_the_time_its_runs_had_it_in_work() -> None:
     rows = [
-        _row("case-1", types.DOCUMENT_ANALYZED, 60_000), _row("case-1", types.DOCUMENT_ANALYZED, 80_000),
-        _row("case-1", types.DOCUMENT_DETECTED, 30_000),
-        _row("case-1", types.CASE_ANALYSIS_COMPLETED, 99_000, at="2026-10-01T00:00:00Z"),
+        # Two documents extracted side by side (0-60 s and 0-80 s): 80 s, counted once.
+        _row("case-1", types.DOCUMENT_ANALYZED, 60_000, at="2026-10-01T00:01:00Z"),
+        _row("case-1", types.DOCUMENT_ANALYZED, 80_000, at="2026-10-01T00:01:20Z"),
+        # The officer approves 9 minutes later: not counted. Detection (600-630 s), then the analysis (630-720 s).
+        _row("case-1", types.DOCUMENT_DETECTED, 30_000, at="2026-10-01T00:10:30Z"),
+        _row("case-1", types.CASE_ANALYSIS_COMPLETED, 90_000, at="2026-10-01T00:12:00Z"),
+        # A later round (another upload, a rerun): its own 20 s, not the day between.
         _row("case-1", types.CASE_ANALYSIS_COMPLETED, 20_000, at="2026-10-02T00:00:00Z"),
         # Extracted but never analysed: no total yet.
         _row("case-2", types.DOCUMENT_ANALYZED, 50_000),
@@ -29,7 +33,7 @@ def test_a_case_total_is_the_average_document_runs_plus_its_latest_analysis() ->
     with patch("app.audit.fetch_all", return_value=rows), patch("app.audit.service_supabase_client"):
         totals = audit.processing_ms_many(["case-1", "case-2", "case-3"])
 
-    assert totals == {"case-1": 70_000 + 30_000 + 20_000}
+    assert totals == {"case-1": 80_000 + 120_000 + 20_000}
 
 
 def test_the_case_list_carries_the_processing_time_and_creator_stored_on_the_case() -> None:

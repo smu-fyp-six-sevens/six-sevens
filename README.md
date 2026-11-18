@@ -70,7 +70,7 @@ Settings come from `backend/.env`. The workers share one container (~3 GB). Walk
 
 ## Deploying
 
-Production runs on GKE Autopilot at `sixsevens.me`: a green push to `main` builds and signs the images and releases the Helm chart through Cloud Deploy (`deploy.yml`'s `gke` job). Cloud Run still deploys alongside, taking no events, until phase 6 removes it (`HOW_IT_WORKS.md` §9; next steps in `CLOUD_ARCHITECTURE_PLAN.md`); "Deploy to Cloud Run" can also be run by hand. Terraform (`deploy/terraform`, one-time setup in its README) creates the services, Pub/Sub, secrets and identities; run `terraform apply` before a push that needs it. Adding a service: [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md).
+Production runs on GKE Autopilot at `sixsevens.me`: a green push to `main` builds and signs the images and releases the Helm chart through Cloud Deploy (`deploy.yml`'s `gke` job); "Deploy to GKE" can also be run by hand. Cloud Run was removed on 2026-11-18 (`HOW_IT_WORKS.md` §9; next steps in `CLOUD_ARCHITECTURE_PLAN.md`). Terraform (`deploy/terraform`, one-time setup in its README) creates the cluster, Pub/Sub, secrets and identities; run `terraform apply` before a push that needs it. Adding a service: [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md).
 
 ## Tests
 
@@ -80,7 +80,7 @@ Production runs on GKE Autopilot at `sixsevens.me`: a green push to `main` build
 ## GitHub Actions
 
 - **`ci-cd.yml`** (PRs and pushes to `main`, not docs-only): backend (ruff, pyright, `openapi.json` up to date, tests with coverage); frontend (lint, `api.gen.ts` up to date, types, build, Playwright); security (Checkov, pip-audit, `npm audit` high, Terraform fmt/validate; Snyk only on lock-file changes or by hand, non-blocking until its quota resets). All must pass; a push to `main` then deploys.
-- **`deploy.yml`**: one image per service, rolled out to Cloud Run, gateway checked, everything rolled back on failure. Signs in by Workload Identity Federation (repo variables `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`); the only repo secrets are `DATA_GOV_SG_API_KEY` and `SNYK_TOKEN`. With the repo variable `GKE_ENABLED=true` (and `SUPABASE_URL`), its `gke` job also signs every image and releases the Helm chart to GKE through Cloud Deploy (`deploy/terraform/README.md`, "GKE").
+- **`deploy.yml`**: builds and scans one image per service; with the repo variable `GKE_ENABLED=true` (and `SUPABASE_URL`), its `gke` job signs every image and releases the Helm chart to GKE through Cloud Deploy, which checks the gateway and rolls back a failed rollout (`deploy/terraform/README.md`, "GKE"). Signs in by Workload Identity Federation (repo variables `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`); the only repo secrets are `DATA_GOV_SG_API_KEY` and `SNYK_TOKEN`.
 - **`helm.yml`** (only changes to the chart, the role table, Kong, the event code or the backend Dockerfile; or by hand). Most pushes don't run it. Two jobs:
   - **Values, render and Checkov** (about 2 minutes): the chart's role values match `roles.json`, it lints and renders, and Checkov passes on the rendered chart.
   - **The kind run** (about 8–10 minutes with a warm image cache): only when the templates, the smoke files, Kong, the event code or the Dockerfile changed, or by hand. It runs the chart on kind (whose network plugin enforces network policies) against the Pub/Sub emulator and a stub Supabase: must-pass and must-block calls, one pulled event per worker.

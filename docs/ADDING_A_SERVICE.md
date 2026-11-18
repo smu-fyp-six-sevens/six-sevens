@@ -1,8 +1,8 @@
 # Adding a service
 
-What to change so a new Cloud Run service is built, deployed, secured and monitored like the others. A missed step usually fails the next deploy (403, 404, or no events arrive) and it rolls back.
+What to change so a new service on GKE is built, deployed, secured and monitored like the others. A missed step usually fails the next deploy (403, 404, or no events arrive) and it rolls back.
 
-**Order:** change Terraform and run `terraform apply` *before* pushing. A push to `main` deploys, but the deploy only swaps images: it can't create a service Terraform hasn't made.
+**Order:** change Terraform and run `terraform apply` *before* pushing. A push to `main` deploys the chart, but the chart can't use an account or subscription Terraform hasn't made.
 
 ## A new backend role
 
@@ -11,7 +11,7 @@ Same backend code, a different `ROLE` (e.g. another event worker).
 1. **Code** (`backend/app`): add the role to `ALL_ROLES` in `config.py`; a `HANDLERS` dict in its `workers/` module plus one line in `_HANDLERS` in `main.py`; its events in `SUBSCRIPTIONS` (and any new event names) in `events/types.py`.
 2. **Subscriptions:** run `python -m app.events.types` from `backend/` to rewrite `deploy/terraform/subscriptions.json`. It errors if a filter passes Pub/Sub's 256-byte limit; CI checks the file matches.
 3. **Dockerfile:** a stage in `backend/Dockerfile`: `FROM runtime AS my-worker` + `ENV ROLE=my-worker` (`FROM with-land-use` if it needs the zoning index).
-4. **Terraform and the chart:** one entry in `deploy/terraform/roles.json`, copied from a similar role: CPU, memory, concurrency, timeout, max instances; `public` or private; `publishes`; secrets and env; and its `gke` block (minimum replicas, drain seconds). Everything else (account, permissions, secrets, metrics sidecar, subscription, Workload Identity, the chart's Deployment and network policy) comes from it. Run `python deploy/helm/gen_values.py` (CI checks it), then `terraform apply` (changed filters replace their subscriptions).
+4. **Terraform and the chart:** one entry in `deploy/terraform/roles.json`, copied from a similar role: `publishes`; secrets and env; and its `gke` block (replicas, the pod's CPU and memory, drain seconds). Everything else (account, permissions, secrets, subscription, Workload Identity, the chart's Deployment and network policy) comes from it. A consumer also goes in `migration.json`'s `pull_roles`. Run `python deploy/helm/gen_values.py` (CI checks it), then `terraform apply` (changed filters replace their subscriptions).
 5. **Deploy workflow:** add it to `BACKEND_ROLES` in `.github/workflows/deploy.yml`.
 6. **Optional:** a compose service and Prometheus target (`deploy/compose/`); Kong routes (`deploy/kong/kong.yml.tmpl`) only if officers call it. Grafana picks it up by name pattern.
 
@@ -20,9 +20,10 @@ Same backend code, a different `ROLE` (e.g. another event worker).
 E.g. a tool like Grafana or Kong.
 
 1. **Dockerfile** with a non-root `USER` and a `HEALTHCHECK` (Checkov requires both).
-2. **Terraform:** its own `google_cloud_run_v2_service` (copy Grafana's in `observability.tf`); add its name to the non-backend lists in `main.tf` (the `url` map) and `iam.tf` (service accounts); `terraform apply`.
-3. **Deploy workflow:** `name=path/to/Dockerfile` in `OTHER_SERVICES`; also `SINGLE_CONTAINER` if it has no sidecar; a build case if it needs build arguments.
-4. **Post-deploy check:** if user-facing, an `expect` line in the gateway check, so a broken release rolls back.
+2. **Terraform:** add its name to the non-backend lists in `iam.tf` (service accounts) and `workload_identity.tf` (its namespace); `terraform apply`.
+3. **The chart:** a template of its own (copy Grafana's in `deploy/helm/six-sevens/templates/`), its network policy, and an `images.<name>` value.
+4. **Deploy workflow:** `name=path/to/Dockerfile` in `OTHER_SERVICES`, a build case if it needs build arguments, and its image in the gke job's sign loop and `--set images.<name>` case.
+5. **Post-deploy check:** if user-facing, an `expect` line in Cloud Deploy's verify step (`deploy/clouddeploy/skaffold.yaml`), so a broken release rolls back.
 
 ## Afterwards
 

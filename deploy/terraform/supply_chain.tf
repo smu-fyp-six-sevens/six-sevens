@@ -125,7 +125,7 @@ resource "google_clouddeploy_delivery_pipeline" "app" {
   }
 }
 
-# --- What the GitHub deploy needs on top of its Cloud Run rights.
+# --- What the GitHub deploy needs on top of pushing images (github.tf).
 resource "google_project_iam_member" "deployer_gke" {
   for_each = var.gke_enabled ? toset([
     "roles/clouddeploy.releaser",

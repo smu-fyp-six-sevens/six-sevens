@@ -116,11 +116,31 @@ _CASE_CHUNK = 100
 _COST_CHUNK = 500
 
 
+def busy_ms(runs: list[tuple[datetime, int]]) -> int:
+    """
+    How long something was being worked on, from finished runs given as (end, duration_ms): the length of the union
+    of their intervals. Runs side by side count once, and the gaps between them (an officer's approval, a later
+    upload) not at all. The same rule as the case page's (pages/upload/processingTimes.ts).
+    """
+    spans = sorted((end.timestamp() * 1000 - ms, end.timestamp() * 1000) for end, ms in runs)
+    total, start, stop = 0.0, None, None
+    for begin, end in spans:
+        if stop is None or begin > stop:
+            if stop is not None and start is not None:
+                total += stop - start
+            start, stop = begin, end
+        else:
+            stop = max(stop, end)
+    if stop is not None and start is not None:
+        total += stop - start
+    return round(total)
+
+
 def processing_ms_many(case_ids: list[str]) -> dict[str, int]:
     """
-    Each analysed case's automated processing time: the average extraction run plus the average detection run
-    of its documents, plus its latest case analysis. Cases missing any of the three stages are absent.
-    Sync: run on a worker thread.
+    Each analysed case's automated processing time: how long its classify-and-extract, detection and case analysis
+    runs had the case in work, end to end, without the waits for an officer (busy_ms). Cases missing any of the three
+    stages are absent. Sync: run on a worker thread.
     """
     rows: list[dict] = []
     for start in range(0, len(case_ids), _CASE_CHUNK):
@@ -142,11 +162,9 @@ def processing_ms_many(case_ids: list[str]) -> dict[str, int]:
         # A case processed before the trail recorded timings has only some stages: no total rather than a short one.
         if any(not stages.get(action) for action in _TIMED):
             continue
-        total = max(stages[types.CASE_ANALYSIS_COMPLETED])[1]  # the latest run
-        for action in (types.DOCUMENT_ANALYZED, types.DOCUMENT_DETECTED):
-            durations = [ms for _, ms in stages[action]]
-            total += sum(durations) / len(durations)
-        totals[case_id] = round(total)
+        totals[case_id] = busy_ms([
+            (datetime.fromisoformat(occurred_at), ms) for runs in stages.values() for occurred_at, ms in runs
+        ])
     return totals
 
 
