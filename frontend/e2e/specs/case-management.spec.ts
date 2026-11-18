@@ -812,7 +812,9 @@ test.describe('Create case @sprint2 @SCRUM-96', () => {
 
     await expect(input).toHaveValue('A'.repeat(100));
     await page.getByRole('button', { name: 'Create Case' }).click();
-    expect(backend.requestsTo('POST', '/cases')).toHaveLength(1);
+    // The request goes out after the click returns: wait for it, as a slower runner (CI) shows.
+    await expect.poll(() => backend.requestsTo('POST', '/cases').length).toBe(1);
+    expect(backend.requestsTo('POST', '/cases')[0].body).toEqual({ company_name: 'A'.repeat(100), reviews_required: true });
   });
 
   test('CM-010 a case cannot be created without a company name @CM-010', async ({ page, backend }) => {

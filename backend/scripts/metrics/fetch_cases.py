@@ -223,6 +223,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("cases", nargs="+", help="case numbers as the app shows them, e.g. GLDB-6")
     parser.add_argument("--api", default=os.environ.get("METRICS_API", "http://localhost:8000"))
+    parser.add_argument("--reset", action="store_true",
+                        help="delete every earlier result first, so only the cases fetched now are scored")
     args = parser.parse_args()
     username, password = os.environ.get("METRICS_USERNAME"), os.environ.get("METRICS_PASSWORD")
     if not username or not password:
@@ -230,7 +232,13 @@ def main() -> None:
 
     labels = json.loads((DATASET / "labels.json").read_text())["cases"]
     owners = _dataset_files(labels)
-    (DATASET / "results").mkdir(exist_ok=True)
+    results_dir = DATASET / "results"
+    if args.reset and results_dir.exists():
+        cleared = sorted(p.stem for p in results_dir.glob("*.json"))
+        for path in results_dir.glob("*.json"):
+            path.unlink()
+        print(f"Cleared earlier results: {', '.join(cleared) or 'none'}")
+    results_dir.mkdir(exist_ok=True)
     failures = []
     with httpx.Client(base_url=args.api.rstrip("/"), timeout=120) as client:
         token = _check(client.post("/auth/login", json={"username": username, "password": password}), "signing in")

@@ -1,0 +1,27 @@
+{
+  "filename": "POR_NRIC_20260712.pdf",
+  "files": [
+    "POR_NRIC_20260712.pdf"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [
+    "proof_of_address"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S0788664J",
+    "individual_name": "Quek Zhi Hao",
+    "date_of_birth": "1959-11-21",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "M",
+    "individual_address": "339C Kang Ching Road, #06-136, Singapore 613339",
+    "date_of_issue": "2025-02-04",
+    "document_side": "single"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

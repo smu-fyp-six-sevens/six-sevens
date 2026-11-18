@@ -1,0 +1,27 @@
+{
+  "filename": "POR_NRIC_20260825.pdf",
+  "files": [
+    "POR_NRIC_20260825.pdf"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [
+    "proof_of_address"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S8042877D",
+    "individual_name": "Chan Boon Keng",
+    "date_of_birth": "1980-03-19",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "F",
+    "individual_address": "133 Simei Street 1, #06-34, Singapore 520133",
+    "date_of_issue": "2020-12-13",
+    "document_side": "single"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

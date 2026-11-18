@@ -1,0 +1,27 @@
+{
+  "filename": "POR_NRIC_20260920.pdf",
+  "files": [
+    "POR_NRIC_20260920.pdf"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [
+    "proof_of_address"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S8296399E",
+    "individual_name": "Suresh s/o Nair",
+    "date_of_birth": "1982-06-01",
+    "country": "Singapore",
+    "race": "Indian",
+    "sex": "M",
+    "individual_address": "304 Clementi Avenue 4, #09-304, Singapore 120304",
+    "date_of_issue": "2025-01-14",
+    "document_side": "single"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

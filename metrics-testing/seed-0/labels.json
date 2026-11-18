@@ -159,6 +159,16 @@
           "fraud_expected": false,
           "dimensions": [],
           "scored_fields": 9
+        },
+        {
+          "filename": "POR_NRIC_20260831.pdf",
+          "files": [
+            "POR_NRIC_20260831.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
         }
       ]
     },
@@ -289,6 +299,16 @@
             "Image Manipulation"
           ],
           "scored_fields": 7
+        },
+        {
+          "filename": "POR_NRIC_20260830.pdf",
+          "files": [
+            "POR_NRIC_20260830.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
         },
         {
           "filename": "POR_UtilityBill_20260830.jpeg",
@@ -624,6 +644,16 @@
           "scored_fields": 9
         },
         {
+          "filename": "POR_NRIC_20260907.pdf",
+          "files": [
+            "POR_NRIC_20260907.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
           "filename": "Payslip_Aug2026_TeoZH.pdf",
           "files": [
             "Payslip_Aug2026_TeoZH.pdf"
@@ -770,6 +800,16 @@
           "fraud_expected": false,
           "dimensions": [],
           "scored_fields": 5
+        },
+        {
+          "filename": "POR_NRIC_20260714.pdf",
+          "files": [
+            "POR_NRIC_20260714.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
         },
         {
           "filename": "POR_UtilityBill_20260714.jpg",
@@ -1158,6 +1198,16 @@
           "scored_fields": 9
         },
         {
+          "filename": "POR_NRIC_20260920.pdf",
+          "files": [
+            "POR_NRIC_20260920.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
           "filename": "Payslip_Aug2026_Suresh.pdf",
           "files": [
             "Payslip_Aug2026_Suresh.pdf"
@@ -1302,6 +1352,16 @@
           "fraud_expected": false,
           "dimensions": [],
           "scored_fields": 8
+        },
+        {
+          "filename": "POR_NRIC_20260808.pdf",
+          "files": [
+            "POR_NRIC_20260808.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
         },
         {
           "filename": "POR_UtilityBill_20260808.pdf",
@@ -1655,6 +1715,16 @@
             "POR_BankStmt_20260825.pdf"
           ],
           "document_type": "proof_of_address",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
+          "filename": "POR_NRIC_20260825.pdf",
+          "files": [
+            "POR_NRIC_20260825.pdf"
+          ],
+          "document_type": "nric",
           "fraud_expected": false,
           "dimensions": [],
           "scored_fields": 9
@@ -2185,6 +2255,16 @@
           "fraud_expected": false,
           "dimensions": [],
           "scored_fields": 9
+        },
+        {
+          "filename": "POR_NRIC_20260803.pdf",
+          "files": [
+            "POR_NRIC_20260803.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
         }
       ]
     },
@@ -2323,6 +2403,16 @@
           "fraud_expected": false,
           "dimensions": [],
           "scored_fields": 7
+        },
+        {
+          "filename": "POR_NRIC_20260810.pdf",
+          "files": [
+            "POR_NRIC_20260810.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
         },
         {
           "filename": "POR_UtilityBill_20260810.pdf",
@@ -2622,6 +2712,16 @@
           "scored_fields": 9
         },
         {
+          "filename": "POR_NRIC_20260712.pdf",
+          "files": [
+            "POR_NRIC_20260712.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
           "filename": "Payslip_Jun2026_QuekZH.pdf",
           "files": [
             "Payslip_Jun2026_QuekZH.pdf"
@@ -2828,6 +2928,16 @@
           "fraud_expected": false,
           "dimensions": [],
           "scored_fields": 7
+        },
+        {
+          "filename": "POR_NRIC_20260726.pdf",
+          "files": [
+            "POR_NRIC_20260726.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
         },
         {
           "filename": "POR_UtilityBill_20260726.pdf",
@@ -3173,6 +3283,16 @@
           "scored_fields": 9
         },
         {
+          "filename": "POR_NRIC_20260921.pdf",
+          "files": [
+            "POR_NRIC_20260921.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
           "filename": "WongTH_Salary_Slip_20260921.pdf",
           "files": [
             "WongTH_Salary_Slip_20260921.pdf"
@@ -3322,6 +3442,16 @@
           "dimensions": [
             "Text Overlay"
           ],
+          "scored_fields": 9
+        },
+        {
+          "filename": "POR_NRIC_20260825.pdf",
+          "files": [
+            "POR_NRIC_20260825.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
           "scored_fields": 9
         },
         {
@@ -3671,6 +3801,16 @@
           "scored_fields": 9
         },
         {
+          "filename": "POR_NRIC_20260811.pdf",
+          "files": [
+            "POR_NRIC_20260811.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
           "filename": "TeoWT_Passport_scan.png",
           "files": [
             "TeoWT_Passport_scan.png"
@@ -3821,6 +3961,16 @@
           "fraud_expected": false,
           "dimensions": [],
           "scored_fields": 7
+        },
+        {
+          "filename": "POR_NRIC_20260808.pdf",
+          "files": [
+            "POR_NRIC_20260808.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
         },
         {
           "filename": "POR_UtilityBill_20260808.png",
@@ -4195,6 +4345,16 @@
           "fraud_expected": false,
           "dimensions": [],
           "scored_fields": 9
+        },
+        {
+          "filename": "POR_NRIC_20260805.pdf",
+          "files": [
+            "POR_NRIC_20260805.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
         }
       ]
     },
@@ -4343,6 +4503,16 @@
           "fraud_expected": false,
           "dimensions": [],
           "scored_fields": 5
+        },
+        {
+          "filename": "POR_NRIC_20260920.pdf",
+          "files": [
+            "POR_NRIC_20260920.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
         },
         {
           "filename": "POR_UtilityBill_20260920.jpg",
@@ -4625,6 +4795,16 @@
           "scored_fields": 9
         },
         {
+          "filename": "POR_NRIC_20260629.pdf",
+          "files": [
+            "POR_NRIC_20260629.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
+        },
+        {
           "filename": "Payslip_Jun2026_ChanSF.pdf",
           "files": [
             "Payslip_Jun2026_ChanSF.pdf"
@@ -4781,6 +4961,16 @@
           "fraud_expected": false,
           "dimensions": [],
           "scored_fields": 7
+        },
+        {
+          "filename": "POR_NRIC_20260803.pdf",
+          "files": [
+            "POR_NRIC_20260803.pdf"
+          ],
+          "document_type": "nric",
+          "fraud_expected": false,
+          "dimensions": [],
+          "scored_fields": 9
         },
         {
           "filename": "POR_UtilityBill_20260803.pdf",

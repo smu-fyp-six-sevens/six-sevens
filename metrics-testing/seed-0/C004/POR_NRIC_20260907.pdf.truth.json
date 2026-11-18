@@ -1,0 +1,27 @@
+{
+  "filename": "POR_NRIC_20260907.pdf",
+  "files": [
+    "POR_NRIC_20260907.pdf"
+  ],
+  "document_type": "nric",
+  "also_acceptable": [
+    "proof_of_address"
+  ],
+  "seed": null,
+  "checked_against_page": true,
+  "fields": {
+    "nric_number": "S1384715J",
+    "individual_name": "Teo Zhi Hao",
+    "date_of_birth": "1954-11-28",
+    "country": "Singapore",
+    "race": "Chinese",
+    "sex": "M",
+    "individual_address": "115B Jalan Ayer, #16-299, Singapore 383115",
+    "date_of_issue": "2023-06-04",
+    "document_side": "single"
+  },
+  "not_printed": {},
+  "reference": {},
+  "fraud_expected": false,
+  "tampering": []
+}

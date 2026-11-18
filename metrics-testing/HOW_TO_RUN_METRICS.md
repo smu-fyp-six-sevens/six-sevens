@@ -30,7 +30,7 @@ The documents are in the shared Drive folders (the same as `FYP/v18_generated_do
 | C002 | Critical | `KFF_COI_scan.pdf`, `NRIC_3844_front.jpg`, `KestrelFreightForwarding_NOA_YA2025.pdf` |
 | C003 | High | `LIS_Constitution.pdf`, `LIS_BalanceSheet_Audited.pdf` |
 | C008 | High | `ACRA_CertIncorp_201651600K.pdf`, `CreditReport_CBS_20260808.pdf` |
-| C011 | Critical | `SimTH_Passport_scan.jpg`, `TayYS_Salary_Slip_20260925.pdf`, `SP_Utilities_TMS.pdf`, `POR_NRIC_20260925.pdf` (only in the fraud folder) |
+| C011 | Critical | `SimTH_Passport_scan.jpg`, `TayYS_Salary_Slip_20260925.pdf`, `SP_Utilities_TMS.pdf`, `POR_NRIC_20260925.pdf` |
 | C015 | Critical | `eStmt_download_630.pdf`, `POR_UtilityBill_20260904.png`, `Rajesh_Salary_Slip_20260904.pdf` |
 | C018 | High | `eStmt_download_233.pdf`, `FATCA_CRS_Entity_95509.pdf` |
 | C020 | High | `LoanFacility_17299_1.pdf` |
@@ -74,28 +74,77 @@ Send the case number from the app (for example **GLDB-12**) to whoever runs Part
 ### One-time setup
 
 1. Pull `main`.
-2. Set up the backend as in the main README (from `backend/`: `pip install -r requirements-dev.lock` and `pip install --no-deps -e .`).
-3. Add these to `backend/.env`:
+2. Set up the backend as in the main README. From `backend/`:
+   ```bash
+   python -m venv .venv
+   .venv/bin/pip install -r requirements-dev.lock
+   .venv/bin/pip install --no-deps -e .
+   ```
+3. Make sure `backend/.env` has the team's usual backend settings: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `AUTH_USERS`, `AUTH_SECRET_KEY` and the rest. They must point at **the same Supabase project the cases were uploaded to**, or the script won't find the cases. Ask whoever set up the project if you don't have them.
+4. Add these three lines to `backend/.env`:
    ```
    METRICS_USERNAME=<your app username> (e.g. bob)
    METRICS_PASSWORD=<your app password> (e.g. bobs-password)
-   METRICS_API=<the backend the cases were uploaded to, e.g. http://localhost:8000>
+   METRICS_API=http://localhost:8000
    ```
 
 The script only *reads* from the app. It never changes a case, a document or the database.
 
-### Fetch and score
+### Every time: run it
 
-From `backend/`:
+You need **two terminals**: one runs the backend, the other runs the scripts.
+
+**Terminal 1: start the backend and leave it running.** From `backend/`:
+
+```bash
+.venv/bin/uvicorn app.main:app --port 8000
+```
+
+Wait until it prints `Application startup complete`. Don't close this terminal until you've finished.
+
+**Terminal 2: fetch the cases, then score them.** From `backend/`:
+
+```bash
+.venv/bin/python -m scripts.metrics.fetch_cases GLDB-12 GLDB-13 GLDB-14
+.venv/bin/python -m scripts.metrics.score
+```
+
+Use the case numbers your teammates sent you (Part A step 5). Each one prints a line like:
 
 ```
-python -m scripts.metrics.fetch_cases GLDB-12 GLDB-13 GLDB-14
-python -m scripts.metrics.score
+GLDB-12 -> C008: 16 documents, risk Critical, 5 note(s)
 ```
 
-For each case number, `fetch_cases` prints the matching mastersheet case, how many documents it took, the risk level and anything it noticed. Fetching a case again replaces its earlier results, which is useful after a re-upload.
+That's the mastersheet case it matched, how many documents it took, the risk level, and anything worth knowing (listed under it).
 
-`score` writes the report to `metrics-testing/metrics_report.md`, with every detail in `metrics_report.json`. It works offline, so you can re-run it as often as you like.
+Then open **`metrics-testing/metrics_report.md`** for the results. Every detail is also in `metrics_report.json`.
+
+**When you're done,** stop the backend in Terminal 1 with `Ctrl+C`.
+
+### Choosing which cases get scored
+
+Results pile up: every case you fetch is saved in `metrics-testing/seed-0/results/`, and `score` scores **all of them**, including cases fetched earlier or by someone else. Two ways to score only what you want:
+
+**Start fresh with `--reset`.** It deletes every earlier result before fetching, so the report covers only the cases in this command:
+
+```bash
+.venv/bin/python -m scripts.metrics.fetch_cases --reset GLDB-12 GLDB-13
+.venv/bin/python -m scripts.metrics.score
+```
+
+**Keep everything, but score a few with `--cases`.** Nothing is deleted. Name cases by app number (GLDB-12) or mastersheet case (C008):
+
+```bash
+.venv/bin/python -m scripts.metrics.score --cases GLDB-12 C008
+```
+
+Use `--reset` before the final full run, so the report has only the cases from that run. Use `--cases` to check one case without losing the rest.
+
+Good to know:
+
+- Fetching a case again replaces its earlier results, which is useful after a re-upload.
+- `score` doesn't need the backend, so you can re-run it any time.
+- `--reset` only deletes the saved results on your machine. The cases in the app are untouched, so you can fetch them again whenever you like.
 
 ### Reading the report
 
@@ -120,6 +169,9 @@ For each case number, `fetch_cases` prints the matching mastersheet case, how ma
 | `fetch_cases`: "files that aren't Cxxx's" | Another case's files were uploaded into this case | Remove them, or start a fresh case |
 | Lots of "UEN is not in ACRA's register" findings | The backend isn't using the test UEN register | Whoever runs the backend must set `SYNTHETIC_ACRA_REGISTRY=true` in its `.env` and restart it |
 | Sign-in fails | Wrong username, password or API address | Check the three `METRICS_` lines in `backend/.env` |
+| `Connection refused` when fetching | The backend isn't running | Start it in Terminal 1 (Part B, "Every time: run it") and wait for `Application startup complete` |
+| `address already in use` when starting the backend | A backend is already running on port 8000 | Use that one, or stop it with `lsof -ti:8000 \| xargs kill` and start again |
+| `fetch_cases`: "looking up GLDB-… failed: 404" | Your backend is connected to a different Supabase project from the one the case was uploaded to | Check `SUPABASE_URL` and the keys in `backend/.env` |
 
 ## Things that would break the scores
 

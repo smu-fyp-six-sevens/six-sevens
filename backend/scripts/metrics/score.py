@@ -3,6 +3,7 @@ Scores the success metrics from a dataset's truth files and the pipeline's saved
 
 From backend/:
     python -m scripts.metrics.score                 # every seed that has results
+    python -m scripts.metrics.score --cases C008 GLDB-9   # only these
     python -m scripts.metrics.score --seeds 0
 
 Reads metrics-testing/seed-<n>/ (labels.json, each document's .truth.json, results/<case>.json) and writes
@@ -233,15 +234,23 @@ def _key_fields(document_type: str) -> set[str]:
     return {*schema.get("required", []), *schema.get("required_when_individual", []), *KEY_EXTRA.get(document_type, set())}
 
 
-def load_seed(seed_dir: Path) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
-    """(labels by case, results by case, cases with no results yet)."""
+def load_seed(seed_dir: Path, only: set[str] | None = None) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    """
+    (labels by case, results by case, cases asked for that have no results). `only`: score just these, named by
+    mastersheet case (C008) or app case number (GLDB-7). Without it, every case with results is scored.
+    """
     labels = json.loads((seed_dir / "labels.json").read_text())["cases"]
     results, missing = {}, []
+    wanted = {name.upper() for name in only} if only else None
     for case_id in sorted(labels):
         path = seed_dir / "results" / f"{case_id}.json"
-        if path.exists():
-            results[case_id] = json.loads(path.read_text())
-        else:
+        result = json.loads(path.read_text()) if path.exists() else None
+        names = {case_id.upper(), str((result or {}).get("greenlink_case_id") or "").upper()}
+        if wanted is not None and not (names & wanted):
+            continue
+        if result is not None:
+            results[case_id] = result
+        elif wanted is not None:
             missing.append(case_id)
     return labels, results, missing
 
@@ -368,8 +377,8 @@ def _rate(hit: int, total: int) -> float | None:
     return round(hit / total, 4) if total else None
 
 
-def score_seed(seed_dir: Path) -> dict[str, Any]:
-    labels, results, missing = load_seed(seed_dir)
+def score_seed(seed_dir: Path, only: set[str] | None = None) -> dict[str, Any]:
+    labels, results, missing = load_seed(seed_dir, only)
     extraction, detection, risk, notes = [], [], [], []
     for case_id, result in results.items():
         by_name = {d["filename"]: d for d in result["documents"]}
@@ -618,7 +627,7 @@ def markdown(summary: dict[str, Any], seeds: list[dict[str, Any]]) -> str:
                   "| Case | Document | Check | Severity | Finding |", "|---|---|---|---|---|",
                   *[f"| {seed_label(f['seed'])}{f['case_id']} | {f['filename']} | {f['tool']} | {f['severity']} | "
                     f"{f['summary'].replace('|', '/')} |" for f in d["false_positives"]]]
-    gaps = [f"{seed_label(s['seed'])}no results for {', '.join(s['cases_without_results'])}"
+    gaps = [f"{seed_label(s['seed'])}asked for, but never fetched: {', '.join(s['cases_without_results'])}"
             for s in seeds if s["cases_without_results"]]
     notes = [n for s in seeds for n in s["run_notes"]]
     unscanned = [f"not scanned, so not checked: {seedless(name)}" for name in
@@ -633,13 +642,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--seeds", type=int, nargs="+", help="default: every seed folder with results")
     parser.add_argument("--dataset", type=Path, default=DATASET_ROOT)
+    parser.add_argument("--cases", nargs="+", metavar="CASE",
+                        help="score only these, by mastersheet case (C008) or app case number (GLDB-7); "
+                             "default: every case fetched so far")
     args = parser.parse_args()
 
     folders = sorted(
         (args.dataset / f"seed-{s}" for s in args.seeds) if args.seeds
         else (p for p in args.dataset.glob("seed-*") if (p / "results").is_dir())
     )
-    seeds = [score_seed(folder) for folder in folders if (folder / "labels.json").exists()]
+    only = set(args.cases) if args.cases else None
+    seeds = [score_seed(folder, only) for folder in folders if (folder / "labels.json").exists()]
     seeds = [s for s in seeds if s["cases_scored"]]
     if not seeds:
         raise SystemExit("No results to score. Run scripts.metrics.run_pipeline first.")
