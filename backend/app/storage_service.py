@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 # Signed URLs handed out, reused while they have at least _MIN_LEFT_SECONDS to run: opening a document's preview
 # again needn't sign its file again. Per process, keyed by (path, download filename); oldest dropped first.
+# Timed by the wall clock, as Supabase checks the URL's expiry: a monotonic clock stops while the machine sleeps, so
+# after a laptop's sleep it handed out URLs that had already expired.
 _MIN_LEFT_SECONDS = 300
 _MAX_SIGNED = 500
 _signed: dict[tuple[str, str | None], tuple[str, float]] = {}
@@ -81,7 +83,7 @@ def signed_url(storage_path: str, expires_in: int, download_filename: str | None
     """A signed URL for the file and the seconds it has left: one already handed out while it has enough time left,
     else a new one."""
     key = (storage_path, download_filename)
-    now = time.monotonic()
+    now = time.time()
     with _signed_lock:
         hit = _signed.get(key)
     if hit is not None and hit[1] - now >= _MIN_LEFT_SECONDS:
