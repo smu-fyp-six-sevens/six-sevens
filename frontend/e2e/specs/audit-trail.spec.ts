@@ -267,7 +267,7 @@ test.describe('Case audit trail', () => {
     const entries = page.getByTestId('audit-entry');
     await expect(entries.getByTestId('audit-action')).toHaveText([
       'Ran External validation check',
-      'Ran AI generation check',
+      'Ran AI Generation check',
       'Ran Font consistency check',
     ]);
     await expect(entries.locator('.audit-summary')).toHaveText([

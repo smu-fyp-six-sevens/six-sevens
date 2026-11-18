@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from postgrest.exceptions import APIError
 
-from app.case_pipeline import service
+from app.case_pipeline import repository, service
 from app.case_pipeline.service import start_if_due as real_start_if_due  # bound before conftest's no-op
 from app.config import settings
 from app.events import types
 from app.models import CaseRecord, DocumentRecord, DocumentStatus
+from tests.support.fake_supabase import FakeSupabase, Row
 
 NOW = datetime.now(timezone.utc)
 
@@ -156,3 +159,111 @@ async def test_rejecting_a_document_checks_whether_the_analysis_is_due() -> None
         await document_service.reject(document)
 
     start.assert_awaited_once_with("case-1")
+
+
+# --- A case analysis can't start twice (PENDING_TESTS rows 1 and 19) ----------------------------------------------
+# The database holds at most one running run per case and fingerprint (case_analysis_runs_one_running_idx in
+# sql/schema.sql); a second insert fails with Postgres's unique-violation code. The fake below enforces that same
+# rule, so these tests go through the real repository.insert_run, not a mock of it.
+
+RUNS = "case_analysis_runs"
+
+
+class _OneRunningRunPerCase(FakeSupabase):
+    def add(self, table: str, values: Row) -> Row:
+        if table == RUNS and values.get("status") == "running" and self.rows(
+            RUNS, case_id=values.get("case_id"), fingerprint=values.get("fingerprint"), status="running",
+        ):
+            raise APIError({"code": "23505", "message": "duplicate key value violates unique constraint "
+                            '"case_analysis_runs_one_running_idx"', "details": None, "hint": None})
+        return super().add(table, values)
+
+
+@pytest.fixture
+def runs_db(monkeypatch: pytest.MonkeyPatch) -> _OneRunningRunPerCase:
+    fake = _OneRunningRunPerCase(keys={RUNS: ("run_id",)})
+    monkeypatch.setattr(repository, "supabase_client", fake)
+    return fake
+
+
+def _running(db: FakeSupabase, run_id: str, *, started: datetime, fingerprint: str = "now") -> None:
+    db.add(RUNS, {"run_id": run_id, "case_id": "case-1", "status": "running", "fingerprint": fingerprint,
+                  "started_at": started.isoformat()})
+
+
+def test_a_second_running_run_over_the_same_inputs_is_refused(runs_db) -> None:
+    _running(runs_db, "first", started=datetime.now(timezone.utc))
+
+    with pytest.raises(repository.RunAlreadyStarted):
+        repository.insert_run("second", "case-1", "now")
+
+    assert [r["run_id"] for r in runs_db.rows(RUNS)] == ["first"]
+    assert runs_db.rows(RUNS, run_id="first")[0]["status"] == "running"
+
+
+def test_a_clashing_run_past_the_time_limit_is_failed_and_the_new_one_starts(runs_db) -> None:
+    lost_at = datetime.now(timezone.utc) - timedelta(seconds=settings.CASE_ANALYSIS_TIMEOUT_SECONDS + 60)
+    _running(runs_db, "lost", started=lost_at)
+
+    repository.insert_run("fresh", "case-1", "now")
+
+    (lost,) = runs_db.rows(RUNS, run_id="lost")
+    assert lost["status"] == "failed" and lost["finished_at"]
+    assert "stopped without finishing" in lost["error"]
+    assert runs_db.rows(RUNS, run_id="fresh")[0]["status"] == "running"
+
+
+def test_a_running_run_over_other_inputs_does_not_block_a_new_one(runs_db) -> None:
+    _running(runs_db, "older-inputs", started=datetime.now(timezone.utc), fingerprint="before")
+
+    repository.insert_run("new-inputs", "case-1", "now")
+
+    assert {r["run_id"] for r in runs_db.rows(RUNS, status="running")} == {"older-inputs", "new-inputs"}
+
+
+async def test_an_automatic_start_that_clashes_sends_nothing_and_does_not_raise(runs_db, published_events) -> None:
+    # Another instance inserted the run between this one's due check and its insert.
+    _running(runs_db, "other-instance", started=datetime.now(timezone.utc))
+    with patch.object(service, "_due_fingerprint", return_value="now"), patch.object(service, "sync_stage", AsyncMock()):
+        await real_start_if_due("case-1")
+
+    assert published_events == []
+    assert [r["run_id"] for r in runs_db.rows(RUNS)] == ["other-instance"]
+
+
+async def test_an_officers_start_that_clashes_is_told_one_is_already_running(runs_db, published_events) -> None:
+    # The pre-check saw no live run, but another instance's insert won the race: the database still refuses it.
+    _running(runs_db, "other-instance", started=datetime.now(timezone.utc))
+    with (
+        patch.object(service.case_repository, "get_case", return_value=_case()),
+        patch.object(service.document_repository, "list_documents", return_value=SCANNED),
+        patch.object(service, "unapproved_requirements", return_value=[]),
+        patch.object(service, "is_ready_for_analysis", return_value=True),
+        patch.object(service.repository, "latest_run_state", return_value=None),
+        patch.object(service.repository, "count_runs_since", return_value=0),
+        patch.object(service.spend_cap, "reached", return_value=None),
+        patch.object(service.detection_results, "get_states", return_value=({}, set())),
+        patch.object(service.state, "compute_fingerprint", return_value="now"),
+        pytest.raises(service.AnalysisAlreadyRunning),
+    ):
+        await service.start_analysis("case-1")
+
+    assert published_events == []
+
+
+async def test_two_automatic_starts_at_once_start_one_run(runs_db, published_events) -> None:
+    with patch.object(service, "_due_fingerprint", return_value="now"), patch.object(service, "sync_stage", AsyncMock()):
+        await asyncio.gather(real_start_if_due("case-1"), real_start_if_due("case-1"))
+
+    assert len(runs_db.rows(RUNS, status="running")) == 1
+    assert [e.type for e in published_events] == [types.CASE_ANALYSIS_REQUESTED]
+
+
+async def test_the_case_lock_is_dropped_after_a_start_and_after_a_failure(runs_db) -> None:
+    with patch.object(service, "_due_fingerprint", return_value="now"), patch.object(service, "sync_stage", AsyncMock()):
+        await real_start_if_due("case-1")
+    assert "case-1" not in service._auto_locks and "case-1" not in service._auto_users
+
+    with patch.object(service, "_due_fingerprint", side_effect=RuntimeError("database down")):
+        await real_start_if_due("case-1")
+    assert "case-1" not in service._auto_locks and "case-1" not in service._auto_users

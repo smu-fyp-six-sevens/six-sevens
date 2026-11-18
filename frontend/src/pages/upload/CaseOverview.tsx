@@ -164,7 +164,7 @@ export function CaseOverview({
                   <ul className="case-overview-flagged-list">
                     {worstDocuments.map((document) => (
                       <li key={document.key}>
-                        <button type="button" className="case-overview-flagged-document" onClick={() => onSelectSection('risk')}>
+                        <button type="button" className="case-overview-flagged-document" onClick={() => onSelectSection('findings')}>
                           <span className="case-overview-flagged-copy">
                             <strong>{document.filename}</strong>
                             <span className="case-overview-flagged-meta">
@@ -243,7 +243,7 @@ export function CaseOverview({
                   {/* The reviews are of the last run's findings; a rerun over the newer documents may change them. */}
                   {reviewed > 0 && analysisStale && <p className="case-overview-accuracy-stale">From before the latest documents · rerun the analysis to update</p>}
                 </div>
-                {reviewed > 0 && <button type="button" className="case-overview-text-button" onClick={() => onSelectSection('risk')}>Review findings →</button>}
+                {reviewed > 0 && <button type="button" className="case-overview-text-button" onClick={() => onSelectSection('findings')}>Review findings →</button>}
               </div>
               {reviewed === 0 && (
                 <div className="case-overview-accuracy-empty">

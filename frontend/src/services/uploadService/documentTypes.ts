@@ -25,6 +25,21 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = Object.fromEntries(
   DOCUMENT_TYPES.map(({ value, label }) => [value, label]),
 );
 
+// Finding text written by the backend names a document by its type in lower case ("on the certificate of
+// incumbency, the fatca crs declaration and the list of loans"). This gives each one its label from the list above
+// ("the Certificate of Incumbency"), so a type reads the same in a sentence as it does everywhere else.
+const TYPE_PHRASES: [string, string][] = DOCUMENT_TYPES.filter((type) => type.value !== 'unrecognised')
+  .map((type): [string, string] => [type.value.replace(/_/g, ' '), type.label])
+  .sort((a, b) => b[0].length - a[0].length);
+const TYPE_IN_TEXT = new RegExp(String.raw`\bthe (${TYPE_PHRASES.map(([phrase]) => phrase).join('|')})\b`, 'gi');
+
+export function capitaliseDocumentTypes(text: string): string {
+  return text.replace(TYPE_IN_TEXT, (_match, phrase: string) => {
+    const label = TYPE_PHRASES.find(([known]) => known === phrase.toLowerCase())?.[1];
+    return `the ${label ?? phrase}`;
+  });
+}
+
 // The type dropdown: the same list, with the "couldn't tell" type offered as the catch-all "Other".
 export const DOCUMENT_TYPE_OPTIONS: { value: string; label: string }[] = DOCUMENT_TYPES.map((type) =>
   type.value === 'unrecognised' ? { ...type, label: 'Other' } : type,

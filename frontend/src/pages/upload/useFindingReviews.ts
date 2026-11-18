@@ -74,6 +74,8 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
   const [data, setData] = useState<CaseFindingReviews | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  // Bumped by retry(): reads the reviews again after a failed load.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -88,7 +90,13 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [caseId, enabled]);
+  }, [caseId, enabled, attempt]);
+
+  // A failed read isn't cached (sharedRead), so this asks the backend again.
+  const retry = useCallback(() => {
+    setError(null);
+    setAttempt((count) => count + 1);
+  }, []);
 
   // Resolves true once saved; a failure is shown through `error` instead.
   const run = useCallback(async (key: string, action: () => Promise<CaseFindingReviews>) => {
@@ -150,5 +158,5 @@ export function useFindingReviews(caseId: string, enabled: boolean) {
     [caseId, run],
   );
 
-  return { data, error, savingKey, saveGroup, saveAll, signOff, addMissed, editMissed, removeReview };
+  return { data, error, retry, savingKey, saveGroup, saveAll, signOff, addMissed, editMissed, removeReview };
 }

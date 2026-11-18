@@ -160,6 +160,25 @@ def test_a_computed_probe_counts_even_on_the_supporting_document(context) -> Non
     assert verify_verdict(context, hypothesis(STATEMENT), verdict([c["refs"][0] for c in calls[:2]]), calls)[1] == ""
 
 
+def test_a_probe_over_several_documents_counts_for_each_one_it_names(context) -> None:
+    # Seen live: the revenue check is logged under the accounts but totals the bank statement too; a claim that said
+    # it could be shown wrong on the statement was discarded as if no probe had run.
+    calls = [read(context, PAYSLIP, "net_pay"), read(context, STATEMENT, "transactions")]
+    probe = read(context, NOA, "revenue_vs_bank_credits", probe=True, tool="revenue_vs_bank_credits")
+    calls.append({**probe, "document": NOA, "args": {"financial_statement": NOA, "statements": [STATEMENT]}})
+
+    assert verify_verdict(context, hypothesis(STATEMENT), verdict([c["refs"][0] for c in calls[:2]]), calls)[1] == ""
+
+
+def test_a_probe_naming_other_documents_still_does_not_count_for_one_it_never_read(context) -> None:
+    calls = [read(context, PAYSLIP, "net_pay"), read(context, STATEMENT, "transactions")]
+    probe = read(context, NOA, "revenue_vs_bank_credits", probe=True, tool="revenue_vs_bank_credits")
+    calls.append({**probe, "document": NOA, "args": {"financial_statement": NOA, "statements": ["not_a_document"]}})
+
+    assert verify_verdict(context, hypothesis(STATEMENT), verdict([c["refs"][0] for c in calls[:2]]), calls)[1] == (
+        "refutation probe did not run")
+
+
 # --- Severity and category ----------------------------------------------------------------------------------------
 
 
@@ -176,6 +195,47 @@ def test_high_needs_a_hard_breach_or_a_registry_fact(context) -> None:
 
     assert (plain.severity, from_registry.severity, breached.severity) == ("medium", "high", "high")
     assert breached.breach_flags == ["CHRONOLOGICAL_IMPOSSIBILITY"]
+
+
+def _revenue_ref(context: CaseContext) -> str:
+    """The revenue-vs-credits comparison's ref, as tools/cross_checks.py issues it (no breach flag of its own)."""
+    return context.ledger.issue(NOA, "revenue_vs_bank_credits", {"annualised_credits_to_revenue": 0.06},
+                                source="revenue_vs_bank_credits")
+
+
+@pytest.mark.parametrize("asked", ["medium", "high"])
+def test_revenue_the_bank_credits_dont_show_is_a_low_lead(context, asked) -> None:
+    # Seen on clean synthetic cases: one company account over four months held 6% of the accounts' revenue, and the
+    # medium finding alone lifted a clean case to Medium. A company can bank elsewhere or invoice on credit.
+    citations, calls = evidence(context)
+
+    finding, reason = verify_verdict(
+        context, hypothesis(), verdict([*citations, _revenue_ref(context)], severity=asked,
+                                       category="unsupported_claim"), calls)
+
+    assert reason == "" and finding.severity == "low"
+    assert finding.category == FindingCategory.UNSUPPORTED_CLAIM  # still shown, as what it is
+
+
+def test_a_revenue_gap_backed_by_a_breach_or_a_registry_fact_keeps_its_severity(context) -> None:
+    citations, calls = evidence(context)
+    revenue = _revenue_ref(context)
+    registry = context.ledger.issue(NOA, "uen_registry", "ACRA: struck off", source="get_business_profile",
+                                    category=FindingCategory.REGISTRY_DISCREPANCY)
+    timeline = context.ledger.issue(STATEMENT, "statement_period", "x", source="compare_periods",
+                                    breach_flag="CHRONOLOGICAL_IMPOSSIBILITY")
+
+    with_registry = verify_verdict(context, hypothesis(), verdict([*citations, revenue, registry]), calls)[0]
+    with_breach = verify_verdict(context, hypothesis(), verdict([*citations, revenue, timeline], severity="high"),
+                                 calls)[0]
+
+    assert (with_registry.severity, with_breach.severity) == ("medium", "high")
+
+
+def test_a_medium_finding_that_doesnt_cite_the_revenue_check_stays_medium(context) -> None:
+    citations, calls = evidence(context)
+
+    assert verify_verdict(context, hypothesis(), verdict(citations), calls)[0].severity == "medium"
 
 
 def test_an_unknown_severity_reads_as_medium(context) -> None:

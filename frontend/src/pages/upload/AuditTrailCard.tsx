@@ -153,8 +153,8 @@ function officerOf(event: AuditEvent): string | null {
 // The individual checks by id, and the two image checks the Detection panel runs only as "Image integrity".
 const CHECK_LABELS: Record<string, string> = {
   ...Object.fromEntries(INDIVIDUAL_DETECTION_CHECKS.map((check) => [check.id, check.label])),
-  'image-manipulation': 'Image manipulation',
-  'image-tampering': 'Image tampering',
+  'image-manipulation': 'Image Resolution & Compression',
+  'image-tampering': 'Image Boundary, Scaling & Colour Consistency',
 };
 
 function actionLabel(event: AuditEvent): string {

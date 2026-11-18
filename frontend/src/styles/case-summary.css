@@ -423,16 +423,18 @@
 }
 
 /* A finding's severity on the same scale as the case's risk (tokens.css --risk-*). */
+/* Light to dark as the severity rises, so each tag reads apart at a glance: Low a pale peach tint, Medium the
+   orange fill, High solid red. */
 .risk-severity--low {
   border-color: var(--risk-low);
-  background: var(--white);
-  color: var(--ink-soft);
+  background: var(--risk-medium-tint);
+  color: var(--risk-medium-ink);
 }
 
 .risk-severity--medium {
-  border-color: var(--risk-medium-border);
-  background: var(--risk-medium-tint);
-  color: var(--risk-medium-ink);
+  border-color: var(--risk-medium);
+  background: var(--risk-medium);
+  color: var(--ink);
 }
 
 .risk-severity--high {
@@ -441,13 +443,19 @@
 }
 
 /* A finding the specialists set aside, or an issue an officer reported as missed: never scored, so no severity
-   colour. */
+   colour. Set aside is a dashed neutral outline (left out of the score); missed is the officer's own report, in the
+   same yellow as its tag in the missed-issue list. */
 .risk-severity--dismissed,
-.risk-severity--info,
-.risk-severity--missed {
-  border: 1px solid var(--line);
+.risk-severity--info {
+  border: 1px dashed var(--slate-77);
   background: var(--paper);
   color: var(--ink-soft);
+}
+
+.risk-severity--missed {
+  border-color: var(--orange-92);
+  background: var(--orange-92);
+  color: var(--orange-27);
 }
 
 .risk-dismissed-heading {
@@ -1574,4 +1582,243 @@
   .flagged-item--highlighted {
     animation: none;
   }
+}
+
+/* Inside the Case Risk card's score block (CaseRiskCard part="score"): the facts sit under the level, in its column. */
+.risk-score-detail .risk-facts {
+  margin: 6px 0 0;
+}
+
+/* Narrow: a group's first finding wraps to two lines rather than cutting off mid-sentence. */
+@media (max-width: 620px) {
+  .risk-document-preview {
+    display: -webkit-box;
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+}
+
+/* Report a missed issue (FindingReviewControls): roomier fields on the same 8px radius as every input, the check
+   list drawn with its own chevron, and the steel focus ring. */
+.missed-issue-form {
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+}
+
+.missed-issue-form label {
+  gap: 6px;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.missed-issue-field {
+  display: grid;
+  gap: 6px;
+}
+
+.missed-issue-field > label {
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.missed-issue-form select,
+.missed-issue-form input {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.missed-issue-form select {
+  padding-right: 36px;
+  appearance: none;
+  background: var(--white) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='m1 1.5 5 5 5-5' fill='none' stroke='%235b6478' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center / 12px 8px;
+  cursor: pointer;
+}
+
+.missed-issue-form select:invalid {
+  color: var(--text-muted);
+}
+
+.missed-issue-form select option,
+.missed-issue-form select optgroup {
+  color: var(--ink);
+}
+
+.missed-issue-form select:hover,
+.missed-issue-form input:hover {
+  border-color: var(--slate-77);
+}
+
+.missed-issue-form select:focus-visible,
+.missed-issue-form input:focus-visible {
+  outline: none;
+  border-color: var(--steel);
+  box-shadow: 0 0 0 3px var(--steel-a20);
+}
+
+.missed-issue-form input::placeholder {
+  color: var(--text-muted);
+}
+
+.missed-issue-actions {
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.missed-issue-cancel,
+.missed-issue-save {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.missed-issue-cancel:hover {
+  background: var(--stone-94);
+}
+
+.missed-issue-save:hover:not(:disabled) {
+  border-color: var(--steel-dark);
+  background: var(--steel-dark);
+}
+
+.missed-issue-cancel:focus-visible,
+.missed-issue-save:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--steel-a25);
+}
+
+/* The check picker (CheckPicker.tsx): a field like the input under it, opening a list that floats over the form
+   (upwards when there's no room below), grouped by specialist under small headings, the current check ticked. */
+.check-picker {
+  position: relative;
+}
+
+.check-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.check-picker-trigger:hover {
+  border-color: var(--slate-77);
+}
+
+.check-picker-trigger:focus-visible,
+.check-picker-trigger[aria-expanded='true'] {
+  outline: none;
+  border-color: var(--steel);
+  box-shadow: 0 0 0 3px var(--steel-a20);
+}
+
+.check-picker-trigger--empty .check-picker-value {
+  color: var(--text-muted);
+}
+
+.check-picker-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.check-picker-chevron {
+  flex: none;
+  width: 12px;
+  height: 8px;
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s;
+}
+
+.check-picker-trigger[aria-expanded='true'] .check-picker-chevron {
+  transform: rotate(180deg);
+}
+
+.check-picker-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  z-index: 30;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--white);
+  box-shadow: 0 12px 32px var(--ink-a16);
+}
+
+.check-picker--up .check-picker-list {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.check-picker-group + .check-picker-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.check-picker-heading {
+  padding: 8px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.check-picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.check-picker-option:hover,
+.check-picker-option:focus-visible {
+  outline: none;
+  background: var(--steel-a10);
+}
+
+.check-picker-option[aria-selected='true'] {
+  color: var(--steel-dark);
+  font-weight: 600;
+}
+
+.check-picker-tick {
+  flex: none;
+  color: var(--steel);
 }

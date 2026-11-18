@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app import case_repository, case_service, case_stage, document_repository, realtime_listener
 from app.case_broadcaster import CaseBroadcaster
 from app.case_pipeline.models import CaseAnalysis
+from app.case_pipeline.readiness import is_ready_for_analysis
 from app.case_service import is_case_finalised as real_is_case_finalised  # bound before conftest's stand-in
 from app.case_stage import sync_case_stage as real_sync_case_stage  # bound before conftest's no-op
 from app.main import app
@@ -591,3 +592,34 @@ def test_only_a_finalised_case_is_locked() -> None:
     for status, locked in [("case_analysed", False), ("finalised", True)]:
         with patch("app.case_service.case_repository.get_case", return_value=_case(status)):
             assert real_is_case_finalised("case-1") is locked
+
+
+# --- Approving an untyped document can finish a case (PENDING_TESTS row 2, the stage part) ------------------------
+# A document with no type is never scanned (models.skips_detection), so once it's approved it is as done as a scanned
+# one: neither the stage nor the analysis may wait for a scan that will never come.
+
+
+
+def _untyped(status: DocumentStatus, doc_id: str = "doc-2") -> DocumentRecord:
+    return _document(status, doc_id).model_copy(update={"document_type": None})
+
+
+def test_an_approved_untyped_document_is_not_waited_on() -> None:
+    documents = [_document(DocumentStatus.DETECTED), _untyped(DocumentStatus.APPROVED)]
+
+    assert case_stage.document_stage(documents) is None  # nothing left to wait for: the analysis decides
+    assert is_ready_for_analysis(documents) is True
+
+
+def test_an_approved_typed_document_is_still_waited_on_until_scanned() -> None:
+    documents = [_document(DocumentStatus.DETECTED), _document(DocumentStatus.APPROVED, "doc-2")]
+
+    assert case_stage.document_stage(documents).stage == CaseStage.FRAUD_DETECTION
+    assert is_ready_for_analysis(documents) is False
+
+
+def test_a_case_of_only_approved_untyped_documents_is_ready() -> None:
+    documents = [_untyped(DocumentStatus.APPROVED, "doc-1"), _untyped(DocumentStatus.APPROVED, "doc-2")]
+
+    assert case_stage.document_stage(documents) is None
+    assert is_ready_for_analysis(documents) is True

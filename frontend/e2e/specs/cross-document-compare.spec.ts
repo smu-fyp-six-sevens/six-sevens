@@ -48,7 +48,7 @@ function seed(backend: MockBackend, findings: CaseRiskFinding[]) {
 }
 
 async function openCompare(page: Page, greenlinkId: string) {
-  await page.goto(`/cases/${greenlinkId}?section=risk`);
+  await page.goto(`/cases/${greenlinkId}?section=findings`);
   const card = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
   await card.getByRole('button', { name: /Across documents/ }).click();
   await card.getByRole('button', { name: 'Compare documents' }).click();
@@ -160,7 +160,7 @@ test.describe('Compare a cross-document finding side by side', () => {
 
   test('a finding resting on one document has nothing to compare', async ({ page, backend }) => {
     seed(backend, [finding({ document_ids: ['doc-a'] })]);
-    await page.goto('/cases/GLDB-7001?section=risk');
+    await page.goto('/cases/GLDB-7001?section=findings');
     const card = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
     await card.getByRole('button', { name: /Across documents/ }).click();
 
@@ -188,7 +188,7 @@ test.describe('A finding with no box on the document says why', () => {
     backend.documents.push(makeDocument({ id: 'doc-p', case_id: theCase.id, filename: 'payslip.pdf', status: 'detected', document_type: 'payslip' }));
     backend.detectionReports['doc-p'] = { findings: [] };
 
-    await page.goto('/cases/GLDB-7002?section=risk');
+    await page.goto('/cases/GLDB-7002?section=findings');
     const card = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
     await card.locator('.risk-document', { hasText: 'payslip.pdf' }).getByRole('button').first().click();
     const rows = page.getByRole('dialog', { name: 'Review findings on payslip.pdf' }).locator('.risk-findings li');
@@ -221,7 +221,7 @@ test.describe("A document's findings beside it are listed by severity, then page
     });
     backend.detectionReports['doc-p'] = { findings: [placed('font-1', 6), placed('font-3', 3), placed('font-4', 5), placed('font-5', 1)] };
 
-    await page.goto('/cases/GLDB-7003?section=risk');
+    await page.goto('/cases/GLDB-7003?section=findings');
     const card = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
     await card.locator('.risk-document', { hasText: 'payslip.pdf' }).getByRole('button').first().click();
     const rows = page.getByRole('dialog', { name: 'Review findings on payslip.pdf' }).locator('.risk-findings li .risk-finding-summary');

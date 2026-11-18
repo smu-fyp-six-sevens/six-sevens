@@ -10,9 +10,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.case_pipeline.cross_document.evidence import build_context
+from app.case_pipeline.cross_document.evidence import build_context, render_dossier
 from app.case_pipeline.cross_document.tools.common import ToolKit
 from app.case_pipeline.cross_document.tools.comparisons import build_comparison_tools
+from app.case_pipeline.cross_document.tools.consistency import build_consistency_tools
 from app.case_pipeline.cross_document.tools.reading import build_reading_tools
 from app.models import DocumentRecord, DocumentStatus
 
@@ -254,3 +255,53 @@ async def test_a_personal_attribute_is_never_compared() -> None:
 
     assert result["available"] is False
     assert len(result["missing"]) == 2
+
+
+# --- No file names reach the case model (PENDING_TESTS row 24) -----------------------------------------------------
+# A file name can carry a person's name or a protected word ("Tan Ah Kow Malay payslip.pdf"), so the model sees
+# document keys only: in the dossier, the document list and the consistency tools' summaries.
+
+def _named(document_type: str, document_id: str, filename: str, **fields) -> DocumentRecord:
+    return document(document_type, document_id, **fields).model_copy(update={"filename": filename})
+
+
+def _without_names(text: str, *filenames: str) -> None:
+    for filename in filenames:
+        assert filename not in text and filename.rsplit(".", 1)[0] not in text, f"{filename!r} reached the model"
+
+
+async def test_the_dossier_names_each_document_by_key_and_type_only() -> None:
+    pay = _named("payslip", "doc-pay", "Tan Ah Kow Malay payslip.pdf", net_pay="4160.00")
+    bank = _named("bank_statement", "doc-bank", "TanAhKow_DBS_Oct.pdf", closing_balance="9000.00")
+    context = build_context("case-1", [pay, bank], {})
+
+    dossier = render_dossier(context)
+
+    _without_names(dossier, pay.filename, bank.filename)
+    assert "[payslip_1] payslip" in dossier and "[bank_statement_1] bank_statement" in dossier
+
+
+async def test_the_document_list_carries_no_file_names() -> None:
+    pay = _named("payslip", "doc-pay", "Tan Ah Kow Malay payslip.pdf")
+    tools, _ = toolkit(pay)
+
+    listed = await call(tools, "list_documents")
+
+    _without_names(json.dumps(listed), pay.filename)
+
+
+async def test_a_company_name_mismatch_summary_names_documents_by_key() -> None:
+    incorporation = _named("certificate_of_incorporation", "doc-inc", "Tan Ah Kow ACRA cert.pdf",
+                           company_name="Greenlink Trading Pte Ltd")
+    pay = _named("payslip", "doc-pay", "Tan Ah Kow Malay payslip.pdf", company_name="Bluewater Logistics Pte Ltd")
+    kit = ToolKit(context=build_context("case-1", [incorporation, pay], {}), calls=[])
+    tools = {t.name: t for t in build_consistency_tools(kit)}
+
+    result = await call(tools, "company_name_consistency_tool", document="certificate_of_incorporation_1")
+
+    (discrepancy,) = result["discrepancies"]
+    assert discrepancy["documents"] == ["payslip_1"]
+    # The summary is written with file names; the tool puts the key in their place.
+    assert "payslip_1" in discrepancy["summary"]
+    _without_names(json.dumps(result), incorporation.filename, pay.filename)
+    _without_names(json.dumps(kit.calls, default=str), incorporation.filename, pay.filename)

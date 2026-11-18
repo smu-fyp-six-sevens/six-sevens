@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { ReviewReason, FindingReview, MetricsSummary, ReviewScope } from '../../services/uploadService';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { Rate } from '../../components/Rate';
@@ -7,6 +7,7 @@ import { InfoLabel } from '../../components/InfoTip';
 import { officerName } from '../../lib/officers';
 import { Icon } from '../../components/Icon';
 import { FALSE_ALARM_REASONS, SET_ASIDE_REASONS, reviewReasonLabel } from '../../utils/reviewReasons';
+import { CheckPicker } from './CheckPicker';
 
 export type GroupReviewStatus = 'not_reviewed' | 'saved' | 'unsaved';
 
@@ -173,6 +174,7 @@ function MissedIssueForm({
   onSubmit: (checkName: string, note: string) => void;
   onCancel: () => void;
 }) {
+  const formId = useId();
   const [checkName, setCheckName] = useState(initialCheck);
   const [note, setNote] = useState(initialNote);
   const unchanged = checkName === initialCheck && note.trim() === initialNote.trim();
@@ -187,21 +189,12 @@ function MissedIssueForm({
         if (checkName) onSubmit(checkName, note.trim());
       }}
     >
+      <div className="missed-issue-field">
+        <label htmlFor={`${formId}-check`}>Check That Missed It</label>
+        <CheckPicker id={`${formId}-check`} checks={checks} value={checkName} onChange={setCheckName} />
+      </div>
       <label>
-        <span>Check that should have caught it</span>
-        <select value={checkName} onChange={(event) => setCheckName(event.target.value)} required>
-          <option value="" disabled>
-            Choose a check…
-          </option>
-          {checks.map((check) => (
-            <option key={check} value={check}>
-              {formatCheck(check)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        <span>What was missed</span>
+        <span>What Was Missed</span>
         <input
           value={note}
           required={needsNote}

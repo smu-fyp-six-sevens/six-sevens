@@ -288,12 +288,12 @@ test.describe('Overall case dashboard @sprint5 @SCRUM-297', () => {
     test('CM-061 / AE-015 a check under target is flagged and shown in red; one meeting both is On target @CM-061 @AE-015', async ({ page }) => {
       await expect(checkRow(page, 'Spelling').locator('[data-label="Flags"]')).toContainText('Below target');
       await expect(checkRow(page, 'Spelling').locator('[data-label="Precision"] .rate--below')).toHaveText('60%');
-      await expect(checkRow(page, 'Numerical checks').locator('[data-label="Flags"]')).toContainText('On target');
-      await expect(checkRow(page, 'Numerical checks').locator('.rate--below')).toHaveCount(0);
+      await expect(checkRow(page, 'Numerical Checks').locator('[data-label="Flags"]')).toContainText('On target');
+      await expect(checkRow(page, 'Numerical Checks').locator('.rate--below')).toHaveCount(0);
     });
 
     test('CM-062 a check with fewer than 5 reviews is marked Few reviews @CM-062', async ({ page }) => {
-      const font = checkRow(page, 'Font consistency');
+      const font = checkRow(page, 'Font Consistency');
 
       await expect(font.locator('.review-mix-total')).toHaveText('2 reviews');
       await expect(font.locator('[data-label="Flags"]')).toHaveText('Few reviews');
@@ -306,7 +306,7 @@ test.describe('Overall case dashboard @sprint5 @SCRUM-297', () => {
       await expect(overall.locator('.accuracy-card').nth(0)).toContainText('13 correct of 22 reviewed findings');
       await expect(overall.locator('.accuracy-card').nth(1)).toContainText('93%');
       await expect(overall.locator('.accuracy-card').nth(1)).toContainText('13 caught of 14 real issues');
-      await expect(checkRow(page, 'Numerical checks').locator('[data-label="Recall"]')).toHaveText('83%');
+      await expect(checkRow(page, 'Numerical Checks').locator('[data-label="Recall"]')).toHaveText('83%');
     });
 
     test('AE-014 a check with no real issues shows recall as Not measured, never 0% or 100% @AE-014', async ({ page }) => {

@@ -1579,3 +1579,27 @@
     min-height: 0;
   }
 }
+
+/* Narrow: the section rail scrolls sideways, so its right edge fades to say there is more; the list's end padding
+   lets the last item scroll clear of the fade. The case actions (⋮) stay on the title's line rather than wrapping
+   onto one of their own. */
+@media (max-width: 860px) {
+  .case-nav {
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+
+  .case-nav ul {
+    padding-right: 28px;
+  }
+}
+
+@media (max-width: 620px) {
+  .case-header .case-title-row > .case-title {
+    flex: 1 1 calc(100% - 64px);
+  }
+
+  .case-header .case-title-row > .case-finalised-banner {
+    order: 3;
+    flex-basis: 100%;
+  }
+}

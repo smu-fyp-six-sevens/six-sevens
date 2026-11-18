@@ -24,13 +24,11 @@ import type { ReviewLink } from './DocumentReviewModal';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { SCORE_BANDS } from './scoreBands';
-import { SeverityGauge, SeverityLegend } from './SeverityGauge';
+import { SeverityGauge } from './SeverityGauge';
 import { readingOrder } from '../../components/findingHighlights';
 import type { FindingHighlight, HighlightArea } from '../../components/findingHighlights';
 import { Icon } from '../../components/Icon';
-
-// The group cross-document findings sit in: they belong to the case, not to one document.
-const CASE_GROUP_ID = '__case__';
+import { CASE_GROUP_ID } from './analysisSummary';
 
 type Severity = CaseRiskFinding['severity'];
 const SEVERITY_ORDER: Severity[] = ['high', 'medium', 'low'];
@@ -51,22 +49,6 @@ function addedDetail(rationale: string, summary: string): string {
       return repeated / words.length < 0.6;
     })
     .join(' ');
-}
-
-// The score on the same dial as the Case Summary's Overall Case Severity card, with what each band means beside it.
-function ScoreGauge({ score, level }: { score: number; level: string }) {
-  const band = SCORE_BANDS.find((b) => b.level === level);
-  return (
-    <div className="risk-score">
-      <SeverityGauge score={score} level={level} />
-      <div className="risk-score-detail">
-        <span className={`risk-score-level risk-score-level--${level.toLowerCase()}`}>
-          {level} Risk{band ? ` · ${band.min}–${band.max}` : ''}
-        </span>
-        <SeverityLegend level={level} />
-      </div>
-    </div>
-  );
 }
 
 // Why a finding has no box on the document: it's about the file rather than the page, or it's on the page but the
@@ -255,9 +237,12 @@ export function CaseRiskCard({
   caseDocuments = [],
   readOnly = false,
   reviewsRequired,
+  part,
 }: {
   risk: CaseRisk | null;
   caseId: string;
+  // The Risk & Analysis page's two tabs: the score on Overview, every finding (and their review) on Findings.
+  part: 'score' | 'findings';
   caseDocuments?: DocumentRecord[];
   // A finalised case: the officer's verdicts and missed issues show, but can't be changed.
   readOnly?: boolean;
@@ -294,14 +279,14 @@ export function CaseRiskCard({
   // A reason in the case analysis summary links here as #risk-finding-<document>-<finding>: open that document for
   // review, then bring the finding into view once the reviews have loaded.
   const { hash } = useLocation();
-  // A reason on the Case Analysis card links here with from=analysis to open the document; closing it should
-  // return there, not leave the officer on the risk tab they never chose.
+  // A reason in the Overview tab's summary links here with from=overview to open the document; closing it should
+  // return there, not leave the officer on the Findings tab they never chose.
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const cameFromAnalysis = searchParams.get('from') === 'analysis';
+  const cameFromOverview = searchParams.get('from') === 'overview';
   function closeReview() {
     setReviewing(null);
-    if (cameFromAnalysis) navigate({ search: '?section=analysis', hash: '' }, { replace: true });
+    if (cameFromOverview) navigate({ search: '?section=risk', hash: '' }, { replace: true });
   }
   const linkedId = hash.startsWith('#risk-finding-') ? decodeURIComponent(hash.slice(1)) : null;
   const linkedGroupId =
@@ -310,11 +295,19 @@ export function CaseRiskCard({
   useEffect(() => {
     if (linkedGroupId) setReviewing(linkedGroupId);
   }, [linkedGroupId]);
+  // A cross-document finding opens in place: expand its group.
+  const linksToCaseGroup = findings.some(
+    (finding) => findingScope(finding) === 'case' && linkedId === `risk-finding-${CASE_GROUP_ID}-${finding.finding_id}`,
+  );
+  useEffect(() => {
+    if (linksToCaseGroup) setExpanded((open) => new Set(open).add(CASE_GROUP_ID));
+  }, [linksToCaseGroup]);
+  const caseGroupOpen = expanded.has(CASE_GROUP_ID);
   const reviewsSettled = reviews.data !== null || reviews.error !== null;
   useEffect(() => {
     if (!linkedId || !reviewsSettled) return;
     window.document.getElementById(linkedId)?.scrollIntoView({ block: 'center' });
-  }, [linkedId, reviewing, reviewsSettled]);
+  }, [linkedId, reviewing, reviewsSettled, caseGroupOpen]);
 
   function metricsFor(group: DocumentGroup) {
     return group.scope === 'case' ? reviews.data?.cross_document : reviews.data?.documents[group.documentId];
@@ -775,76 +768,79 @@ export function CaseRiskCard({
     cleanToSignOff > 0 && `${plural(cleanToSignOff, 'document')} with no findings will be signed off`,
   ].filter(Boolean).join(', ');
 
-  return (
-    <>
+  if (part === 'findings' && (!scored || allGroups.length === 0)) {
+    return (
       <section className="summary-card">
         <div className="summary-card-header">
           <div className="summary-card-title">
-            <span className="summary-icon summary-icon--risk"><Icon name="risk" size={20} /></span>
-            <h2>Customer Risk Summary</h2>
+            <span className="summary-icon"><Icon name="documents" size={20} /></span>
+            <h2>Findings</h2>
           </div>
-
-          {scored && (
-            <span className={`risk-badge risk-badge--${scored.level!.toLowerCase()}`} data-testid="risk-badge">
-              {scored.level} Risk
-            </span>
-          )}
         </div>
-
         {!scored ? (
           <NotScoredMessage risk={risk} />
         ) : (
-          <>
-            {scored.score !== null && scored.score !== undefined && (
-              <ScoreGauge score={scored.score} level={scored.level!} />
-            )}
-            <div className="risk-facts">
-              <span>
-                Based on {scored.documents_scanned}{' '}
-                {scored.documents_scanned === 1 ? 'document' : 'documents'}
-              </span>
-              {(findings.length > 0 || dismissedFindings.length > 0) && (
-                <span>
-                  {[
-                    ...countBySeverity(findings).map(([severity, count]) => `${count} ${severity}`),
-                    ...(dismissedFindings.length > 0 ? [`${dismissedFindings.length} set aside`] : []),
-                  ].join(' · ')}
-                </span>
-              )}
-              {scored.reasons.map((reason) => (
-                <span key={reason} className="risk-reason">
-                  {reason}
-                </span>
-              ))}
+          <div className="summary-message summary-message--success">
+            <span className="summary-message-icon"><Icon name="check" size={18} /></span>
+            <div>
+              <strong>No findings.</strong>
+              <p>Detection and the case analysis found nothing worth flagging across this case's documents.</p>
             </div>
-
-            {findings.length === 0 && (
-              <div className="summary-message summary-message--success">
-                <span className="summary-message-icon"><Icon name="check" size={18} /></span>
-                <div>
-                  <strong>No contributing findings.</strong>
-                  <p>Detection found nothing worth flagging across this case's documents.</p>
-                </div>
-              </div>
-            )}
-
-            {scored.unassessed_checks.length > 0 && (
-              <details className="risk-unassessed">
-                <summary>Couldn't verify ({scored.unassessed_checks.length})</summary>
-                <ul>
-                  {scored.unassessed_checks.map((check, index) => (
-                    <li key={`${check.document_id}-${check.tool}-${index}`}>
-                      {check.filename} — {formatTool(check.tool)}
-                      {check.reason ? `: ${check.reason}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-          </>
+          </div>
         )}
       </section>
+    );
+  }
 
+  // Overview: the score, its level and what it rests on, at the top of the combined Case Risk card
+  // (CaseAnalysisCard). The case analysis's summary under it explains why.
+  if (part === 'score') {
+    if (!scored) return <NotScoredMessage risk={risk} />;
+    const band = SCORE_BANDS.find((b) => b.level === scored.level);
+    return (
+      <>
+      <div className="risk-score">
+        {scored.score !== null && scored.score !== undefined && (
+          <SeverityGauge score={scored.score} level={scored.level!} />
+        )}
+        <div className="risk-score-detail">
+          <span className={`risk-score-level risk-score-level--${scored.level!.toLowerCase()}`}>
+            <span data-testid="risk-badge">{scored.level} Risk</span>
+            {band ? ` · ${band.min}–${band.max}` : ''}
+          </span>
+          {/* "18 findings across 16 documents", then the findings by severity, each with its severity's dot, and the
+              ones the specialists set aside (not scored) after them, quieter. */}
+          <p className="risk-facts">
+            {findings.length > 0
+              ? `${findings.length} ${findings.length === 1 ? 'finding' : 'findings'} across `
+              : 'Based on '}
+            {scored.documents_scanned} {scored.documents_scanned === 1 ? 'document' : 'documents'}
+          </p>
+          {(findings.length > 0 || dismissedFindings.length > 0) && (
+            <ul className="risk-tally" aria-label="Findings by severity">
+              {countBySeverity(findings).map(([severity, count]) => (
+                <li key={severity}>
+                  <span className={`analysis-brief-dot analysis-brief-dot--${severity}`} aria-hidden="true" />
+                  <strong>{count}</strong> {severity.charAt(0).toUpperCase() + severity.slice(1)}
+                </li>
+              ))}
+              {dismissedFindings.length > 0 && (
+                <li className="risk-tally-aside">
+                  <strong>{dismissedFindings.length}</strong> Set Aside
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
+      </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {part === 'findings' && (
+      <>
       {/* With reviews off, each document's findings, to open beside the document. */}
       {scored && !reviewsOn && allGroups.length > 0 && (
         <section className="summary-card">
@@ -869,8 +865,12 @@ export function CaseRiskCard({
             </div>
             {reviews.data && (
               <div className="risk-review-actions">
+                {/* Counts documents (a clean one still needs signing off), not findings: the Findings tab's pill
+                    and the next step count findings without a verdict. */}
                 <span className="risk-review-count">
-                  {toReview.length === 0 ? 'All reviewed' : `${toReview.length} of ${allGroups.length} to review`}
+                  {toReview.length === 0
+                    ? 'All documents reviewed'
+                    : `${toReview.length} of ${allGroups.length} ${allGroups.length === 1 ? 'document' : 'documents'} to review`}
                 </span>
                 {!readOnly && toReview.length > 0 && (
                   <>
@@ -892,6 +892,24 @@ export function CaseRiskCard({
               </div>
             )}
           </div>
+
+          {/* At the top, for the whole card: without the saved verdicts every document reads as still to review. */}
+          {reviews.error && (
+            <div className="risk-reviews-error">
+              <ErrorMessage
+                message={
+                  reviews.data
+                    ? reviews.error
+                    : "Couldn't load your earlier verdicts, so every document shows as still to review."
+                }
+              />
+              {!reviews.data && (
+                <button type="button" className="text-button" onClick={reviews.retry}>
+                  Try again
+                </button>
+              )}
+            </div>
+          )}
 
           {reviewsLoading ? (
             <div className="summary-message summary-message--info" role="status">
@@ -921,7 +939,6 @@ export function CaseRiskCard({
               <div className="flagged-list">{done.map(renderGroup)}</div>
             </details>
           )}
-          {reviews.error && <ErrorMessage className="card-error" message={reviews.error} />}
           {reviews.data && (
             <ReviewSummary
               caseSummary={reviews.data.case}
@@ -964,6 +981,8 @@ export function CaseRiskCard({
           onCancel={() => setConfirmSaveAll(false)}
           onConfirm={() => void saveAllReviews()}
         />
+      )}
+      </>
       )}
     </>
   );

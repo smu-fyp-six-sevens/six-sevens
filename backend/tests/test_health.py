@@ -1,3 +1,8 @@
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -148,3 +153,36 @@ async def test_lifespan_tolerates_realtime_listener_start_failure() -> None:
     mock_check.assert_called_once_with()
     mock_realtime.start.assert_awaited_once_with()
     mock_realtime.stop.assert_awaited_once_with()
+
+
+# --- API docs are hidden when deployed (PENDING_TESTS row 9) -----------------------------------------------------
+# Deployed, Kong's catch-all would serve /docs and the schema to anyone. The app reads EVENT_TRANSPORT at import, so
+# the deployed app is imported in a fresh process rather than reloaded here (a reload re-registers every handler).
+
+_DOC_PATHS = ("/docs", "/redoc", "/openapi.json")
+_PROBE = """
+import json
+from fastapi.testclient import TestClient
+from app.main import app
+client = TestClient(app)  # no `with`: the lifespan (Pub/Sub, the database) never starts
+print(json.dumps({path: client.get(path).status_code for path in %r}))
+""" % (_DOC_PATHS,)
+
+
+def _doc_statuses(**env: str) -> dict[str, int]:
+    backend = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "-c", _PROBE], cwd=backend, env={**os.environ, **env},
+        capture_output=True, text=True, timeout=120, check=True,
+    )
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+def test_deployed_the_api_docs_and_schema_are_not_served() -> None:
+    statuses = _doc_statuses(EVENT_TRANSPORT="pubsub", GOOGLE_CLOUD_PROJECT="test-project", EVENT_DELIVERY="push")
+
+    assert statuses == {path: 404 for path in _DOC_PATHS}
+
+
+def test_in_process_the_api_docs_and_schema_are_served() -> None:
+    assert {path: client.get(path).status_code for path in _DOC_PATHS} == {path: 200 for path in _DOC_PATHS}

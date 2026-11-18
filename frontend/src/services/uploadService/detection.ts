@@ -59,7 +59,7 @@ export const INDIVIDUAL_DETECTION_CHECKS: { id: IndividualCheckId; label: string
   { id: 'external-validation', label: 'External validation' },
   { id: 'metadata-anomaly', label: 'Metadata anomaly' },
   { id: 'image-integrity', label: 'Image integrity' },
-  { id: 'ai-generation', label: 'AI generation' },
+  { id: 'ai-generation', label: 'AI Generation' },
   { id: 'page-consistency', label: 'Page consistency' },
 ];
 

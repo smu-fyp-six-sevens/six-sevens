@@ -4,7 +4,9 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
-from app import auth, detection_results, sweeper
+import pytest
+
+from app import auth, detection_results, monitoring, sweeper
 from app.config import settings
 from app.events import Event, types
 from app.models import DocumentRecord, DocumentStatus
@@ -201,3 +203,142 @@ def test_ws_ticket_is_signed_for_its_own_purpose():
     assert auth._verify_token(ticket) is None  # nor a ticket a login token
     assert auth.consume_ws_ticket(ticket)
     assert not auth.consume_ws_ticket(ticket)
+
+
+# --- A lost approval event is recovered (PENDING_TESTS row 7) ------------------------------------------------------
+
+
+def _approved(doc_id: str, document_type: str | None = "payslip") -> DocumentRecord:
+    return _doc(doc_id, DocumentStatus.APPROVED, 60).model_copy(update={"document_type": document_type})
+
+
+def test_an_approved_document_whose_detection_never_started_is_stuck():
+    documents = [
+        _approved("lost"),                      # approved long ago: no report, no error
+        _approved("has-error"),                 # a failed run keeps its error; the officer retries it
+        _approved("has-report"),                # detection ran (a retry may be waiting, not lost)
+        _approved("untyped", document_type=None),  # detection never runs on it
+        _approved("recent"),                    # approved a minute ago, still in the queue behind the slots
+    ]
+    over = timedelta(seconds=settings.STUCK_RUNNING_SECONDS + 60)
+    approved_at = {"lost": NOW - over, "has-error": NOW - over, "has-report": NOW - over,
+                   "untyped": NOW - over, "recent": NOW - timedelta(minutes=1)}
+    with (
+        patch("app.document_repository.get_documents_in_status", return_value=documents),
+        patch("app.detection_results.get_states", return_value=({"has-report": {}}, {"has-error"})) as states,
+        patch("app.audit.latest_times",
+              side_effect=lambda actions, ids: {d: approved_at[d] for d in ids}) as latest,
+        patch("app.case_pipeline.repository.running_started_before", return_value=[]),
+    ):
+        stuck = sweeper.find_stuck(NOW)
+
+    assert [(s.stage, s.document_id, s.owner) for s in stuck] == [("approved", "lost", "detection-worker")]
+    assert set(states.call_args.args[0]) == {"lost", "has-error", "has-report", "recent"}  # not the untyped one
+    actions, _ = latest.call_args.args
+    assert types.DOCUMENT_APPROVED in actions  # timed from the approval, not the upload
+
+
+def test_the_detection_worker_runs_detection_for_a_lost_approval():
+    with (
+        patch("app.workers.detection.run", AsyncMock()) as run,
+        patch("app.workers.detection._report_recovery", AsyncMock()) as reported,
+        patch("app.workers.detection.detection_results.save_error") as save_error,
+    ):
+        asyncio.run(detection_worker.on_recovery_requested(_recovery("detection-worker", "approved", 1)))
+
+    # Claimed from approved like the original would have: a late original then finds it taken.
+    run.assert_awaited_once_with("doc-1", "case-1", start_from=[DocumentStatus.APPROVED])
+    reported.assert_awaited_once()
+    save_error.assert_not_called()
+
+
+def test_past_the_attempt_limit_a_lost_approval_gets_an_error_the_officer_can_retry_from():
+    with (
+        patch("app.workers.detection.run", AsyncMock()) as run,
+        patch("app.workers.detection.detection_results.has_report", return_value=False),
+        patch("app.workers.detection.detection_results.save_error") as save_error,
+        patch("app.workers.recovery.report", AsyncMock()) as report,
+        patch("app.workers.detection.push_case_snapshot", AsyncMock()) as snapshot,
+    ):
+        asyncio.run(detection_worker.on_recovery_requested(
+            _recovery("detection-worker", "approved", settings.RECOVERY_MAX_ATTEMPTS + 1)))
+
+    run.assert_not_awaited()
+    document_id, error = save_error.call_args.args
+    assert document_id == "doc-1" and error.startswith("Detection never started")
+    assert report.await_args.args[2:] == (types.RECOVERY_EXHAUSTED, "failed")
+    snapshot.assert_awaited_once()
+
+
+def test_past_the_attempt_limit_a_document_that_got_a_report_meanwhile_is_left_alone():
+    with (
+        patch("app.workers.detection.run", AsyncMock()) as run,
+        patch("app.workers.detection.detection_results.has_report", return_value=True),
+        patch("app.workers.detection.detection_results.save_error") as save_error,
+        patch("app.workers.recovery.report", AsyncMock()) as report,
+    ):
+        asyncio.run(detection_worker.on_recovery_requested(
+            _recovery("detection-worker", "approved", settings.RECOVERY_MAX_ATTEMPTS + 1)))
+
+    run.assert_not_awaited()
+    save_error.assert_not_called()
+    report.assert_not_awaited()
+
+
+# --- One "stuck" limit (PENDING_TESTS row 45) ------------------------------------------------------------------
+# monitoring.is_stuck (the case queue and an officer's retry) and sweeper.find_stuck (the recovery) must agree.
+
+
+WAITING, RUNNING = settings.STUCK_WAITING_SECONDS, settings.STUCK_RUNNING_SECONDS
+
+
+def _aged(status: DocumentStatus, seconds: float) -> DocumentRecord:
+    at = datetime.now(timezone.utc) - timedelta(seconds=seconds)
+    return DocumentRecord(id="doc-1", case_id="case-1", filename="f.pdf", status=status, uploaded_at=at,
+                          queued_at=at, processing_started_at=at if status not in (
+                              DocumentStatus.UPLOADED, DocumentStatus.QUEUED) else None)
+
+
+def test_the_running_limit_is_ten_minutes_by_default() -> None:
+    assert (WAITING, RUNNING) == (300, 600)
+
+
+@pytest.mark.parametrize("status, limit", [
+    (DocumentStatus.UPLOADED, WAITING), (DocumentStatus.QUEUED, WAITING),
+    (DocumentStatus.PROCESSING, RUNNING), (DocumentStatus.EXTRACTING, RUNNING),
+])
+def test_a_document_is_stuck_only_past_its_stages_limit(status, limit) -> None:
+    assert not monitoring.is_stuck(_aged(status, limit - 30))
+    assert monitoring.is_stuck(_aged(status, limit + 30))
+
+
+@pytest.mark.parametrize("status", [DocumentStatus.APPROVED, DocumentStatus.DETECTED, DocumentStatus.ANALYZED,
+                                    DocumentStatus.FAILED, DocumentStatus.REJECTED, DocumentStatus.CANCELLED])
+def test_a_document_in_any_other_status_is_never_stuck_however_old(status) -> None:
+    assert not monitoring.is_stuck(_aged(status, 7 * 86_400))
+
+
+def test_a_retry_takes_a_processing_document_only_past_the_running_limit() -> None:
+    assert not monitoring.is_stuck_processing_for_retry(_aged(DocumentStatus.PROCESSING, RUNNING - 30))
+    assert monitoring.is_stuck_processing_for_retry(_aged(DocumentStatus.PROCESSING, RUNNING + 30))
+    # Queued past its limit is stuck, but a retry only re-queues a processing one.
+    assert not monitoring.is_stuck_processing_for_retry(_aged(DocumentStatus.QUEUED, WAITING + 30))
+
+
+@pytest.mark.parametrize("status, seconds", [
+    (DocumentStatus.QUEUED, WAITING - 30), (DocumentStatus.QUEUED, WAITING + 30),
+    (DocumentStatus.PROCESSING, RUNNING - 30), (DocumentStatus.PROCESSING, RUNNING + 30),
+    (DocumentStatus.EXTRACTING, RUNNING + 30),
+    # Between the two limits: a running stage timed with the waiting limit would read as stuck here.
+    (DocumentStatus.PROCESSING, WAITING + 30), (DocumentStatus.EXTRACTING, WAITING + 30),
+])
+def test_the_queue_and_the_sweeper_agree_at_the_same_moment(status, seconds) -> None:
+    document = _aged(status, seconds)
+    with (
+        patch("app.document_repository.get_documents_in_status", return_value=[document]),
+        patch("app.audit.latest_times", return_value={}),
+        patch("app.case_pipeline.repository.running_started_before", return_value=[]),
+    ):
+        swept = bool(sweeper.find_stuck(datetime.now(timezone.utc)))
+
+    assert swept == monitoring.is_stuck(document)

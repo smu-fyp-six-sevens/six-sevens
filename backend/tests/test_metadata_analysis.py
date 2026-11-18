@@ -543,3 +543,34 @@ def test_a_document_with_only_a_subject_or_title_is_still_unable_to_assess() -> 
     result = check_metadata_anomalies("doc-1", {"Subject": "modified copy", "Title": "x", "FileType": "PDF"}, "company_constitution")
 
     assert result.unable_to_assess is True
+
+
+# --- A tool's name in Author is flagged (PENDING_TESTS row 75) ---------------------------------------------------
+# Seen live: C008's forged credit report carried Author "Adobe Photoshop" and passed, because only Creator,
+# Producer and Software were read for tool names.
+
+def _author_codes(author: str, document_type: str | None) -> list[tuple[str, str, str]]:
+    result = check_metadata_anomalies("doc-1", {"Author": author, "Creator": "DocuSuite Enterprise 4.2"}, document_type)
+    return [(a.code, a.field, a.severity) for a in result.anomalies if a.field == "author"]
+
+
+def test_an_image_editor_named_as_author_is_flagged_high() -> None:
+    assert _author_codes("Adobe Photoshop", "credit_report") == [("META.CONTENT_EDITOR", "author", "high")]
+
+
+def test_an_ai_tool_named_as_author_is_flagged() -> None:
+    codes = _author_codes("ChatGPT", "credit_report")
+    assert [code for code, _field, _severity in codes] == ["META.AI_TOOL"]
+
+
+@pytest.mark.parametrize("person", ["Claude Tan", "Gemini Lim", "Hans Gimpel"])
+def test_a_person_whose_name_contains_a_tool_name_is_not_flagged(person: str) -> None:
+    # "Claude" and "Gemini" are first names as well as AI tools; "Gimpel" contains "gimp".
+    assert _author_codes(person, "credit_report") == []
+
+
+def test_a_pdf_editor_as_author_is_flagged_only_on_a_document_an_institution_issues() -> None:
+    # A payslip should reach us as the employer generated it; a FATCA form is filled in by the applicant, so a PDF
+    # editor there is ordinary.
+    assert [code for code, *_ in _author_codes("Adobe Acrobat", "payslip")] == ["META.PDF_EDITOR"]
+    assert _author_codes("Adobe Acrobat", "fatca_crs_declaration") == []

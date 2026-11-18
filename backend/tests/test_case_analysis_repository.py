@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.case_pipeline import repository
-from app.case_pipeline.models import CaseAnalysis
+from app.case_pipeline.models import CaseAnalysis, CrossDocFinding, FindingCategory
 from app.models import CaseRisk
 from tests.support.fake_supabase import FakeSupabase
 
@@ -112,3 +112,50 @@ def test_the_latest_complete_run_is_read_while_a_newer_one_runs(db) -> None:
 
     assert (latest.run_id, latest.risk.score) == ("done", 40)
     assert repository.get_latest_summary(CASE).run_id == "running"
+
+
+# --- A failed run stays failed (PENDING_TESTS row 54) ---------------------------------------------------------------
+
+def test_a_run_the_sweeper_already_failed_is_not_overwritten_by_its_late_result(db) -> None:
+    run(db, "run-1")
+    repository.fail_if_running("run-1", "Timed out")
+
+    assert repository.finish_run(finished("run-1", score=90)) is False
+
+    row = stored(db, "run-1")
+    assert (row["status"], row["error"]) == ("failed", "Timed out")
+    assert not row.get("result")
+
+
+def test_a_run_inserted_between_the_check_and_the_write_supersedes_the_result(db, monkeypatch) -> None:
+    run(db, "run-1", minutes_ago=5)
+    real_latest = repository.latest_run_id
+    reads = iter(["run-1"])  # the first read sees run-1 as newest; run-2 lands before the second
+
+    def latest_run_id(case_id: str) -> str | None:
+        answer = next(reads, None)
+        if answer is not None:
+            run(db, "run-2")
+            return answer
+        return real_latest(case_id)
+
+    monkeypatch.setattr(repository, "latest_run_id", latest_run_id)
+
+    assert repository.finish_run(finished("run-1")) is False
+
+    assert (stored(db, "run-1")["status"], stored(db, "run-1")["result"]) == ("superseded", {})
+    assert stored(db, "run-2")["status"] == "running"
+
+
+def test_a_published_result_carries_its_finding_count(db) -> None:
+    run(db, "run-1")
+    analysis = finished("run-1")
+    analysis.findings = [
+        CrossDocFinding(id=f"f{i}", hypothesis_id="h1", summary="Addresses differ", rationale="r", severity="medium",
+                        category=FindingCategory.CROSS_DOCUMENT_VARIANCE)
+        for i in range(2)
+    ]
+
+    assert repository.finish_run(analysis) is True
+
+    assert stored(db, "run-1")["result"]["finding_count"] == 2

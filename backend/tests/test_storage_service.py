@@ -168,3 +168,19 @@ def test_a_signed_url_can_ask_the_browser_to_download_under_a_filename() -> None
 
     assert url.endswith("?download=statement.pdf")
     assert client.bucket.signed == [("case-1/uuid_statement.pdf", 300, {"download": "statement.pdf"})]
+
+
+def test_a_signed_url_past_its_expiry_by_the_wall_clock_is_signed_again(monkeypatch) -> None:
+    # After the machine slept, a monotonic clock says little time passed while Supabase's (wall) clock says the
+    # URL has expired: the URL must not be handed out again.
+    client, patched = _storage()
+    path = "case-1/uuid_slept.pdf"
+    clock = [1_000_000.0]
+    monkeypatch.setattr(storage_service.time, "time", lambda: clock[0])
+    monkeypatch.setattr(storage_service.time, "monotonic", lambda: 0.0)  # stood still through the sleep
+    with patched:
+        storage_service.signed_url(path, 1800)
+        clock[0] += 3600  # an hour asleep
+        _, left = storage_service.signed_url(path, 1800)
+
+    assert len(client.bucket.signed) == 2 and left == 1800
