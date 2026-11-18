@@ -274,7 +274,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect(documentStatus(page)).toHaveText('Scanning…');
     await expect(detectionPanel(page)).toContainText('the report below is from the previous run');
     await detectionPanel(page).getByRole('button', { name: 'Cancel detection' }).click();
-    expect(backend.requestsTo('POST', `/documents/${document.id}/detection/cancel`)).toHaveLength(1);
+    await expect.poll(() => backend.requestsTo('POST', `/documents/${document.id}/detection/cancel`).length).toBe(1);
 
     // The rerun stopped: the document is back to scanned, on the earlier report, which says the last run didn't finish.
     backend.push(document.case_id!);
@@ -333,7 +333,7 @@ test.describe('Trigger detection @sprint3 @SCRUM-26', () => {
     await expect(page.locator('.approval-warning')).toHaveCount(0);
     await expect(approveButton(page)).toBeEnabled();
     await approveButton(page).click();
-    expect(backend.requestsTo('POST', `/documents/${payslip.id}/approve`)).toHaveLength(1);
+    await expect.poll(() => backend.requestsTo('POST', `/documents/${payslip.id}/approve`).length).toBe(1);
     await expect(approveButton(page)).toHaveCount(0);
   });
 });
@@ -459,6 +459,6 @@ test.describe('Case match @sprint3 @SCRUM-110', () => {
     await expect(triage(page)).toContainText('UEN 201634564N does not match the certificate of incumbency');
     await expect(approveButton(page)).toBeEnabled();
     await approveButton(page).click();
-    expect(backend.requestsTo('POST', `/documents/${misfiled.id}/approve`)).toHaveLength(1);
+    await expect.poll(() => backend.requestsTo('POST', `/documents/${misfiled.id}/approve`).length).toBe(1);
   });
 });
