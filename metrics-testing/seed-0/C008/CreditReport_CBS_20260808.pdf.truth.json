@@ -13,7 +13,7 @@
     "date_of_birth": "1975-06-20",
     "nationality": "Singaporean",
     "individual_address": "354B Admiralty Drive, #11-360, Singapore 752354",
-    "report_date": "2026-08-10",
+    "enquiry_date": "2026-08-10",
     "bankruptcy_proceedings": []
   },
   "not_printed": {},
@@ -48,7 +48,7 @@
         {
           "printed_before": "Credit Bureau (Singapore) Pte Ltd",
           "printed_after": null,
-          "injector": "Tampered document metadata: author='Experian Credit Services', creator='Microsoft Word for Microsoft 365'"
+          "injector": "Tampered document metadata: author='Adobe Photoshop', creator='Microsoft Word for Microsoft 365'"
         }
       ]
     }

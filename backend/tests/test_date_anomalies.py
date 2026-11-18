@@ -311,8 +311,8 @@ def test_date_valid_does_not_flag_forward_looking_fields_in_the_future() -> None
 
 def test_cr_date_logic_flags_account_opened_in_the_future_as_impossible() -> None:
     # A date genuinely in the future (vs today) is impossible regardless of
-    # what the report_date field says — and this must still fire even
-    # without report_date extracted at all.
+    # what the enquiry_date field says — and this must still fire even
+    # without enquiry_date extracted at all.
     result = _run(
         [_field("accounts", [{"date_opened": "2099-01-01"}])],
         document_type="credit_report",
@@ -322,17 +322,30 @@ def test_cr_date_logic_flags_account_opened_in_the_future_as_impossible() -> Non
     assert findings[0].severity == "impossible"
 
 
-def test_cr_date_logic_does_not_double_flag_a_future_date_against_report_date() -> None:
-    # The account date is beyond both today and report_date — only the
+def test_cr_date_logic_does_not_double_flag_a_future_date_against_enquiry_date() -> None:
+    # The account date is beyond both today and enquiry_date — only the
     # stronger "impossible" finding should fire, not a second
-    # "inconsistent vs report_date" one for the same fact.
+    # "inconsistent vs enquiry_date" one for the same fact.
     result = _run(
-        [_field("report_date", "2026-06-02"), _field("accounts", [{"date_opened": "2030-11-07"}])],
+        [_field("enquiry_date", "2026-06-02"), _field("accounts", [{"date_opened": "2030-11-07"}])],
         document_type="credit_report",
     )
     findings = _codes(result, "CR.DATE_LOGIC")
     assert len(findings) == 1
     assert findings[0].severity == "impossible"
+
+
+def test_cr_date_logic_flags_an_account_dated_after_the_enquiry_date() -> None:
+    # Reads the report's "Enquiry Date" (extracted as enquiry_date): an account can't be opened after the report
+    # was pulled. Before today, so it's this check, not the future-date one, that catches it.
+    result = _run(
+        [_field("enquiry_date", "06/08/2026"), _field("accounts", [{"date_opened": "2026-09-15"}])],
+        document_type="credit_report",
+    )
+    findings = _codes(result, "CR.DATE_LOGIC")
+    assert len(findings) == 1
+    assert findings[0].severity == "inconsistent"
+    assert "enquiry date (2026-08-06)" in findings[0].summary
 
 
 def test_acra_officer_date_checks_read_the_appointment_date_whatever_its_column_is_called() -> None:

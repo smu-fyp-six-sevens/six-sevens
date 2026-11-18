@@ -35,7 +35,7 @@ Every document was given the right type.
 | Reading | Accuracy | Count |
 |---|---|---|
 | Key fields, right name | 98.6% | 70 of 71 |
-| All truth fields, right name | 97.7% | 130 of 133 |
+| All truth fields, right name | 97.0% | 129 of 133 |
 | All truth fields, any name | 97.7% | 130 of 133 |
 | Table rows found | 98.3% | 57 of 58 |
 | Key fields on forged documents | 100.0% | 12 of 12 |

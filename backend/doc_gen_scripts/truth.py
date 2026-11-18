@@ -339,7 +339,7 @@ def credit_report(persona: dict) -> dict[str, Any]:
         "date_of_birth": persona["date_of_birth"],
         "nationality": persona["nationality"],
         "individual_address": persona["address"],
-        "report_date": persona["enquiry_date"],
+        "enquiry_date": persona["enquiry_date"],
     }
     # Only the "none on record" answer is kept: the populated tables have no fixed row shape to compare.
     if not persona.get("default_records"):

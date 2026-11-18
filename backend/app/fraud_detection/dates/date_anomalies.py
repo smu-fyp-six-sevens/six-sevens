@@ -159,7 +159,7 @@ _DATE_FIELD_LABELS: dict[str, str] = {
     "previous_assessment_date": "previous assessment date",
     "pay_date": "pay date",
     "pay_period_end": "pay period end",
-    "report_date": "credit report date",
+    "enquiry_date": "credit report enquiry date",
     "earliest_account_date": "earliest account date",
     "declaration_date": "FATCA/CRS declaration date",
     "form_version_date": "form version date",
@@ -570,8 +570,8 @@ def _check_cr_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | N
     """
     CR.DATE_LOGIC. Closing follows opening; no account date is in the
     future (checked against today directly — not just the report's own
-    date — so this still catches it even if report_date wasn't extracted);
-    all dates on or before the enquiry date.
+    date — so this still catches it even if enquiry_date wasn't extracted);
+    all dates on or before the enquiry date (the date the report was pulled, printed as "Enquiry Date").
 
     A date that's actually in the future (vs today) is reported as
     impossible rather than merely inconsistent-with-the-report-date: it
@@ -583,7 +583,7 @@ def _check_cr_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | N
     values = _need(ctx, "CR.DATE_LOGIC", "accounts")
     if values is None:
         return [], skip_missing("CR.DATE_LOGIC", "accounts")
-    enquiry_date = parse_field_date(ctx.fields.get("report_date"))
+    enquiry_date = parse_field_date(ctx.fields.get("enquiry_date"))
     findings = []
     for i, row in enumerate(table_rows(values[0])):
         opened, closed = parse_field_date(row.get("date_opened")), parse_field_date(row.get("date_closed"))
@@ -607,8 +607,8 @@ def _check_cr_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | N
             elif enquiry_date and d > enquiry_date:
                 findings.append(_finding(
                     "CR.DATE_LOGIC", "inconsistent",
-                    f"Account {i + 1}'s {label} date ({d.isoformat()}) is after the report "
-                    f"date ({enquiry_date.isoformat()})",
+                    f"Account {i + 1}'s {label} date ({d.isoformat()}) is after the report's "
+                    f"enquiry date ({enquiry_date.isoformat()})",
                     field=f"accounts[{i}].{field_name}", stated=d.isoformat(),
                     expected=f"on or before {enquiry_date.isoformat()}",
                 ))
