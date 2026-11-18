@@ -201,3 +201,83 @@ def test_ws_ticket_is_signed_for_its_own_purpose():
     assert auth._verify_token(ticket) is None  # nor a ticket a login token
     assert auth.consume_ws_ticket(ticket)
     assert not auth.consume_ws_ticket(ticket)
+
+
+# --- A lost approval event is recovered (PENDING_TESTS row 7) ------------------------------------------------------
+
+
+def _approved(doc_id: str, document_type: str | None = "payslip") -> DocumentRecord:
+    return _doc(doc_id, DocumentStatus.APPROVED, 60).model_copy(update={"document_type": document_type})
+
+
+def test_an_approved_document_whose_detection_never_started_is_stuck():
+    documents = [
+        _approved("lost"),                      # approved long ago: no report, no error
+        _approved("has-error"),                 # a failed run keeps its error; the officer retries it
+        _approved("has-report"),                # detection ran (a retry may be waiting, not lost)
+        _approved("untyped", document_type=None),  # detection never runs on it
+        _approved("recent"),                    # approved a minute ago, still in the queue behind the slots
+    ]
+    over = timedelta(seconds=settings.STUCK_RUNNING_SECONDS + 60)
+    approved_at = {"lost": NOW - over, "has-error": NOW - over, "has-report": NOW - over,
+                   "untyped": NOW - over, "recent": NOW - timedelta(minutes=1)}
+    with (
+        patch("app.document_repository.get_documents_in_status", return_value=documents),
+        patch("app.detection_results.get_states", return_value=({"has-report": {}}, {"has-error"})) as states,
+        patch("app.audit.latest_times",
+              side_effect=lambda actions, ids: {d: approved_at[d] for d in ids}) as latest,
+        patch("app.case_pipeline.repository.running_started_before", return_value=[]),
+    ):
+        stuck = sweeper.find_stuck(NOW)
+
+    assert [(s.stage, s.document_id, s.owner) for s in stuck] == [("approved", "lost", "detection-worker")]
+    assert set(states.call_args.args[0]) == {"lost", "has-error", "has-report", "recent"}  # not the untyped one
+    actions, _ = latest.call_args.args
+    assert types.DOCUMENT_APPROVED in actions  # timed from the approval, not the upload
+
+
+def test_the_detection_worker_runs_detection_for_a_lost_approval():
+    with (
+        patch("app.workers.detection.run", AsyncMock()) as run,
+        patch("app.workers.detection._report_recovery", AsyncMock()) as reported,
+        patch("app.workers.detection.detection_results.save_error") as save_error,
+    ):
+        asyncio.run(detection_worker.on_recovery_requested(_recovery("detection-worker", "approved", 1)))
+
+    # Claimed from approved like the original would have: a late original then finds it taken.
+    run.assert_awaited_once_with("doc-1", "case-1", start_from=[DocumentStatus.APPROVED])
+    reported.assert_awaited_once()
+    save_error.assert_not_called()
+
+
+def test_past_the_attempt_limit_a_lost_approval_gets_an_error_the_officer_can_retry_from():
+    with (
+        patch("app.workers.detection.run", AsyncMock()) as run,
+        patch("app.workers.detection.detection_results.has_report", return_value=False),
+        patch("app.workers.detection.detection_results.save_error") as save_error,
+        patch("app.workers.recovery.report", AsyncMock()) as report,
+        patch("app.workers.detection.push_case_snapshot", AsyncMock()) as snapshot,
+    ):
+        asyncio.run(detection_worker.on_recovery_requested(
+            _recovery("detection-worker", "approved", settings.RECOVERY_MAX_ATTEMPTS + 1)))
+
+    run.assert_not_awaited()
+    document_id, error = save_error.call_args.args
+    assert document_id == "doc-1" and error.startswith("Detection never started")
+    assert report.await_args.args[2:] == (types.RECOVERY_EXHAUSTED, "failed")
+    snapshot.assert_awaited_once()
+
+
+def test_past_the_attempt_limit_a_document_that_got_a_report_meanwhile_is_left_alone():
+    with (
+        patch("app.workers.detection.run", AsyncMock()) as run,
+        patch("app.workers.detection.detection_results.has_report", return_value=True),
+        patch("app.workers.detection.detection_results.save_error") as save_error,
+        patch("app.workers.recovery.report", AsyncMock()) as report,
+    ):
+        asyncio.run(detection_worker.on_recovery_requested(
+            _recovery("detection-worker", "approved", settings.RECOVERY_MAX_ATTEMPTS + 1)))
+
+    run.assert_not_awaited()
+    save_error.assert_not_called()
+    report.assert_not_awaited()

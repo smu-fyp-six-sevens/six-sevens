@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -277,3 +278,72 @@ def test_delete_case_removes_its_documents_then_the_case() -> None:
         mock_doc_repo.list_documents.assert_called_once_with(case_id="case-1", include_fields=False)
         mock_doc_repo.remove_documents.assert_called_once_with(documents, case_going=True)
         mock_case_repo.delete_case.assert_called_once_with("case-1")
+
+
+# --- A case can't be deleted mid-run (PENDING_TESTS row 42) -------------------------------------------------------
+# A delete mid-run would leave the run spending Claude calls on rows that no longer exist. delete_case refuses on its
+# own, not only through the route, so no other caller can get round it.
+
+def _typed(document_id: str, status: DocumentStatus) -> DocumentRecord:
+    return _make_document(document_id, status=status).model_copy(update={"document_type": "payslip"})
+
+
+_NOW = datetime.now(timezone.utc)
+_LIVE_RUN = ("running", _NOW)
+_LOST_RUN = ("running", _NOW - timedelta(hours=2))  # past the time limit: its worker was lost
+
+
+def _delete(documents, *, reports=None, failed=None, latest_run=None):
+    with (
+        patch("app.case_service.case_repository") as cases,
+        patch("app.case_service.document_repository") as docs,
+        patch("app.case_service.analysis_repository") as runs,
+        patch("app.case_service.detection_results") as detection,
+    ):
+        docs.list_documents.return_value = documents
+        detection.get_states.return_value = (reports or {}, failed or set())
+        runs.latest_run_state.return_value = latest_run
+        try:
+            case_service.delete_case("case-1")
+            refused = None
+        except case_service.CaseNotDeletable as exc:
+            refused = str(exc)
+        return refused, docs.remove_documents.called, cases.delete_case.called
+
+
+@pytest.mark.parametrize(
+    ("documents", "kwargs", "reason"),
+    [
+        ([_typed("doc-1", DocumentStatus.PROCESSING)], {}, "still being processed"),
+        ([_typed("doc-1", DocumentStatus.DETECTING)], {}, "still being scanned"),
+        ([_typed("doc-1", DocumentStatus.APPROVED)], {}, "waiting to be scanned"),
+        ([_typed("doc-1", DocumentStatus.DETECTED)], {"latest_run": _LIVE_RUN}, "analysis is still running"),
+    ],
+    ids=["a document still processing", "a document being scanned",
+         "an approved document with no report and no error", "a live analysis run"],
+)
+def test_a_case_with_something_running_is_not_deleted(documents, kwargs, reason) -> None:
+    refused, removed_documents, removed_case = _delete(documents, **kwargs)
+
+    assert refused is not None and reason in refused
+    assert not removed_documents and not removed_case
+
+
+@pytest.mark.parametrize(
+    ("documents", "kwargs"),
+    [
+        ([_typed("doc-1", DocumentStatus.APPROVED)], {"failed": {"doc-1"}}),
+        ([_typed("doc-1", DocumentStatus.APPROVED)], {"reports": {"doc-1": {"findings": []}}}),
+        ([_make_document("doc-1", status=DocumentStatus.APPROVED)], {}),
+        ([_typed("doc-1", DocumentStatus.DETECTED)], {"latest_run": _LOST_RUN}),
+        ([_typed("doc-1", DocumentStatus.DETECTED)], {"latest_run": ("complete", _NOW)}),
+    ],
+    ids=["an approved document whose scan failed", "an approved document with a report",
+         "an approved document with no type (never scanned)", "an analysis run past its time limit",
+         "a finished analysis run"],
+)
+def test_a_case_with_nothing_running_is_deleted(documents, kwargs) -> None:
+    refused, removed_documents, removed_case = _delete(documents, **kwargs)
+
+    assert refused is None
+    assert removed_documents and removed_case

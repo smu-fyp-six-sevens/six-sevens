@@ -242,3 +242,60 @@ async def test_socket_swallows_runtime_error_from_close_on_already_closed_connec
         await case_status_socket(mock_ws, "case-1", ticket)
 
     mock_ws.close.assert_awaited_once()
+
+
+# --- A socket ticket opens one case (PENDING_TESTS row 21) --------------------------------------------------------
+# The ticket travels in the socket URL, where it can leak into a proxy or browser log: it opens only the case it was
+# issued for, and names the officer it was issued to.
+
+def _snapshot_patches():
+    return (
+        patch("app.case_service.case_repository"),
+        patch("app.case_service.document_repository"),
+        patch("app.case_service.extracted_fields_repository"),
+    )
+
+
+def test_a_ticket_for_one_case_does_not_open_another() -> None:
+    ticket = auth.create_ws_ticket("alice", "case-1")
+
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(f"/ws/cases/case-2?ticket={ticket}"):
+            pass
+
+
+def test_trying_a_ticket_on_the_wrong_case_does_not_use_it_up() -> None:
+    ticket = auth.create_ws_ticket("alice", "case-1")
+
+    assert auth.consume_ws_ticket(ticket, "case-2") is None
+    assert auth.consume_ws_ticket(ticket, "case-1") == "alice"  # still good for its own case, once
+    assert auth.consume_ws_ticket(ticket, "case-1") is None
+
+
+def test_a_ticket_opens_its_own_case_and_carries_the_officer() -> None:
+    ticket = auth.create_ws_ticket("alice", "case-1")
+    cases, documents, fields = _snapshot_patches()
+
+    with cases as mock_case_repo, documents as mock_doc_repo, fields as mock_fields_repo:
+        mock_case_repo.get_case.return_value = _make_case("case-1")
+        mock_doc_repo.list_documents.return_value = []
+        mock_fields_repo.get_extracted_fields_for_documents.return_value = {}
+        with patch("app.routers.ws.logger") as logger:
+            with client.websocket_connect(f"/ws/cases/case-1?ticket={ticket}") as ws:
+                assert ws.receive_json()["type"] == "snapshot"
+
+    opened = [c for c in logger.info.call_args_list if "Case socket opened" in c.args[0]]
+    assert opened and opened[0].args[1:] == ("case-1", "alice")
+
+
+def test_issuing_a_ticket_needs_the_case() -> None:
+    assert client.post("/ws/tickets").status_code == 422
+
+
+def test_the_ticket_the_route_issues_names_the_signed_in_officer_and_the_case() -> None:
+    # conftest bypasses require_auth with a fixed user; the ticket must carry whoever that is, and the case asked for.
+    ticket = client.post("/ws/tickets", params={"case_id": "case-1"}).json()["ticket"]
+
+    payload = auth._unsigned(ticket)
+    assert payload is not None and payload["case_id"] == "case-1" and payload["sub"]
+    assert auth.consume_ws_ticket(ticket, "case-2") is None

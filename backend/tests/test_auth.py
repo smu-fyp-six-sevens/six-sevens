@@ -318,3 +318,36 @@ def test_logout_clears_the_cookie_even_without_a_session():
 def test_logout_needs_no_csrf_header():
     response = _cookie_client().post("/auth/logout", headers=_session_header(auth.create_token("demo")))
     assert response.status_code == 204
+
+
+# --- Only the cookie signs a request in (PENDING_TESTS row 69) ----------------------------------------------------
+
+def _bearer(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_a_valid_token_as_a_bearer_header_alone_is_refused(whoami):
+    # Before the cookie, a script signed in with this header. A valid login token sent that way must no longer work:
+    # a token in a header is one a script on the page could have read.
+    response = _cookie_client().get("/_whoami_cookie", headers=_bearer(auth.create_token("demo")))
+    assert response.status_code == 401
+    assert whoami == []
+
+
+def test_a_bearer_header_on_a_real_protected_route_is_refused():
+    assert _cookie_client().get("/cases", headers=_bearer(auth.create_token("demo"))).status_code == 401
+
+
+def test_beside_a_valid_cookie_the_bearer_header_is_ignored(whoami, two_accounts):
+    # The cookie's user acts, never the header's: a header can't make a signed-in officer act as someone else.
+    headers = {**_session_header(auth.create_token("demo")), **_bearer(auth.create_token("bob"))}
+    response = _cookie_client().get("/_whoami_cookie", headers=headers)
+    assert response.status_code == 200
+    assert whoami == ["demo"]
+
+
+def test_a_cookie_write_still_needs_the_csrf_header_whatever_the_bearer_header_says(whoami):
+    headers = {**_session_header(auth.create_token("demo")), **_bearer(auth.create_token("demo"))}
+    response = _cookie_client().post("/_whoami_cookie", headers=headers)
+    assert response.status_code == 403
+    assert whoami == []

@@ -407,3 +407,52 @@ async def test_the_case_name_is_searched_only_when_no_document_names_the_company
 
     # The documents' company, never the placeholder title, until no document names one.
     assert searched == ["Acme Trading Pte. Ltd.", "Case 67"]
+
+
+# --- Logs name the case, not the company (PENDING_TESTS row 23) ----------------------------------------------------
+# Application logs leave the case's records: a company name in them is customer data where it doesn't belong.
+
+COMPANY = "Acme Trading Pte Ltd"
+
+
+def _model(**ainvoke) -> MagicMock:
+    model = MagicMock()
+    model.bind_tools.return_value = model
+    model.ainvoke = AsyncMock(**ainvoke)
+    return model
+
+
+async def _logged(caplog, model: MagicMock) -> str:
+    with (
+        caplog.at_level("INFO", logger=adverse_media.logger.name),
+        patch.object(adverse_media, "build_chat_anthropic", return_value=model),
+        patch.object(adverse_media, "spend_model_call"),
+    ):
+        await adverse_media.run_adverse_media_check(COMPANY, ["Acme Old Name Pte Ltd"], case_id="c1")
+    return "\n".join(record.getMessage() for record in caplog.records)
+
+
+async def test_a_failed_check_logs_the_case_and_not_the_company(caplog) -> None:
+    text = await _logged(caplog, _model(side_effect=RuntimeError("web search unavailable")))
+
+    assert "c1" in text and "web search unavailable" in text
+    assert "Acme" not in text
+
+
+async def test_a_check_whose_searches_all_failed_logs_the_case_and_not_the_company(caplog) -> None:
+    reply = AIMessage(content=[_search_error(), {"type": "text", "text": json.dumps(
+        {"status": "clean", "summary": "Nothing concerning.", "sources": []})}])
+
+    text = await _logged(caplog, _model(return_value=reply))
+
+    assert "c1" in text and "every search failed" in text
+    assert "Acme" not in text
+
+
+async def test_an_unreadable_reply_logs_the_case_and_not_the_company(caplog) -> None:
+    reply = AIMessage(content=[_search(MAS_PAGE), {"type": "text", "text": f"Sorry, {COMPANY} is hard to read"}])
+
+    text = await _logged(caplog, _model(return_value=reply))
+
+    assert "c1" in text
+    assert "Acme" not in text

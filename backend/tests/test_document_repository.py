@@ -563,3 +563,62 @@ def test_flushing_runs_the_requests_scheduled_refreshes_now_and_leaves_other_req
         assert "case-other" in document_repository._sync_timers  # another request's, not flushed here
     finally:
         document_repository.flush_syncs({"case-other"})
+
+
+# --- A detection run replaced by a recovery can't overwrite it (PENDING_TESTS row 4) -------------------------------
+# A recovery puts a lost run's document back (approved) or claims it again with a new stamp; the old run, still
+# going somewhere, must then write nothing when it ends.
+
+_CLAIMED = "2026-11-18T03:00:00+00:00"
+
+
+def test_a_run_still_holding_the_document_writes_detected(db, synced) -> None:
+    db.add("documents", _row(status="detecting", processing_started_at=_CLAIMED))
+
+    assert document_repository.mark_detected("doc-1", datetime.fromisoformat(_CLAIMED)) is True
+
+    assert _stored(db)["status"] == "detected"
+    assert synced == ["case-1"]
+
+
+@pytest.mark.parametrize("status_", ["approved", "detected", "rejected"])
+def test_a_run_whose_document_is_no_longer_detecting_writes_nothing(db, synced, status_) -> None:
+    db.add("documents", _row(status=status_))
+
+    assert document_repository.mark_detected("doc-1") is False
+    assert document_repository.end_unfinished_detection("doc-1", has_report=False) is False
+
+    assert _stored(db)["status"] == status_
+    assert synced == []
+
+
+def test_a_run_whose_claim_was_taken_by_a_recovery_writes_nothing(db, synced) -> None:
+    # Still detecting, but under the recovery's new claim: the old run's stamp no longer matches.
+    db.add("documents", _row(status="detecting", processing_started_at="2026-11-18T03:20:00+00:00"))
+    old_stamp = datetime.fromisoformat(_CLAIMED)
+
+    assert document_repository.mark_detected("doc-1", old_stamp) is False
+    assert document_repository.end_unfinished_detection("doc-1", has_report=True, run_stamp=old_stamp) is False
+
+    assert _stored(db)["status"] == "detecting"
+    assert synced == []
+
+
+@pytest.mark.parametrize(("has_report", "status_"), [(True, "detected"), (False, "approved")])
+def test_an_unfinished_run_puts_the_document_back_by_whether_a_report_stands(db, has_report, status_) -> None:
+    db.add("documents", _row(status="detecting", processing_started_at=_CLAIMED))
+
+    assert document_repository.end_unfinished_detection(
+        "doc-1", has_report=has_report, run_stamp=datetime.fromisoformat(_CLAIMED),
+    ) is True
+
+    assert _stored(db)["status"] == status_
+
+
+def test_rejecting_writes_nothing_when_the_status_moved_on_since_it_was_read(db, synced) -> None:
+    db.add("documents", _row(status="approved"))  # it was analyzed when the officer's request read it
+
+    assert document_repository.reject_document("doc-1", DocumentStatus.ANALYZED) is None
+
+    assert _stored(db)["status"] == "approved"
+    assert synced == []
