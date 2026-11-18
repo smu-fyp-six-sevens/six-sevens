@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useDismiss } from '../../components/useDismiss';
-import { CASE_SECTIONS, SECTIONS_WITH_STATUS, type CaseSection, type SectionStatus } from './caseSections';
+import { CASE_SECTIONS, SECTIONS_WITH_STATUS, menuSection, type CaseSection, type SectionStatus } from './caseSections';
 import { Icon } from '../../components/Icon';
 
 // The case's sections, as a rail of icons that never takes more room than that. Opening it lays the full menu over the
@@ -47,7 +47,7 @@ export function CaseSectionNav({
 
       <ul>
         {CASE_SECTIONS.map((section) => {
-          const isActive = section.id === activeSection;
+          const isActive = activeSection !== null && section.id === menuSection(activeSection);
           const status = statusesLoading ? undefined : statuses[section.id];
           const statusPending = statusesLoading && SECTIONS_WITH_STATUS.includes(section.id);
 

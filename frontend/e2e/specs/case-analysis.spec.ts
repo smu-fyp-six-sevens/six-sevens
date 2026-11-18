@@ -31,7 +31,7 @@ function consoleErrors(page: Page): string[] {
 
 const runButton = (page: Page) => page.getByRole('button', { name: /^(Run case analysis|Run again|Analysing…)$/ });
 const analysisCard = (page: Page) =>
-  page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Case Analysis' }) });
+  page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Case Risk' }) });
 const tracePanel = (page: Page) => page.getByRole('dialog', { name: 'Case analysis trace' });
 const showTrace = (page: Page) =>
   page.getByRole('button', { name: 'Case actions' }).click().then(() =>
@@ -53,7 +53,7 @@ async function scoredFindings(page: Page) {
   return trace.locator('.trace-table tbody tr');
 }
 const riskCard = (page: Page) =>
-  page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
+  page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Case Risk' }) });
 const reviewCard = (page: Page) =>
   page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
 const sectionStatus = (page: Page, label: string) =>
@@ -122,9 +122,9 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
 
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=analysis`);
 
-    await expect(analysisCard(page)).toContainText('Not started yet.');
+    await expect(analysisCard(page)).toContainText('Not scored yet.');
     await expect(runButton(page)).toHaveCount(0);
-    await expect(sectionStatus(page, 'Case Analysis')).toContainText('Waiting');
+    await expect(sectionStatus(page, 'Risk & Analysis')).toContainText('Not Scored');
   });
 
   test('MA-014 the Run Case Analysis button shows once every document has been scanned @MA-014', async ({ page, backend }) => {
@@ -134,7 +134,7 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
 
     await expect(runButton(page)).toHaveText('Run case analysis');
     await expect(runButton(page)).toBeEnabled();
-    await expect(sectionStatus(page, 'Case Analysis')).toContainText('Starting');
+    await expect(sectionStatus(page, 'Risk & Analysis')).toContainText('Starting');
   });
 
   test('MA-015 clicking Run Case Analysis starts the analysis for this case @MA-015', async ({ page, backend }) => {
@@ -149,7 +149,7 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
     await expect(runButton(page)).toBeDisabled();
     await expect(analysisCard(page).getByRole('status')).toContainText('Analysing this case…');
     await expect(page.locator('.analysis-spinner')).toBeVisible();
-    await expect(sectionStatus(page, 'Case Analysis')).toContainText('Running');
+    await expect(sectionStatus(page, 'Risk & Analysis')).toContainText('Running');
     await showTrace(page);
     await expect(tracePanel(page)).toContainText('No steps recorded yet.');
   });
@@ -198,7 +198,7 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
     await expect(analysisCard(page)).toContainText('Run it again.');
     await expect(analysisCard(page)).not.toContainText('RuntimeError');
     await expect.poll(() => errors.join('\n')).toContain('RuntimeError: scoring unavailable');
-    await expect(sectionStatus(page, 'Case Analysis')).toContainText('Did Not Finish');
+    await expect(sectionStatus(page, 'Risk & Analysis')).toContainText('Did Not Finish');
     await expect(runButton(page)).toHaveText('Run again');
   });
   test('a run whose documents changed since it ran says it is out of date and offers to run again @SCRUM-52', async ({ page, backend }) => {
@@ -213,7 +213,7 @@ test.describe('Trigger case analysis @sprint4 @SCRUM-52', () => {
 
     await expect(analysisCard(page)).toContainText('Out of date.');
     await expect(analysisCard(page)).toContainText('The documents changed since the last run. A new run starts on its own; if none has, run it again.');
-    await expect(sectionStatus(page, 'Case Analysis')).toContainText('Out of Date');
+    await expect(sectionStatus(page, 'Risk & Analysis')).toContainText('Out of Date');
     await expect(runButton(page)).toHaveText('Run again');
   });
 });
@@ -279,7 +279,8 @@ test.describe('Auto-trigger scoring @sprint4 @SCRUM-53', () => {
 });
 
 test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
-  async function openRisk(page: Page, backend: MockBackend, testCase: string) {
+  // section: the Risk & Analysis tab to open, Overview (the score) or Findings (the review).
+  async function openRisk(page: Page, backend: MockBackend, testCase: string, section: 'risk' | 'findings' = 'risk') {
     const theCase = makeCase({ greenlink_case_id: `GLDB-4${testCase.slice(-3)}`, risk: CASE_RISK[testCase].risk });
     backend.cases.push(theCase);
     if (CASE_RISK[testCase].scoring) {
@@ -287,7 +288,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
       backend.analyses[theCase.id] = run;
       theCase.analysis = { run_id: run.run_id, status: 'complete', stale: false, finished_at: run.finished_at, finding_count: 0 };
     }
-    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=${section}`);
     return theCase;
   }
 
@@ -300,7 +301,6 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await expect(card.getByTestId('risk-badge')).toHaveText('Low Risk');
     await expect(card.locator('.severity-gauge-value')).toHaveText('0');
     await expect(card).toContainText('No contributing findings.');
-    await expect(card.locator('.risk-reason')).toHaveText('Rated Low: detection found nothing worth flagging.');
     await expect(card).toContainText('Based on 3 documents');
   });
 
@@ -312,7 +312,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await expect(card).toContainText('2 of 3 documents scanned.');
     await expect(card.locator('.severity-gauge-value')).toHaveCount(0);
     await expect(card.getByTestId('risk-badge')).toHaveCount(0);
-    await expect(sectionStatus(page, 'Risk Summary')).toContainText('Detection Failed');
+    await expect(sectionStatus(page, 'Risk & Analysis')).toContainText('Detection Failed');
   });
 
   test('RS-003 high findings on 3 or more documents are Critical, with the reason @RS-003', async ({ page, backend }) => {
@@ -322,8 +322,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await expect(card.getByTestId('risk-badge')).toHaveText('Critical Risk');
     await expect(card.locator('.severity-gauge-value')).toHaveText('89');
     await expect(card.locator('.risk-score-level')).toHaveText('Critical Risk · 80–100');
-    await expect(card.locator('.risk-reason')).toHaveText('Rated Critical: high-severity findings on 4 documents.');
-    await expect(sectionStatus(page, 'Risk Summary')).toContainText('Critical · 89');
+    await expect(sectionStatus(page, 'Risk & Analysis')).toContainText('Critical · 89');
   });
 
   test('RS-004 a single medium finding is Medium, worth 3 points @RS-004', async ({ page, backend }) => {
@@ -332,7 +331,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     const card = riskCard(page);
     await expect(card.getByTestId('risk-badge')).toHaveText('Medium Risk');
     await expect(card.locator('.risk-score-level')).toHaveText('Medium Risk · 25–49');
-    await expect(card).toContainText('1 medium');
+    await expect(card.locator('.risk-tally li')).toHaveText(['1 Medium']);
     await openTrace(page, theCase);
     const row = await scoredFindings(page);
     await expect(row).toHaveCount(1);
@@ -345,18 +344,17 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     const card = riskCard(page);
     await expect(card.getByTestId('risk-badge')).toHaveText('High Risk');
     await expect(card.locator('.severity-gauge-value')).toHaveText('50');
-    await expect(card.locator('.risk-reason')).toHaveText('Rated High from the combined severity of 1 finding(s).');
   });
 
   test('RS-006 each finding shows its document, type, check, severity, summary, rationale and points @RS-006', async ({ page, backend }) => {
-    const theCase = await openRisk(page, backend, 'RS-006');
+    const theCase = await openRisk(page, backend, 'RS-006', 'findings');
 
     const payslip = reviewCard(page).locator('.risk-document', { hasText: 'C011_Payslip.pdf' });
     await expect(payslip.locator('.risk-document-meta')).toContainText('Payslip');
     await payslip.getByRole('button').click();
     const row = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' }).locator('.risk-findings li');
     await expect(row.locator('.risk-severity')).toHaveText('high');
-    await expect(row.locator('.risk-finding-check')).toHaveText('Font consistency');
+    await expect(row.locator('.risk-finding-check')).toHaveText('Font Consistency');
     await expect(row.locator('.risk-finding-summary')).toHaveText('Net pay is in a different font from the rest of the payslip.');
     await expect(row.locator('.risk-finding-rationale')).toHaveText(
       'Only the figure that matters differs, which is how a pasted value looks.',
@@ -369,7 +367,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
   });
 
   test('RS-007 findings are listed high first, then medium, then low @RS-007', async ({ page, backend }) => {
-    const theCase = await openRisk(page, backend, 'RS-006');
+    const theCase = await openRisk(page, backend, 'RS-006', 'findings');
 
     // Every group is to review until it's saved, low-only ones and the empty cross-document group included.
     const documents = reviewCard(page).locator(':scope > .flagged-list .risk-document');
@@ -395,7 +393,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     };
     const theCase = makeCase({ greenlink_case_id: 'GLDB-4106', risk });
     backend.cases.push(theCase);
-    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=findings`);
 
     await reviewCard(page).locator('.risk-document', { hasText: 'C011_Payslip.pdf' }).getByRole('button').click();
     const dialog = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
@@ -411,7 +409,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     const payslip = base.contributing_findings.filter((finding) => finding.filename === 'C011_Payslip.pdf');
     const theCase = makeCase({ greenlink_case_id: 'GLDB-4107', risk: base });
     backend.cases.push(theCase);
-    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=findings`);
 
     await reviewCard(page).locator('.risk-document', { hasText: 'C011_Payslip.pdf' }).getByRole('button').click();
     const dialog = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
@@ -445,7 +443,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
   test('a one-click reason is saved without a note', async ({ page, backend }) => {
     const theCase = makeCase({ greenlink_case_id: 'GLDB-4109', risk: CASE_RISK['RS-006'].risk });
     backend.cases.push(theCase);
-    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=findings`);
 
     await reviewCard(page).locator('.risk-document', { hasText: 'C011_Payslip.pdf' }).getByRole('button').click();
     const dialog = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
@@ -472,7 +470,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     });
     const theCase = makeCase({ greenlink_case_id: 'GLDB-4108', risk });
     backend.cases.push(theCase);
-    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=findings`);
 
     await reviewCard(page).locator('.risk-document', { hasText: first.filename }).getByRole('button').click();
     const dialog = page.getByRole('dialog', { name: `Review findings on ${first.filename}` });
@@ -496,7 +494,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     const risk: CaseRisk = { ...base, dismissed_findings: [setAside(1), setAside(2)] };
     const theCase = makeCase({ greenlink_case_id: 'GLDB-4110', risk });
     backend.cases.push(theCase);
-    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=findings`);
 
     const heading = (name: string) => reviewCard(page).locator('.risk-document', { hasText: name }).locator('.risk-document-meta');
     // The payslip: its severity count, then the set-aside count.
@@ -519,7 +517,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
       }],
     };
     backend.cases.push(makeCase({ greenlink_case_id: caseNumber, risk }));
-    await page.goto(`/cases/${caseNumber}?section=risk`);
+    await page.goto(`/cases/${caseNumber}?section=findings`);
     await reviewCard(page).locator('.risk-document', { hasText: 'C011_Payslip.pdf' }).getByRole('button').click();
     return page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });
   }
@@ -575,7 +573,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     };
     const theCase = makeCase({ greenlink_case_id: 'GLDB-4111', risk });
     backend.cases.push(theCase);
-    await page.goto(`/cases/${theCase.greenlink_case_id}?section=risk`);
+    await page.goto(`/cases/${theCase.greenlink_case_id}?section=findings`);
 
     const meta = reviewCard(page).locator('.risk-document', { hasText: 'C011_Payslip.pdf' }).locator('.risk-document-meta');
     await expect(meta.locator('.risk-document-none')).toHaveText('Clean');
@@ -583,7 +581,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
   });
 
   test('a group with no findings moves to Reviewed only once an officer saves it', async ({ page, backend }) => {
-    await openRisk(page, backend, 'RS-006');
+    await openRisk(page, backend, 'RS-006', 'findings');
     const card = reviewCard(page);
     await expect(card.getByText(/^Reviewed \(/)).toHaveCount(0);
 
@@ -595,7 +593,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
   });
 
   test('Save all reviews saves every group as its ticks stand, in one go', async ({ page, backend }) => {
-    const theCase = await openRisk(page, backend, 'RS-006');
+    const theCase = await openRisk(page, backend, 'RS-006', 'findings');
     const card = reviewCard(page);
 
     // Four groups to review: three documents with a finding, and the empty cross-document group.
@@ -623,7 +621,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     await dialog.getByRole('button', { name: 'Save all' }).click();
 
     // Every group is reviewed in one go: none left to review, all folded into Reviewed, the button gone.
-    await expect(card.getByText('All reviewed')).toBeVisible();
+    await expect(card.getByText('All documents reviewed')).toBeVisible();
     await expect(card.getByText('Reviewed (4)')).toBeVisible();
     await expect(card.getByRole('button', { name: 'Save all reviews' })).toHaveCount(0);
     // Saved as ticked, with the false alarm's reason, as each group's Save review would.
@@ -633,7 +631,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
   });
 
   test('a sign-off is saved for its group, signed by the officer, and still there after a reload', async ({ page, backend }) => {
-    const theCase = await openRisk(page, backend, 'RS-006');
+    const theCase = await openRisk(page, backend, 'RS-006', 'findings');
     const card = reviewCard(page);
 
     await card.getByRole('button', { name: /Across documents/ }).click();
@@ -657,7 +655,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
     backend.cases.push(theCase);
     await page.goto(`/cases/${theCase.greenlink_case_id}?section=documents`);
 
-    await sectionStatus(page, 'Risk Summary').click();
+    await sectionStatus(page, 'Risk & Analysis').click();
 
     const card = riskCard(page);
     await expect(card).toContainText('Not scored yet.');
@@ -672,7 +670,7 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
 
     const card = riskCard(page);
     await expect(card).toContainText('1 of 2 documents scanned.');
-    await expect(sectionStatus(page, 'Risk Summary')).toContainText('1/2 Scanned');
+    await expect(sectionStatus(page, 'Risk & Analysis')).toContainText('1/2 Scanned');
     await expect(card.getByTestId('risk-badge')).toHaveCount(0);
     await expect(card.locator('.severity-gauge-value')).toHaveCount(0);
     await expect(card.locator('.risk-document')).toHaveCount(0);

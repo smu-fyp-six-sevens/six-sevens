@@ -71,7 +71,7 @@ function nextStep({ stage, failure, analysisRunning, analysisReady, findingsToRe
         text: findingsToReview
           ? `The case has been analysed. Mark each finding correct or wrong for precision and recall: ${findingsToReview} still need${findingsToReview === 1 ? 's' : ''} your verdict.`
           : 'The case has been analysed. Mark each finding correct or wrong for precision and recall.',
-        link: { label: 'Evaluate findings', section: 'risk' },
+        link: { label: 'Evaluate findings', section: 'findings' },
       };
     case 'case_analysed':
       return { text: 'The case has been analysed. Check the risk summary, then finalise the case.', link: { label: 'View risk summary', section: 'risk' } };

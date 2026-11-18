@@ -35,7 +35,7 @@
 .analysis-action {
   padding: 7px 14px;
   border: none;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--steel);
   color: var(--white);
   font-size: 12.5px;
@@ -79,7 +79,7 @@
 }
 
 .analysis-score-compare strong {
-  font-size: 18px;
+  font-size: 15px;
 }
 
 .analysis-score-arrow {
@@ -94,20 +94,41 @@
   display: grid;
   gap: 12px;
   margin: 0 20px 18px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--slate-97);
 }
 
+/* The headline answers "why this score", so it reads first: title size, ink, at reading measure. */
 .analysis-brief-headline {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.45;
   color: var(--ink);
+}
+
+.analysis-brief-headline strong {
+  font-weight: 600;
+}
+
+/* Checked and fine, Media check, Would help: one ruled row each, the label in a column of its own so the three
+   line up and read as a list rather than as boxes. */
+.analysis-brief-row {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.analysis-brief-row .analysis-brief-label {
+  margin: 0;
+}
+
+@media (max-width: 620px) {
+  .analysis-brief-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .analysis-brief-level.risk-badge {
@@ -152,15 +173,16 @@
   color: var(--ink);
   font: inherit;
   text-align: left;
-  text-decoration: underline;
-  text-decoration-color: var(--slate-77);
+  text-decoration: none;
   text-underline-offset: 3px;
   cursor: pointer;
+  transition: color 0.12s;
 }
 
 .analysis-brief-link:hover {
   color: var(--steel-dark);
-  text-decoration-color: currentColor;
+  text-decoration: underline;
+  text-decoration-color: var(--steel-a25);
 }
 
 .analysis-brief-label {
@@ -170,13 +192,6 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-soft);
-}
-
-.analysis-brief-checked {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 
 .analysis-brief-chips {
@@ -189,63 +204,51 @@
 }
 
 .analysis-brief-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 2px 9px;
-  border: 1px solid var(--slate-88);
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--white);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-soft);
 }
 
-.analysis-brief-chips li span {
+.analysis-brief-chip-mark {
   color: var(--teal);
-  font-weight: 700;
 }
 
-.analysis-brief-help {
-  margin: 0;
-  font-size: 13px;
+/* Media check (pages/upload/AnalysisSummaryBlock.tsx): a due-diligence note, never part of the score. A row like
+   the others; the outcome is the mark before the text, never a coloured edge. Shown whole, never clamped: the
+   backend's prompt keeps it to one short sentence. */
+.analysis-brief-media-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
-/* Media check (pages/upload/AnalysisSummaryBlock.tsx): a due-diligence note, never part of the score. Shown whole,
-   never clamped: the backend's prompt keeps it to one short sentence. */
-.analysis-brief-media {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 8px;
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--slate-88);
-  border-left: 3px solid var(--teal);
-  border-radius: 8px;
-  background: var(--white);
-  font-size: 13px;
+.analysis-brief-media-mark {
+  display: inline-flex;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--teal);
 }
 
-.analysis-brief-media--concerns {
-  border-left-color: var(--amber);
-  background: var(--amber-bg);
+.analysis-brief-media--concerns .analysis-brief-media-mark {
+  color: var(--orange-27);
 }
 
-.analysis-brief-media--muted {
-  border-left-color: var(--slate-88);
+.analysis-brief-media--muted .analysis-brief-media-text {
   color: var(--ink-soft);
-}
-
-.analysis-brief-media-text span[aria-label='clear'] {
-  color: var(--teal);
-  font-weight: 700;
 }
 
 .analysis-brief-media-when {
-  flex-basis: 100%;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-soft);
 }
 
 .analysis-brief-media-sources {
-  flex-basis: 100%;
   margin: 4px 0 0;
   padding-left: 18px;
   font-size: 12.5px;
@@ -255,22 +258,94 @@
   color: var(--steel);
 }
 
-/* Previous runs (pages/upload/PreviousRuns.tsx) */
+/* Previous runs (pages/upload/PreviousRuns.tsx): a heading row and one row per run on the same columns, so the
+   level, score and change line up down the list. */
+.analysis-run-head,
+.analysis-run {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 44px 84px 104px;
+  align-items: center;
+  column-gap: 16px;
+  padding: 9px 12px;
+}
+
+/* A ruled row like Checked and fine and Media check above it, its label in the same small capitals at the same
+   left edge; the column names under it match. */
+.analysis-runs {
+  margin: 0 20px 18px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.analysis-runs-title {
+  margin: 0;
+}
+
+.analysis-runs-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.analysis-runs-toggle:hover {
+  color: var(--ink);
+}
+
+.analysis-runs-toggle:focus-visible {
+  outline: none;
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px var(--steel-a25);
+}
+
+.analysis-runs-chevron {
+  transition: transform 0.15s;
+}
+
+.analysis-runs-toggle[aria-expanded='true'] .analysis-runs-chevron {
+  transform: rotate(90deg);
+}
+
+.analysis-runs-count {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--slate-93);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.analysis-run-head {
+  /* No left inset, so the title lines up with the labels above; the right inset matches a run's, so the
+     column names sit over their columns. */
+  padding: 0 13px 8px 0;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
 .analysis-run-list {
   display: grid;
   gap: 6px;
-  margin: 0 20px 18px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .analysis-run {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  padding: 9px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   font-size: 12.5px;
@@ -281,12 +356,12 @@
   background: var(--slate-97);
 }
 
-.analysis-run-main,
-.analysis-run-result {
+.analysis-run-main {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px 8px;
+  min-width: 0;
 }
 
 .analysis-run-when {
@@ -295,13 +370,64 @@
 }
 
 .analysis-run-by,
-.analysis-run-findings,
 .analysis-run-status {
   color: var(--ink-soft);
 }
 
-.analysis-run-result .risk-badge {
+/* A run that didn't finish has no level, score or change: its status takes those columns. */
+.analysis-run-status {
+  grid-column: 2 / 5;
+}
+
+.analysis-run-cell--number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-run-action {
+  text-align: right;
+}
+
+/* One width for every level, so the column reads as a stack of pills. */
+.analysis-run .risk-badge {
+  box-sizing: border-box;
+  justify-content: center;
+  width: 100%;
   margin-left: 0;
+}
+
+/* Too narrow for the columns: each run wraps as one line of facts, and the heading row has nothing to sit over. */
+@media (max-width: 900px) {
+  /* The column names have no columns to sit over: only the title stays. */
+  .analysis-run-head {
+    display: block;
+  }
+
+  .analysis-run-head > span {
+    display: none;
+  }
+
+  .analysis-run {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+
+  .analysis-run-main {
+    flex-basis: 100%;
+  }
+
+  .analysis-run-cell:empty {
+    display: none;
+  }
+
+  .analysis-run .risk-badge {
+    width: auto;
+  }
+
+  .analysis-run-action {
+    margin-left: auto;
+  }
 }
 
 .analysis-run-score {
@@ -375,3 +501,474 @@
 .cache-use-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0 0 12px; padding: 0; list-style: none; font-size: 0.85rem; color: var(--ink-soft); }
 .cache-use-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; vertical-align: -1px; }
 .cache-use-note { margin: 8px 0 0; font-size: 0.8rem; color: var(--ink-soft); }
+
+/* The cross-document findings under the summary: a heading of its own, without the rule above it. */
+.analysis-heading--findings {
+  margin-top: 18px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Next step (pages/upload/NextStepPanel.tsx): what the officer does after reading the Case Analysis or Risk tab.
+   A tinted steel panel with its action on the right, so it reads as the way forward rather than another finding. */
+.next-step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 18px 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--steel-a25);
+  border-radius: 10px;
+  background: var(--steel-a10);
+}
+
+.case-content > .next-step {
+  margin: 0;
+}
+
+.next-step-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--steel);
+  color: var(--white);
+}
+
+.next-step-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.next-step-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.next-step-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px 8px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--steel);
+  color: var(--white);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.next-step-action:hover {
+  background: var(--steel-dark);
+}
+
+.next-step-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--steel-a25);
+  border-radius: 8px;
+}
+
+@media (max-width: 760px) {
+  .next-step {
+    flex-wrap: wrap;
+  }
+
+  .next-step-actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* Risk & Analysis tabs (pages/upload/RiskTabs.tsx): the same underline tabs as the dashboard's sections. */
+.case-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* One gap under the tabs and between everything stacked beneath them, on either tab: the next step and the cards. */
+.case-tabs ~ .next-step,
+.case-tabs ~ .summary-card {
+  margin-top: 16px;
+}
+
+.case-tabs button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.case-tabs button::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  transition: background-color 0.15s;
+}
+
+.case-tabs button:hover {
+  background: var(--stone-94);
+  color: var(--ink);
+}
+
+.case-tabs button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 3px var(--steel-a25);
+}
+
+.case-tabs button.active {
+  color: var(--ink);
+}
+
+.case-tabs button.active::after {
+  background: var(--steel);
+}
+
+.case-tabs-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--slate-93);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.case-tabs-count--due {
+  background: var(--amber-bg);
+  color: var(--orange-27);
+}
+
+.case-tabs button.active .case-tabs-count {
+  background: var(--steel);
+  color: var(--white);
+}
+
+/* Checked and fine as one line (AnalysisSummaryBlock): the checks that couldn't be verified are named in bold,
+   "Why?" opens where and why under the line, and "See all" folds out what passed. */
+.analysis-brief-checked-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.analysis-brief-checked-text {
+  margin: 0;
+  color: var(--ink);
+}
+
+.analysis-brief-unverified {
+  font-weight: 600;
+}
+
+.analysis-brief-toggle,
+.analysis-brief-checked-all summary {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--steel);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.analysis-brief-toggle {
+  margin-left: 8px;
+}
+
+.analysis-brief-toggle:hover,
+.analysis-brief-checked-all summary:hover {
+  color: var(--steel-dark);
+}
+
+.analysis-brief-toggle:focus-visible,
+.analysis-brief-checked-all summary:focus-visible,
+.analysis-brief-link:focus-visible,
+.risk-findings-link:focus-visible {
+  outline: none;
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px var(--steel-a25);
+}
+
+.analysis-brief-unverified-why {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.analysis-brief-checked-all .analysis-brief-chips {
+  margin-top: 6px;
+}
+
+/* Under the summary: on to the findings it rests on. */
+.risk-findings-link {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--steel);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.risk-findings-link:hover {
+  color: var(--steel-dark);
+}
+
+/* The Findings tab's load error, for the whole card, above the list. */
+.risk-reviews-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 0 20px 14px;
+}
+
+.risk-reviews-error .error-message {
+  flex: 1 1 320px;
+}
+
+.risk-reviews-error .text-button {
+  color: var(--steel);
+}
+
+.risk-reviews-error .text-button:hover {
+  color: var(--steel-dark);
+}
+
+
+/* On touch, the small text controls get a full-size target without changing how they look. */
+@media (pointer: coarse) {
+  .analysis-brief-toggle,
+  .analysis-brief-checked-all summary,
+  .risk-findings-link,
+  .analysis-brief-link,
+  .analysis-run-open {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+/* The Case Risk card's top (CaseAnalysisCard): the score on the left, why it is that score on the right, divided by
+   a hairline; what else was checked runs under both. The summary's wrapper steps aside (display: contents) so its
+   two parts are cells of this grid. */
+.risk-overview {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 18px 0;
+  margin: 0 20px 18px;
+}
+
+.risk-overview--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.risk-overview .analysis-brief {
+  display: contents;
+}
+
+.risk-overview-score {
+  min-width: 240px;
+  padding-right: 32px;
+}
+
+
+.risk-overview-score {
+  align-self: center;
+}
+
+/* The gauge, level and facts centred in their column. */
+.risk-overview-score .risk-score {
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  text-align: center;
+}
+
+.risk-overview-score .risk-score-detail {
+  flex: none;
+  min-width: 0;
+}
+
+
+.risk-overview-score .summary-message {
+  margin: 12px 0 0;
+}
+
+.analysis-brief-why {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.risk-overview:not(.risk-overview--single) .analysis-brief-why {
+  align-self: stretch;
+  padding-left: 28px;
+  border-left: 1px solid var(--line);
+}
+
+.analysis-brief-checks {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 12px;
+  min-width: 0;
+}
+
+
+/* Too narrow for two columns: the reasons go under the score, ruled off like the rows below. */
+@media (max-width: 760px) {
+  .risk-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .risk-overview-score {
+    padding-right: 0;
+  }
+
+  .risk-overview:not(.risk-overview--single) .analysis-brief-why {
+    padding: 14px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
+
+/* The score's facts (CaseRiskCard score part): "18 findings across 16 documents", then a tally by severity, each
+   count with its severity's dot, and what the specialists set aside after them, quieter. */
+.risk-overview-score .risk-score-level {
+  white-space: nowrap;
+}
+
+.risk-overview-score .risk-facts {
+  display: block;
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.risk-tally {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.risk-tally li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.risk-tally strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.risk-tally .analysis-brief-dot {
+  transform: none;
+}
+
+/* Set aside follows the severities after a hairline; alone, it needs none. */
+.risk-tally li + .risk-tally-aside {
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+}
+
+.risk-tally-aside strong {
+  color: var(--ink-soft);
+}
+
+/* "No contributing findings" in the summary column, under the headline. */
+.analysis-brief-why .analysis-brief-clear {
+  margin: 0;
+}
+
+/* With the Risk & Analysis tabs under it, the case header drops its own divider and gap: the tabs sit right under
+   the title, and their underline is the one line between header and page. */
+.case-frame-main:has(.case-content > .case-tabs:first-child) .case-header {
+  margin-bottom: 0;
+  padding-bottom: 8px;
+  border-bottom: 0;
+}
+
+/* While a finished run's summary loads (CaseAnalysisCard): the same two columns, in skeleton, so nothing jumps. */
+.risk-overview--loading .risk-overview-score {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: 240px;
+}
+
+.skeleton-gauge {
+  width: 150px;
+  height: 75px;
+  border: 14px solid var(--slate-91);
+  border-bottom: 0;
+  border-radius: 150px 150px 0 0;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.risk-overview--loading .analysis-brief-why {
+  gap: 14px;
+}
+
+.skeleton-bar--level { width: 140px; height: 16px; }
+.skeleton-bar--facts { width: 180px; }
+.skeleton-bar--headline { width: min(560px, 90%); height: 15px; }
+.skeleton-bar--reason { width: min(380px, 70%); }
+.skeleton-bar--short { width: min(300px, 55%); }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-gauge {
+    animation: none;
+  }
+}

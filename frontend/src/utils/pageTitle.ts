@@ -1,4 +1,4 @@
-import { CASE_SECTIONS, isCaseSection } from '../pages/upload/caseSections';
+import { CASE_SECTIONS, isCaseSection, menuSection } from '../pages/upload/caseSections';
 
 const APP = 'GLAD Portal';
 
@@ -17,7 +17,7 @@ export function pageTitle(pathname: string, search: string): string {
     const caseId = decodeURIComponent(caseMatch[1]);
     if (caseMatch[2]) return `${caseId} | Document`;
     const id = new URLSearchParams(search).get('section');
-    const section = CASE_SECTIONS.find((item) => item.id === (isCaseSection(id) ? id : 'summary'));
+    const section = CASE_SECTIONS.find((item) => item.id === (isCaseSection(id) ? menuSection(id) : 'summary'));
     return `${caseId} | ${section?.label ?? 'Case Summary'}`;
   }
   const page = PAGES[path];

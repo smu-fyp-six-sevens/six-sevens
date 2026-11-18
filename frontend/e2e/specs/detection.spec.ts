@@ -407,7 +407,7 @@ test.describe('Lead detection agent @sprint3 @SCRUM-119', () => {
     await expect(panel.locator('.detection-findings')).toHaveCount(0);
     // A check that couldn't run is in plain view, never folded away: it is why the verdict isn't clean.
     await expect(panel.locator('.detection-unassessed')).toBeVisible();
-    await expect(panel.locator('.detection-unassessed')).toContainText(`Font consistency: ${unassessed.reason}`);
+    await expect(panel.locator('.detection-unassessed')).toContainText(`Font Consistency: ${unassessed.reason}`);
   });
 
   test('FD-020 a second look is shown once, to a different specialist, with the lead\'s question @FD-020', async ({ page, backend }) => {

@@ -7,16 +7,18 @@ export type CaseSection =
   | 'documents'
   | 'risk'
   | 'analysis'
+  | 'findings'
   | 'additional'
   | 'notes'
   | 'audit'
   | 'cost';
 
+// The side menu. Risk & Analysis is one item: one page with an Overview tab ('risk'; 'analysis' still lands there)
+// and a Findings tab ('findings'), each its own section in the URL so a link or refresh lands on the right one.
 export const CASE_SECTIONS: { id: CaseSection; label: string; short: string; icon: IconName }[] = [
   { id: 'summary', label: 'Case Summary', short: 'Summary', icon: 'summary' },
   { id: 'documents', label: 'Documents', short: 'Documents', icon: 'documents' },
-  { id: 'analysis', label: 'Case Analysis', short: 'Analysis', icon: 'analysis' },
-  { id: 'risk', label: 'Risk Summary', short: 'Risk', icon: 'risk' },
+  { id: 'risk', label: 'Risk & Analysis', short: 'Risk', icon: 'risk' },
   { id: 'additional', label: 'Additional Documents', short: 'Additional', icon: 'additional' },
   { id: 'notes', label: 'Notes', short: 'Notes', icon: 'notes' },
   { id: 'audit', label: 'Audit Trail', short: 'Audit', icon: 'audit' },
@@ -24,11 +26,23 @@ export const CASE_SECTIONS: { id: CaseSection; label: string; short: string; ico
 ];
 
 // The sections whose menu item has a status line under its label, which only the live snapshot can fill in.
-export const SECTIONS_WITH_STATUS: CaseSection[] = ['documents', 'analysis', 'risk', 'additional'];
+export const SECTIONS_WITH_STATUS: CaseSection[] = ['documents', 'risk', 'additional'];
 
 export function isCaseSection(value: string | null): value is CaseSection {
-  return CASE_SECTIONS.some((section) => section.id === value);
+  return value === 'analysis' || value === 'findings' || CASE_SECTIONS.some((section) => section.id === value);
 }
+
+// The menu item a section sits under: both tabs are the Risk & Analysis page.
+export function menuSection(section: CaseSection): CaseSection {
+  return section === 'analysis' || section === 'findings' ? 'risk' : section;
+}
+
+// The two tabs of the Risk & Analysis page: the score, the summarised findings and earlier runs; then every finding.
+export type RiskTab = 'risk' | 'findings';
+export const RISK_TABS: { id: RiskTab; label: string }[] = [
+  { id: 'risk', label: 'Overview' },
+  { id: 'findings', label: 'Findings' },
+];
 
 // done: nothing left to do · action: the officer has something to do · progress: waiting on the pipeline.
 export type SectionTone = 'done' | 'action' | 'progress' | 'error' | 'idle';
@@ -144,7 +158,14 @@ export function caseSectionStatuses({
         ? { tone: 'error', text: 'Did Not Finish' }
         : analysisOverview.stale || analysisOverview.status === 'superseded'
           ? { tone: 'action', text: `Out of Date · ${outOfDateMessage(analysisOverview).short}` }
-          : { tone: 'done', text: plural(analysisOverview.finding_count, 'Finding') };
+          : // "0 Findings" read as if the whole case were clean; this card only lists what differs between documents.
+            {
+              tone: 'done',
+              text:
+                analysisOverview.finding_count === 0
+                  ? 'No Cross-Document Findings'
+                  : plural(analysisOverview.finding_count, 'Cross-Document Finding'),
+            };
 
   const riskStatus: SectionStatus = !risk
     ? { tone: 'idle', text: 'Not Scored' }
@@ -160,6 +181,14 @@ export function caseSectionStatuses({
           ? { tone: 'progress', text: `${risk.documents_scanned}/${risk.documents_total} Scanned` }
           : { tone: 'idle', text: 'Not Scored' };
 
+  // The Risk & Analysis menu item: while the analysis is starting, running, failed or out of date, that is what it
+  // says; otherwise the score.
+  const analysisInFlight =
+    (!analysisOverview && analysisReady) ||
+    (analysisOverview !== null && analysisOverview.status !== 'complete');
+  const analysisNeedsRerun = Boolean(analysisOverview?.stale);
+  const riskAndAnalysis = analysisInFlight || analysisNeedsRerun ? analysis : riskStatus;
+
   // Like the card, the requests only exist once a case analysis has scored the case.
   const additional: SectionStatus = !risk
     ? { tone: 'idle', text: 'Not Checked' }
@@ -167,7 +196,7 @@ export function caseSectionStatuses({
       ? { tone: 'action', text: `${additionalDocumentCount} To Request` }
       : { tone: 'done', text: 'None Needed' };
 
-  return { documents, analysis, risk: riskStatus, additional };
+  return { documents, analysis, risk: riskAndAnalysis, additional };
 }
 
 // How many required checklist documents aren't approved yet, out of all of them: "8 out of 11 not yet approved".

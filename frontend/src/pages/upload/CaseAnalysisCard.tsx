@@ -1,26 +1,28 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CaseAnalysis, CaseAnalysisOverview } from '../../services/uploadService';
+import type { CaseAnalysis, CaseAnalysisOverview, CaseRisk } from '../../services/uploadService';
 import type { CaseAnalysisRunItem } from '../../services/uploadService';
-import { getCaseAnalysis, getCaseAnalysisRun, listCaseAnalysisRuns, runCaseAnalysis } from '../../services/uploadService';
+import { REQUIRED_DOCUMENT_TYPES, capitaliseDocumentTypes, getCaseAnalysis, getCaseAnalysisRun, listCaseAnalysisRuns, runCaseAnalysis } from '../../services/uploadService';
 import { AnalysisSummaryBlock } from './AnalysisSummaryBlock';
 import { analysisFindingAnchor } from './analysisSummary';
 import { PreviousRuns } from './PreviousRuns';
 import { AgentTraceView } from '../../components/agentTrace/AgentTraceView';
 import { ErrorMessage } from '../../components/ErrorMessage';
-import { missingRequirementsText, outOfDateMessage } from './caseSections';
+import { outOfDateMessage } from './caseSections';
 import { Icon } from '../../components/Icon';
+import type { ReactNode } from 'react';
 
 const CATEGORY_LABELS: Record<string, string> = {
-  identity_entity_conflict: 'Identity conflict',
-  cross_document_variance: 'Documents differ',
-  behavioural_anomaly: 'Unusual behaviour',
-  unsupported_claim: 'Unsupported claim',
+  identity_entity_conflict: 'Identity Conflict',
+  cross_document_variance: 'Documents Differ',
+  behavioural_anomaly: 'Unusual Behaviour',
+  unsupported_claim: 'Unsupported Claim',
 };
 
 const SEVERITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
-// The case analysis, which starts on its own once every approved document is scanned: a structured summary,
-// cross-document findings, every earlier run to open read-only, and the run's trace. The button is the fallback
+// The Overview tab's one card, Case Risk: the score, then why it is that score (the case analysis's summary), then
+// every earlier run to open read-only (with its cross-document findings), and the run's trace. The analysis starts
+// on its own once every approved document is scanned; Run again at the top is the fallback. The latest run's findings are on the Findings tab. The button is the fallback
 // for a failed run, or one that didn't start automatically.
 export function CaseAnalysisCard({
   caseId,
@@ -29,6 +31,8 @@ export function CaseAnalysisCard({
   missingRequirements = 0,
   traceOpen,
   onTraceClose,
+  score,
+  findingsLink,
 }: {
   caseId: string;
   analysisReady: boolean;
@@ -37,6 +41,11 @@ export function CaseAnalysisCard({
   missingRequirements?: number;
   traceOpen: boolean;
   onTraceClose: () => void;
+  // The risk score (CaseRiskCard's score part), at the top of the card beside why it is that score: the case's
+  // latest score, or, for an earlier run opened read-only, that run's own (its risk as it was then).
+  score?: (runRisk?: CaseRisk | null) => ReactNode;
+  // Under the summary: on to the findings it rests on. Not shown beside an earlier run.
+  findingsLink?: ReactNode;
 }) {
   const [analysis, setAnalysis] = useState<CaseAnalysis | null>(null);
   const [starting, setStarting] = useState(false);
@@ -47,12 +56,20 @@ export function CaseAnalysisCard({
   const [viewing, setViewing] = useState<CaseAnalysis | null>(null);
   const [openingRunId, setOpeningRunId] = useState<string | null>(null);
 
+  // The detail fetch failed, or found no analysis: the card shows what the overview has rather than loading for ever.
+  const [detailFailed, setDetailFailed] = useState(false);
+
   const load = useCallback(async () => {
     setIsRefreshing(true);
+    setDetailFailed(false);
     try {
-      setAnalysis(await getCaseAnalysis(caseId));
+      const loaded = await getCaseAnalysis(caseId);
+      setAnalysis(loaded);
+      // None to show (a 404): stop waiting for it, as for a failure.
+      if (!loaded) setDetailFailed(true);
     } catch {
       // The card still shows the overview; a failed detail fetch isn't worth an error banner.
+      setDetailFailed(true);
     } finally {
       setIsRefreshing(false);
     }
@@ -133,31 +150,53 @@ export function CaseAnalysisCard({
     (a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
   );
   const showResult = shown?.status === 'complete';
+  // The same layout for an earlier run: its own score on the left. One without a score has the summary alone.
+  const waitingOnRequirements = !overview && !analysisReady && missingRequirements > 0;
+  // A finished run whose summary hasn't arrived yet: a skeleton of the score-and-summary layout holds its place, so
+  // the score doesn't show alone and then jump aside when the summary lands.
+  const detailLoading =
+    !viewing && overview?.status === 'complete' && analysis?.run_id !== overview.run_id && !detailFailed;
+  const scoreShown = waitingOnRequirements
+    ? null
+    : score
+      ? viewing
+        ? viewing.risk
+          ? score(viewing.risk as CaseRisk)
+          : null
+        : score()
+      : null;
 
   return (
     <>
     <section className="summary-card">
       <div className="summary-card-header">
         <div className="summary-card-title">
-          <span className="summary-icon summary-icon--risk"><Icon name="analysis" size={20} /></span>
-          <h2>Case Analysis</h2>
+          <span className="summary-icon summary-icon--risk"><Icon name="risk" size={20} /></span>
+          <h2>Case Risk Summary</h2>
         </div>
         {analysisReady && (
-          <button type="button" className="analysis-action" disabled={running} onClick={() => void start()}>
+          <button
+            type="button"
+            className="analysis-action"
+            disabled={running}
+            onClick={() => void start()}
+          >
             {running ? 'Analysing…' : overview ? 'Run again' : 'Run case analysis'}
           </button>
         )}
       </div>
 
-      {!analysisReady && !overview && (
+      {/* Never analysed: one message saying what the score waits for. Required documents still to approve come
+          first; otherwise the score's own message (below) says how far scanning has got. */}
+      {waitingOnRequirements && (
         <div className="summary-message summary-message--info">
-          <span className="summary-message-icon">ⓘ</span>
+          <span className="summary-message-icon"><Icon name="info" size={18} /></span>
           <div>
-            <strong>Not started yet.</strong>
+            <strong>Not scored yet.</strong>
             <p>
-              {missingRequirements
-                ? `Every required document must be approved first: ${missingRequirementsText(missingRequirements)}.`
-                : 'The analysis starts on its own once every document is decided and every approved one has been scanned.'}
+              {missingRequirements} of the {REQUIRED_DOCUMENT_TYPES.length} required documents still{' '}
+              {missingRequirements === 1 ? 'needs' : 'need'} approving. The case is analysed and scored on its own
+              once they are all approved and scanned.
             </p>
           </div>
         </div>
@@ -167,7 +206,7 @@ export function CaseAnalysisCard({
 
       {viewing && (
         <div className="summary-message summary-message--info">
-          <span className="summary-message-icon">ⓘ</span>
+          <span className="summary-message-icon"><Icon name="info" size={18} /></span>
           <div>
             <strong>
               Earlier run from{' '}
@@ -202,7 +241,7 @@ export function CaseAnalysisCard({
           <div>
             <strong>Out of date.</strong>
             <p title={outOfDateMessage(overview).waitingList || undefined}>{outOfDateMessage(overview).detail}</p>
-            <p>The risk score and recommendations below are from before the documents changed.</p>
+            <p>The risk score and the summary here are from before the documents changed.</p>
           </div>
         </div>
       )}
@@ -217,11 +256,39 @@ export function CaseAnalysisCard({
         </div>
       )}
 
+      {/* The score on the left, why it is that score on the right, what else was checked under both. */}
+      {detailLoading && (
+        <div className="risk-overview risk-overview--loading" role="status">
+          <span className="sr-only">Loading the case risk summary…</span>
+          <div className="risk-overview-score" aria-hidden="true">
+            <span className="skeleton-gauge" />
+            <span className="skeleton-bar skeleton-bar--level" />
+            <span className="skeleton-bar skeleton-bar--facts" />
+          </div>
+          <div className="analysis-brief-why" aria-hidden="true">
+            <span className="skeleton-bar skeleton-bar--headline" />
+            <span className="skeleton-bar skeleton-bar--reason" />
+            <span className="skeleton-bar skeleton-bar--reason skeleton-bar--short" />
+          </div>
+        </div>
+      )}
+
+      {!detailLoading && (scoreShown || (showResult && shown)) && (
+        // Two columns only when there is both a score and a summary to sit beside it.
+        <div className={`risk-overview${scoreShown && showResult && shown ? '' : ' risk-overview--single'}`}>
+          {scoreShown && <div className="risk-overview-score">{scoreShown}</div>}
+          {showResult && shown && (
+            <AnalysisSummaryBlock analysis={shown} linkToRiskTab={!viewing} footer={!viewing && findingsLink} />
+          )}
+        </div>
+      )}
+
       {showResult && shown && (
         <>
-          <AnalysisSummaryBlock analysis={shown} linkToRiskTab={!viewing} />
 
-          {findings.length === 0 ? (
+          {/* The latest run's cross-document findings are on the Findings tab, with the rest, to review; an earlier
+              run's are listed here, as they were then. */}
+          {viewing && (findings.length === 0 ? (
             <div className="summary-message summary-message--success">
               <span className="summary-message-icon"><Icon name="check" size={18} /></span>
               <div>
@@ -230,6 +297,8 @@ export function CaseAnalysisCard({
               </div>
             </div>
           ) : (
+            <>
+            <h3 className="analysis-heading analysis-heading--findings">Cross-document findings</h3>
             <ul className="risk-findings">
               {findings.map((finding) => (
                 <li key={finding.id} id={analysisFindingAnchor(finding.id)}>
@@ -239,16 +308,18 @@ export function CaseAnalysisCard({
                       <span className="analysis-category">
                         {CATEGORY_LABELS[finding.category] ?? finding.category}
                       </span>
-                      {finding.summary}
+                      {capitaliseDocumentTypes(finding.summary)}
                     </span>
                     <span className="risk-finding-rationale">{finding.rationale}</span>
                   </span>
                 </li>
               ))}
             </ul>
-          )}
+            </>
+          ))}
         </>
       )}
+
 
       {runs.length > 1 && (
         <PreviousRuns

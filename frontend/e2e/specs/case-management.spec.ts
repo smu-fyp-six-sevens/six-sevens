@@ -441,25 +441,25 @@ test.describe('Case page layout @SCRUM-299', () => {
     // Measure the loaded page: while it loads, the skeleton's frame can be there twice, and its height differs.
     await expect(page.getByRole('region', { name: 'Document counts' })).toBeVisible();
     // Closed: icons only, but every section is still reachable by name.
-    await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
+    await expect(sectionNav(page).getByText('Risk & Analysis')).toBeHidden();
     const content = page.locator('.case-frame-main');
     const before = await content.boundingBox();
 
     await page.getByRole('button', { name: 'Expand menu' }).click();
 
-    await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
+    await expect(sectionNav(page).getByText('Risk & Analysis')).toBeVisible();
     // Opened over the page: the content is exactly where it was.
     expect(await content.boundingBox()).toEqual(before);
 
     // Escape closes it again.
     await page.keyboard.press('Escape');
-    await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
+    await expect(sectionNav(page).getByText('Risk & Analysis')).toBeHidden();
 
     // Choosing a section goes there and closes the menu.
     await page.getByRole('button', { name: 'Expand menu' }).click();
     await sectionNav(page).getByRole('button', { name: /^Documents/ }).click();
     await expect(page.getByRole('heading', { name: 'Upload supporting documents' })).toBeVisible();
-    await expect(sectionNav(page).getByText('Case Analysis')).toBeHidden();
+    await expect(sectionNav(page).getByText('Risk & Analysis')).toBeHidden();
   });
 
   test('a document page has the same menu, opening over the document', async ({ page, backend }) => {
@@ -468,8 +468,8 @@ test.describe('Case page layout @SCRUM-299', () => {
     await page.goto(fixture.documentUrl(payslip));
 
     await page.getByRole('button', { name: 'Expand menu' }).click();
-    await expect(sectionNav(page).getByText('Case Analysis')).toBeVisible();
-    await sectionNav(page).getByRole('button', { name: /^Risk Summary/ }).click();
+    await expect(sectionNav(page).getByText('Risk & Analysis')).toBeVisible();
+    await sectionNav(page).getByRole('button', { name: /^Risk & Analysis/ }).click();
     await expect(page).toHaveURL(/section=risk/);
   });
 
@@ -561,17 +561,19 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     const harbor = makeCase({ greenlink_case_id: 'GLDB-2002', risk: CASE_VIEWS.scored.risk });
     backend.cases.push(harbor);
     await page.goto(`/cases/${harbor.greenlink_case_id}?section=documents`);
-    await openSection(page, 'Risk summary');
+    await openSection(page, 'Risk & Analysis');
     // The menu's Risk dot turns green once the case is scored, whatever the level (the level is in its text).
-    const riskItem = page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: /^Risk Summary/ });
+    const riskItem = page.getByRole('navigation', { name: 'Case sections' }).getByRole('button', { name: /^Risk & Analysis/ });
     await expect(riskItem.locator('.case-nav-badge')).toHaveClass(/case-nav-dot--done/);
 
-    const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Customer Risk Summary' }) });
+    const section = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Case Risk' }) });
     await expect(section.getByTestId('risk-badge')).toHaveText('High Risk');
     await expect(section.locator('.severity-gauge-value')).toHaveText('58');
     await expect(section.locator('.risk-score-level')).toHaveText('High Risk · 50–79');
     await expect(section.locator('.severity-gauge')).toHaveAttribute('aria-label', 'Risk score 58 out of 100, High');
-    await expect(section).toContainText('2 high · 3 medium · 1 low');
+    await expect(section.locator('.risk-tally li')).toHaveText(['2 High', '3 Medium', '1 Low']);
+    // The findings are on the Findings tab.
+    await page.getByRole('navigation', { name: 'Risk and analysis' }).getByRole('button', { name: /^Findings/ }).click();
 
     // The documents are a card of their own, listed collapsed until reviewed (the low-only bank statement
     // included); the cross-document group, with a green "Clean" badge, waits to be saved like the rest.
@@ -598,7 +600,7 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
     await expect(rows.locator('.risk-severity')).toHaveText(['high', 'high', 'medium']);
     await expect(rows.nth(2)).toContainText('×3');
     // The check is a label of its own, and the explanation keeps only what the title doesn't already say.
-    await expect(rows.nth(1).locator('.risk-finding-check')).toHaveText('Font consistency');
+    await expect(rows.nth(1).locator('.risk-finding-check')).toHaveText('Font Consistency');
     await expect(rows.nth(1).locator('.risk-finding-rationale')).toHaveText('The edit hides an underpayment.');
 
     // There is nothing to show or hide: low findings are listed with the rest.
@@ -606,9 +608,6 @@ test.describe('View case details @sprint2 @SCRUM-83', () => {
 
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
-
-    await section.getByText("Couldn't verify (1)").click();
-    await expect(section).toContainText('C011_BankStatement.pdf — Metadata: No metadata');
   });
 
   test('CM-008 flagged anomalies are accessible from case details @CM-008', async ({ page, backend }) => {
@@ -1340,7 +1339,7 @@ test.describe('X-ray in the findings review', () => {
       route.fulfill({ body: BLANK_PDF, contentType: 'application/pdf', headers: { 'access-control-allow-origin': '*' } }),
     );
 
-    await page.goto(`/cases/${harbor.greenlink_case_id}?section=risk`);
+    await page.goto(`/cases/${harbor.greenlink_case_id}?section=findings`);
     const review = page.locator('.summary-card', { has: page.getByRole('heading', { name: 'Documents to Review' }) });
     await review.locator('.risk-document').first().getByRole('button').click();
     const dialog = page.getByRole('dialog', { name: 'Review findings on C011_Payslip.pdf' });

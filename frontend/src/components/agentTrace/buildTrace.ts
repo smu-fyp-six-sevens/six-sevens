@@ -111,7 +111,7 @@ const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 
 export function humanize(text: string): string {
   const spaced = text.replace(/[._]+/g, ' ').trim();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  return (spaced.charAt(0).toUpperCase() + spaced.slice(1)).replace(/\bai\b/gi, 'AI');
 }
 
 const SPAN_LABELS: Record<string, string> = {
@@ -187,6 +187,9 @@ const TOOL_LABELS: Record<string, string> = {
   numerical_checks_tool: 'Numerical checks',
   external_validation_tool: 'Public record checks',
   metadata_tool: 'File metadata check',
+  ai_generation_tool: 'AI Generation check',
+  image_manipulation_tool: 'Image Resolution & Compression check',
+  image_tampering_tool: 'Image Boundary, Scaling & Colour Consistency check',
 };
 
 export function toolLabel(name: string): string {

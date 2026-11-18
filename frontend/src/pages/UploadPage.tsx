@@ -24,7 +24,10 @@ import { CaseSectionNav } from './upload/CaseSectionNav';
 import { useCaseReportDownload } from './upload/useCaseReportDownload';
 import { CharacterCount } from '../components/CharacterCount';
 import { CaseStageCard } from './upload/CaseStageCard';
-import { isCaseSection, type CaseSection } from './upload/caseSections';
+import { NextStepPanel } from './upload/NextStepPanel';
+import { RiskTabs } from './upload/RiskTabs';
+import { sectionNextStep } from './upload/nextStep';
+import { isCaseSection, type CaseSection, type RiskTab } from './upload/caseSections';
 import { sectionStatusesFrom } from './upload/caseNavStatuses';
 import { reviewReason } from './upload/reviewReason';
 import { NotesCard } from '../components/NotesCard';
@@ -92,6 +95,13 @@ export default function UploadPage({
   const [searchParams, setSearchParams] = useSearchParams();
   const sectionParam = searchParams.get('section');
   const activeSection: CaseSection = isCaseSection(sectionParam) ? sectionParam : 'summary';
+  // The Risk & Analysis page's tab, when that is the page open ('analysis', from older links, is its Overview).
+  // Every finding on the Findings tab: the scored ones and the ones the specialists set aside, as the backend's
+  // findings_to_review counts them, so the tab's pill means the same thing whether or not verdicts are owed.
+  const riskFindingCount =
+    risk?.state === 'scored' ? risk.contributing_findings.length + (risk.dismissed_findings?.length ?? 0) : 0;
+  const riskTab: RiskTab | null =
+    activeSection === 'findings' ? 'findings' : activeSection === 'risk' || activeSection === 'analysis' ? 'risk' : null;
   const [isAnalysisTraceOpen, setIsAnalysisTraceOpen] = useState(false);
   const selectSection = (section: CaseSection) => {
     setSearchParams(section === 'summary' ? {} : { section }, { replace: true });
@@ -112,6 +122,15 @@ export default function UploadPage({
 
   // For a case that enforces the checklist, the stage and the analysis wait for these to be approved.
   const missingRequirements = unapprovedRequirements.length;
+
+  // What the Case Analysis and Risk tabs point the officer to next.
+  const nextStepContext = {
+    stage: currentStage,
+    findingsToReview,
+    analysed: analysisOverview?.status === 'complete',
+    stale: Boolean(analysisOverview && (analysisOverview.stale || analysisOverview.status === 'superseded')),
+    reviewsRequired,
+  };
 
   const liveDocumentIds = useMemo(
     () => (snapshotLoaded ? new Set(documents.map((document) => document.id)) : null),
@@ -271,7 +290,7 @@ export default function UploadPage({
                 label={isDeletingCase ? 'Deleting case' : 'Case actions'}
                 disabled={isDeletingCase}
                 items={[
-                  ...(activeSection === 'analysis'
+                  ...(riskTab === 'risk'
                     ? [{ id: 'trace', label: 'Case analysis trace', onSelect: () => setIsAnalysisTraceOpen(true) }]
                     : []),
                   {
@@ -450,17 +469,23 @@ export default function UploadPage({
             </div>
           )}
 
-          {activeSection === 'risk' && (
-            <CaseRiskCard
-              risk={risk}
-              caseId={selectedCase.id}
-              caseDocuments={documents}
-              readOnly={isFinalised}
-              reviewsRequired={reviewsRequired}
+          {/* Risk & Analysis: one page. Overview has the score, the summarised findings and earlier runs; Findings
+              has every finding, to review. */}
+          {riskTab && (
+            <RiskTabs
+              active={riskTab}
+              findingCount={risk?.state === 'scored' ? riskFindingCount : null}
+              toReview={findingsToReview}
+              onSelect={selectSection}
             />
           )}
 
-          {activeSection === 'analysis' && (
+          {/* What to do next sits first, under the tabs; then the score and why it is that score, in one card. */}
+          {riskTab === 'risk' && (
+            <NextStepPanel step={sectionNextStep('overview', nextStepContext)} onSelectSection={selectSection} />
+          )}
+
+          {riskTab === 'risk' && (
             <CaseAnalysisCard
               caseId={selectedCase.id}
               analysisReady={analysisReady && !isFinalised}
@@ -468,6 +493,41 @@ export default function UploadPage({
               missingRequirements={missingRequirements}
               traceOpen={isAnalysisTraceOpen}
               onTraceClose={() => setIsAnalysisTraceOpen(false)}
+              score={(runRisk) => (
+                <CaseRiskCard
+                  part="score"
+                  risk={runRisk === undefined ? risk : runRisk}
+                  caseId={selectedCase.id}
+                  caseDocuments={documents}
+                  readOnly={isFinalised}
+                  reviewsRequired={reviewsRequired}
+                />
+              )}
+              findingsLink={
+                riskFindingCount > 0 && (
+                  <button type="button" className="risk-findings-link" onClick={() => selectSection('findings')}>
+                    {findingsToReview
+                      ? `Review ${findingsToReview} ${findingsToReview === 1 ? 'finding' : 'findings'}`
+                      : `See all ${riskFindingCount} ${riskFindingCount === 1 ? 'finding' : 'findings'}`}
+                    <Icon name="chevronRight" size={16} />
+                  </button>
+                )
+              }
+            />
+          )}
+
+          {riskTab === 'findings' && (
+            <NextStepPanel step={sectionNextStep('findings', nextStepContext)} onSelectSection={selectSection} />
+          )}
+
+          {riskTab === 'findings' && (
+            <CaseRiskCard
+              part="findings"
+              risk={risk}
+              caseId={selectedCase.id}
+              caseDocuments={documents}
+              readOnly={isFinalised}
+              reviewsRequired={reviewsRequired}
             />
           )}
 

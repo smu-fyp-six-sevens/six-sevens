@@ -134,9 +134,9 @@ test.describe('Track case status @SCRUM-80', () => {
     await expect(progressCard(page).locator('.case-status-next')).toContainText('2 still need your verdict');
     // Finalising comes after the evaluation, at Case Analysed.
     await expect(progressCard(page).getByRole('button', { name: 'Finalise Case' })).toHaveCount(0);
-    // The link goes to the Risk Summary, where findings are marked correct or wrong.
+    // The link goes to the Findings tab, where findings are marked correct or wrong.
     await progressCard(page).getByRole('button', { name: /Evaluate findings/ }).click();
-    await expect(page).toHaveURL(/section=risk/);
+    await expect(page).toHaveURL(/section=findings/);
   });
 
   test('a case reaches Case Analysed once its findings are evaluated @SCRUM-80', async ({ page, backend }) => {
@@ -164,7 +164,8 @@ test.describe('Track case status @SCRUM-80', () => {
 
     // The analysis waits for the same documents.
     await page.goto('/cases/GLDB-1200?section=analysis');
-    await expect(page.locator('.summary-message')).toContainText('Every required document must be approved first: 11 out of 11 not yet approved.');
+    await expect(page.getByText('11 of the 11 required documents still need approving.', { exact: false })).toBeVisible();
+    await expect(page.locator('.summary-message')).toHaveCount(1);
   });
   test('a failed case says which step failed @SCRUM-80', async ({ page, backend }) => {
     seedCase(backend, { status: 'failed', failure: 'fraud_detection' });
