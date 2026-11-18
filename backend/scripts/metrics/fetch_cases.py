@@ -165,7 +165,13 @@ def fetch_case(client: httpx.Client, number: str, labels: dict[str, Any], owners
         full = _check(client.get(f"/documents/{document['id']}"), "reading a document")
         expected = DATASET / case_id / name
         signed = _check(client.get(f"/documents/{document['id']}/download"), "getting a download link")
-        uploaded = httpx.get(signed["signed_url"], timeout=120).content
+        download = httpx.get(signed["signed_url"], timeout=120)
+        if download.status_code != 200:
+            # Not a different document: the file couldn't be read (an expired link, storage down). Comparing the
+            # error body with the PDF would leave a good document out of the scores without saying why.
+            raise RuntimeError(f"couldn't download {name} (HTTP {download.status_code}: {download.text[:150]}); "
+                               "restart the API if the link had expired, then fetch again")
+        uploaded = download.content
         if not expected.exists() or not _same_document(uploaded, expected):
             notes.append(f"{name} doesn't print what the dataset's file prints (another build, or the clean copy of a "
                          "forged document): left out of the scores")

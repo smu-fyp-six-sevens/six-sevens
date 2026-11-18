@@ -18,6 +18,8 @@ from .evidence import CaseContext
 from .tools import BREACH_FLAGS, COMPUTED_TOOLS, IDENTITY_FLAGS, VARIANCE_FLAGS
 
 _SEVERITIES = ("low", "medium", "high")
+# The comparison of a financial statement's revenue with the bank credits (tools/cross_checks.py).
+_REVENUE_CHECK = "revenue_vs_bank_credits"
 # The officer reads these sentences; tool names, flags and ref ids are for citations only.
 _REF_RE = re.compile(r"\(?\bref:[\w:\[\]\-.]+\)?")
 _TOOL_RE = re.compile(
@@ -60,6 +62,16 @@ def _read_keys(context: CaseContext, call: dict[str, Any]) -> set[tuple[str, str
     }
 
 
+def _named_documents(context: CaseContext, args: dict[str, Any]) -> set[str]:
+    """The case's documents a tool call's arguments name, singly or in a list."""
+    named: set[str] = set()
+    for value in args.values():
+        for item in value if isinstance(value, list) else [value]:
+            if isinstance(item, str) and item in context.docs:
+                named.add(item)
+    return named
+
+
 def _probe_ran(context: CaseContext, hypothesis: Hypothesis, calls: list[dict[str, Any]]) -> bool:
     """
     Whether a real attempt to disprove the claim ran. Reading back the very fields the claim's own
@@ -78,6 +90,9 @@ def _probe_ran(context: CaseContext, hypothesis: Hypothesis, calls: list[dict[st
             return True
         touched = {context.ledger.refs[r]["doc_key"] for r in call.get("refs", []) if r in context.ledger.refs}
         touched.add(call.get("document"))
+        # A check over several documents is logged under one (revenue_vs_bank_credits under the accounts) but reads
+        # every one its arguments name: the statements it totals are looked at too.
+        touched |= _named_documents(context, call.get("args") or {})
         if hypothesis.refutation_document in touched:
             return True
     return False
@@ -120,6 +135,12 @@ def verify_verdict(
     hard = [f for f in flags if f not in VARIANCE_FLAGS]
     if severity == "high" and not (hard or registry_backed):
         severity = "medium"
+    # Revenue against the credits on the statements given is a lead, not proof: a company banks with more than one
+    # account, invoices on credit, and the statements cover a few months of a year. Unless a comparison tool flagged a
+    # breach or a registry fact backs it, it stays low, shown to the officer without lifting the case's level alone.
+    if (severity != "low" and not (flags or registry_backed)
+            and any(e.get("source") == _REVENUE_CHECK for e in entries)):
+        severity = "low"
 
     if any(f in IDENTITY_FLAGS for f in flags):
         category = FindingCategory.IDENTITY_ENTITY_CONFLICT
