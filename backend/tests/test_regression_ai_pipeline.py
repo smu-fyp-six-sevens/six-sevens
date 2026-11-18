@@ -36,7 +36,7 @@ from langchain_core.messages import AIMessage
 from app.config import settings
 from app.langgraph import nodes, pipeline, trace
 from app.langgraph.extraction_prompts import EXTRACTION_SCHEMAS
-from app.models import DocumentStatus
+from app.models import DocumentStatus, RoutingStatus
 from app.events import Event, types
 from app.workers import documents as doc_worker
 from tests.support import pipeline_harness
@@ -575,3 +575,166 @@ async def test_a_low_confidence_named_type_is_extracted_with_the_generic_schema(
     extract_prompt = str(ai.calls[-1][1])
     assert "net_pay" not in extract_prompt
 
+
+
+# --- A late run can't overwrite an officer's action (PENDING_TESTS rows 3, 43 and the pipeline half of 48) --------
+# The officer acts while extraction is waiting on Claude; the reply lands after. The run must stop quietly: no
+# fields written, no further status write, the officer's status kept, and the trace saying why.
+
+PAYSLIP_TEXT = "PAYSLIP Employee Tan Wei Ming Employer Meridian Pte Ltd Net Pay 5,200.00"
+PAYSLIP_FIELDS = {
+    "individual_name": ("Tan Wei Ming", 0.98), "company_name": ("Meridian Pte Ltd", 0.97), "net_pay": ("5,200.00", 0.97),
+}
+
+
+def _officer_acts_during_extraction(ai, store: FakeStore, monkeypatch, document_id: str, status_: DocumentStatus):
+    """While the extractor waits on Claude, the officer moves the document to `status_` (written straight to the store,
+    as the officer's own request does)."""
+    real_next = ai.next
+
+    def next_reply(step, messages):
+        if step == "extract":
+            store.documents[document_id].status = status_
+        return real_next(step, messages)
+
+    monkeypatch.setattr(ai, "next", next_reply)
+
+
+def _ended_stopped(document_id: str) -> bool:
+    done = [s for s in (trace.get(document_id) or {}).get("steps", []) if s["step"] == "done"]
+    return bool(done) and done[-1].get("final_status") == "stopped"
+
+
+@pytest.mark.parametrize("officer_status", [DocumentStatus.CANCELLED, DocumentStatus.APPROVED],
+                         ids=["the officer cancelled it", "the officer approved it"])
+async def test_a_late_extraction_does_not_overwrite_the_officers_action(ai, store, monkeypatch, officer_status):
+    document_id = store.add("Payslip_Aug2026.pdf", PAYSLIP_TEXT)
+    ai.reply("classify_agent", classification("payslip"))
+    ai.reply("extract", extraction(PAYSLIP_FIELDS))
+    _officer_acts_during_extraction(ai, store, monkeypatch, document_id, officer_status)
+
+    await run(document_id)
+
+    assert store.documents[document_id].status == officer_status
+    assert document_id not in store.fields  # no fields written over the officer's view
+    assert store.statuses[document_id] == ["processing", "extracting"]  # nothing written after the officer acted
+    assert _ended_stopped(document_id)
+
+
+async def test_a_late_rerun_does_not_overwrite_the_officers_cancel(ai, store, monkeypatch):
+    document_id = _officer_set_type(store, monkeypatch, "Payslip_Aug2026.pdf", PAYSLIP_TEXT, "payslip")
+    ai.reply("extract", extraction(PAYSLIP_FIELDS))
+    _officer_acts_during_extraction(ai, store, monkeypatch, document_id, DocumentStatus.CANCELLED)
+
+    await pipeline.rerun_extraction(document_id)
+
+    assert store.documents[document_id].status == DocumentStatus.CANCELLED
+    assert document_id not in store.fields
+    assert store.statuses[document_id] == []
+    assert _ended_stopped(document_id)
+
+
+async def test_the_same_run_without_an_officers_action_finishes(ai, store):
+    # The control: the race tests above stop only because of the officer's action.
+    document_id = store.add("Payslip_Aug2026.pdf", PAYSLIP_TEXT)
+    ai.reply("classify_agent", classification("payslip"))
+    ai.reply("extract", extraction(PAYSLIP_FIELDS))
+
+    await run(document_id)
+
+    assert store.documents[document_id].status == DocumentStatus.ANALYZED
+    assert store.fields[document_id]["net_pay"] == "5,200.00"
+    assert not _ended_stopped(document_id)
+
+
+async def test_a_cancel_after_the_fields_are_saved_still_keeps_the_final_status_from_being_written(ai, store, monkeypatch):
+    # The narrowest window: the fields were written while the run still held the document, then the officer cancelled
+    # before the run marked it analyzed. That last write is refused too.
+    document_id = store.add("Payslip_Aug2026.pdf", PAYSLIP_TEXT)
+    ai.reply("classify_agent", classification("payslip"))
+    ai.reply("extract", extraction(PAYSLIP_FIELDS))
+    real_update = store.update_extracted_fields
+
+    def officer_cancels_just_after(document_id_, *args, **kwargs):
+        real_update(document_id_, *args, **kwargs)
+        store.documents[document_id_].status = DocumentStatus.CANCELLED
+
+    monkeypatch.setattr(store, "update_extracted_fields", officer_cancels_just_after)
+
+    await run(document_id)
+
+    assert store.documents[document_id].status == DocumentStatus.CANCELLED
+    assert "analyzed" not in store.statuses[document_id]
+    assert _ended_stopped(document_id)
+
+
+# --- A recovered or retried document keeps the officer's type (PENDING_TESTS row 6) --------------------------------
+# set_type stores the officer's type at confidence 1.0. When the sweeper requeues the document, or the officer
+# retries it, the full pipeline runs again: it must not classify it again and overwrite their decision.
+
+
+def _requeued_with_officer_type(store: FakeStore, filename: str, text: str, document_type: str,
+                                confidence: float = 1.0) -> str:
+    document_id = store.add(filename, text)  # queued, as a recovery or retry leaves it
+    document = store.documents[document_id]
+    document.document_type = document_type
+    document.classification_confidence = confidence
+    document.routing_status = RoutingStatus.ACCEPTED
+    return document_id
+
+
+def _asked(ai, step: str) -> int:
+    return sum(1 for called, _ in ai.calls if called == step)
+
+
+async def test_a_requeued_officer_typed_document_is_extracted_as_that_type_without_classifying(ai, store):
+    document_id = _requeued_with_officer_type(store, "scan_0042.pdf", PAYSLIP_TEXT, "payslip")
+    ai.reply("extract", extraction(PAYSLIP_FIELDS))  # nothing scripted for the classifier: a call would fail it
+
+    await run(document_id)
+
+    document = store.documents[document_id]
+    assert document.status == DocumentStatus.ANALYZED
+    assert document.document_type == "payslip" and document.classification_confidence == 1.0
+    assert _asked(ai, "classify_agent") == 0
+    assert store.fields[document_id]["net_pay"] == "5,200.00"
+    assert "classification_skipped" in steps(document_id)
+
+
+async def test_extraction_objecting_to_the_officers_type_fails_it_without_reclassifying(ai, store):
+    document_id = _requeued_with_officer_type(store, "C067_BudgetProposal.pdf", BUDGET_PROPOSAL_TEXT, "payslip")
+    ai.reply("extract", extraction({}, escalation={"reason": "This is a budget proposal, not a payslip"}))
+
+    await run(document_id)
+
+    document = store.documents[document_id]
+    assert document.status == DocumentStatus.FAILED
+    assert document.failure_reason.startswith("Extraction could not process this as payslip")
+    assert document.document_type == "payslip"
+    assert _asked(ai, "classify_agent") == 0 and _asked(ai, "extract") == 1
+
+
+async def test_on_an_officer_confirmed_other_an_objection_is_only_advice(ai, store):
+    document_id = _requeued_with_officer_type(store, "C067_BudgetProposal.pdf", BUDGET_PROPOSAL_TEXT, "unrecognised")
+    ai.reply("extract", extraction(
+        {"document_title": ("Proposal Budget", 0.95)},
+        escalation={"suggested_document_type": "list_of_loans", "reason": "Mentions a DBS term loan facility"},
+    ))
+
+    await run(document_id)
+
+    document = store.documents[document_id]
+    assert document.status == DocumentStatus.ANALYZED and document.document_type == "unrecognised"
+    assert _asked(ai, "classify_agent") == 0
+
+
+async def test_a_classifier_type_under_full_confidence_is_classified_again(ai, store):
+    # Only the officer's 1.0 is kept: a classifier's 0.96 from the run that died is re-read like any upload.
+    document_id = _requeued_with_officer_type(store, "scan_0042.pdf", PAYSLIP_TEXT, "payslip", confidence=0.96)
+    ai.reply("classify_agent", classification("payslip", 0.97))
+    ai.reply("extract", extraction(PAYSLIP_FIELDS))
+
+    await run(document_id)
+
+    assert _asked(ai, "classify_agent") == 1
+    assert store.documents[document_id].status == DocumentStatus.ANALYZED

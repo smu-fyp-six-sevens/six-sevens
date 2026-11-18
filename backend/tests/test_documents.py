@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from postgrest.exceptions import APIError
 from starlette.datastructures import Headers
 
+from app import document_service
 from app.config import settings
 from app.fraud_detection.font_consistency import ExtractedField
 from app.main import app
@@ -2014,3 +2015,243 @@ def test_real_pdf_png_and_jpeg_headers_pass(data, content_type) -> None:
 def test_the_monitoring_endpoints_are_gone(path) -> None:
     assert client.get(path).status_code == 404
     assert not any("monitoring" in route for route in app.openapi()["paths"])
+
+
+def test_rejecting_a_document_that_moved_on_since_it_was_read_is_a_conflict() -> None:
+    # The officer's page read it analyzed; by the write it had moved on (another officer, or the pipeline).
+    document = _typed_document()
+
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.document_service.document_repository") as mock_repo,
+        patch("app.document_service.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.reject_document.return_value = None
+
+        response = client.post("/documents/doc-1/reject")
+
+    assert response.status_code == 409
+    assert "changed by someone else" in response.json()["detail"]
+    mock_fields_repo.get_extracted_fields.assert_not_called()
+
+
+# --- A field write refuses once the document moved on (PENDING_TESTS row 48, the officer's side) ------------------
+# The officer's page read the document, then a run or another officer moved it on: the write matches nothing, and
+# the officer is told rather than having their edit half-applied.
+
+
+
+def _a_field(name: str, value: str, field_id: str = "f-1") -> ExtractedField:
+    return ExtractedField(id=field_id, field_name=name, field_type="string", field_value=value, confidence=0.6)
+
+
+@pytest.mark.parametrize("action", ["save", "add", "delete"])
+async def test_a_field_edit_on_a_document_that_moved_on_is_refused_and_records_nothing(action) -> None:
+    document = _typed_document()
+    with (
+        patch.object(document_service, "extracted_fields_repository") as fields,
+        patch.object(document_service, "document_repository") as documents,
+        patch.object(document_service, "_audit", AsyncMock()) as audit,
+    ):
+        fields.get_extracted_fields.return_value = [_a_field("net_pay", "5,200.00")]
+        fields.replace_extracted_fields.return_value = False
+        fields.add_extracted_field.return_value = False
+        fields.delete_extracted_field.return_value = False
+
+        with pytest.raises(document_service.Refused) as refused:
+            if action == "save":
+                await document_service.save_fields(document, {"net_pay": "5,300.00"})
+            elif action == "add":
+                await document_service.add_field(document, "employee_cpf", "1,040.00")
+            else:
+                await document_service.delete_field(document, "f-1")
+
+    assert refused.value.kind == "conflict"
+    assert "changed by someone else" in refused.value.detail
+    documents.update_extracted_fields.assert_not_called()
+    audit.assert_not_called()
+
+
+# --- An approval re-checks the fields it approved (PENDING_TESTS row 49), and an untyped approval can finish the case
+# (row 2, the approval part) ------------------------------------------------------------------------------------------
+
+_PAYSLIP_FIELDS = [
+    _a_field("individual_name", "Tan Wei Ming", "f-1"), _a_field("company_name", "Meridian Pte Ltd", "f-2"),
+    _a_field("net_pay", "5,200.00", "f-3"),
+]
+
+
+def _confident(fields: list[ExtractedField]) -> list[ExtractedField]:
+    return [f.model_copy(update={"confidence": 0.98}) for f in fields]
+
+
+async def test_a_required_field_emptied_while_the_officer_approved_undoes_the_approval(published_events) -> None:
+    document = _typed_document(classification_confidence=0.97, routing_status=RoutingStatus.ACCEPTED)
+    before = _confident(_PAYSLIP_FIELDS)
+    after = [f.model_copy(update={"field_value": ""}) if f.field_name == "net_pay" else f for f in before]
+    with (
+        patch.object(document_service, "extracted_fields_repository") as fields,
+        patch.object(document_service, "document_repository") as documents,
+        patch.object(document_service.analysis_service, "start_if_due", AsyncMock()),
+    ):
+        fields.get_extracted_fields.side_effect = [before, after]  # the approval's read, then the re-check
+        documents.approve_document.return_value = document.model_copy(update={"status": DocumentStatus.APPROVED})
+
+        with pytest.raises(document_service.Refused) as refused:
+            await document_service.approve(document)
+
+    assert refused.value.kind == "conflict"
+    assert "changed while you approved" in refused.value.detail and "net_pay" in refused.value.detail
+    documents.undo_approval.assert_called_once_with(document.id, RoutingStatus.ACCEPTED)
+    assert published_events == []  # detection is never started on the half-empty document
+
+
+@pytest.mark.parametrize(("document_type", "starts_check"), [(None, True), ("payslip", False)],
+                         ids=["untyped: no scan will finish the case, so the approval checks", "typed: the scan's end does"])
+async def test_only_an_untyped_approval_checks_whether_the_case_is_now_finished(
+    published_events, document_type, starts_check,
+) -> None:
+    document = _typed_document(document_type=document_type, classification_confidence=0.97)
+    with (
+        patch.object(document_service, "extracted_fields_repository") as fields,
+        patch.object(document_service, "document_repository") as documents,
+        patch.object(document_service, "approval_refusal", return_value=None),
+        patch.object(document_service.analysis_service, "start_if_due", AsyncMock()) as start_if_due,
+    ):
+        fields.get_extracted_fields.return_value = _confident(_PAYSLIP_FIELDS)
+        documents.approve_document.return_value = document.model_copy(update={"status": DocumentStatus.APPROVED})
+
+        await document_service.approve(document)
+
+    assert start_if_due.await_count == (1 if starts_check else 0)
+    (event,) = published_events
+    assert event.detail["skip_detection"] is starts_check
+
+
+# --- Retyping: the event's stamp, and a retype can't override another action (PENDING_TESTS rows 5 and 44) ------------
+
+
+def _retype(document: DocumentRecord, mock_repo, type_: str = "nric"):
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_dep_repo,
+        patch("app.document_service.extracted_fields_repository") as mock_fields_repo,
+    ):
+        mock_dep_repo.get_document.return_value = document
+        mock_repo.get_document.return_value = document
+        mock_fields_repo.get_extracted_fields.return_value = []
+        return client.patch("/documents/doc-1/document-type", json={"document_type": type_})
+
+
+def test_the_retype_event_carries_the_stamp_the_status_was_claimed_with(published_events) -> None:
+    with patch("app.document_service.document_repository") as mock_repo:
+        mock_repo.update_status.return_value = True
+        response = _retype(_typed_document(), mock_repo)
+
+    assert response.status_code == 200
+    (event,) = published_events
+    stamp = mock_repo.update_status.call_args.kwargs["processing_started_at"]
+    # The doc-worker claims the rerun with this stamp: it must be the one the status write stored.
+    assert datetime.fromisoformat(event.detail["requested_at"]) == stamp
+    assert event.detail["from_type"] == "payslip" and event.detail["to_type"] == "nric"
+
+
+def test_a_retype_after_the_document_moved_on_is_refused_and_changes_nothing(published_events) -> None:
+    # A reject, retry, cancel or delete landed between the officer's read and this write.
+    with patch("app.document_service.document_repository") as mock_repo:
+        mock_repo.update_status.return_value = False
+        response = _retype(_typed_document(), mock_repo)
+
+    assert response.status_code == 409
+    assert "changed by someone else" in response.json()["detail"]
+    assert mock_repo.update_status.call_args.kwargs["expected_current_statuses"] == [DocumentStatus.ANALYZED]
+    mock_repo.record_classification.assert_not_called()
+    assert published_events == []
+
+
+def test_a_retype_writes_the_status_before_the_type() -> None:
+    with patch("app.document_service.document_repository") as mock_repo:
+        mock_repo.update_status.return_value = True
+        _retype(_typed_document(), mock_repo)
+
+    names = [c[0] for c in mock_repo.method_calls if c[0] in ("update_status", "record_classification")]
+    assert names[:2] == ["update_status", "record_classification"]
+
+
+async def test_a_retype_whose_event_fails_to_publish_puts_the_status_and_type_back() -> None:
+    document = _typed_document(evidence=[], fulfilled_requirements=["payslip"])
+    with (
+        patch("app.document_service.document_repository") as mock_repo,
+        patch("app.document_service.events.publish", AsyncMock(side_effect=RuntimeError("pubsub down"))),
+    ):
+        mock_repo.update_status.return_value = True
+        with pytest.raises(RuntimeError):
+            await document_service.set_type(document, "nric")
+
+    claim, undo = mock_repo.update_status.call_args_list
+    assert claim.args == ("doc-1", DocumentStatus.EXTRACTING)
+    # Back to analyzed, only if nothing else moved it out of extracting meanwhile.
+    assert undo.args == ("doc-1", DocumentStatus.ANALYZED)
+    assert undo.kwargs["expected_current_statuses"] == [DocumentStatus.EXTRACTING]
+    retyped, restored = mock_repo.record_classification.call_args_list
+    assert retyped.kwargs["document_type"] == "nric"
+    assert restored.kwargs["document_type"] == "payslip"
+    assert restored.kwargs["classification_confidence"] == 0.5
+    assert restored.kwargs["fulfilled_requirements"] == ["payslip"]
+
+
+
+# --- A failed upload event leaves no copy behind (PENDING_TESTS row 11) ----------------------------------------------
+
+
+def _upload_whose_event_fails(published_events, *, removal_fails: bool = False):
+    document = _make_document("doc-new")
+    with (
+        patch("app.routers.upload.case_service.get_case", return_value=_make_case("case-1")),
+        patch("app.routers.upload.storage_service") as storage,
+        patch("app.routers.upload.document_repository") as documents,
+        patch("app.routers.upload.events.publish", AsyncMock(side_effect=RuntimeError("pubsub down"))),
+    ):
+        storage.upload_file.return_value = "case-1/uuid_good.pdf"
+        documents.create_document.return_value = document
+        if removal_fails:
+            documents.remove_document.side_effect = RuntimeError("database down")
+        response = client.post(
+            "/documents/upload-batch", data={"case_id": "case-1"},
+            files=[("files", ("good.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf"))],
+        )
+    return response, documents, document
+
+
+def test_an_upload_whose_event_cant_be_published_is_removed_so_a_retry_leaves_one_copy(published_events) -> None:
+    response, documents, document = _upload_whose_event_fails(published_events)
+
+    [result] = response.json()["results"]
+    assert result["success"] is False
+    # The row and its file go together: the new row, not just the file.
+    documents.remove_document.assert_called_once_with(document)
+
+
+async def test_the_upload_route_answers_502_when_its_event_cant_be_published() -> None:
+    upload = UploadFile(file=io.BytesIO(_PDF), filename="good.pdf", headers=Headers({"content-type": "application/pdf"}))
+    document = _make_document("doc-new")
+    with (
+        patch("app.routers.upload.storage_service") as storage,
+        patch("app.routers.upload.document_repository") as documents,
+        patch("app.routers.upload.events.publish", AsyncMock(side_effect=RuntimeError("pubsub down"))),
+    ):
+        storage.upload_file.return_value = "case-1/uuid_good.pdf"
+        documents.create_document.return_value = document
+        with pytest.raises(HTTPException) as failed:
+            await _ingest_one("case-1", upload, case_verified=True)
+
+    assert failed.value.status_code == 502
+    documents.remove_document.assert_called_once_with(document)
+
+
+def test_a_removal_that_also_fails_still_answers_the_officer(published_events) -> None:
+    response, documents, _ = _upload_whose_event_fails(published_events, removal_fails=True)
+
+    [result] = response.json()["results"]
+    assert result["success"] is False  # an error for the file, not a crashed request
+    documents.remove_document.assert_called_once()
