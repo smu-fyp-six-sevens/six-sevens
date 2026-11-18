@@ -185,7 +185,7 @@ p2.box("Management", 300, 70, 1180, 120, "group")
 for i, label in enumerate([
     S("Terraform", "the cloud pieces, state in GCS"),
     S("Grafana + Managed Prometheus", "5 dashboards (Overview first)<br>alerts · SLOs"),
-    S("Cloud Deploy", "a recorded release per deploy<br>verify · one-step rollback"),
+    S("Git (main)", "the chart + image digests:<br>what the cluster should run"),
     S("Billing", "budget alert · BigQuery export"),
     S("GitHub Actions", "CI + deploy via Workload<br>Identity Federation (no keys)"),
 ]):
@@ -201,6 +201,7 @@ cluster = p2.box("GKE Autopilot · regional · private nodes · a namespace per 
 fe2 = p2.box(S("frontend", "nginx"), 290, 380, 160, 60, "gcp")
 kong2 = p2.box(S("kong", "namespace gateway"), 480, 380, 160, 60, "gcp")
 graf2 = p2.box(S("grafana", "namespace observability"), 1300, 380, 170, 60, "gcp")
+p2.box(S("Argo CD", "namespace argocd · GitOps:<br>syncs the chart from git"), 1090, 380, 190, 60, "ops")
 api2 = p2.box(S("api", "1–2 pods"), 290, 500, 160, 60, "gcp")
 aud2 = p2.box(S("audit-metrics", "+ sweeper · 1 pod"), 480, 500, 160, 60, "gcp")
 WSUB = (685, 470, 575, 110)
@@ -359,7 +360,7 @@ p5.edge(o_audsvc, o_ui, "GET /audit/cases/<br>{id}/cost", exit=(1, 0.5), entry=(
 # ------------------------------------------------------------------ 6. CI/CD
 # CI's jobs run in parallel in a column; the gate below them hands a green push to main to deploy.yml.
 p6 = Page("6 CI and deploy", 1800, 1020)
-p6.box("Delivery: CI on every push and PR; a green push to main deploys (GitHub Actions → Cloud Deploy)", 40, 20, 1300, 40, "title")
+p6.box("Delivery: CI on every push and PR; a green push to main deploys (GitHub Actions → git → Argo CD)", 40, 20, 1300, 40, "title")
 c_push = p6.box(S("git push / PR", "ci-cd.yml<br>a docs-only push is skipped"), 40, 250, 160, 70, "user")
 JOB_X, JOB_W, JOB_H = 270, 380, 80
 JOBS = [
@@ -384,11 +385,11 @@ c_build = p6.box(S("Build 8 images, scan", "5 role targets of one Dockerfile + K
 c_ar = p6.box(S("Artifact Registry", "images by digest"), 780, 605, 170, 60, "gcp")
 c_sign = p6.box(S("Sign and attest", "cosign signature + SBOM (syft)<br>+ SLSA provenance<br>Binary Authorization attestation<br>(one Cloud KMS key)"), 1000, DEPLOY_Y, 260, DEPLOY_H, "worker")
 ROW_B = 740
-c_render = p6.box(S("Render the chart", "Helm, images by digest"), 1000, ROW_B, 170, 80, "worker")
-c_rel = p6.box(S("Cloud Deploy release", "rolls out to GKE<br>(recorded)"), 1200, ROW_B, 180, 80, "gcp")
-c_verify = p6.box(S("Verify", "gateway checks through<br>the load balancer"), 1410, ROW_B, 170, 80, "service")
-c_ok = p6.box(S("Done", "release recorded"), 1610, 734, 150, 60, "data")
-c_back = p6.box(S("Roll back", "to the newest release<br>that rolled out fine"), 1610, 840, 150, 60, "ops")
+c_render = p6.box(S("Commit the digests", "values-images.yaml on main<br>(git holds what runs)"), 1000, ROW_B, 170, 80, "data")
+c_rel = p6.box(S("Argo CD sync", "pulls the Helm chart from git,<br>applies it to GKE (GitOps)"), 1200, ROW_B, 180, 80, "gcp")
+c_verify = p6.box(S("Verify", "PostSync checks through<br>the load balancer"), 1410, ROW_B, 170, 80, "service")
+c_ok = p6.box(S("Done", "synced · in Argo CD's history"), 1610, 734, 150, 60, "data")
+c_back = p6.box(S("Roll back", "argocd app rollback<br>to the last good sync"), 1610, 840, 150, 60, "ops")
 p6.edge(c_gate, c_auth, "green push to main", exit=(0.5, 1), entry=(0.5, 0), points=[(835, 510), (340, 510)])
 p6.edge(c_run, c_auth, exit=(1, 0.5), entry=(0, fx(630, DEPLOY_Y, DEPLOY_H)))
 p6.edge(c_auth, c_build, exit=(1, 0.5), entry=(0, 0.5))
@@ -399,8 +400,8 @@ p6.edge(c_render, c_rel, exit=(1, 0.5), entry=(0, 0.5))
 p6.edge(c_rel, c_verify, exit=(1, 0.5), entry=(0, 0.5))
 p6.edge(c_verify, c_ok, "pass", exit=(1, 0.3), entry=(0, 0.5))
 p6.edge(c_verify, c_back, "fail", exit=(0.5, 1), entry=(0, 0.5), points=[(1495, 870)])
-p6.box("Terraform owns the cloud (cluster, load balancer, Pub/Sub, IAM, KMS, the Cloud Deploy pipeline) and is applied by hand before a push that needs it; "
-       "the Helm chart owns everything inside the cluster; a deploy only changes images.", 240, 940, 1300, 50, "note")
+p6.box("Terraform owns the cloud (cluster, load balancer, Pub/Sub, IAM, KMS) and is applied by hand before a push that needs it; "
+       "the Helm chart in git owns everything inside the cluster, and Argo CD keeps the cluster matching it; a deploy only changes image digests.", 240, 940, 1300, 50, "note")
 
 pages = [p1, p2, p3, p4, p5, p6]
 OUT.parent.mkdir(parents=True, exist_ok=True)

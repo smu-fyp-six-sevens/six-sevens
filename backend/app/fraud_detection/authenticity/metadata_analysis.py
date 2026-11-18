@@ -112,12 +112,19 @@ _SAME_PASS_TOLERANCE_SECONDS = 60
 # retains the tools that touched the file earlier even when Producer has
 # since been overwritten with something innocuous, so a forger who cleans
 # up the headline field can still be given away by the history.
+#
+# author is scanned too: a tool's name typed or written into Author ("Adobe Photoshop" on a Word file) is the same
+# signal as in Producer. It usually holds a person, so there markers match only as whole words (a surname like
+# "Gimpel" isn't GIMP), and the AI markers that are also first names are skipped (_PERSON_NAME_MARKERS).
 _SOFTWARE_BEARING_FIELDS: tuple[str, ...] = (
     "software",
     "creator",
     "producer",
     "edit_history_tools",
+    "author",
 )
+_PERSON_FIELDS = frozenset({"author"})
+_PERSON_NAME_MARKERS = frozenset({"claude", "gemini"})
 
 # AC3: seed set of placeholder/generic values that shouldn't appear as a
 # real author/creator/producer on a genuine corporate document — a starter
@@ -357,9 +364,14 @@ def _check_suspicious_values(extracted: dict[str, str | None]) -> list[MetadataA
     return anomalies
 
 
-def _match_marker(lowered: str, markers: list[tuple[str, str]]) -> str | None:
+def _match_marker(lowered: str, markers: list[tuple[str, str]], person_field: bool = False) -> str | None:
+    """The first marker in `lowered`. In a field that usually names a person, whole words only, and never a marker
+    that is also a first name."""
     for marker, text in markers:
-        if marker in lowered:
+        if not person_field:
+            if marker in lowered:
+                return text
+        elif marker not in _PERSON_NAME_MARKERS and re.search(rf"(?<![a-z0-9]){re.escape(marker)}(?![a-z0-9])", lowered):
             return text
     return None
 
@@ -384,8 +396,9 @@ def _check_software_markers(
         if not value:
             continue
         lowered = value.lower()
+        person = field in _PERSON_FIELDS
 
-        tool_name = _match_marker(lowered, AI_GENERATION_SOFTWARE_MARKERS)
+        tool_name = _match_marker(lowered, AI_GENERATION_SOFTWARE_MARKERS, person)
         if tool_name is not None:
             anomaly = MetadataAnomaly(
                 code="META.AI_TOOL",
@@ -398,7 +411,7 @@ def _check_software_markers(
             ai_indicators.append(anomaly)
             continue
 
-        reason = _match_marker(lowered, CONTENT_EDITOR_MARKERS)
+        reason = _match_marker(lowered, CONTENT_EDITOR_MARKERS, person)
         if reason is not None:
             anomalies.append(
                 MetadataAnomaly(code="META.CONTENT_EDITOR", field=field, value=value, reason=reason, severity="high")
@@ -408,7 +421,7 @@ def _check_software_markers(
         if not institution_originated:
             continue
 
-        editor_name = _match_marker(lowered, PDF_EDITOR_MARKERS)
+        editor_name = _match_marker(lowered, PDF_EDITOR_MARKERS, person)
         if editor_name is not None:
             label = (document_type or "").replace("_", " ")
             anomalies.append(

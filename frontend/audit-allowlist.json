@@ -1,0 +1,11 @@
+{
+  "_about": "High or critical npm advisories CI's audit lets through (scripts/npm-audit.mjs), each with why and a date to look again. Remove an entry once a fix ships.",
+  "advisories": [
+    {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "reason": "No fixed version yet (4.0.7, the newest, is affected). Build tooling only (vite, vitest): never in the shipped site, and the glob patterns are ours.",
+      "review_by": "2026-12-18"
+    }
+  ]
+}

@@ -211,7 +211,8 @@ jobs:
         run: checkov -d .github/workflows --framework github_actions --compact --quiet
 
       # Every run: free scanners with no quota, blocking. pip-audit fails on any known vulnerability (OSV gives no
-      # severity to filter on); npm audit on high and critical.
+      # severity to filter on); npm audit on high and critical, except advisories with no fix yet listed in
+      # frontend/audit-allowlist.json (each with a reason and a review date).
       - name: pip-audit (Python dependencies)
         if: ${{ !cancelled() }}
         run: |
@@ -221,7 +222,7 @@ jobs:
       - name: npm audit (npm dependencies)
         if: ${{ !cancelled() }}
         working-directory: frontend
-        run: npm audit --audit-level=high
+        run: node scripts/npm-audit.mjs
 
       # Secrets in the commits this push or pull request adds (not the whole history again: seconds, not minutes). The
       # binary in a pinned image: gitleaks-action needs a licence for organisation repositories.

@@ -1,6 +1,7 @@
 # ocr_extractor.py
 from __future__ import annotations
 
+import re
 from typing import cast
 
 import numpy as np
@@ -33,6 +34,24 @@ class _LazyReader:
 reader = _LazyReader()
 
 
+# What RapidOCR reads in a passport's machine-readable zone (the OCR-B font) instead of its plain characters.
+_MRZ_LOOKALIKES = str.maketrans({
+    "∪": "U", "ᴜ": "U", "Ս": "U",          # set union, small capital U, Armenian Se
+    "Λ": "<", "‹": "<", "˂": "<", "＜": "<", "«": "<", "〈": "<", "❮": "<",
+})
+# A run of MRZ characters about as long as an MRZ line (30, 36 or 44; OCR may drop one or two) with at least two
+# fillers: nothing else on a page looks like that, so ordinary text is never touched.
+_MRZ_RUN = re.compile("[A-Z0-9<" + re.escape("".join(chr(code) for code in _MRZ_LOOKALIKES)) + "]{28,}")
+
+
+def _fix_mrz(text: str) -> str:
+    """The MRZ in plain ASCII: OCR's lookalikes for U and the "<" filler put back, inside MRZ-shaped runs only."""
+    def fix(match: re.Match[str]) -> str:
+        run = match.group(0).translate(_MRZ_LOOKALIKES)
+        return run if run.count("<") >= 2 else match.group(0)
+    return _MRZ_RUN.sub(fix, text)
+
+
 def _bbox(box) -> list[float]:
     """RapidOCR's four corner points as [x0, y0, x1, y1]."""
     xs = [float(point[0]) for point in box]
@@ -56,7 +75,7 @@ def extract_image_with_ocr(image, page_number: int = 1) -> dict:
         assert result.txts is not None and result.scores is not None
         for box, text, confidence in zip(result.boxes, result.txts, result.scores):
             elements.append({
-                "text": text,
+                "text": _fix_mrz(text),
                 "confidence": float(confidence),
                 "extraction_method": "ocr",
                 # Where the line sits, [x0, y0, x1, y1] in the image's pixels from the top-left.
