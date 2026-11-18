@@ -46,6 +46,7 @@ terraform apply
 - **Grafana:** `https://grafana.sixsevens.me`; user `admin`, password `terraform output -raw grafana_admin_password`. Dashboards: Overview (home), Services, Pipeline, Agents, Cost. Data appears minutes after traffic; the Cost dashboard's per-namespace rows only after cost allocation (`gke.tf`) has run a day, since the billing export lags.
 - **Traces:** Cloud Console → Trace explorer. One upload is one trace across services; Claude spans carry model, tokens and `llm.cost_usd`.
 - **Alerts:** dead-lettered events (10 min); API 5xx over 5% for 10 min; Claude spend over `alert_daily_claude_usd` (default $10) in 24 h; unrecoverable stuck work (30 min); and on GKE (`slo.tf`): the site or API down from more than one region for 10 min, and an SLO's error budget burning 14.4× too fast over 1 h or 6× over 6 h. SLOs and their budgets: Monitoring → SLOs, service `six-sevens`.
+- **Dead letters:** when the alert email says events were dead-lettered, look without removing them: `gcloud pubsub subscriptions pull domain-events-dead-letter-pull --limit=10 --project fyp-six-sevens`. Check the worker's logs for why (`kubectl -n <role> logs deploy/<role>`), redo the action in the app if the sweeper hasn't (for example "Run detection again"), then remove them: the same command with `--auto-ack`.
 - **Disaster recovery drill:** with Docker running and `SUPABASE_DB_URL` set (Supabase → Connect → Session pooler), `python scripts\dr_drill.py` from `backend\`. It reads production only and restores into a local container (`dr-drill-postgres`, removed after).
 - **Claude cost:** every end-of-run event carries `detail.llm_cost_usd`, `llm_calls` and tokens. In the app: the case's **Claude Cost** tab. One case: `GET <Kong URL>/audit/cases/<case_id>/cost`. All cases (SQL editor): `select case_id, round(sum((detail->>'llm_cost_usd')::numeric), 4) as usd, count(*) as runs from audit_events where detail ? 'llm_cost_usd' group by case_id order by usd desc;`. These are list-price estimates (`backend/app/pricing.py`); the Anthropic console has the invoice.
 - **Sweeper:** runs in audit-metrics every 5 minutes. Pause: `gcloud scheduler jobs pause sweep --location asia-southeast1` (`resume` likewise).
@@ -152,7 +153,7 @@ The order is audit-metrics, then case-worker, then detection-worker, then doc-wo
 4. Push the two changed files. The release starts the role's pods, which pull the backlog.
 5. **Watch:** `kubectl -n <role> get pods`; the Pipeline and Agents dashboards; `domain-events-dead-letter-pull` stays empty; for audit-metrics, sweeps still run every 5 minutes (`sweep.requested` in the audit trail).
 
-### Phase 6: remove Cloud Run (prepared 2026-11-18)
+### Phase 6: remove Cloud Run (applied 2026-11-18; the steps are kept for the record and the rollback)
 
 The code no longer has `run.tf`, the push identity (`pubsub-push`), the subscriptions' push config, the Cloud Run Grafana, Kong's sidecar config (`kong-gmp-config`), the deployer's Cloud Run rights or the Cloud Run deploy job.
 

@@ -288,9 +288,8 @@ At the end of each run (classification and extraction, an extraction rerun, dete
 - **Summary writer** (only when the model wrote it): kept its limits; no advice to approve or decline (fail); no protected attribute (fail).
 - **Evidence requests:** say what they would show; cite findings that exist. **Adverse media:** a result backed by sources.
 
-**Rules for evals.** They only watch: they never change a score, severity, verdict, status or finding, never reach a prompt, and never block a run. No model marks another model (cost, and "code verifies" is the design rule). No golden set, no nightly evals, no scheduled token spend: evals run inside normal use and cost nothing extra per run. No personal data in metrics or the trace's check results (field names, never values). Accuracy is meant to come from officers' own verdicts on finalised cases, not from a golden set (not built yet: `CLOUD_ARCHITECTURE_PLAN.md`, "Accuracy from officer verdicts").
-
-**What the checks can't tell you.** A run can follow the expected path, give a sensible answer and still miss fraud: the checks don't measure accuracy. Officers mostly confirm or dismiss what the system flagged and rarely see what it missed, so misses are under-measured; this is a stated limitation, along with all test data being synthetic. With no golden set, a prompt change can't be rerun on fixed cases and compared; changes are watched through the checks and the officer-verdict trend instead.
+**Rules for evals.** They only watch: they never change a score, severity, verdict, status or finding, never reach a prompt, and never block a run. No model marks another model (cost, and "code verifies" is the design rule). No golden set, no nightly evals, no scheduled token spend: evals run inside normal use and cost nothing extra per run. No personal data in metrics or the trace's check results (field names, never values).
+**What the checks can't tell you.** A run can follow the expected path, give a sensible answer and still miss fraud: the checks don't measure accuracy. Officers mostly confirm or dismiss what the system flagged and rarely see what it missed, so misses are under-measured; this is a stated limitation, along with all test data being synthetic. With no golden set, a prompt change can't be rerun on fixed cases and compared; changes are watched through the checks instead.
 
 ### Which agent version ran (`app/agent_versions.py`)
 Each agent has a **fingerprint**: a hash of what the agent directory (`/agents`, `agent_registry.py` and `agent_prompts.py`) shows for it, meaning its prompt templates (every document type's, for the extractor, plus its second look), model, tools and call budget. Change any of them and the fingerprint changes, so a version can't be forgotten. It's computed once per process. Every document, extraction-rerun, detection and case-analysis run's end event carries the fingerprints of the agents it used (`detail.agent_versions`, about 20 characters each), so the audit trail answers "which version produced this finding?". The `agent_versions` table has one row per fingerprint, with its model, tools, prompt hash and the commit it first appeared in (`GIT_COMMIT`, set by the deploy). Each Claude-calling role adds its rows at start-up, skips any already stored, and never fails start-up over it. The agent directory shows each agent's fingerprint. Nothing reads them to decide anything. The summary writer, evidence requests and adverse media aren't in the registry, so they have no fingerprint yet.
@@ -519,7 +518,7 @@ Live in GCP project `fyp-six-sevens` (`asia-southeast1`) on GKE Autopilot at `si
 
 | Feature | Problem it solves | Expectation it meets |
 |---|---|---|
-| Sensibility checks; accuracy from officer verdicts | Catches agents going off track | MAS FEAT (monitoring); TRM change management |
+| Sensibility checks | Catches agents going off track | MAS FEAT (monitoring); TRM change management |
 | Helm chart | GLDB can run it on its own platform | MAS outsourcing (exit, portability) |
 | Pull workers + KEDA | No 10-minute ceiling; free when idle | TRM capacity |
 | Load balancer + Cloud Armor, internal services | Nobody reaches a service directly; common web attacks stopped at the edge | TRM access control; OWASP |
@@ -550,7 +549,6 @@ Live in GCP project `fyp-six-sevens` (`asia-southeast1`) on GKE Autopilot at `si
 - A slow start from zero tripping the sweeper: keep doc-worker warm for demos.
 - Nobody to run it after handover: Autopilot, Cloud Deploy, a short runbook.
 - Data leaving Singapore: a regional cluster and registry; Claude calls leave Singapore (Anthropic API), a stated limitation.
-- Too few officer verdicts to read accuracy: show the count with each figure; a person decides below 30 cases.
 
 ## 10. How it's tested
 

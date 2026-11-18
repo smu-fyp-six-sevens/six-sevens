@@ -13,7 +13,7 @@ None open.
 | # | Sev | In plain words | Fix | Where | Size |
 |---|---|---|---|---|---|
 | 2.1 | Low | A case is re-read hundreds of times a day by live snapshot builds | Recheck once a few cases are worked in a day | `snapshots.py` | — |
-| 2.2 | Low | Precision/recall figures read every review (`list_reviews`) | Aggregate in SQL once reviews pass the thousands (or store evaluation rows: `CLOUD_ARCHITECTURE_PLAN.md`, "Accuracy from officer verdicts") | `findings_repository.py` | M |
+| 2.2 | Low | Precision/recall figures read every review (`list_reviews`) | Aggregate in SQL once reviews pass the thousands | `findings_repository.py` | M |
 | 2.3 | Low | The content guard's OCR of an image embedded in a PDF takes several seconds (about 6 s on a laptop for one 1031×84 px strip, 90% of it detection): RapidOCR's detection scales a thin image up until its shortest side is 736 px (`Det.limit_type: min`), and it reads every image up to 12 per document, short ones twice | Time one pass on a doc-worker pod first (the laptop's timings varied 2–3×). Then try 4 onnxruntime threads (twice as fast on the laptop) or `limit_type: max` for the guard's own reader only, checking every attack in `tests/test_content_guard.py` is still caught; ingestion's page OCR keeps its settings | `guardrails/content_guard.py` `_ocr_lines`, `ingestion/ocr_extractor.py` | S |
 
 **Prompt caching:** recheck the cache rates on the case cost card after a few cases (on 2026-11-16: documents 37%, detection 64%, case analysis 9%). Case analysis stays low by design: its two calls share only the tools and the system prompt, and the dossier is sent once.

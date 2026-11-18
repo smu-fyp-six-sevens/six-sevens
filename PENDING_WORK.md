@@ -1,11 +1,6 @@
 # Pending work
 
-Open product and platform work only: delete an item once done. Updated 2026-11-17. How things are built today: `HOW_IT_WORKS.md`. Elsewhere: bugs (detection included), performance and security in `CODEBASE_AUDIT.md`; tests in `TEST_SUITE_AUDIT.md` and `PENDING_TESTS.md`; cloud work in `CLOUD_ARCHITECTURE_PLAN.md`.
-
-## Handover documentation
-
-- **CPF rates each January.** *Issue:* the 2027 CPF table is a placeholder (2026's rates), so 2027 payslips skip the CPF checks unless `CPF_USE_PROVISIONAL_RATES` is on. CPF publishes new rates and ceilings every year, so GLDB's team will need to repeat this. *Do:* when CPF publishes 2027, replace the five 2027 rows and the ceiling in `fraud_detection/external_validation/sg_reference/cpf.py` and remove the date from `PROVISIONAL_RATE_TABLES`; write the yearly steps into the handover documentation.
-- **Database recovery steps.** *Issue:* the 1-hour recovery target (RTO) for losing the database isn't written up as steps. The drill (`HOW_IT_WORKS.md` §9) copied and restored it in 10 seconds; the rest of the hour is loading it into Supabase, updating the Supabase URL and key in Secret Manager if it's a new project, and restarting the pods. Not covered: uploaded files (Supabase Storage isn't in the copy), and how much data could be lost (RPO) depends on the Supabase plan (free: no self-service backups, only our own copies; Pro: daily backups). *Do:* write the recovery steps, the files caveat and the plan's backups into the handover documentation.
+Open product and platform work only: delete an item once done. Updated 2026-11-18. How things are built today: `HOW_IT_WORKS.md`. Elsewhere: bugs (detection included), performance and security in `CODEBASE_AUDIT.md`; tests in `TEST_SUITE_AUDIT.md` and `PENDING_TESTS.md`; cloud work in `CLOUD_ARCHITECTURE_PLAN.md`.
 
 ## Security
 
@@ -18,10 +13,6 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 - **Billed cost per role.** *Issue:* per-call cost is estimated from list prices, not the bill. *Do:* one Claude workspace and key per worker role; the Cost API then reports billed USD per workspace.
 - **On-demand live check.** *Issue:* CI, the kind run and the load tests stub Claude, so an API-side break (like the `temperature` 400) isn't caught. *Do:* one tiny call per model, run by hand after an SDK or model change.
-
-## Report wording
-
-- **Data residency note.** Put this wherever the report or the commercialisation document describes the model calls: *"This prototype calls the public Claude API. In production, GLDB would reach Claude through an enterprise agreement or its cloud provider (for example Vertex AI), with regional processing and zero data retention, subject to its outsourcing and MAS requirements."* Add that the adverse-media check sends the company's name (and former names) to Claude's web search. Don't name a model, region or bank without a source.
 
 ## Detection and the document pipeline
 
@@ -41,7 +32,7 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 ## Evals and verification (all on demand: they spend tokens)
 
-- **Agent evals:** the sensibility checks are built; what's open (tests, tuning, the officer-verdict accuracy table) is in `CLOUD_ARCHITECTURE_PLAN.md`, "Agent evaluation". No golden set, by decision.
+- **Agent evals:** the sensibility checks are built. Open: the tests in `PENDING_TESTS.md` rows 29–31, then one real run per run kind (a payslip, a bank statement, a case) to see the checks on a live trace. Tune from those runs: the overconfidence gap (0.3); the expected-checks table (`evals/detection.py`: today only Content Validation's numerical checks on income documents and bank statements, and Digital Authenticity's metadata check); the field-name rules for dates and amounts (`evals/extraction.py`). A check that warns on most runs is noise: change or drop it. Extraction rerun records no `extraction` step, so its field checks don't run. No golden set, by decision.
 - **Case analysis evals:** false positives on clean generated cases (Other documents included), recall on planted contradictions, false-positive parity across subgroups.
 - **Extraction accuracy:** text-only vs second look, and code-read vs model-read statement transactions, on labelled statements and payslips.
 - **Does officer feedback help?** Same cases with and without `finding_feedback`.
@@ -55,10 +46,5 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 ## Cloud operations
 
-- **Make Snyk blocking again** when its quota resets: delete the two `continue-on-error: true` lines in `.github/workflows/ci-cd.yml`, and "temporarily non-blocking" from CLAUDE.md, README and `HOW_IT_WORKS.md` §9.
+- **Make Snyk blocking again** on 2026-11-21 at the earliest (after the demo), when its quota resets: delete the two `continue-on-error: true` lines in `.github/workflows/ci-cd.yml`, and "temporarily non-blocking" from CLAUDE.md, README and `HOW_IT_WORKS.md` §9.
 - **Frontend fully non-root:** `nginx-unprivileged` on 8080 (change `nginx.conf`, compose and the chart's `templates/frontend.yaml` port, with `runAsNonRoot`, together).
-- **Dead letters:** an event that failed delivery 5 times lands in `domain-events-dead-letter-pull`, and the alert email says so. Nothing reads them. *Do (no code change):* when the email comes, look without removing them (`gcloud pubsub subscriptions pull domain-events-dead-letter-pull --limit=10 --project fyp-six-sevens`), check the worker's logs for why, redo the action in the app if the sweeper hasn't (for example "Run detection again"), then remove them (the same command with `--auto-ack`).
-
-## Frontend
-
-- Dev StrictMode sends some document-page requests twice.
