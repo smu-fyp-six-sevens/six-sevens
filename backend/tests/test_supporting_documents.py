@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import pytest
 
+from app.case_pipeline.models import CrossDocFinding, FindingCategory
 from app.models import DocumentRecord, DocumentStatus, RoutingStatus
 from app.case_pipeline.risk.supporting_documents import _counterparty_from_description, recommend_supporting_documents
 
@@ -423,3 +424,121 @@ def test_related_party_balance_without_a_prior_year() -> None:
 
     assert recommendation.items[0].reason == "Amount due from related corporations: 352,920.00."
 
+
+
+# --- The newer rules: address, missing months, concentration, facility letter (PENDING_TESTS row 65) --------------
+
+
+def _address_finding(summary: str, document_ids: list[str], flags: list[str] | None = None) -> CrossDocFinding:
+    return CrossDocFinding(
+        id=f"xd-{summary[:4]}", hypothesis_id="det", summary=summary, rationale="", severity="medium",
+        category=FindingCategory.CROSS_DOCUMENT_VARIANCE, document_ids=document_ids,
+        breach_flags=["ADDRESS_MISMATCH"] if flags is None else flags,
+    )
+
+
+def _personal_statement(document_id: str = "por") -> DocumentRecord:
+    return _statement([], document_id=document_id, entity_type="individual", individual_name="TOH YONG SHENG")
+
+
+def test_an_address_mismatch_asks_for_a_recent_statement_showing_the_current_address() -> None:
+    # The recommendation the score-drop demo relies on: the old statement's address against the rest of the case.
+    por = _personal_statement()
+    finding = _address_finding('Toh Yong Sheng\'s address is "236 Serangoon Avenue 3" on the proof of address', ["por"])
+
+    [recommendation] = recommend_supporting_documents([por], [finding])
+
+    assert recommendation.title == "Recent Bank Statement Showing the Current Address"
+    assert recommendation.source_document_id == "por"
+    assert "this difference" in recommendation.request
+    assert [i.description for i in recommendation.items] == [finding.summary]
+
+
+def test_several_address_findings_make_one_recommendation_listing_each() -> None:
+    por, other = _personal_statement(), _personal_statement("por-2")
+    findings = [_address_finding("First address difference", ["por"]),
+                _address_finding("Second address difference", ["por-2"])]
+
+    [recommendation] = recommend_supporting_documents([por, other], findings)
+
+    assert len(recommendation.items) == 2 and "these differences" in recommendation.request
+
+
+def test_an_address_finding_whose_documents_arent_in_the_case_asks_for_nothing() -> None:
+    finding = _address_finding("An address difference", ["removed-document"])
+
+    assert recommend_supporting_documents([_personal_statement()], [finding]) == []
+
+
+def test_a_finding_without_the_address_flag_asks_for_no_address_evidence() -> None:
+    finding = _address_finding("The company name differs", ["por"], flags=["NAME_MISMATCH"])
+
+    assert recommend_supporting_documents([_personal_statement()], [finding]) == []
+
+
+def test_a_month_between_two_company_statements_asks_for_that_months_statement() -> None:
+    april = _statement([], document_id="april", statement_period_start="2026-04-01", statement_period_end="2026-04-30")
+    june = _statement([], document_id="june", statement_period_start="2026-06-01", statement_period_end="2026-06-30")
+
+    [recommendation] = recommend_supporting_documents([april, june])
+
+    assert recommendation.title == "Bank Statements for May 2026"
+    assert [i.description for i in recommendation.items] == ["2026-05"]
+
+
+def test_consecutive_company_statements_ask_for_nothing_more() -> None:
+    april = _statement([], document_id="april", statement_period_start="2026-04-01", statement_period_end="2026-04-30")
+    may = _statement([], document_id="may", statement_period_start="2026-05-01", statement_period_end="2026-05-31")
+
+    assert recommend_supporting_documents([april, may]) == []
+
+
+def _receipts(customer: str | None, count: int, amount: float = 5_000.0) -> list[dict]:
+    return [{"date": f"2026-04-{day + 1:02d}", "amount": amount, "description": "Inward Cr",
+             **({"counterparty": customer} if customer else {})} for day in range(count)]
+
+
+def test_most_receipts_from_one_named_customer_ask_for_its_contract_or_invoices() -> None:
+    rows = _receipts("Orion Academy Pte Ltd", 6) + _receipts("Small Client", 1, 1_000.0)
+
+    titles = [r.title for r in recommend_supporting_documents([_statement(rows)])]
+
+    assert "Contract or Invoices with Orion Academy Pte Ltd" in titles
+
+
+@pytest.mark.parametrize("rows", [
+    _receipts("Orion Academy Pte Ltd", 5),                                  # fewer than 6 credits
+    _receipts("Orion Academy Pte Ltd", 3) + _receipts("Other Client", 3) + _receipts("Third Client", 2),  # 3 of 8 at most
+    _receipts(None, 8),                                                     # an unnamed payer
+], ids=["too few receipts", "not concentrated", "unnamed customer"])
+def test_receipts_that_arent_concentrated_on_a_named_customer_ask_for_no_contract(rows) -> None:
+    titles = [r.title for r in recommend_supporting_documents([_statement(rows)])]
+
+    assert not any(t.startswith("Contract or Invoices") for t in titles)
+
+
+_REPAYMENT = {"date": "2026-04-05", "amount": -10_681.80, "description": "GIRO TERM LOAN INSTALMENT DBS"}
+
+
+def test_loan_repayments_with_no_facility_letter_ask_for_one() -> None:
+    [recommendation] = [r for r in recommend_supporting_documents([_statement([_REPAYMENT])])
+                        if r.title == "Facility Letter"]
+
+    [item] = recommendation.items
+    assert item.amount == -10_681.80 and item.date == "2026-04-05"
+
+
+def test_loan_repayments_ask_for_no_facility_letter_when_the_case_has_one() -> None:
+    letter = _statement([], document_id="letter", document_type="list_of_loans")
+
+    titles = [r.title for r in recommend_supporting_documents([_statement([_REPAYMENT]), letter])]
+
+    assert "Facility Letter" not in titles
+
+
+def test_an_item_without_an_amount_serialises_with_amount_null() -> None:
+    [recommendation] = recommend_supporting_documents(
+        [_personal_statement()], [_address_finding("An address difference", ["por"])])
+
+    [item] = json.loads(recommendation.model_dump_json())["items"]
+    assert "amount" in item and item["amount"] is None

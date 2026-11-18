@@ -85,3 +85,34 @@ def test_empty_reasons() -> None:
     assert _build(clean, [], status="not_asked").reason == "none_needed"
     assert _build(reducible, [], status="failed").reason == "model_failed"
     assert _build(reducible, [], status="budget").reason == "budget"
+
+
+# --- Requests ranked by what they gain (PENDING_TESTS row 66) -------------------------------------------------------
+
+
+def test_requests_are_ranked_by_how_far_they_lower_the_score_then_the_rest_then_the_rules() -> None:
+    risk = _risk(
+        _finding("small:1", "cross_document_variance", 3),
+        _finding("big:1", "cross_document_variance", 6),
+        _finding("uen:1", "registry_discrepancy", 8),  # not reducible by a document: its request has no score
+    )
+    # The model's order: small gain, no gain, big gain.
+    requests = [
+        EvidenceRequest(title="Utility Bill", what_it_shows="settles the small one", addresses=["small:1"]),
+        EvidenceRequest(title="ACRA Letter", what_it_shows="about the UEN", addresses=["uen:1"]),
+        EvidenceRequest(title="Lease Agreement", what_it_shows="settles the big one", addresses=["big:1"]),
+    ]
+
+    result = _build(risk, requests, [_rule()])
+
+    assert [i.title for i in result.items] == ["Lease Agreement", "Utility Bill", "ACRA Letter", "Bank Loan Statements"]
+    big, small = result.items[0], result.items[1]
+    assert big.score_if_supports < small.score_if_supports  # lower score after it: ranked first
+    assert result.items[2].affects_score is False and result.items[3].source == "checklist"
+
+
+def test_unscored_requests_keep_the_models_order() -> None:
+    risk = _risk(_finding("uen:1", "registry_discrepancy", 8))
+    requests = [EvidenceRequest(title=t, what_it_shows="w", addresses=["uen:1"]) for t in ("First", "Second", "Third")]
+
+    assert [i.title for i in _build(risk, requests).items] == ["First", "Second", "Third"]

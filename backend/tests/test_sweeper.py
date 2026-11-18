@@ -4,7 +4,9 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
-from app import auth, detection_results, sweeper
+import pytest
+
+from app import auth, detection_results, monitoring, sweeper
 from app.config import settings
 from app.events import Event, types
 from app.models import DocumentRecord, DocumentStatus
@@ -281,3 +283,62 @@ def test_past_the_attempt_limit_a_document_that_got_a_report_meanwhile_is_left_a
     run.assert_not_awaited()
     save_error.assert_not_called()
     report.assert_not_awaited()
+
+
+# --- One "stuck" limit (PENDING_TESTS row 45) ------------------------------------------------------------------
+# monitoring.is_stuck (the case queue and an officer's retry) and sweeper.find_stuck (the recovery) must agree.
+
+
+WAITING, RUNNING = settings.STUCK_WAITING_SECONDS, settings.STUCK_RUNNING_SECONDS
+
+
+def _aged(status: DocumentStatus, seconds: float) -> DocumentRecord:
+    at = datetime.now(timezone.utc) - timedelta(seconds=seconds)
+    return DocumentRecord(id="doc-1", case_id="case-1", filename="f.pdf", status=status, uploaded_at=at,
+                          queued_at=at, processing_started_at=at if status not in (
+                              DocumentStatus.UPLOADED, DocumentStatus.QUEUED) else None)
+
+
+def test_the_running_limit_is_ten_minutes_by_default() -> None:
+    assert (WAITING, RUNNING) == (300, 600)
+
+
+@pytest.mark.parametrize("status, limit", [
+    (DocumentStatus.UPLOADED, WAITING), (DocumentStatus.QUEUED, WAITING),
+    (DocumentStatus.PROCESSING, RUNNING), (DocumentStatus.EXTRACTING, RUNNING),
+])
+def test_a_document_is_stuck_only_past_its_stages_limit(status, limit) -> None:
+    assert not monitoring.is_stuck(_aged(status, limit - 30))
+    assert monitoring.is_stuck(_aged(status, limit + 30))
+
+
+@pytest.mark.parametrize("status", [DocumentStatus.APPROVED, DocumentStatus.DETECTED, DocumentStatus.ANALYZED,
+                                    DocumentStatus.FAILED, DocumentStatus.REJECTED, DocumentStatus.CANCELLED])
+def test_a_document_in_any_other_status_is_never_stuck_however_old(status) -> None:
+    assert not monitoring.is_stuck(_aged(status, 7 * 86_400))
+
+
+def test_a_retry_takes_a_processing_document_only_past_the_running_limit() -> None:
+    assert not monitoring.is_stuck_processing_for_retry(_aged(DocumentStatus.PROCESSING, RUNNING - 30))
+    assert monitoring.is_stuck_processing_for_retry(_aged(DocumentStatus.PROCESSING, RUNNING + 30))
+    # Queued past its limit is stuck, but a retry only re-queues a processing one.
+    assert not monitoring.is_stuck_processing_for_retry(_aged(DocumentStatus.QUEUED, WAITING + 30))
+
+
+@pytest.mark.parametrize("status, seconds", [
+    (DocumentStatus.QUEUED, WAITING - 30), (DocumentStatus.QUEUED, WAITING + 30),
+    (DocumentStatus.PROCESSING, RUNNING - 30), (DocumentStatus.PROCESSING, RUNNING + 30),
+    (DocumentStatus.EXTRACTING, RUNNING + 30),
+    # Between the two limits: a running stage timed with the waiting limit would read as stuck here.
+    (DocumentStatus.PROCESSING, WAITING + 30), (DocumentStatus.EXTRACTING, WAITING + 30),
+])
+def test_the_queue_and_the_sweeper_agree_at_the_same_moment(status, seconds) -> None:
+    document = _aged(status, seconds)
+    with (
+        patch("app.document_repository.get_documents_in_status", return_value=[document]),
+        patch("app.audit.latest_times", return_value={}),
+        patch("app.case_pipeline.repository.running_started_before", return_value=[]),
+    ):
+        swept = bool(sweeper.find_stuck(datetime.now(timezone.utc)))
+
+    assert swept == monitoring.is_stuck(document)
