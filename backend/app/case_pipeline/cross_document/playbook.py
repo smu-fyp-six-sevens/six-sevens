@@ -165,7 +165,7 @@ def _period_of(view: DocView) -> str | None:
         months = signals.covered_months(view.fields)
         return f"{months[0]} to {months[-1]}" if months else None
     for name in ("financial_year_end", "year_of_assessment", "pay_date", "pay_period_end", "bill_date",
-                 "billing_period_end", "report_date", "document_date", "certificate_date", "noa_date"):
+                 "billing_period_end", "enquiry_date", "document_date", "certificate_date", "noa_date"):
         found = signals.value(view.fields, name)
         if found not in (None, ""):
             return f"{name.replace('_', ' ')} {found}"

@@ -7,9 +7,9 @@
         "accuracy": 0.9859
       },
       "all_fields": {
-        "correct": 130,
+        "correct": 129,
         "total": 133,
-        "accuracy": 0.9774
+        "accuracy": 0.9699
       },
       "all_fields_any_name": {
         "correct": 130,
@@ -865,9 +865,9 @@
               "extracted": null
             },
             {
-              "field": "report_date",
+              "field": "enquiry_date",
               "key": false,
-              "correct": true,
+              "correct": false,
               "correct_any_name": true,
               "is_table": false,
               "rows_found": 0,

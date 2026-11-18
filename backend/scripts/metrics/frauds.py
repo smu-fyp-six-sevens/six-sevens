@@ -236,7 +236,7 @@ FRAUDS: list[Fraud] = [
         Step("misalignment", "Misalignment", find=money("secured_credit_limit", 0), dx=26, dy=2,
              note="Secured Credit Limit value shifted 26pt right and 2pt down, out of line with its column."),
         Step("metadata", "Metadata",
-             metadata={"author": "Experian Credit Services", "creator": "Microsoft Word for Microsoft 365"},
+             metadata={"author": "Adobe Photoshop", "creator": "Microsoft Word for Microsoft 365"},
              note="Author/Creator inconsistent with the issuer, Credit Bureau (Singapore)."),
     ]),
     # --- C011 ---------------------------------------------------------------------------------------------

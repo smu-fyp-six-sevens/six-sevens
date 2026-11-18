@@ -346,7 +346,7 @@ EXTRACTION_SCHEMAS: dict[str, dict[str, list[str]]] = {
         # report's own summary counters and score block.
         "additional": [
             "accounts", "account_count", "enquiry_count", "default_count",
-            "earliest_account_date", "total_outstanding_balance", "report_date", "bureau_score",
+            "earliest_account_date", "total_outstanding_balance", "enquiry_date", "bureau_score",
             "previous_enquiries","narratives",
         ],
     },

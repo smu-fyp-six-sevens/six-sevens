@@ -302,7 +302,7 @@ def _personal_statement(doc_id: str, address: str, period_end: str | None) -> Do
 
 def _credit_report(address: str = _CURRENT) -> DocumentRecord:
     return _doc("cbr", "credit_report", {"individual_name": "Lakshmi d/o Rajendran", "id_number": "S8427269H",
-                                         "individual_address": address, "report_date": "29 Aug 2026"})
+                                         "individual_address": address, "enquiry_date": "29 Aug 2026"})
 
 
 def _address_findings(context) -> list:
