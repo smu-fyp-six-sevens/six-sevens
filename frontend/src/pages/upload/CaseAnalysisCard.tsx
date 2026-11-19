@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CaseAnalysis, CaseAnalysisOverview, CaseRisk } from '../../services/uploadService';
+import type { AdditionalDocument, CaseAnalysis, CaseAnalysisOverview, CaseRisk } from '../../services/uploadService';
 import type { CaseAnalysisRunItem } from '../../services/uploadService';
 import { REQUIRED_DOCUMENT_TYPES, capitaliseDocumentTypes, getCaseAnalysis, getCaseAnalysisRun, listCaseAnalysisRuns, runCaseAnalysis } from '../../services/uploadService';
 import { AnalysisSummaryBlock } from './AnalysisSummaryBlock';
@@ -33,6 +33,7 @@ export function CaseAnalysisCard({
   onTraceClose,
   score,
   findingsLink,
+  suggestedDocuments = [],
 }: {
   caseId: string;
   analysisReady: boolean;
@@ -46,6 +47,9 @@ export function CaseAnalysisCard({
   score?: (runRisk?: CaseRisk | null) => ReactNode;
   // Under the summary: on to the findings it rests on. Not shown beside an earlier run.
   findingsLink?: ReactNode;
+  // The documents the Additional Documents section suggests now, listed under the summary's "would help". Not shown
+  // beside an earlier run.
+  suggestedDocuments?: AdditionalDocument[];
 }) {
   const [analysis, setAnalysis] = useState<CaseAnalysis | null>(null);
   const [starting, setStarting] = useState(false);
@@ -278,7 +282,12 @@ export function CaseAnalysisCard({
         <div className={`risk-overview${scoreShown && showResult && shown ? '' : ' risk-overview--single'}`}>
           {scoreShown && <div className="risk-overview-score">{scoreShown}</div>}
           {showResult && shown && (
-            <AnalysisSummaryBlock analysis={shown} linkToRiskTab={!viewing} footer={!viewing && findingsLink} />
+            <AnalysisSummaryBlock
+              analysis={shown}
+              linkToRiskTab={!viewing}
+              footer={!viewing && findingsLink}
+              suggestedDocuments={viewing ? [] : suggestedDocuments}
+            />
           )}
         </div>
       )}

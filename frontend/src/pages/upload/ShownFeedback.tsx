@@ -17,14 +17,14 @@ function itemVerdict(item: FeedbackDetail): string {
 // The most ids the agent records per lesson (feedback_counts): a lesson that hit it may have come from more cases.
 const IDS_PER_LESSON = 10;
 
-// The items in lessons, as the agent read them: "False alarm in 3 cases".
+// The items in lessons, as the agent read them: "False alarm in 3 other cases".
 function lessons(items: FeedbackDetail[]): { label: string; items: FeedbackDetail[] }[] {
   const groups = new Map<string, FeedbackDetail[]>();
   for (const item of items) groups.set(itemVerdict(item), [...(groups.get(itemVerdict(item)) ?? []), item]);
   return [...groups].map(([verdict, grouped]) => {
     const cases = new Set(grouped.map((item) => item.case_id)).size;
     const atLeast = grouped.length >= IDS_PER_LESSON ? 'at least ' : '';
-    return { label: `${verdict} in ${atLeast}${cases} ${cases === 1 ? 'case' : 'cases'}`, items: grouped };
+    return { label: `${verdict} in ${atLeast}${cases} other ${cases === 1 ? 'case' : 'cases'}`, items: grouped };
   });
 }
 
@@ -33,10 +33,8 @@ function FeedbackItem({ item }: { item: FeedbackDetail }) {
   return (
     <li>
       <details className="shown-feedback-item">
+        {/* The lesson's heading already gives the verdict: the row is the past finding itself. */}
         <summary>
-          <span className={`shown-feedback-verdict shown-feedback-verdict--${item.kind === 'missed' ? 'missed' : item.verdict}`}>
-            {itemVerdict(item)}
-          </span>
           <span className="shown-feedback-summary">{item.summary || item.note || formatCheck(item.check_name)}</span>
         </summary>
         <dl className="shown-feedback-detail">
@@ -85,9 +83,12 @@ export function ShownFeedback({ ids }: { ids: string[] | undefined }) {
   return (
     <details className="shown-feedback" onToggle={(event) => load(event.currentTarget.open)}>
       <summary>
-        Feedback the agent was shown: {ids.length} {ids.length === 1 ? 'item' : 'items'} from other cases
+        Learned from {ids.length} past officer {ids.length === 1 ? 'review' : 'reviews'}
       </summary>
-      {error && <p className="shown-feedback-note" role="alert">{error}</p>}
+      <p className="shown-feedback-note">
+        How officers judged this check in other cases. It guides the agent; it doesn't decide this finding.
+      </p>
+      {error &&<p className="shown-feedback-note" role="alert">{error}</p>}
       {!error && items === null && <p className="shown-feedback-note">Loading…</p>}
       {items !== null && items.length === 0 && (
         <p className="shown-feedback-note">That feedback has since been withdrawn.</p>

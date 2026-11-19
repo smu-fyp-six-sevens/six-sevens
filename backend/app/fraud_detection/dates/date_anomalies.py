@@ -44,12 +44,12 @@ sanity-check a value a human has already verified — not worth the cost).
 from __future__ import annotations
 
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
 from pydantic import BaseModel
 
-from ...sg_time import today_sg
+from ...sg_time import SINGAPORE, today_sg
 from ..shared.check_result import CheckResult
 from .date_parsing import date_in_period, parse_date_parts
 from ..font_consistency import ExtractedField
@@ -65,7 +65,15 @@ class _Ctx(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
     fields: dict[str, Any]
     document_type: str | None
+    # The day nothing on the document can be dated after: the day it was uploaded (in Singapore), or today when the
+    # upload time isn't known. Not simply today: a re-run after the date passes would stop catching it.
     today: date
+    uploaded: bool = False
+
+
+def _as_of(ctx: _Ctx) -> str:
+    """The day the checks measure against, as a finding says it."""
+    return f"the upload date ({ctx.today.isoformat()})" if ctx.uploaded else f"today's date ({ctx.today.isoformat()})"
 
 
 def _need(ctx: _Ctx, code: str, *names: str) -> list[Any] | None:
@@ -292,9 +300,9 @@ def _check_date_valid(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | None
         elif parsed > ctx.today and not _is_forward_looking_date_field(name):
             findings.append(_finding(
                 "GEN.DATE_VALID", "impossible",
-                f"{name} ({parsed.isoformat()}) is after today's date "
-                f"({ctx.today.isoformat()}) — nothing dated later than today can be genuine "
-                "yet",
+                f"{name} ({parsed.isoformat()}) is after {_as_of(ctx)} — "
+                + ("a document can't be dated after it was uploaded" if ctx.uploaded
+                   else "nothing dated later than today can be genuine yet"),
                 field=name, stated=parsed.isoformat(), expected=f"on or before {ctx.today.isoformat()}",
             ))
     return findings, None
@@ -600,8 +608,7 @@ def _check_cr_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck | N
             if d > ctx.today:
                 findings.append(_finding(
                     "CR.DATE_LOGIC", "impossible",
-                    f"Account {i + 1}'s {label} date ({d.isoformat()}) is in the future "
-                    f"(today is {ctx.today.isoformat()})",
+                    f"Account {i + 1}'s {label} date ({d.isoformat()}) is after {_as_of(ctx)}",
                     field=f"accounts[{i}].{field_name}", stated=d.isoformat(),
                 ))
             elif enquiry_date and d > enquiry_date:
@@ -942,7 +949,7 @@ def _check_nric_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck |
         ))
     if issue > ctx.today:
         findings.append(_finding(
-            "ID.DATE_LOGIC", "impossible", f"Issue date ({issue.isoformat()}) is in the future",
+            "ID.DATE_LOGIC", "impossible", f"Issue date ({issue.isoformat()}) is after {_as_of(ctx)}",
             field="date_of_issue", stated=issue.isoformat(),
         ))
     return findings, None
@@ -986,7 +993,8 @@ def _check_passport_expired(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck 
         return [], skip_missing("ID.EXPIRED", "date_of_expiry (unparseable)")
     if expiry < ctx.today:
         return [_finding(
-            "ID.EXPIRED", "signal", f"Passport expired on {expiry.isoformat()}",
+            "ID.EXPIRED", "signal", f"Passport expired on {expiry.isoformat()}"
+            + (f", before it was uploaded ({ctx.today.isoformat()})" if ctx.uploaded else ""),
             field="date_of_expiry", stated=expiry.isoformat(),
         )], None
     return [], None
@@ -1013,7 +1021,7 @@ def _check_fatca_date_logic(ctx: _Ctx) -> tuple[list[DateFinding], SkippedCheck 
     if declaration > ctx.today:
         findings.append(_finding(
             "FATCA.DATE_LOGIC", "inconsistent",
-            f"Declaration date ({declaration.isoformat()}) is in the future",
+            f"Declaration date ({declaration.isoformat()}) is after {_as_of(ctx)}",
             field="declaration_date", stated=declaration.isoformat(),
         ))
     form_version = parse_field_date(ctx.fields.get("form_version_date"))
@@ -1060,6 +1068,7 @@ def check_date_anomalies(
     document_id: str,
     extracted_fields: list[ExtractedField] | None = None,
     document_type: str | None = None,
+    uploaded_at: datetime | None = None,
 ) -> DateAnomalyResult:
     """
     AC1/AC2: extracts and labels every identifiable date. Then runs every
@@ -1076,6 +1085,10 @@ def check_date_anomalies(
     fields = fields_by_name(extracted_fields)
     confidences = confidence_by_name(extracted_fields)
     ctx = _Ctx(fields=fields, document_type=document_type, today=today_sg())
+    if uploaded_at is not None:
+        # Stored in UTC; the day it was uploaded is Singapore's.
+        aware = uploaded_at if uploaded_at.tzinfo else uploaded_at.replace(tzinfo=timezone.utc)
+        ctx = _Ctx(fields=fields, document_type=document_type, today=aware.astimezone(SINGAPORE).date(), uploaded=True)
 
     dates_extracted = extract_labeled_dates(ctx, confidences)
 

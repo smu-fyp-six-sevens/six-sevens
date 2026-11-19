@@ -1367,6 +1367,10 @@ _NOT_FLAGGED = [
         id='amount_parse_ignores_identifier_fields_that_mention_tax',
     ),
     pytest.param(
+        'GEN.AMOUNT_PARSE', None, [_field("share_capital_currency", "SINGAPORE, DOLLARS")],
+        id='amount_parse_ignores_currency_labels',
+    ),
+    pytest.param(
         'POA.USAGE_MATCH', "proof_of_address", [_field("usage_this_period", "500"),
              _field("consumption_trend", [
                  {"month": "Mar", "usage": 500}, {"month": "Feb", "usage": 420}, {"month": "Jan", "usage": 380},

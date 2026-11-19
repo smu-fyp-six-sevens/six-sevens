@@ -83,8 +83,8 @@
 .case-overview-severity { flex: none; min-width: 52px; padding: 0 6px; border: 1px solid transparent; border-radius: 4px; text-align: center; text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: .03em; line-height: 16px; }
 /* The Risk Summary's severity colours (case-summary.css .risk-severity), so a level reads the same on both. */
 .case-overview-severity--high { color: var(--white); background: var(--risk-high); }
-.case-overview-severity--medium { border-color: var(--risk-medium-border); color: var(--risk-medium-ink); background: var(--risk-medium-tint); }
-.case-overview-severity--low { border-color: var(--risk-low); color: var(--ink-soft); background: var(--white); }
+.case-overview-severity--medium { border-color: var(--risk-medium); background: var(--risk-medium); color: var(--ink); }
+.case-overview-severity--low { border-color: var(--risk-low); background: var(--risk-medium-tint); color: var(--risk-medium-ink); }
 .case-overview-document-copy { display: grid; min-width: 0; gap: 3px; }
 .case-overview-empty { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border-radius: 9px; background: var(--slate-97); color: var(--ink-soft); }
 .case-overview-empty > span { color: var(--teal); font-size: 17px; font-weight: 700; }

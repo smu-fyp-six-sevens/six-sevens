@@ -9,10 +9,17 @@ interface SelectMenuProps {
   value: string;
   disabled?: boolean;
   onChange: (next: string) => void;
+  // What an option reads as, when its value isn't its label (an id).
+  optionLabel?: (option: string) => string;
+  // An option that starts a second group: a hairline above it.
+  separateFrom?: string;
+  className?: string;
 }
 
 // A single-choice dropdown in the look of HeaderFilter: a button that opens a list, the current choice ticked.
-export default function SelectMenu({ name, options, value, disabled = false, onChange }: SelectMenuProps) {
+export default function SelectMenu({
+  name, options, value, disabled = false, onChange, optionLabel = (option) => option, separateFrom, className = '',
+}: SelectMenuProps) {
   const listId = useId();
   const rootRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -46,19 +53,19 @@ export default function SelectMenu({ name, options, value, disabled = false, onC
   useDismiss(rootRef, isOpen, () => setIsOpen(false), () => close(true));
 
   return (
-    <span className="header-filter select-menu" ref={rootRef}>
+    <span className={`header-filter select-menu ${className}`.trim()} ref={rootRef}>
       <button
         ref={triggerRef}
         type="button"
         className="header-filter-trigger"
         disabled={disabled}
-        aria-label={`${name}: ${value}`}
+        aria-label={`${name}: ${optionLabel(value)}`}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={isOpen ? listId : undefined}
         onClick={() => setIsOpen((open) => !open)}
       >
-        {value}
+        <span className="select-menu-value">{optionLabel(value)}</span>
         <svg className="select-menu-chevron" viewBox="0 0 12 8" aria-hidden="true">
           <path d="m1 1.5 5 5 5-5" />
         </svg>
@@ -73,13 +80,13 @@ export default function SelectMenu({ name, options, value, disabled = false, onC
               type="button"
               role="option"
               aria-selected={option === value}
-              className="header-filter-option select-menu-option"
+              className={`header-filter-option select-menu-option${option === separateFrom ? ' header-filter-option--separate' : ''}`}
               onClick={() => choose(option)}
             >
               <svg className="select-menu-check" viewBox="0 0 12 12" aria-hidden="true">
                 {option === value && <path d="M2 6.5 4.8 9 10 3" />}
               </svg>
-              <span className="header-filter-label">{option}</span>
+              <span className="header-filter-label">{optionLabel(option)}</span>
             </button>
           ))}
         </div>

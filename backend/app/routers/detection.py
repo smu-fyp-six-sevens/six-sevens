@@ -269,7 +269,7 @@ _CHECKS = [
     ),
     _Check(
         "date-anomalies", DateAnomalyResult,
-        lambda d, _, x: asyncio.to_thread(check_date_anomalies, d.id, x, d.document_type),
+        lambda d, _, x: asyncio.to_thread(check_date_anomalies, d.id, x, d.document_type, d.uploaded_at),
         "Every labelled date in the extracted fields, and the inconsistent or suspicious ones (no file download).",
         fields=True, step="check_date_anomalies", trace=_counted("findings"),
     ),

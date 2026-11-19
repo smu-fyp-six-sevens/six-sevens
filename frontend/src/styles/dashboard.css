@@ -116,8 +116,8 @@
 /* A flag's severity on the risk scale (tokens.css --risk-*), like the Risk Summary's .risk-severity. */
 .flag-severity { border: 1px solid transparent; }
 .flag-severity.high { background: var(--risk-high); color: var(--white); }
-.flag-severity.medium { border-color: var(--risk-medium-border); background: var(--risk-medium-tint); color: var(--risk-medium-ink); }
-.flag-severity.low { border-color: var(--risk-low); background: var(--white); color: var(--ink-soft); }
+.flag-severity.medium { border-color: var(--risk-medium); background: var(--risk-medium); color: var(--ink); }
+.flag-severity.low { border-color: var(--risk-low); background: var(--risk-medium-tint); color: var(--risk-medium-ink); }
 .flag-doc-types, .flag-case-ids { color: var(--ink-soft); font-size: 12.5px; }
 .dashboard-data-note { margin: -11px 0 15px; color: var(--ink-soft); font-size: 13px; }
 .dashboard-load-error { margin: 0 0 15px; }
@@ -271,8 +271,8 @@
 @keyframes flag-pill-in { from { opacity: 0; transform: scaleY(.3); } }
 .flag-pill-severity { justify-self: end; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .flag-pill-severity--high { background: var(--risk-high); color: var(--white); }
-.flag-pill-severity--medium { background: var(--risk-medium-tint); color: var(--risk-medium-ink); }
-.flag-pill-severity--low { background: var(--white); box-shadow: inset 0 0 0 1px var(--risk-low); color: var(--ink-soft); }
+.flag-pill-severity--medium { background: var(--risk-medium); color: var(--ink); }
+.flag-pill-severity--low { background: var(--risk-medium-tint); box-shadow: inset 0 0 0 1px var(--risk-low); color: var(--risk-medium-ink); }
 /* The panel is as tall as Documents by type beside it; the note sits at its foot. */
 .flag-insight-panel { display: flex; flex-direction: column; }
 .insight-note { margin: auto 0 0; padding-top: 14px; color: var(--text-muted); font-size: 12px; }

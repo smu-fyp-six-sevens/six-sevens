@@ -474,9 +474,9 @@ test.describe('Case risk score @sprint4 @SCRUM-84 @SCRUM-90', () => {
 
     await reviewCard(page).locator('.risk-document', { hasText: first.filename }).getByRole('button').click();
     const dialog = page.getByRole('dialog', { name: `Review findings on ${first.filename}` });
-    await dialog.getByText('Feedback the agent was shown: 1 item from other cases').click();
-    await expect(dialog.getByText('False alarm in 1 case')).toBeVisible();
-    await dialog.getByText('False alarm', { exact: true }).click();
+    await dialog.getByText('Learned from 1 past officer review').click();
+    await expect(dialog.getByText('False alarm in 1 other case')).toBeVisible();
+    await dialog.getByText('Author edited', { exact: true }).click();
 
     await expect(dialog.getByText('The tool misread the document')).toBeVisible();
     await expect(dialog.getByText('The scan software wrote the author')).toBeVisible();

@@ -1271,8 +1271,8 @@
 
 /* The Risk Summary's severity colours (case-summary.css .risk-severity). */
 .xray-severity--high { background: var(--risk-high); color: var(--white); }
-.xray-severity--medium { border-color: var(--risk-medium-border); background: var(--risk-medium-tint); color: var(--risk-medium-ink); }
-.xray-severity--low { border-color: var(--risk-low); background: var(--white); color: var(--ink-soft); }
+.xray-severity--medium { border-color: var(--risk-medium); background: var(--risk-medium); color: var(--ink); }
+.xray-severity--low { border-color: var(--risk-low); background: var(--risk-medium-tint); color: var(--risk-medium-ink); }
 
 @media (prefers-reduced-motion: reduce) {
   .xray-stage .finding-highlight-layer {

@@ -90,10 +90,11 @@ const runs: CaseAnalysisRunItem[] = [
     risk_level: 'High', risk_score: 72, score_change: null, finding_count: 3, stale: true },
 ];
 
-async function openAnalysis(page: Page, backend: MockBackend) {
+async function openAnalysis(page: Page, backend: MockBackend, additionalDocuments?: unknown) {
   const theCase = Object.assign(
     makeCase({ id: 'case-analysis', greenlink_case_id: 'GLDB-4004', risk }),
     { analysis: { run_id: LATEST, status: 'complete', stale: false, finding_count: 1, finished_at: '2026-10-27T02:03:00Z' } },
+    additionalDocuments === undefined ? {} : { additional_documents: additionalDocuments },
   );
   backend.cases.push(theCase);
   backend.documents.push(
@@ -231,6 +232,23 @@ test.describe('Case analysis summary and earlier runs', () => {
     await brief.getByRole('link', { name: 'A recent utility bill would help.' }).click();
 
     await expect(page).toHaveURL(/section=additional/);
+  });
+
+  test('"Would help" lists each document that would lower the score, each opening its request', async ({ page, backend }) => {
+    const suggestion = (title: string, affectsScore: boolean) => ({
+      addresses: [], affects_score: affectsScore, level_if_supports: null, recommendation: null, score_if_supports: null,
+      source: 'finding' as const, title, why: 'Confirms the address.',
+    });
+    const brief = await openAnalysis(page, backend, {
+      best_case_level: null, best_case_score: null, current_level: null, current_score: null, reason: null,
+      items: [suggestion('Utility bill', true), suggestion('Tenancy agreement', true), suggestion('Bank letter', false)],
+    });
+
+    const help = brief.locator('.analysis-brief-help');
+    await expect(help.getByRole('link')).toHaveText(['Utility bill', 'Tenancy agreement']);
+    await help.getByRole('link', { name: 'Tenancy agreement' }).click();
+
+    await expect(page).toHaveURL(/section=additional&request=finding-Tenancy\+agreement/);
   });
 
   test('earlier runs are listed newest first and open read-only, with their own summary', async ({ page, backend }) => {

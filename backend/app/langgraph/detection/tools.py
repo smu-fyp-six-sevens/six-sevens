@@ -550,7 +550,7 @@ async def date_consistency_tool(document_id: Annotated[str, InjectedState("docum
 
     fields = await _extracted_fields(document_id)
     result = await asyncio.to_thread(
-        check_date_anomalies, document_id, fields, document.document_type
+        check_date_anomalies, document_id, fields, document.document_type, document.uploaded_at
     )
     if result.unable_to_assess:
         return tool_result(

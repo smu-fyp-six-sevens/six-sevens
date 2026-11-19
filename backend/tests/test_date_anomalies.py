@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -424,3 +424,34 @@ def test_a_card_opened_on_the_21st_birthday_is_not_underage() -> None:
         _field("date_of_birth", "1986-01-23"),
     ], document_type="credit_report")
     assert _codes(result, "CR.AGE_AT_OPENING") == []
+
+
+def test_a_date_after_the_upload_is_caught_even_once_it_has_passed(monkeypatch) -> None:
+    # Signed 23 Nov, uploaded 18 Nov: impossible, and still so when the detection re-runs on 1 Dec.
+    monkeypatch.setattr(sg_time, "now_sg", lambda: datetime(2026, 12, 1, 9, 0, tzinfo=sg_time.SINGAPORE))
+    uploaded = datetime(2026, 11, 18, 2, 0, tzinfo=timezone.utc)
+    result = check_date_anomalies("doc-1", [_field("signing_date", "2026-11-23")], None, uploaded)
+    [finding] = _codes(result, "GEN.DATE_VALID")
+    assert "after the upload date (2026-11-18)" in finding.summary
+    assert "can't be dated after it was uploaded" in finding.summary
+    # Without the upload time it falls back to today, by which the date has passed.
+    assert _codes(_run([_field("signing_date", "2026-11-23")]), "GEN.DATE_VALID") == []
+
+
+def test_the_upload_day_is_singapores() -> None:
+    # 20:00 UTC on 17 Nov is 04:00 on 18 Nov in Singapore: a document dated the 18th was not uploaded before it.
+    uploaded = datetime(2026, 11, 17, 20, 0, tzinfo=timezone.utc)
+    result = check_date_anomalies("doc-1", [_field("declaration_date", "2026-11-18")], None, uploaded)
+    assert _codes(result, "GEN.DATE_VALID") == []
+
+
+def test_a_passport_expired_before_it_was_uploaded_says_so() -> None:
+    uploaded = datetime(2026, 11, 18, 2, 0, tzinfo=timezone.utc)
+    result = check_date_anomalies(
+        "doc-1",
+        [_field("date_of_issue", "2016-11-01"), _field("date_of_expiry", "2026-11-01"), _field("date_of_birth", "1990-01-01")],
+        "passport",
+        uploaded,
+    )
+    [finding] = _codes(result, "ID.EXPIRED")
+    assert finding.summary == "Passport expired on 2026-11-01, before it was uploaded (2026-11-18)"

@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '../../components/Icon';
-import type { AdverseMediaCheck, CaseAnalysis } from '../../services/uploadService';
+import type { AdditionalDocument, AdverseMediaCheck, CaseAnalysis } from '../../services/uploadService';
 import { analysisFindingAnchor, checkedAndFine, riskFindingAnchor, unverifiedChecks } from './analysisSummary';
+import { requestKey } from './requestedDocument';
 
 // A due-diligence aid, not a score: a web search for recent sanctions, regulatory action or negative news about
 // the company. A run says what happened; a skipped or failed one says why, quietly; one that didn't run it shows nothing.
@@ -138,13 +139,18 @@ export function AnalysisSummaryBlock({
   analysis,
   linkToRiskTab,
   footer,
+  suggestedDocuments = [],
 }: {
   analysis: CaseAnalysis;
   linkToRiskTab: boolean;
   // Under the reasons: on to every finding (Case Risk card's "See all findings").
   footer?: ReactNode;
+  // Every document the Additional Documents section suggests, listed under "Would help".
+  suggestedDocuments?: AdditionalDocument[];
 }) {
   const summary = analysis.structured_summary;
+  // Those that would lower the score if they support the client; with none of those, the summary's own line.
+  const helping = suggestedDocuments.filter((item) => item.affects_score);
   // Nothing scored: said beside the score, where the reasons would be, so the column isn't left empty.
   const noFindings = analysis.risk !== null && analysis.risk !== undefined && analysis.risk.contributing_findings.length === 0 ? (
     <div className="summary-message summary-message--success analysis-brief-clear">
@@ -219,7 +225,25 @@ export function AnalysisSummaryBlock({
 
       <AdverseMedia check={analysis.adverse_media} />
 
-      {summary.would_help && (
+      {helping.length > 0 ? (
+        <div className="analysis-brief-row analysis-brief-help">
+          <span className="analysis-brief-label">Would help</span>
+          {/* Each document by name, opening its request on the Additional Documents tab. */}
+          <ul className="analysis-brief-help-list">
+            {helping.map((item) => (
+              <li key={requestKey(item)}>
+                <Link
+                  className="analysis-brief-link"
+                  to={{ search: `?${new URLSearchParams({ section: 'additional', request: requestKey(item) })}` }}
+                >
+                  {item.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : summary.would_help && (
+        // No document that lowers the score (or an earlier run): the summary's own line.
         <p className="analysis-brief-row analysis-brief-help">
           <span className="analysis-brief-label">Would help</span>
           <Link className="analysis-brief-link" to={{ search: '?section=additional' }}>

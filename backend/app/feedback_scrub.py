@@ -35,7 +35,17 @@ _AMOUNT = re.compile(
 # Phone numbers and account numbers: runs of digits, spaces and dashes with at least 8 digits.
 _NUMBER_RUN = re.compile(r"\+?\d[\d -]{6,}\d")
 # Fields that name a person or a company, whatever the document type calls them.
-_NAME_KEYS = ("name", "employer", "holder", "director", "shareholder", "payee", "payer", "company", "signatory")
+_NAME_KEYS = (
+    "name", "employer", "holder", "director", "shareholder", "payee", "payer", "company", "signatory", "subscriber",
+    "officer", "partner", "secretary", "guarantor", "applicant",
+)
+# A finding names a person in a table by role and row: "Subscriber 1 (Teo Kai Wen), Address". Whatever is in the
+# brackets is the person, so it goes even when the case's fields didn't hold the name.
+_ROLE_ROW = re.compile(
+    r"\b((?:Subscriber|Shareholder|Director|Officer|Partner|Secretary|Guarantor|Member|Owner|Signatory|Holder|"
+    r"Applicant|Payee|Payer)s?\s+\d+)\s*\((?!\[name\]\))[^()]+\)",
+    re.IGNORECASE,
+)
 # Words of a company name that say nothing about which company: never scrubbed on their own.
 _GENERIC_WORDS = {
     "PTE", "LTD", "PRIVATE", "LIMITED", "LLP", "INC", "CORP", "CORPORATION", "CO", "COMPANY", "HOLDINGS", "GROUP",
@@ -59,7 +69,7 @@ def scrub(text: str | None, names: list[str] | None = None) -> str | None:
     """`text` with confidential details replaced by placeholders; None and blank stay None."""
     if text is None or not text.strip():
         return None
-    out = text
+    out = _ROLE_ROW.sub(r"\1 ([name])", text)
     # Names first, longest first, so "Acme Holdings Pte Ltd" goes whole rather than leaving "Pte Ltd".
     for name in _name_parts(names):
         out = re.sub(rf"(?<!\w){re.escape(name)}(?!\w)", "[name]", out, flags=re.IGNORECASE)

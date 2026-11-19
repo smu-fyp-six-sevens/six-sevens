@@ -42,10 +42,74 @@ function BreakdownTable({ total }: { total: RecommendationItem }) {
   );
 }
 
-function scoreEffect(item: AdditionalDocument): string {
-  if (!item.affects_score) return 'No effect on score';
-  const level = item.level_if_supports ? ` (${item.level_if_supports})` : '';
-  return `If it supports the client: ${item.score_if_supports}${level}`;
+function LevelBadge({ level }: { level: string | null }) {
+  if (!level) return null;
+  return <span className={`risk-badge risk-badge--${level.toLowerCase()}`}>{level}</span>;
+}
+
+// The score now and at best (every request supports the client), large, and how far the documents could take it down.
+function ScoreOutlook({ now, nowLevel, best, bestLevel }: { now: number; nowLevel: string | null; best: number; bestLevel: string | null }) {
+  const drop = now - best;
+  return (
+    <div className="additional-outlook">
+      <div className="additional-outlook-figures">
+        <div className="additional-outlook-figure">
+          <span className="additional-outlook-label">Score now</span>
+          <span className="additional-outlook-value">
+            <strong>{now}</strong>
+            <LevelBadge level={nowLevel} />
+          </span>
+        </div>
+        <div className="additional-outlook-figure">
+          <span className="additional-outlook-label">If every request supports the client</span>
+          <span className="additional-outlook-value">
+            <strong>{best}</strong>
+            <LevelBadge level={bestLevel} />
+          </span>
+        </div>
+        <div className="additional-outlook-figure additional-outlook-figure--drop">
+          <span className="additional-outlook-label">Could come down by</span>
+          <span className="additional-outlook-value">
+            <strong>{drop}</strong>
+            <span className="additional-outlook-unit">{drop === 1 ? 'point' : 'points'}</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Beside each request: the score it would leave if it supports the client, and how much that takes off.
+function ScoreEffect({ item, current }: { item: AdditionalDocument; current: number | null }) {
+  if (!item.affects_score || item.score_if_supports == null) {
+    return (
+      <div className="additional-effect additional-effect--none">
+        <span className="additional-effect-label">No effect on score</span>
+      </div>
+    );
+  }
+  const drop = current == null ? null : current - item.score_if_supports;
+  return (
+    <div className="additional-effect">
+      <span className="additional-effect-label">If it supports the client</span>
+      <span className="additional-effect-value">
+        <strong>{item.score_if_supports}</strong>
+        <LevelBadge level={item.level_if_supports} />
+      </span>
+      {drop != null && drop > 0 && (
+        <span className="additional-effect-drop">
+          {drop} {drop === 1 ? 'point' : 'points'} lower
+        </span>
+      )}
+    </div>
+  );
+}
+
+// The requests that move the score most first; the rest keep their order.
+function byEffect(items: AdditionalDocument[]): AdditionalDocument[] {
+  const score = (item: AdditionalDocument) =>
+    item.affects_score && item.score_if_supports != null ? item.score_if_supports : Number.POSITIVE_INFINITY;
+  return [...items].sort((a, b) => score(a) - score(b));
 }
 
 // Produced by the case analysis run (backend risk/additional_documents.py): checklist rules and the agent's requests.
@@ -70,7 +134,7 @@ export function AdditionalDocumentsCard({
     if (highlightedPresent) highlightedRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
   }, [highlightedPresent, highlightedRequest]);
 
-  const items: AdditionalDocument[] = additionalDocuments?.items ?? [];
+  const items: AdditionalDocument[] = byEffect(additionalDocuments?.items ?? []);
   const reason = additionalDocuments?.reason ?? null;
   const canMoveScore = items.some((item) => item.affects_score);
   const best = additionalDocuments;
@@ -144,15 +208,12 @@ export function AdditionalDocumentsCard({
             best?.best_case_score != null &&
             best.current_score != null &&
             best.best_case_score < best.current_score && (
-              <p className="analysis-score-compare">
-                <span>
-                  Now <strong>{best.current_score}</strong> ({best.current_level})
-                </span>
-                <span className="analysis-score-arrow">→</span>
-                <span>
-                  Best case <strong>{best.best_case_score}</strong> ({best.best_case_level})
-                </span>
-              </p>
+              <ScoreOutlook
+                now={best.current_score}
+                nowLevel={best.current_level}
+                best={best.best_case_score}
+                bestLevel={best.best_case_level}
+              />
             )}
 
           {items.length === 0 && (reason === null || reason === 'none_needed') ? (
@@ -174,15 +235,16 @@ export function AdditionalDocumentsCard({
                 <div
                   key={requestKey(item)}
                   ref={requestKey(item) === highlightedRequest ? highlightedRef : undefined}
-                  className={`flagged-item${requestKey(item) === highlightedRequest ? ' flagged-item--highlighted' : ''}`}
+                  className={`flagged-item additional-request${requestKey(item) === highlightedRequest ? ' flagged-item--highlighted' : ''}`}
                   aria-current={requestKey(item) === highlightedRequest ? 'true' : undefined}
                 >
-                  <div className="flagged-item-main">
-                    <strong>{item.title}</strong>
+                  <div className="flagged-item-main additional-request-main">
+                    <h3 className="additional-request-title">{item.title}</h3>
+                    <span className="additional-request-source">
+                      {item.source === 'checklist' ? 'Checklist requirement' : 'Asked for by the findings'}
+                    </span>
 
-                    <p>{item.why}</p>
-
-                    <p className="supporting-document-request">{scoreEffect(item)}</p>
+                    <p className="additional-request-why">{item.why}</p>
 
                     {item.recommendation && (
                       <>
@@ -200,6 +262,8 @@ export function AdditionalDocumentsCard({
                       </>
                     )}
                   </div>
+
+                  <ScoreEffect item={item} current={best?.current_score ?? null} />
                 </div>
               ))}
             </div>

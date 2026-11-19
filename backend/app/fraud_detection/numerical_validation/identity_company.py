@@ -129,9 +129,9 @@ def _looks_like_date_field(name: str) -> bool:
 
 
 def _looks_like_amount_field(name: str) -> bool:
-    # Identifiers and labels that merely mention an amount word (tax_reference_number, payment_date, tax_type)
-    # aren't amounts.
-    if re.search(r"number|_no$|reference|_ref|_id$|code|date|_type$|name|period", name, re.IGNORECASE):
+    # Identifiers and labels that merely mention an amount word (tax_reference_number, payment_date, tax_type,
+    # share_capital_currency) aren't amounts.
+    if re.search(r"number|_no$|reference|_ref|_id$|code|date|_type$|name|period|currency", name, re.IGNORECASE):
         return False
     return bool(re.search(r"amount|balance|pay$|_pay|capital|value|tax|eci|income|price|rate$", name, re.IGNORECASE))
 

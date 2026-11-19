@@ -146,18 +146,18 @@
   font-size: 12px;
 }
 
-/* The risk scale (tokens.css --risk-*): outline, tint, then solid as the level rises, so no level reads as
-   "safe". */
+/* The risk scale (tokens.css --risk-*), the same steps as a finding's .risk-severity: a pale peach tint, the
+   orange fill, then solid as the level rises, so no level reads as "safe". */
 .risk-badge--low {
   border-color: var(--risk-low);
-  background: var(--white);
-  color: var(--ink-soft);
+  background: var(--risk-medium-tint);
+  color: var(--risk-medium-ink);
 }
 
 .risk-badge--medium {
-  border-color: var(--risk-medium-border);
-  background: var(--risk-medium-tint);
-  color: var(--risk-medium-ink);
+  border-color: var(--risk-medium);
+  background: var(--risk-medium);
+  color: var(--ink);
 }
 
 .risk-badge--high {
@@ -1440,21 +1440,6 @@
   cursor: pointer;
 }
 
-.shown-feedback-verdict {
-  flex-shrink: 0;
-  color: var(--ink);
-  font-weight: 700;
-}
-
-.shown-feedback-verdict--wrong {
-  color: var(--risk-medium-ink);
-}
-
-.shown-feedback-verdict--correct,
-.shown-feedback-verdict--missed {
-  color: var(--steel-dark);
-}
-
 .shown-feedback-summary {
   min-width: 0;
   color: var(--text-muted);
@@ -1563,11 +1548,176 @@
   color: var(--violet-dark);
 }
 
-/* The request the officer followed a link to from the Documents tab: tinted and edged in the Requested group's
-   violet, after a brief flash. */
+/* Additional Documents (AdditionalDocumentsCard): what the requests could do to the score, then each request with its
+   own effect in a column beside it. */
+/* 20px over the label (whose line height adds ~2px) and 22px under the figures: the same space above and below. */
+.additional-outlook {
+  padding: 20px 20px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Straight under the card header, the header's own 14px bottom margin would add to the space above. */
+.summary-card-header + .additional-outlook {
+  margin-top: -14px;
+}
+
+.additional-outlook-figures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 40px;
+}
+
+.additional-outlook-figure {
+  display: grid;
+  gap: 4px;
+}
+
+.additional-outlook-label,
+.additional-effect-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.additional-outlook-value,
+.additional-effect-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.additional-outlook-value strong {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.additional-outlook-value .risk-badge,
+.additional-effect-value .risk-badge {
+  margin-left: 0;
+}
+
+/* The drop sits after the two scores, set off by a hairline: what the requests are worth. */
+.additional-outlook-figure--drop {
+  padding-left: 40px;
+  border-left: 1px solid var(--line);
+}
+
+.additional-outlook-unit {
+  margin-left: -4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.additional-request {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  align-items: start;
+  gap: 28px;
+  padding: 20px;
+}
+
+.additional-request-main {
+  max-width: 760px;
+}
+
+.additional-request-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.additional-request-source {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.flagged-item-main p.additional-request-why {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.additional-request .supporting-document-breakdown {
+  max-width: 620px;
+}
+
+.additional-effect {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  text-align: right;
+}
+
+.additional-effect-value strong {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.additional-effect-drop {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.additional-effect--none .additional-effect-label {
+  padding-top: 2px;
+}
+
+@media (max-width: 620px) {
+  .additional-outlook-figures {
+    gap: 14px 28px;
+  }
+
+  .additional-outlook-figure--drop {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  /* The breakdown keeps its columns and scrolls sideways rather than spilling out of the card. */
+  .additional-request .supporting-document-breakdown {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .additional-request {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  /* Under the request on a phone, read left to right: the label, then the score and level, then the drop. */
+  .additional-effect {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-items: start;
+    gap: 4px 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    text-align: left;
+  }
+
+  .additional-effect-value strong {
+    font-size: 20px;
+  }
+}
+
+/* The request the officer followed a link to: tinted in the Requested group's violet, after a brief flash. */
 .flagged-item--highlighted {
   background: var(--violet-bg);
-  box-shadow: inset 4px 0 0 var(--violet);
   animation: request-highlight 1.6s ease-out;
 }
 

@@ -133,7 +133,8 @@ test.describe('Attach officer notes @sprint4 @SCRUM-81', () => {
     // From the case's notes, picking the document: it shows who wrote it, when, and which document.
     await page.goto(`${fixture.caseUrl}?section=notes`);
     await page.getByLabel('New note').fill('CPF figure checked against the CPF statement.');
-    await page.locator('.notes-attach select').selectOption({ label: payslip.filename });
+    await page.getByRole('button', { name: /^Note on:/ }).click();
+    await page.getByRole('option', { name: payslip.filename }).click();
     await page.getByRole('button', { name: 'Save note' }).click();
     const notes = page.getByTestId('note');
     await expect(notes).toHaveCount(2);

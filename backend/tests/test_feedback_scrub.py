@@ -56,3 +56,13 @@ def test_amounts_are_scrubbed_with_or_without_a_currency() -> None:
 def test_the_words_every_company_has_are_never_scrubbed_alone() -> None:
     text = "A Pte Ltd must file its accounts"
     assert scrub(text, ["Acme Holdings Pte Ltd"]) == text
+
+
+def test_a_person_named_by_role_and_row_is_scrubbed_without_the_case_holding_the_name() -> None:
+    text = "the company is registered at a home. Also printed in Subscriber 1 (Teo Kai Wen), Address"
+    assert scrub(text) == "the company is registered at a home. Also printed in Subscriber 1 ([name]), Address"
+
+
+def test_subscribers_are_names() -> None:
+    fields = {"subscribers": [{"name": "Teo Kai Wen", "id_number": "S1234567D"}]}
+    assert names_in(fields) == ["Teo Kai Wen"]

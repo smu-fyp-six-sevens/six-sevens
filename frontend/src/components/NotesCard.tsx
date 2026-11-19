@@ -6,6 +6,7 @@ import { formatDate } from '../pages/document-details/formatters';
 import { addCaseNote, deleteCaseNote, listCaseNotes, updateCaseNote, type CaseNote } from '../services/uploadService';
 import { ErrorMessage } from './ErrorMessage';
 import { Icon } from './Icon';
+import SelectMenu from './SelectMenu';
 
 const MAX_NOTE_LENGTH = 4000; // MAX_NOTE_LENGTH in backend/app/models.py
 const WHOLE_CASE = '';
@@ -240,17 +241,21 @@ export function NotesCard({
         />
         <div className="notes-composer-actions">
           {documentId === undefined && (
-            <label className="notes-attach">
+            <span className="notes-attach">
               On
-              <select value={attachTo} onChange={(event) => setAttachTo(event.target.value)}>
-                <option value={WHOLE_CASE}>{caseLabel}</option>
-                {documents.map((document) => (
-                  <option key={document.id} value={document.id}>
-                    {document.filename}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <SelectMenu
+                className="notes-attach-menu"
+                name="Note on"
+                options={[WHOLE_CASE, ...documents.map((document) => document.id)]}
+                value={attachTo}
+                onChange={setAttachTo}
+                optionLabel={(option) =>
+                  option === WHOLE_CASE
+                    ? `Whole case (${caseLabel})`
+                    : documents.find((document) => document.id === option)?.filename ?? option}
+                separateFrom={documents[0]?.id}
+              />
+            </span>
           )}
           <button type="submit" className="analysis-action" disabled={isSaving || !draft.trim()}>
             {isSaving && editor === null ? 'Saving…' : 'Save note'}
