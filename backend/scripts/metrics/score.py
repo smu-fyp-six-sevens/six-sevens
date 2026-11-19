@@ -49,6 +49,7 @@ import argparse
 import ast
 import json
 import re
+import statistics
 import sys
 import unicodedata
 from collections import Counter, defaultdict
@@ -400,6 +401,7 @@ def score_seed(seed_dir: Path, only: set[str] | None = None) -> dict[str, Any]:
             "system": level,
             "system_level": level,
             "score": ((analysis or {}).get("risk") or {}).get("score"),
+            "processing_time": result.get("processing_time"),
         })
         notes.extend(f"{case_id}: {note}" for note in result.get("notes") or [])
     return {
@@ -411,6 +413,39 @@ def score_seed(seed_dir: Path, only: set[str] | None = None) -> dict[str, Any]:
         "risk": risk,
         "run_notes": notes,
     }
+
+
+_LEVELS = ("Low", "Medium", "High", "Critical")
+
+
+def _levels_apart(expected: str | None, system: str | None) -> int:
+    """How many risk levels apart; a case with no level is as far off as it can be."""
+    if expected not in _LEVELS or system not in _LEVELS:
+        return len(_LEVELS)
+    return abs(_LEVELS.index(expected) - _LEVELS.index(system))
+
+
+def _processing_summary(cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """
+    Processing time: how long the system worked on each case, from the first upload to the scored analysis,
+    leaving out the time an officer took to review and approve (fetch_cases._processing_time). Cases run through
+    run_pipeline have no audit trail, so no time.
+    """
+    timed = [(c["case_id"], c["processing_time"]) for c in cases if c.get("processing_time")]
+    busy = [t["busy_seconds"] for _, t in timed]
+    return {
+        "cases": len(timed),
+        "mean_seconds": round(statistics.mean(busy), 1) if busy else None,
+        "median_seconds": round(statistics.median(busy), 1) if busy else None,
+        "min_seconds": min(busy) if busy else None,
+        "max_seconds": max(busy) if busy else None,
+        "mean_analysis_seconds": round(statistics.mean(t["analysis_seconds"] for _, t in timed), 1) if timed else None,
+        "by_case": {case_id: t for case_id, t in timed},
+    }
+
+
+def _minutes(seconds: float | None) -> str:
+    return "n/a" if seconds is None else f"{seconds / 60:.1f} min"
 
 
 def summarise(seeds: list[dict[str, Any]]) -> dict[str, Any]:
@@ -472,6 +507,12 @@ def summarise(seeds: list[dict[str, Any]]) -> dict[str, Any]:
             "accuracy": _rate(sum(1 for c in cases if c["expected"] == c["system_level"]), len(cases)),
             "by_seed": {str(s["seed"]): _rate(sum(1 for c in s["risk"] if c["expected"] == c["system_level"]),
                                               len(s["risk"])) for s in seeds},
+            "within_one_level": {
+                "correct": sum(1 for c in cases if _levels_apart(c["expected"], c["system_level"]) <= 1),
+                "total": len(cases),
+                "accuracy": _rate(sum(1 for c in cases if _levels_apart(c["expected"], c["system_level"]) <= 1),
+                                  len(cases)),
+            },
             "confusion": {f"{expected} -> {system}": n for (expected, system), n in sorted(confusion.items())},
             "wrong": [c for c in cases if c["expected"] != c["system_level"]],
             "clean_cases_rated_above_low": {
@@ -481,6 +522,7 @@ def summarise(seeds: list[dict[str, Any]]) -> dict[str, Any]:
                               sum(1 for c in cases if c["expected"] == "Low")),
             },
         },
+        "processing_time": _processing_summary(cases),
         "detection": {
             "forged_documents_flagged": {"flagged": sum(1 for d in forged if d["flagged"]), "total": len(forged),
                                          "accuracy": _rate(sum(1 for d in forged if d["flagged"]), len(forged))},
@@ -544,13 +586,27 @@ def markdown(summary: dict[str, Any], seeds: list[dict[str, Any]]) -> str:
         f"| Extraction accuracy (key fields) | {_pct(e['key_fields']['accuracy'])} | "
         f"{e['key_fields']['correct']} of {e['key_fields']['total']} fields |",
         f"| Risk score accuracy | {_pct(r['accuracy'])} | {r['correct']} of {r['total']} cases |",
+        f"| Risk score accuracy (within one level) | {_pct(r['within_one_level']['accuracy'])} | "
+        f"{r['within_one_level']['correct']} of {r['within_one_level']['total']} cases |",
         f"| Anomaly detection accuracy | {_pct(d['forged_documents_flagged']['accuracy'])} | "
         f"{d['forged_documents_flagged']['flagged']} of {d['forged_documents_flagged']['total']} forged documents |",
         f"| False positive rate (clean documents flagged) | {_pct(d['clean_documents_flagged']['rate'])} | "
         f"{d['clean_documents_flagged']['flagged']} of {d['clean_documents_flagged']['total']} scanned clean documents |",
         f"| False positive rate (clean cases rated above Low) | {_pct(r['clean_cases_rated_above_low']['rate'])} | "
         f"{r['clean_cases_rated_above_low']['count']} of {r['clean_cases_rated_above_low']['total']} clean cases |",
+        f"| Processing time (upload to completed analysis, officer time excluded) | "
+        f"{_minutes(summary['processing_time']['mean_seconds'])} average | "
+        f"{summary['processing_time']['cases']} cases, {_minutes(summary['processing_time']['min_seconds'])} to "
+        f"{_minutes(summary['processing_time']['max_seconds'])} |",
         "",
+        *(["## Processing time", "",
+           "The time the system worked on each case: each document's upload until it was extracted, its approval "
+           "until detection finished, and the analysis run, overlaps counted once. The officer's review and approval "
+           "in between is left out; the wall clock below includes it.", "",
+           "| Case | Processing time | Wall clock | Case analysis |", "|---|---|---|---|",
+           *[f"| {case_id} | {_minutes(t['busy_seconds'])} | {_minutes(t['wall_clock_seconds'])} | "
+             f"{t['analysis_seconds']:.0f} s |" for case_id, t in summary["processing_time"]["by_case"].items()],
+           ""] if summary["processing_time"]["cases"] else []),
         "## Classification",
         "",
         "| Document type | Accuracy | Count |",

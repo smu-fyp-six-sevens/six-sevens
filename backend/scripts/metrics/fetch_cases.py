@@ -33,6 +33,7 @@ import json
 import os
 import sys
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -139,6 +140,50 @@ def _undo_officer(fields: dict[str, Any], current_type: str | None, events: list
     return original_type, fields, sorted(edited_lists), actions
 
 
+def _at(event: dict[str, Any], key: str = "occurred_at") -> datetime:
+    return datetime.fromisoformat(event[key])
+
+
+def _processing_time(client: httpx.Client, case_id: str, run_id: str | None) -> dict[str, Any] | None:
+    """
+    How long the system worked on the case, from its audit trail: each document's upload until it was extracted,
+    its approval until detection finished, and the analysis run that is scored, overlaps counted once. The time an
+    officer took to review and approve sits between these and isn't counted. None when the case has no analysis.
+    """
+    events = sorted(_check(client.get("/audit/events", params={"case_id": case_id, "limit": 1000}),
+                           "reading the case's audit trail"), key=lambda e: e["occurred_at"])
+    by_document: dict[str, list[dict[str, Any]]] = {}
+    for event in events:
+        if event.get("document_id"):
+            by_document.setdefault(event["document_id"], []).append(event)
+    spans = []
+    for trail in by_document.values():
+        for start_type, end_type in (("document.uploaded", "document.analyzed"), ("document.approved", "document.detected")):
+            start = next((e for e in trail if e["type"] == start_type), None)
+            end = start and next((e for e in trail if e["type"] == end_type and e["occurred_at"] >= start["occurred_at"]), None)
+            if start and end:
+                spans.append((_at(start), _at(end)))
+    runs = [e for e in events if e["type"] == "case.analysis.completed" and e.get("outcome") == "success"]
+    run = next((e for e in reversed(runs) if (e.get("detail") or {}).get("run_id") == run_id), runs[-1] if runs else None)
+    if run is None:
+        return None
+    analysis = (_at(run, "started_at") if run.get("started_at") else _at(run), _at(run))
+    spans.append(analysis)
+    busy, end = 0.0, None
+    for start, finish in sorted(spans):
+        if end is None or start > end:
+            busy += (finish - start).total_seconds()
+            end = finish
+        elif finish > end:
+            busy += (finish - end).total_seconds()
+            end = finish
+    return {
+        "busy_seconds": round(busy, 1),
+        "wall_clock_seconds": round((analysis[1] - min(s for s, _ in spans)).total_seconds(), 1),
+        "analysis_seconds": round((analysis[1] - analysis[0]).total_seconds(), 1),
+    }
+
+
 def fetch_case(client: httpx.Client, number: str, labels: dict[str, Any], owners: dict[str, list[str]]) -> tuple[str, dict]:
     item = _check(client.get(f"/cases/by-number/{number}"), f"looking up {number}")
     api_case_id = item["id"]
@@ -222,6 +267,7 @@ def fetch_case(client: httpx.Client, number: str, labels: dict[str, Any], owners
         "case_id": case_id, "seed": 0, "source": f"fetched from {number}",
         "api_case_id": api_case_id, "greenlink_case_id": item.get("greenlink_case_id") or number,
         "documents": records, "excluded_documents": excluded, "analysis": analysis, "notes": notes,
+        "processing_time": _processing_time(client, api_case_id, (analysis or {}).get("run_id")),
     }
 
 
