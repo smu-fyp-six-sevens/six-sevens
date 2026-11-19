@@ -85,9 +85,43 @@ def uen_key(value: object) -> str | None:
     return found.group(0) if found else cleaned or None
 
 
+# Real, published algorithm: weights 2-7-6-5-4-3-2 over the 7 digits, an offset added before the modulus (4 for
+# T/G, 3 for M, 0 for S/F), remainder mod 11, and, only for the M series, the index reflected as 10 - index.
+_NRIC_WEIGHTS = (2, 7, 6, 5, 4, 3, 2)
+_NRIC_TABLE_ST = "JZIHGFEDCBA"
+_NRIC_TABLE_FG = "XWUTRQPNMLK"
+_NRIC_TABLE_M = "KLJNPQRTUWX"
+# An NRIC/FIN whose check letter was read as a digit (OCR turns I into 1, B into 8...). A real one never ends in one.
+_NRIC_DIGIT_LETTER = re.compile(r"^([STFGM])(\d{7})\d$")
+
+
+def nric_check_letter(prefix: str, digits: str) -> str | None:
+    """The check letter an NRIC/FIN with this prefix and these 7 digits carries; None for an unknown prefix."""
+    prefix = prefix.upper()
+    index = ((4 if prefix in ("T", "G") else 3 if prefix == "M" else 0)
+             + sum(int(d) * w for d, w in zip(digits, _NRIC_WEIGHTS))) % 11
+    if prefix == "M":
+        return _NRIC_TABLE_M[10 - index]
+    if prefix in ("S", "T"):
+        return _NRIC_TABLE_ST[index]
+    if prefix in ("F", "G"):
+        return _NRIC_TABLE_FG[index]
+    return None
+
+
 def id_key(value: object) -> str | None:
-    """An ID number (NRIC, passport...) with spaces and punctuation dropped; None when nothing is left."""
-    return alnum(value) or None
+    """
+    An ID number (NRIC, passport...) with spaces and punctuation dropped; None when nothing is left. An NRIC/FIN
+    that ends in a digit had its check letter misread, so the letter its digits call for is put back:
+    "S74345681" -> "S7434568I". The letter follows from the digits, so a genuinely different ID still differs.
+    """
+    key = alnum(value)
+    misread = _NRIC_DIGIT_LETTER.match(key)
+    if misread:
+        letter = nric_check_letter(misread.group(1), misread.group(2))
+        if letter:
+            key = f"{misread.group(1)}{misread.group(2)}{letter}"
+    return key or None
 
 
 def name_tokens(value: object) -> list[str]:

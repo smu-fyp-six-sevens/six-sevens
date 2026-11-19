@@ -171,3 +171,17 @@ def test_a_second_look_floored_after_an_unfloored_first_rating_keeps_the_higher_
     assert merged["severity"] == "medium"
     assert merged["agent_severity"] == "low"
     assert merged["severity_floor_reason"] == specialists._RULE_FLOOR_REASON
+
+
+def test_a_rule_check_signal_is_not_held_at_medium() -> None:
+    # C021: a bank statement that prints no opening balance got BS.OPEN_CLOSE's "can't be checked" note, and the
+    # balance-check floor held it at medium, enough alone to rate a clean case Medium.
+    note = _finding("BS.OPEN_CLOSE", "signal", summary="The statement prints no opening balance")
+    [kept] = _collect(note, "bank_statement")["findings"]
+    assert kept["severity"] == "low"
+    assert "severity_floor_reason" not in kept
+
+
+def test_a_balance_that_does_not_add_up_is_still_held_at_medium() -> None:
+    [kept] = _collect(_finding("BS.OPEN_CLOSE", "inconsistent"), "bank_statement")["findings"]
+    assert kept["severity"] == "medium"

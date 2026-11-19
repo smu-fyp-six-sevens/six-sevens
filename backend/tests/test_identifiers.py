@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.identifiers import alnum, company_key, id_key, linked_people, name_key, uen_key
+from app.identifiers import alnum, company_key, id_key, linked_people, name_key, nric_check_letter, uen_key
 
 
 def test_alnum_keeps_letters_and_digits_upper_case() -> None:
@@ -11,6 +11,27 @@ def test_alnum_keeps_letters_and_digits_upper_case() -> None:
 def test_id_key_ignores_spaces_and_punctuation() -> None:
     assert id_key("S 1234567-A") == "S1234567A"
     assert id_key("!!!") is None and id_key(None) is None
+
+
+def test_nric_check_letter_follows_the_published_rule() -> None:
+    assert nric_check_letter("S", "7434568") == "I"
+    assert nric_check_letter("s", "0426464") == "I"
+    assert nric_check_letter("X", "1234567") is None
+
+
+def test_id_key_puts_back_a_check_letter_read_as_a_digit() -> None:
+    # C015: Ho Mei Ling's NRIC S7434568I was read off a scan as S74345681.
+    assert id_key("S74345681") == id_key("S7434568I") == "S7434568I"
+    assert id_key("s 7434568-1") == "S7434568I"
+
+
+def test_id_key_leaves_a_different_id_different() -> None:
+    # A wrong digit is still a different person; only a digit in the letter's place is put back.
+    assert id_key("S7434569I") != id_key("S7434568I")
+    assert id_key("S74345691") != id_key("S7434568I")
+    # Not NRIC-shaped (passport numbers, UENs...): left as read.
+    assert id_key("E12345678") == "E12345678"
+    assert id_key("201912345K") == "201912345K"
 
 
 def test_uen_key_pulls_the_uen_out_of_a_labelled_value() -> None:

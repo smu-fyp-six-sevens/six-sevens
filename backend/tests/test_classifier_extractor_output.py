@@ -324,3 +324,33 @@ def test_text_without_example_blocks_is_untouched() -> None:
 
     assert result["dropped_example_values"] == []
     assert result["extracted_fields"] == {"bureau_score": 1500}
+
+
+async def _schema_used(classification: dict) -> str:
+    failed = {
+        "extracted_fields": {}, "field_confidences": {}, "confidence": 0.0, "escalation": None,
+        "output_error": "stop here", "output_status": "failed",
+    }
+    run = AsyncMock(return_value=failed)
+    with (
+        patch.object(nodes, "set_status", AsyncMock()),
+        patch.object(nodes, "trace"),
+        patch.object(nodes.text_cache, "get", return_value="text"),
+        patch.object(nodes.extract, "run_extraction", run),
+        patch.object(nodes, "extracted_fields_repository"),
+        patch.object(nodes, "document_repository"),
+    ):
+        await nodes.extract_node({"document_id": "d", "classification": classification})  # type: ignore[arg-type]
+    return run.await_args.args[0]
+
+
+async def test_a_confident_type_flagged_for_review_is_extracted_with_its_own_schema() -> None:
+    # GLDB-6: a DBS statement at 0.97 that the classifier flagged for review was read with the generic schema, so
+    # it had no transactions, and at that confidence the officer can't retype it to get them.
+    classification = {"document_type": "bank_statement", "confidence": 0.97, "needs_manual_review": True}
+    assert await _schema_used(classification) == "bank_statement"
+
+
+async def test_a_low_confidence_type_is_still_extracted_with_the_generic_schema() -> None:
+    classification = {"document_type": "bank_statement", "confidence": 0.5, "needs_manual_review": True}
+    assert await _schema_used(classification) == "unrecognised"

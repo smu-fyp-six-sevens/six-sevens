@@ -6,11 +6,35 @@ import re
 
 from ...models import AdditionalDocument, AdditionalDocuments, CaseRisk, SupportingDocumentRecommendation
 from ..models import EvidenceRequest, RiskOutlook
-from .outlook import _reducible, resolve_finding_id
+from .case_risk import rate_findings
+from .outlook import _adjusted, _reducible, resolve_finding_id
+
+# Checklist rules whose document answers the scored finding they were raised for: a recent statement showing the
+# current address settles the address mismatch, so it is re-scored like a request that fully answers it.
+_ANSWERS_ITS_FINDING = frozenset({"current_address_evidence"})
 
 
 def _key(title: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
+
+
+def _same(a: str, b: str) -> bool:
+    return " ".join(a.split()) == " ".join(b.split())
+
+
+def _rule_effect(rec: SupportingDocumentRecommendation, risk: CaseRisk) -> tuple[list[str], int | None, str | None]:
+    """The findings a rule's document answers, and the case's score and level once they're answered."""
+    if rec.document_type not in _ANSWERS_ITS_FINDING or risk.state != "scored" or risk.score is None:
+        return [], None, None
+    raised_for = [item.description for item in rec.items if item.description]
+    answered = [
+        f.finding_id for f in risk.contributing_findings
+        if f.points > 0 and _reducible(f) and any(_same(f.summary, d) for d in raised_for)
+    ]
+    if not answered:
+        return [], None, None
+    level, score, _, _ = rate_findings(_adjusted(risk.contributing_findings, {f: 0.0 for f in answered}))
+    return answered, score, level
 
 
 def build_additional_documents(
@@ -22,7 +46,8 @@ def build_additional_documents(
 ) -> AdditionalDocuments:
     """
     Every agent request is kept; the ones the outlook re-scored carry their score, the rest are labelled as
-    having no effect. Checklist items never affect the score. Duplicates by title are merged, agent first.
+    having no effect. Checklist items don't affect the score, except a rule whose document answers the scored
+    finding it was raised for (_ANSWERS_ITS_FINDING). Duplicates by title are merged, agent first.
     Ranked by what the officer gains: the requests that would lower the score most first, then the other agent
     requests, then the checklist rules.
     """
@@ -47,8 +72,10 @@ def build_additional_documents(
             level_if_supports=hit.level_if_supports if hit else None,
         ))
     for rec in supporting_documents:
+        answered, score, level = _rule_effect(rec, risk)
         items.setdefault(_key(rec.title), AdditionalDocument(
             title=rec.title, why=rec.reason, source="checklist", recommendation=rec,
+            addresses=answered, affects_score=score is not None, score_if_supports=score, level_if_supports=level,
         ))
 
     scoring = [f for f in by_id.values() if f.points > 0]

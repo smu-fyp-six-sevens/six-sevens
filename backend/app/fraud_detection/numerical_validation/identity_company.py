@@ -18,6 +18,7 @@ from .common import (
     parse_field_date,
     table_rows,
 )
+from ...identifiers import nric_check_letter
 from ...sg_time import today_sg
 from ..shared.field_values import also_printed_in, describe_path, text_values
 from .models import NumericalFinding
@@ -29,30 +30,9 @@ from .registry import Num, check
 # ---------------------------------------------------------------------------
 
 
-# Real, published algorithm (verified against samliew/singapore-nric, a maintained npm library): weights 2-7-6-5-
-# 4-3-2 over the 7 digits, an offset added before the modulus (4 for T/G, 3 for M, 0 for S/F), remainder mod 11,
-# and, only for the M series, the index is reflected as 10 - index before the table lookup.
-_NRIC_WEIGHTS = (2, 7, 6, 5, 4, 3, 2)
-_NRIC_TABLE_ST = "JZIHGFEDCBA"
-_NRIC_TABLE_FG = "XWUTRQPNMLK"
-_NRIC_TABLE_M = "KLJNPQRTUWX"
 _NRIC_RE = re.compile(r"\b([STFGM])(\d{7})([A-Z])\b", re.IGNORECASE)
 # A field or column that holds an ID number, as opposed to free text that happens to mention one.
 _ID_KEY_RE = re.compile(r"nric|fin\b|identification|(?:^|_)id(?:$|_)|passport|personal_no", re.IGNORECASE)
-
-
-def _nric_expected_letter(prefix: str, digits: str) -> str | None:
-    prefix = prefix.upper()
-    weighted = sum(int(d) * w for d, w in zip(digits, _NRIC_WEIGHTS))
-    offset = 4 if prefix in ("T", "G") else 3 if prefix == "M" else 0
-    index = (offset + weighted) % 11
-    if prefix == "M":
-        return _NRIC_TABLE_M[10 - index]
-    if prefix in ("S", "T"):
-        return _NRIC_TABLE_ST[index]
-    if prefix in ("F", "G"):
-        return _NRIC_TABLE_FG[index]
-    return None
 
 
 def _extract_nric_candidates(fields: dict[str, Any]) -> dict[str, list[str]]:
@@ -83,7 +63,7 @@ def _check_nric_checksum(*, fields: dict[str, Any]) -> CheckResult:
     findings = []
     for value, paths in sorted(candidates.items()):
         prefix, digits, letter = value[0], value[1:8], value[8]
-        expected = _nric_expected_letter(prefix, digits)
+        expected = nric_check_letter(prefix, digits)
         if expected and expected != letter:
             findings.append(new_finding(
                 "ID.NRIC_CHECKSUM", "impossible",

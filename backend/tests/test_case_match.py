@@ -327,6 +327,18 @@ def test_nric_matched_by_id_number() -> None:
     assert match.comparisons[0].check == "individual_id"
 
 
+def test_nric_matched_when_its_check_letter_was_read_as_a_digit() -> None:
+    # C015: the incumbency lists S7434568I; OCR read the document's as S74345681.
+    incumbency = _incumbency({**INCUMBENCY_FIELDS, "director_id_number": "S7434568I"})
+    nric = _doc("nric", {"nric_number": "S74345681"})
+    result = check_case_match(_case(), [incumbency, *_corroborating(3), nric])
+
+    match = _by_id(result, nric.id)
+    assert match.status == DocumentMatchStatus.MATCH
+    assert match.comparisons[0].check == "individual_id"
+    assert match.comparisons[0].outcome == CheckOutcome.MATCH
+
+
 def test_matching_id_still_flags_name_mismatch_and_cites_reference_document() -> None:
     nric = _doc(
         "nric",

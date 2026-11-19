@@ -8,7 +8,8 @@ from app.fraud_detection.shared.field_catalogue import array_rows
 from app.fraud_detection.font_consistency import ExtractedField
 from app.fraud_detection.numerical_validation.runner import Binding, ROW_ROLES, benford_summary, run_numerical_checks
 from app.fraud_detection.numerical_validation.common import as_number
-from app.fraud_detection.numerical_validation.identity_company import _mrz_check_digit, _nric_expected_letter
+from app.fraud_detection.numerical_validation.identity_company import _mrz_check_digit
+from app.identifiers import nric_check_letter
 from app.fraud_detection.numerical_validation.statements import BENFORD_MIN_SAMPLE, _benford
 
 
@@ -48,7 +49,7 @@ def _codes(result, code: str) -> list:
 
 
 def _valid_nric(prefix: str, digits: str) -> str:
-    return f"{prefix}{digits}{_nric_expected_letter(prefix, digits)}"
+    return f"{prefix}{digits}{nric_check_letter(prefix, digits)}"
 
 
 # ---------------------------------------------------------------------------

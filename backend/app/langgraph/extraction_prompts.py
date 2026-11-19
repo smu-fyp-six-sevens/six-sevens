@@ -511,7 +511,12 @@ EXTRA_FIELD_GUIDANCE: dict[str, str] = {
         '"additional_wages" as separate fields when the payslip prints that '
         "figure on its own (e.g. a \"CPF wages\" or \"Ordinary wages\" box); "
         "never add up or work out a figure that is not printed. Leave them "
-        "out otherwise: the lines above already carry them."
+        "out otherwise: the lines above already carry them.\n\n"
+        '"basic_pay" is the employee\'s base salary line, whatever the payslip '
+        'calls it: "Basic Pay", "Basic Salary", "Base Pay", "Base Salary" and '
+        '"Basic" are all the same figure. When one of these lines is printed, '
+        "its amount is basic_pay as printed, not a value implied or inferred, "
+        "so the label's wording is no reason for a lower confidence."
     ),
     "nric": (
         'For "document_side", its "value" should be one of "front", '

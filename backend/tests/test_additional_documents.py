@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from app.case_pipeline.models import EvidenceRequest
 from app.case_pipeline.risk.additional_documents import build_additional_documents
+from app.case_pipeline.risk.case_risk import rate_findings
 from app.case_pipeline.risk.outlook import build_outlook, resolve_finding_id
-from app.models import CaseRisk, ContributingFinding, SupportingDocumentRecommendation
+from app.models import CaseRisk, ContributingFinding, RecommendationItem, SupportingDocumentRecommendation
 
 
 def _finding(finding_id: str, category: str, points: float = 8) -> ContributingFinding:
@@ -116,3 +117,37 @@ def test_unscored_requests_keep_the_models_order() -> None:
     requests = [EvidenceRequest(title=t, what_it_shows="w", addresses=["uen:1"]) for t in ("First", "Second", "Third")]
 
     assert [i.title for i in _build(risk, requests).items] == ["First", "Second", "Third"]
+
+
+def _address_rule(*summaries: str) -> SupportingDocumentRecommendation:
+    return SupportingDocumentRecommendation(
+        document_type="current_address_evidence", title="Recent Bank Statement Showing the Current Address",
+        reason="addresses differ", request="Request", source_document_id="d", source_filename="f.pdf",
+        items=[RecommendationItem(description=s, reason=s) for s in summaries],
+    )
+
+
+def test_the_address_rule_scores_the_case_without_the_mismatch_it_answers() -> None:
+    # GLDB-6: the only request for Seah Wan Ting's address difference was the checklist rule's, labelled "No effect
+    # on score", though a statement showing her current address settles the 4.5-point mismatch.
+    mismatch = _finding("x:1", "cross_document_variance", 4.5).model_copy(update={"summary": "Seah's address differs"})
+    spelling = _finding("c:1", "tampering_forensic", 8)
+    risk = _risk(spelling, mismatch)
+
+    [item] = _build(risk, [], [_address_rule("Seah's  address differs")]).items
+
+    assert item.source == "checklist" and item.affects_score and item.addresses == ["x:1"]
+    level, score, *_ = rate_findings([spelling])
+    assert (item.score_if_supports, item.level_if_supports) == (score, level)
+
+
+def test_the_address_rule_has_no_effect_when_its_finding_adds_nothing() -> None:
+    risk = _risk(_finding("c:1", "tampering_forensic", 8))
+    [item] = _build(risk, [], [_address_rule("an address difference the score doesn't count")]).items
+    assert not item.affects_score and item.score_if_supports is None
+
+
+def test_other_checklist_rules_still_have_no_effect() -> None:
+    risk = _risk(_finding("x:1", "cross_document_variance", 4.5))
+    [item] = _build(risk, [], [_rule()]).items
+    assert not item.affects_score

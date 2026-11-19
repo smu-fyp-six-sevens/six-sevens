@@ -354,14 +354,12 @@ async def extract_node(state: DocumentGraphState) -> dict:
     raw_text = text_cache.get(document_id) or ""
 
     await set_status(document_id, DocumentStatus.EXTRACTING, expected=_RUNNING)
-    # A low-confidence or review-flagged classification is extracted with the
-    # generic schema, so the document's fields aren't tied to a guess. The
-    # named type is still recorded for the officer to confirm.
-    schema_type = (
-        "unrecognised"
-        if _is_below_threshold(classification.get("confidence")) or classification.get("needs_manual_review")
-        else document_type
-    )
+    # A low-confidence classification is extracted with the generic schema, so the document's fields aren't tied
+    # to a guess; the named type is still recorded for the officer to confirm, and confirming it re-extracts.
+    # A confident type the classifier only flagged for review keeps its own schema: the officer can't retype it
+    # (the type is already confirmed at this confidence), so a generic read would leave it without its fields
+    # for good (a bank statement with no transactions). It still goes to manual review.
+    schema_type = "unrecognised" if _is_below_threshold(classification.get("confidence")) else document_type
     # Extracted with the generic schema because the classifier wasn't sure: say what it guessed, so extraction
     # can object. Only on the first pass: after a reclassification the classifier has already been asked again.
     guess = document_type if schema_type == "unrecognised" and document_type != "unrecognised" else None

@@ -18,7 +18,7 @@ function CheckedWhen({ check }: { check: AdverseMediaCheck }) {
   const company = check.query ? ` “${check.query}”${former}` : '';
   return (
     <span className="analysis-brief-media-when">
-      Searched{company} on {when}{check.reused && ' (cached)'} · Last 3 weeks, selected news and regulator sites
+      Searched{company} on {when}{check.reused && ' (cached)'} · Last month, selected news and regulator sites
     </span>
   );
 }

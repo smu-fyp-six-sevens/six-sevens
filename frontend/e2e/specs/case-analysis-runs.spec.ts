@@ -76,7 +76,7 @@ const latest = analysis(LATEST, {
   clean_checks: ['metadata_tool'],
   adverse_media: {
     status: 'clean', query: 'Acme Trading Pte Ltd',
-    summary: 'The web search found nothing concerning about the company in the last three weeks.',
+    summary: 'The web search found nothing concerning about the company in the last month.',
     sources: [], checked_at: '2026-10-27T02:03:00Z', reused: true, former_names: [],
   },
 });
@@ -167,7 +167,7 @@ test.describe('Case analysis summary and earlier runs', () => {
     const media = brief.locator('.analysis-brief-media');
     await expect(media).toHaveClass(/analysis-brief-media--clean/);
     await expect(media).toContainText('Media check');
-    await expect(media).toContainText('nothing concerning about the company in the last three weeks');
+    await expect(media).toContainText('nothing concerning about the company in the last month');
     // When the search ran, and that this run used the case's cached search rather than searching again.
     await expect(media.locator('.analysis-brief-media-when')).toContainText('Searched “Acme Trading Pte Ltd” on 27 Oct 2026');
     await expect(media.locator('.analysis-brief-media-when')).toContainText('(cached)');
