@@ -2,11 +2,17 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import type { AgentRecord } from '../services/agents';
 import { agentGroupLabel } from '../utils/agentGroups';
 
-/* Design-space size of the graph. Nodes are laid out in these units, then the stage is scaled to fit the canvas. */
+/* Design-space size of the graph. Nodes are laid out in these units, then the stage is scaled to fit the canvas.
+   The height grows with the longest side column (see stageHeight), so every agent stays inside the frame. */
 const STAGE_W = 1000;
-const STAGE_H = 600;
-const HUB = { x: 500, y: 300 };
+const MIN_STAGE_H = 600;
+const HUB_X = 500;
 const HINT_SPACE = 56;
+// A side column's agents sit up to COLUMN_GAP apart, never under MIN_COLUMN_GAP (a node and its two-line label).
+const COLUMN_GAP = 230;
+const MIN_COLUMN_GAP = 140;
+// Room above the first agent of a column (its column title) and below the last (its label).
+const COLUMN_MARGIN = 110;
 
 const GROUP_DOCS = 'Document processing';
 const GROUP_LEAD = 'Fraud detection';
@@ -42,10 +48,22 @@ function spread(count: number, center: number, gap: number): number[] {
   return Array.from({ length: count }, (_, index) => center + (index - (count - 1) / 2) * gap);
 }
 
-function buildGraph(agents: AgentRecord[]): { nodes: GraphNode[]; edges: GraphEdge[] } {
+// Tall enough for the longest side column at MIN_COLUMN_GAP, and never shorter than the original 600.
+function stageHeight(rows: number): number {
+  return Math.max(MIN_STAGE_H, (Math.max(rows, 1) - 1) * MIN_COLUMN_GAP + 2 * COLUMN_MARGIN);
+}
+
+// The gap that spreads a column over the stage's height between its margins, at most COLUMN_GAP.
+function columnGap(rows: number, height: number): number {
+  return rows > 1 ? Math.min(COLUMN_GAP, (height - 2 * COLUMN_MARGIN) / (rows - 1)) : COLUMN_GAP;
+}
+
+function buildGraph(agents: AgentRecord[]): { nodes: GraphNode[]; edges: GraphEdge[]; height: number } {
   const docs = agents.filter((agent) => agent.group === GROUP_DOCS);
   const leads = agents.filter((agent) => agent.group === GROUP_LEAD);
   const cases = agents.filter((agent) => agent.group === GROUP_CASE);
+  const height = stageHeight(Math.max(docs.length, cases.length));
+  const HUB = { x: HUB_X, y: height / 2 };
   const known = new Set([GROUP_DOCS, GROUP_LEAD, GROUP_SPECIALISTS, GROUP_CASE]);
   const hubAgent = leads[0];
   const ring = [
@@ -60,7 +78,7 @@ function buildGraph(agents: AgentRecord[]): { nodes: GraphNode[]; edges: GraphEd
     nodes.push({ agent, x, y, hub: false, label, hw: 34, hh: 34, order: order++ });
   };
 
-  spread(docs.length, HUB.y, 230).forEach((y, index) => satellite(docs[index], 150, y, 'below'));
+  spread(docs.length, HUB.y, columnGap(docs.length, height)).forEach((y, index) => satellite(docs[index], 150, y, 'below'));
   if (hubAgent) nodes.push({ agent: hubAgent, ...HUB, hub: true, label: 'below', hw: 92, hh: 78, order: order++ });
 
   // Specialists sit on an ellipse around the hub: the first half across the top, the rest across the bottom.
@@ -74,7 +92,7 @@ function buildGraph(agents: AgentRecord[]): { nodes: GraphNode[]; edges: GraphEd
     satellite(agent, HUB.x + 270 * Math.cos(angle), HUB.y + 205 * Math.sin(angle), onTop ? 'above' : 'below');
   });
 
-  spread(cases.length, HUB.y, 230).forEach((y, index) => satellite(cases[index], 850, y, 'below'));
+  spread(cases.length, HUB.y, columnGap(cases.length, height)).forEach((y, index) => satellite(cases[index], 850, y, 'below'));
 
   const edges: GraphEdge[] = [];
   const link = (from: AgentRecord, to: AgentRecord, kind: EdgeKind, shape: EdgeShape) => {
@@ -93,7 +111,7 @@ function buildGraph(agents: AgentRecord[]): { nodes: GraphNode[]; edges: GraphEd
   }
   cases.slice(1).forEach((agent, index) => link(cases[index], agent, 'handoff', 'bulge-right'));
 
-  return { nodes, edges };
+  return { nodes, edges, height };
 }
 
 function edgeGeometry(a: GraphNode, b: GraphNode, shape: EdgeShape) {
@@ -151,6 +169,12 @@ export function AgentGlyph({ agent }: { agent: AgentRecord }) {
     digital_authenticity: <><path d="M12 4a6 6 0 0 0-6 6c0 3 .7 5.8 2 8" /><path d="M12 8a2 2 0 0 0-2 2c0 3.4.6 6.4 2 10" /><path d="M12 4a6 6 0 0 1 6 6c0 2.5-.3 4.6-1 6.5" /><path d="M14 10c0 2.4-.2 4.6-.8 6.6" /></>,
     hypothesis_planner: <><path d="M9 18h6M10 21h4" /><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.3 1 2.2h5.2c0-.9.4-1.7 1-2.2A6 6 0 0 0 12 3z" /></>,
     hypothesis_judge: <><path d="M12 4v16M7 20h10M5 7h14" /><path d="m5 7-3 6a3 3 0 0 0 6 0zM19 7l-3 6a3 3 0 0 0 6 0z" /></>,
+    // A document with a plus: one more to ask for.
+    evidence_requests: <><path d="M13 3H6v18h12V8z" /><path d="M13 3v5h5" /><path d="M12 11v6M9 14h6" /></>,
+    // Lines of a short write-up.
+    case_summary: <><path d="M4 6h16M4 10h16M4 14h10M4 18h7" /></>,
+    // A magnifier over the news: a web search.
+    adverse_media: <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5" /><path d="M8 9h5M8 12h3.5" /></>,
   };
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="agent-graph-glyph">
@@ -182,7 +206,7 @@ interface AgentGraphProps {
 }
 
 export default function AgentGraph({ agents, selectedId, onSelect }: AgentGraphProps) {
-  const { nodes, edges } = useMemo(() => buildGraph(agents), [agents]);
+  const { nodes, edges, height: STAGE_H } = useMemo(() => buildGraph(agents), [agents]);
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.agent.id, node])), [nodes]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [view, setView] = useState<View>({ s: 1, x: 0, y: 0 });
@@ -207,7 +231,7 @@ export default function AgentGraph({ agents, selectedId, onSelect }: AgentGraphP
     const usable = height - HINT_SPACE;
     const s = Math.max(0.25, Math.min(width / STAGE_W, usable / STAGE_H) * 0.95);
     setView({ s, x: (width - STAGE_W * s) / 2, y: Math.max(8, (usable - STAGE_H * s) / 2) });
-  }, []);
+  }, [STAGE_H]);
 
   useLayoutEffect(() => {
     fit();
