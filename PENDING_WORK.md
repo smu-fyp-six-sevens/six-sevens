@@ -46,5 +46,5 @@ Open product and platform work only: delete an item once done. Updated 2026-11-1
 
 ## Cloud operations
 
-- **Make Snyk blocking again** on 2026-11-21 at the earliest (after the demo), when its quota resets: delete the two `continue-on-error: true` lines in `.github/workflows/ci-cd.yml`, and "temporarily non-blocking" from CLAUDE.md, README and `HOW_IT_WORKS.md` §9.
+- **Make Snyk blocking again** from 2026-11-21, when its quota resets: delete the two `continue-on-error: true` lines in `.github/workflows/ci-cd.yml`, and "temporarily non-blocking" from CLAUDE.md, README and `HOW_IT_WORKS.md` §9.
 - **Frontend fully non-root:** `nginx-unprivileged` on 8080 (change `nginx.conf`, compose and the chart's `templates/frontend.yaml` port, with `runAsNonRoot`, together).

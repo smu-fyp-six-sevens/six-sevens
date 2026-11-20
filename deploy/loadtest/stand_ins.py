@@ -20,7 +20,8 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-BACKEND = Path(os.environ.get("BACKEND_DIR", Path(__file__).resolve().parents[2] / "backend"))
+# The fallback only on the laptop: in the container the script is /loadtest/stand_ins.py, which has no parents[2].
+BACKEND = Path(os.environ.get("BACKEND_DIR") or Path(__file__).resolve().parents[2] / "backend")
 sys.path.insert(0, str(BACKEND))
 
 # Settings are read once, at import: everything the app needs, set before it's imported. A JWT-shaped placeholder,

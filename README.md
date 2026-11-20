@@ -70,7 +70,7 @@ Settings come from `backend/.env`. The workers share one container (~3 GB). Walk
 
 ## Deploying
 
-Production runs on GKE Autopilot at `sixsevens.me`: a green push to `main` builds and signs the images and releases the Helm chart through Cloud Deploy (`deploy.yml`'s `gke` job); "Deploy to GKE" can also be run by hand. Cloud Run was removed on 2026-11-18 (`HOW_IT_WORKS.md` §9; next steps in `CLOUD_ARCHITECTURE_PLAN.md`). Terraform (`deploy/terraform`, one-time setup in its README) creates the cluster, Pub/Sub, secrets and identities; run `terraform apply` before a push that needs it. Adding a service: [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md).
+Production runs on GKE Autopilot at `sixsevens.me`: a green push to `main` builds and signs the images and releases the Helm chart through Cloud Deploy (`deploy.yml`'s `gke` job); "Deploy to GKE" can also be run by hand. Design: `HOW_IT_WORKS.md` §9; open cloud work: `CLOUD_ARCHITECTURE_PLAN.md`. Terraform (`deploy/terraform`, one-time setup in its README) creates the cluster, Pub/Sub, secrets and identities; run `terraform apply` before a push that needs it. Adding a service: [`docs/ADDING_A_SERVICE.md`](docs/ADDING_A_SERVICE.md).
 
 ## Tests
 

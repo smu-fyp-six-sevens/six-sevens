@@ -31,11 +31,11 @@ None open.
 
 ## 4. Backwards compatibility
 
-Code kept only for old data, old links or the retired platform (Cloud Run's infrastructure and CI deploy were removed 2026-11-18). The database (and the audit trail) was wiped on 2026-11-15, so a shim for data older than that guards nothing.
+Code kept only for old data, old links or the old push delivery. The database (and the audit trail) was wiped on 2026-11-15, so a shim for data older than that guards nothing.
 
 | # | In plain words | Remove when | Where | Size |
 |---|---|---|---|---|
-| B1 | Cloud Run's code left behind: push delivery (`EVENT_DELIVERY=push`, the `/push/<role>` routes, `PUSH_AUDIENCE` and its check), the `none` mode and the chart's HTTP-only branch for a consumer not yet moved, `migration.json` (every consumer is listed; only `gen_values.py` reads it now), and comments naming Cloud Run | After the demo. Switch the local compose stack to pull first (`deploy/compose/pubsub.yaml`; `EVENT_DELIVERY` defaults to `push` in `config.py`). The gateway key (`gateway.py`) stays as a second guard | `events/push.py`, `main.py`, `config.py`, `deploy/compose/`, `deploy/helm/six-sevens/templates/backend.yaml`, `deploy/helm/gen_values.py` | M |
+| B1 | Push delivery left behind (`EVENT_DELIVERY=push`, the `/push/<role>` routes, `PUSH_AUDIENCE` and its check), the `none` mode and the chart's HTTP-only branch, `migration.json` (only `gen_values.py` reads it), and comments naming Cloud Run | Switch the local compose stack to pull first (`deploy/compose/pubsub.yaml`; `EVENT_DELIVERY` defaults to `push` in `config.py`). The gateway key (`gateway.py`) stays as a second guard | `events/push.py`, `main.py`, `config.py`, `deploy/compose/`, `deploy/helm/six-sevens/templates/backend.yaml`, `deploy/helm/gen_values.py` | M |
 | B2 | Two names for one Supabase client: `service_supabase_client()` (50 calls) was kept "for the code that used to have its own" client; `supabase_client` (15 imports) is the same object. Not a rename: 47 test files mock `service_supabase_client` as a function (`client.return_value.table…`), so each test's mock setup changes too | One name, with the tests' mocks rewritten | `supabase_client.py:41-46`, its callers and `backend/tests/` | M |
 
 ## 5. Bigger reorganisations (optional, in order)
@@ -60,4 +60,4 @@ Code kept only for old data, old links or the retired platform (Cloud Run's infr
 ## 8. Order
 
 1. 3.6
-2. After the demo: B1, 3.1, 3.2, B2, 3.3
+2. B1, 3.1, 3.2, B2, 3.3

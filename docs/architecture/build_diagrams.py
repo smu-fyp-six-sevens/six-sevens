@@ -115,72 +115,73 @@ def legend(p: Page, x: int, y: int, cols: int = 1) -> None:
         p.box(text, x + 10 + col * (item_w + 10), y + 32 + row * 32, item_w, 26, kind, "fontSize=10;")
 
 
+def legend_small(p: Page, x: int, y: int) -> None:
+    """The colour key as bare swatches and labels in a corner: three columns, no frame."""
+    for i, (kind, text) in enumerate(LEGEND):
+        left, top = x + (i % 3) * 150, y + (i // 3) * 24
+        p.box("", left, top, 16, 16, kind)
+        p.box(text, left + 22, top - 2, 125, 20, "text", "fontSize=10;verticalAlign=middle;")
+
+
 # ------------------------------------------------------------------ 1. System architecture
-# Public services sit above the topic, workers below it, so every topic arrow is a short vertical.
-p1 = Page("1 System architecture", 1680, 1000)
-p1.box("Six Sevens: event-driven services on GKE Autopilot", 40, 20, 900, 40, "title")
-officer = p1.box("Loan officer<br><font style='font-size:10px'>browser</font>", 40, 140, 110, 70, "user")
-lb = p1.box(S("Load balancer + Cloud Armor", "sixsevens.me · managed TLS<br>OWASP rules · per-address limits<br>(Gateway API)"), 200, 105, 200, 140, "gateway")
-kong = p1.box(S("Kong API Gateway", "CORS · rate limits · request IDs<br>blocks /push and /metrics"), 460, 100, 200, 90, "gateway")
-fe = p1.box(S("frontend", "React, served by nginx"), 460, 210, 200, 60, "ui")
-p1.box("Internal services behind Kong (ClusterIP; each checks the app's token)", 790, 100, 560, 170, "group")
-api = p1.box(S("api", "reads, login, officer commands<br>uploads · WebSocket live updates<br>case match"), 810, 140, 240, 110)
-audit = p1.box(S("audit-metrics", "stores every event in audit_events<br>/audit/events · /audit/cases/{id}/cost<br>runs the sweeper (stuck work)"), 1090, 140, 250, 110)
-sched = p1.box(S("Cloud Scheduler", "sweep.requested<br>every 5 minutes"), 1410, 140, 190, 90, "external")
+# Front door and the public services on top, the topic across the middle, workers under it, Supabase as a bar at the
+# bottom: roughly square, and every topic arrow is a short vertical.
+p1 = Page("1 System architecture", 1170, 1040)
+p1.box("Six Sevens: event-driven services on GKE Autopilot", 40, 20, 600, 40, "title")
+legend_small(p1, 680, 20)
+officer = p1.box("Loan officer<br><font style='font-size:10px'>browser</font>", 40, 140, 100, 60, "user")
+lb = p1.box(S("Load balancer + Cloud Armor", "sixsevens.me · managed TLS<br>OWASP rules · per-address limits<br>(Gateway API)"), 170, 115, 180, 110, "gateway")
+kong = p1.box(S("Kong API Gateway", "CORS · rate limits · request IDs<br>blocks /push and /metrics"), 390, 100, 180, 80, "gateway")
+fe = p1.box(S("frontend", "React, served by nginx"), 390, 195, 180, 50, "ui")
+p1.box("Internal services behind Kong (ClusterIP; each checks the app's token)", 610, 90, 480, 140, "group")
+api = p1.box(S("api", "reads, login, officer commands<br>uploads · WebSocket live updates<br>case match"), 630, 130, 200, 90)
+audit = p1.box(S("audit-metrics", "stores every event in audit_events<br>/audit/events · /audit/cases/{id}/cost<br>runs the sweeper (stuck work)"), 850, 130, 220, 90)
+sched = p1.box(S("Cloud Scheduler", "sweep.requested<br>every 5 minutes"), 1000, 290, 130, 70, "external")
 
-BUS_X, BUS_W = 480, 1120
-bus = p1.box(S("Pub/Sub topic: domain-events", "one topic · a filtered pull subscription per role · at-least-once delivery · dead letters after 5 tries"), BUS_X, 330, BUS_W, 70, "bus")
+BUS_X, BUS_W = 160, 970
+bus = p1.box(S("Pub/Sub topic: domain-events", "one topic · a filtered pull subscription per role · at-least-once delivery · dead letters after 5 tries"), BUS_X, 420, BUS_W, 60, "bus")
 
-WG_Y, WG_H = 470, 180
-workers_group = p1.box("Private workers (no inbound traffic; each pulls its own events)", 580, WG_Y, 760, WG_H, "group")
+WG_X, WG_Y, WG_W, WG_H = 160, 580, 680, 170
+workers_group = p1.box("Private workers (no inbound traffic; each pulls its own events)", WG_X, WG_Y, WG_W, WG_H, "group")
 WORKERS = [  # (label, detail, centre x, in/out events)
-    ("doc-worker", "OCR · classify · extract<br>LangGraph · Sonnet/Haiku", 710, "pull: uploaded, retyped,<br>retry, cancel<br>out: document.analyzed"),
-    ("detection-worker", "lead agent + 3 specialists<br>13 checks · flags", 960, "pull: approved,<br>retry, cancel<br>out: document.detected"),
-    ("case-worker", "cross-document analysis<br>deterministic risk · summary", 1210, "pull: analysis requested<br>out: analysis completed"),
+    ("doc-worker", "OCR · classify · extract<br>LangGraph · Sonnet/Haiku", 280, "pull: uploaded, retyped,<br>retry, cancel<br>out: document.analyzed"),
+    ("detection-worker", "lead agent + 3 specialists<br>13 checks · flags", 500, "pull: approved,<br>retry, cancel<br>out: document.detected"),
+    ("case-worker", "cross-document analysis<br>deterministic risk · summary", 720, "pull: analysis requested<br>out: analysis completed"),
 ]
 worker_ids = []
 for name, detail, cx, events in WORKERS:
-    wid = p1.box(S(name, detail), cx - 110, 510, 220, 120, "worker")
+    wid = p1.box(S(name, detail), cx - 100, 620, 200, 100, "worker")
     worker_ids.append(wid)
     p1.edge(bus, wid, events, exit=(fx(cx, BUS_X, BUS_W), 1), entry=(0.5, 0), both=True)
 
-dlq = p1.box(S("domain-events-dead-letter", "an event lands here after<br>5 failed deliveries"), 1420, 480, 210, 70, "bus")
-regs = p1.box(S("Public registries", "data.gov.sg · URA · OneMap"), 1420, 590, 210, 70, "external")
-claude = p1.box(S("Claude (Anthropic API)", "Sonnet and Haiku, called by every worker's agents; the API key is mounted from Secret Manager"), 600, 710, 720, 50, "external")
-keda = p1.box(S("KEDA", "scales each worker on<br>its undelivered messages"), 1420, 700, 210, 60, "gcp")
-supa = p1.box(S("Supabase", "Postgres: cases, documents, fields,<br>flags, runs, risk, audit_events<br><br>Storage: uploaded files (private)<br><br>Realtime: row changes"), 40, 330, 340, 320, "data")
+dlq = p1.box(S("domain-events-dead-letter", "an event lands here after<br>5 failed deliveries"), 900, 540, 230, 70, "bus")
+regs = p1.box(S("Public registries", "data.gov.sg · URA · OneMap"), 900, 630, 230, 70, "external")
+keda = p1.box(S("KEDA", "scales each worker on<br>its undelivered messages"), 900, 720, 230, 60, "gcp")
+claude = p1.box(S("Claude (Anthropic API)", "Sonnet and Haiku, called by every worker's agents; the API key is mounted from Secret Manager"), 260, 810, 800, 50, "external")
+supa = p1.box(S("Supabase", "Postgres: cases, documents, fields, flags, runs, risk, audit_events<br>Storage: uploaded files (private) · Realtime: row changes"), 40, 900, 1090, 90, "data")
 
 p1.edge(officer, lb, "HTTPS +<br>WebSocket", exit=(1, 0.5), entry=(0, 0.5))
-p1.edge(lb, kong, "api.", exit=(1, fx(145, 105, 140)), entry=(0, 0.5))
-p1.edge(lb, fe, "sixsevens.me", exit=(1, fx(240, 105, 140)), entry=(0, 0.5))
-p1.edge(kong, api, "API calls", exit=(1, 0.5), entry=(0, fx(145, 140, 110)))
-p1.edge(kong, audit, "/audit/*", exit=(0.5, 0), entry=(0.5, 0), points=[(560, 80), (1215, 80)])
-p1.edge(api, bus, "commands<br>(uploaded, approved,<br>analysis requested)", exit=(0.5, 1), entry=(fx(930, BUS_X, BUS_W), 0))
-p1.edge(bus, audit, "pull: every event<br>out: recovery.requested", exit=(fx(1215, BUS_X, BUS_W), 0), entry=(0.5, 1), both=True)
-p1.edge(keda, workers_group, "scales", DASHED, exit=(0, 0.5), entry=(1, fx(640, WG_Y, WG_H)), points=[(1380, 730), (1380, 640)])
-p1.edge(sched, bus, "tick", exit=(0.5, 1), entry=(fx(1505, BUS_X, BUS_W), 0))
-p1.edge(bus, dlq, "", DASHED, exit=(fx(1525, BUS_X, BUS_W), 1), entry=(0.5, 0))
+p1.edge(lb, kong, "api.", exit=(1, fx(140, 115, 110)), entry=(0, 0.5))
+p1.edge(lb, fe, "sixsevens.me", exit=(1, fx(220, 115, 110)), entry=(0, 0.5))
+p1.edge(kong, api, "API calls", exit=(1, 0.5), entry=(0, fx(140, 130, 90)))
+p1.edge(kong, audit, "/audit/*", exit=(0.5, 0), entry=(0.5, 0), points=[(480, 70), (960, 70)])
+p1.edge(api, bus, "commands<br>(uploaded, approved,<br>analysis requested)", exit=(0.5, 1), entry=(fx(730, BUS_X, BUS_W), 0))
+p1.edge(bus, audit, "pull: every event<br>out: recovery.requested", exit=(fx(880, BUS_X, BUS_W), 0), entry=(fx(880, 850, 220), 1), both=True)
+p1.edge(sched, bus, "tick", exit=(fx(1065, 1000, 130), 1), entry=(fx(1065, BUS_X, BUS_W), 0))
+p1.edge(bus, dlq, "", DASHED, exit=(fx(1015, BUS_X, BUS_W), 1), entry=(0.5, 0))
+p1.edge(keda, workers_group, "scales", DASHED, exit=(0, fx(740, 720, 60)), entry=(1, fx(740, WG_Y, WG_H)))
+p1.edge(workers_group, regs, "detection<br>lookups", DASHED, exit=(1, fx(665, WG_Y, WG_H)), entry=(0, 0.5))
 for wid, (_, _, cx, _) in zip(worker_ids, WORKERS):
-    p1.edge(wid, claude, "", DASHED, exit=(0.5, 1), entry=(fx(cx, 600, 720), 0))
-# From the group's edge, not detection-worker's, so the arrow doesn't cross case-worker.
-p1.edge(workers_group, regs, "detection<br>lookups", DASHED, exit=(1, fx(625, WG_Y, WG_H)), entry=(0, 0.5))
-p1.edge(workers_group, supa, "reads and writes: status,<br>fields, flags, runs, risk", DASHED, exit=(0, fx(560, WG_Y, WG_H)), entry=(1, fx(560, 330, 320)), both=True)
-p1.edge(api, supa, "reads and writes ·<br>Realtime → live updates", DASHED, exit=(0, 0.85), entry=(0.5, 0),
-        points=[(770, 233.5), (770, 290), (210, 290)], both=True)
-p1.box(
-    "<b>How the services talk</b><br>• Only through events on one topic, and through Supabase state. No service calls another directly.<br>"
-    "• Each role pulls only its own events and publishes its result back to the topic; network policies block every other path.<br>"
-    "• Every event is also an audit row, stored once by audit-metrics (redeliveries ignored by event id).<br>"
-    "• Status changes are compare-and-swap, so a repeated event can't apply twice.<br>"
-    "• One codebase, one Dockerfile with a build target per role (shared layers); ROLE picks what each pod runs.",
-    40, 810, 900, 140, "note",
-)
-legend(p1, 1000, 810, cols=2)
+    p1.edge(wid, claude, "", DASHED, exit=(0.5, 1), entry=(fx(cx, 260, 800), 0))
+p1.edge(workers_group, supa, "reads and writes<br>status, fields, flags", DASHED, exit=(fx(200, WG_X, WG_W), 1), entry=(fx(200, 40, 1090), 0), both=True)
+p1.edge(api, supa, "reads and writes ·<br>Realtime → live updates", DASHED, exit=(fx(645, 630, 200), 1), entry=(fx(90, 40, 1090), 0),
+        points=[(645, 290), (90, 290)], both=True)
 
 # ------------------------------------------------------------------ 2. GCP infrastructure
 # The cluster's pods in two rows, Pub/Sub as a bar under them: each pod's arrow to the topic is a short vertical.
-p2 = Page("2 GCP infrastructure", 1880, 1100)
-p2.box("Infrastructure on Google Cloud (Terraform for the cloud, a Helm chart inside the cluster)", 40, 20, 1200, 40, "title")
+p2 = Page("2 GCP infrastructure", 1880, 960)
+p2.box("Infrastructure on Google Cloud (Terraform for the cloud, a Helm chart inside the cluster)", 40, 20, 1000, 40, "title")
+legend_small(p2, 1420, 16)
 p2.box("Management", 300, 70, 1180, 120, "group")
 for i, label in enumerate([
     S("Terraform", "the cloud pieces, state in GCS"),
@@ -193,9 +194,9 @@ for i, label in enumerate([
 
 LB2 = (260, 240, 1240, 50)
 users = p2.box("Loan officers<br><font style='font-size:10px'>browser</font>", 40, 235, 130, 60, "user")
-p2.box("Google Cloud Platform · project fyp-six-sevens", 200, 220, 1360, 850, "region", "fillColor=#ffffff;")
+p2.box("Google Cloud Platform · project fyp-six-sevens", 200, 220, 1360, 690, "region", "fillColor=#ffffff;")
 lb2 = p2.box(S("Load balancer (Gateway API, global) + Cloud Armor", "sixsevens.me · api. · grafana. · Google-managed certificate · OWASP rules · per-address rate limits"), *LB2, "gateway")
-p2.box("asia-southeast1 (Singapore)", 230, 310, 1300, 740, "region")
+p2.box("asia-southeast1 (Singapore)", 230, 310, 1300, 580, "region")
 CLUSTER = (260, 340, 1240, 300)
 cluster = p2.box("GKE Autopilot · regional · private nodes · a namespace per role · default-deny network policies · Workload Identity", *CLUSTER, "group")
 fe2 = p2.box(S("frontend", "nginx"), 290, 380, 160, 60, "gcp")
@@ -248,14 +249,6 @@ p2.edge(cluster, nat2, "egress", DASHED, exit=(fx(1405, CLUSTER[0], CLUSTER[2]),
 p2.edge(nat2, regs2, "", DASHED, exit=(1, 0.5), entry=(0, 0.5), points=[(1605, 700), (1605, 390)])
 p2.edge(nat2, supa2, "HTTPS", DASHED, exit=(1, 0.5), entry=(0, 0.5), points=[(1605, 700), (1605, 500)])
 p2.edge(wsub, vtx2, "Claude calls", DASHED, exit=(1, fx(490, WSUB[1], WSUB[3])), entry=(0, 0.5), points=[(1580, 490), (1580, 280)])
-p2.box(
-    "<b>Security</b><br>• Only the load balancer is public: Cloud Armor in front, Kong accepts only Google's front ends, every service is internal (ClusterIP).<br>"
-    "• Default-deny network policies per namespace; pods run non-root with a read-only root filesystem and CPU and memory limits.<br>"
-    "• Workload Identity: a Google account per role and no Google keys; GitHub deploys through Workload Identity Federation. The one outside key, Anthropic's, sits in Secret Manager.<br>"
-    "• Binary Authorization enforces: only images CI signed (cosign, with an SBOM and SLSA provenance) can run; Trivy stops a deploy whose own images have a fixable high finding.",
-    260, 890, 1240, 120, "note",
-)
-legend(p2, 1640, 760)
 
 # ------------------------------------------------------------------ 3. Life of a document (sequence)
 p3 = Page("3 Life of a document", 1800, 1420)
@@ -358,50 +351,54 @@ p5.edge(o_audit, o_audsvc, "read", exit=(1, 0.5), entry=(0, 0.5))
 p5.edge(o_audsvc, o_ui, "GET /audit/cases/<br>{id}/cost", exit=(1, 0.5), entry=(0, 0.5))
 
 # ------------------------------------------------------------------ 6. CI/CD
-# CI's jobs run in parallel in a column; the gate below them hands a green push to main to deploy.yml.
-p6 = Page("6 CI and deploy", 1800, 1020)
-p6.box("Delivery: CI on every push and PR; a green push to main deploys (GitHub Actions → git → Argo CD)", 40, 20, 1300, 40, "title")
-c_push = p6.box(S("git push / PR", "ci-cd.yml<br>a docs-only push is skipped"), 40, 250, 160, 70, "user")
-JOB_X, JOB_W, JOB_H = 270, 380, 80
-JOBS = [
-    ("Backend", "ruff · pyright (no suppressions)<br>pytest + coverage"),
-    ("Frontend", "lint · tsc · build<br>Playwright on the production build"),
-    ("Security", "Checkov · pip-audit · npm audit · gitleaks (blocking)<br>Snyk · Terraform fmt + validate"),
-]
-c_gate = p6.box(S("All three green?", "only a push to main deploys;<br>a PR or branch stops here"), 740, 250, 190, 70, "gateway")
-for i, (title, detail) in enumerate(JOBS):
-    y = 110 + i * (JOB_H + 20)
-    job = p6.box(S(title, detail), JOB_X, y, JOB_W, JOB_H, "service")
-    p6.edge(c_push, job, exit=(1, 0.5), entry=(0, 0.5), points=[(235, 285), (235, y + JOB_H / 2)])
-    p6.edge(job, c_gate, exit=(1, 0.5), entry=(0, 0.5), points=[(695, y + JOB_H / 2), (695, 285)])
-p6.box(S("Helm chart (helm.yml, on chart changes)", "values generated from roles.json · render · Checkov<br>on kind: Pub/Sub emulator, one event per worker, a call the policies must block"),
-       1000, 110, 420, 80, "service")
+# Icon-based, like a typical delivery overview: the repo triggers Actions, Actions fans out to the checks and the
+# registry, and Argo CD pulls from git into the cluster. Icons are the public brand SVGs in docs/architecture/icons/,
+# embedded in the file so it opens anywhere.
+import base64
 
-DEPLOY_Y, DEPLOY_H = 590, 90
-p6.box("deploy.yml · one deploy at a time, never cancelled halfway (that would skip the rollback)", 220, 540, 1560, 380, "group")
-c_run = p6.box(S("Run workflow", "manual"), 40, 600, 160, 60, "user")
-c_auth = p6.box(S("Authenticate", "Workload Identity Federation<br>short-lived tokens, no keys"), 240, DEPLOY_Y, 200, DEPLOY_H, "gcp")
-c_build = p6.box(S("Build 8 images, scan", "5 role targets of one Dockerfile + Kong,<br>frontend, Grafana · Trivy: a fixable high<br>finding in our images stops the deploy"), 490, DEPLOY_Y, 240, DEPLOY_H, "worker")
-c_ar = p6.box(S("Artifact Registry", "images by digest"), 780, 605, 170, 60, "gcp")
-c_sign = p6.box(S("Sign and attest", "cosign signature + SBOM (syft)<br>+ SLSA provenance<br>Binary Authorization attestation<br>(one Cloud KMS key)"), 1000, DEPLOY_Y, 260, DEPLOY_H, "worker")
-ROW_B = 740
-c_render = p6.box(S("Commit the digests", "values-images.yaml on main<br>(git holds what runs)"), 1000, ROW_B, 170, 80, "data")
-c_rel = p6.box(S("Argo CD sync", "pulls the Helm chart from git,<br>applies it to GKE (GitOps)"), 1200, ROW_B, 180, 80, "gcp")
-c_verify = p6.box(S("Verify", "PostSync checks through<br>the load balancer"), 1410, ROW_B, 170, 80, "service")
-c_ok = p6.box(S("Done", "synced · in Argo CD's history"), 1610, 734, 150, 60, "data")
-c_back = p6.box(S("Roll back", "argocd app rollback<br>to the last good sync"), 1610, 840, 150, 60, "ops")
-p6.edge(c_gate, c_auth, "green push to main", exit=(0.5, 1), entry=(0.5, 0), points=[(835, 510), (340, 510)])
-p6.edge(c_run, c_auth, exit=(1, 0.5), entry=(0, fx(630, DEPLOY_Y, DEPLOY_H)))
-p6.edge(c_auth, c_build, exit=(1, 0.5), entry=(0, 0.5))
-p6.edge(c_build, c_ar, exit=(1, fx(635, DEPLOY_Y, DEPLOY_H)), entry=(0, 0.5))
-p6.edge(c_ar, c_sign, exit=(1, 0.5), entry=(0, fx(635, DEPLOY_Y, DEPLOY_H)))
-p6.edge(c_sign, c_render, exit=(fx(1085, 1000, 260), 1), entry=(0.5, 0))
-p6.edge(c_render, c_rel, exit=(1, 0.5), entry=(0, 0.5))
-p6.edge(c_rel, c_verify, exit=(1, 0.5), entry=(0, 0.5))
-p6.edge(c_verify, c_ok, "pass", exit=(1, 0.3), entry=(0, 0.5))
-p6.edge(c_verify, c_back, "fail", exit=(0.5, 1), entry=(0, 0.5), points=[(1495, 870)])
-p6.box("Terraform owns the cloud (cluster, load balancer, Pub/Sub, IAM, KMS) and is applied by hand before a push that needs it; "
-       "the Helm chart in git owns everything inside the cluster, and Argo CD keeps the cluster matching it; a deploy only changes image digests.", 240, 940, 1300, 50, "note")
+ICON_DIR = Path(__file__).parent / "icons"
+ICON_BELOW = "verticalLabelPosition=bottom;verticalAlign=top;labelPosition=center;align=center;"
+ICON_RIGHT = "labelPosition=right;verticalLabelPosition=middle;align=left;verticalAlign=middle;spacingLeft=10;"
+
+
+def icon(page: Page, name: str, label: str, x: int, y: int, size: int = 80, caption: str = ICON_BELOW) -> str:
+    data = base64.b64encode((ICON_DIR / f"{name}.svg").read_bytes()).decode()
+    cid = page._id()
+    style = f"shape=image;html=1;aspect=fixed;imageAspect=0;fontSize=12;{caption}image=data:image/svg+xml,{data};"
+    page.cells.append(
+        f'<mxCell id="{cid}" value={quoteattr(label)} style="{style}" vertex="1" parent="1">'
+        f'<mxGeometry x="{x}" y="{y}" width="{size}" height="{size}" as="geometry"/></mxCell>'
+    )
+    return cid
+
+
+p6 = Page("6 CI and deploy", 1300, 960)
+p6.box("", 10, 10, 1280, 940, "group")
+p6.box("<b>Delivery:</b> CI on every push and PR; a green push to main deploys (GitHub Actions → git → Argo CD)", 30, 20, 1000, 30, "title", "fontSize=16;")
+dev = p6.box("Developers", 60, 459, 100, 90, "user", "shape=actor;verticalLabelPosition=bottom;verticalAlign=top;fillColor=#ffffff;strokeColor=#999999;")
+repo = icon(p6, "github", "<b>Application repository</b><br>main branch", 380, 480)
+act = icon(p6, "githubactions", "<b>GitHub Actions</b><br>ci-cd.yml, deploy.yml", 680, 480)
+snyk = icon(p6, "snyk", "<b>Snyk</b><br>dependency scan, on lock-file changes<br>(non-blocking for now)", 910, 110, caption=ICON_RIGHT)
+checkov = p6.box("<b style='font-size:28px;color:#2b3a8c'>checkov</b>", 880, 290, 140, 40, "text", "align=center;verticalAlign=middle;")
+tf = icon(p6, "terraform", "<b>Terraform</b>", 1170, 270)
+checks = p6.box("<b>Backend:</b> ruff · pyright · pytest + coverage<br><b>Frontend:</b> eslint · tsc · Playwright<br>"
+                "<b>Security:</b> pip-audit · npm audit · gitleaks<br><b>Chart changes:</b> helm.yml, render + kind test", 870, 430, 400, 90, "service", "align=left;spacingLeft=10;fontSize=12;")
+ar = icon(p6, "googlecloud", "<b>Artifact Registry</b><br>images by digest, Trivy-scanned,<br>signed (cosign, SBOM, SLSA)", 910, 610, caption=ICON_RIGHT)
+gke = icon(p6, "kubernetes", "<b>Google Kubernetes Engine</b><br>Autopilot behind the load balancer;<br>Binary Authorization admits only signed images", 910, 820, caption=ICON_RIGHT)
+argo = icon(p6, "argo", "<b>Argo CD</b>", 680, 820)
+
+p6.edge(dev, repo, "Commits and<br>pushes code", exit=(1, 0.5), entry=(0, fx(504, 480, 80)))
+p6.edge(repo, act, "Triggers CI<br>(push and PR)", exit=(1, 0.5), entry=(0, 0.5))
+TRUNK = 830
+p6.edge(act, snyk, "", exit=(1, 0.5), entry=(0, 0.5), points=[(TRUNK, 520), (TRUNK, 150)])
+p6.edge(act, checkov, "", exit=(1, 0.5), entry=(0, 0.5), points=[(TRUNK, 520), (TRUNK, 310)])
+p6.edge(act, checks, "", exit=(1, 0.5), entry=(0, 0.5), points=[(TRUNK, 520), (TRUNK, 475)])
+p6.edge(act, ar, "Build · scan · sign · push<br>(green push to main)", exit=(1, 0.5), entry=(0, 0.5), points=[(TRUNK, 520), (TRUNK, 650)])
+p6.edge(tf, checkov, "scans Terraform,<br>Dockerfiles, workflows<br>(blocking)", exit=(0, 0.5), entry=(1, 0.5))
+p6.edge(act, repo, "Commits the image digests<br>(green push to main)", exit=(0.5, 0), entry=(0.5, 0), points=[(720, 70), (420, 70)])
+p6.edge(ar, gke, "Pulls signed images", exit=(0.5, 1), entry=(0.5, 0))
+p6.edge(argo, repo, "Polls git for<br>changes", exit=(0, 0.5), entry=(0, fx(544, 480, 80)), points=[(300, 860), (300, 544)])
+p6.edge(argo, gke, "Syncs the chart · rolling update<br>rolls back if the check fails", exit=(1, 0.5), entry=(0, 0.5))
 
 pages = [p1, p2, p3, p4, p5, p6]
 OUT.parent.mkdir(parents=True, exist_ok=True)

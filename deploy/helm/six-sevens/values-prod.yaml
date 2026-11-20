@@ -5,6 +5,12 @@ pullPolicy: IfNotPresent
 kong:
   corsOrigins: "https://sixsevens.me"
 
+# Off after the demo (2026-11-20) to save credits: no Grafana and no Prometheus scraping. Turning Grafana back on also
+# needs its checks back in deploy/clouddeploy/skaffold.yaml.
+monitoring:
+  podMonitoring: false
+
 grafana:
+  enabled: false
   # Where the Cloud Billing export lives (deploy/terraform variables.tf, billing_export_location).
   billingExportLocation: US
