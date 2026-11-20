@@ -483,7 +483,7 @@ GCP project `fyp-six-sevens` (`asia-southeast1`), GKE Autopilot at `sixsevens.me
 | Database | Supabase outside; egress through Cloud NAT on one static IP | Private nodes need NAT to reach Supabase and Anthropic |
 | Secrets | Secret Manager, mounted as files and exported at start; a rotated secret needs a restart | No secrets in Helm values |
 | Claude | The Anthropic API, its key mounted only where it's used | One outside key |
-| Images | Artifact Registry; Trivy scans each image (our backend images block the deploy, upstream ones only report); cosign signs each image with its SBOM and SLSA provenance; Binary Authorization admits only images the deploy attested | Only our software runs, with a parts list |
+| Images | Artifact Registry; Trivy scans each image (our backend images block the deploy, upstream ones only report); cosign signs each image with its SBOM and SLSA provenance; Binary Authorization admits only images the deploy attested. The scan and the SBOM read the copy left on the build runner, and the build cache is GitHub's Actions cache: pulling images back from the registry to GitHub is billed as internet egress (about S$2 a push) | Only our software runs, with a parts list |
 | Releases | Cloud Deploy renders the chart by digest, records each rollout, rolls back in one step; the merge to `main` is the approval | Every change recorded and reversible |
 | Backups | The cluster holds no state; Supabase's backups matter | No cluster backup tool |
 | Environments | dev (laptop, compose or kind) and prod | No staging (decided) |
