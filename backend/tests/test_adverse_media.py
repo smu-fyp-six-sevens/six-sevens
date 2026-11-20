@@ -189,8 +189,8 @@ async def test_former_names_are_given_one_search_within_the_limit() -> None:
     prompt = model.ainvoke.call_args.args[0][0].content
     assert "Zenith Bay Engineering Pte. Ltd." in prompt
     assert "exactly one of your searches on the former names" in prompt
-    # The same bad-news search, under the old name: not a search for the rename itself.
-    assert '"Zenith Bay Engineering Pte. Ltd." sanctions fraud investigation' in prompt
+    # The old name on its own: keywords would miss coverage that doesn't use them (haze notices aren't "fraud").
+    assert 'just the former name in quotes, with no other words, e.g. "Zenith Bay Engineering Pte. Ltd."' in prompt
     # Still capped at the same number of searches in all.
     assert model.bind_tools.call_args.args[0][0]["max_uses"] == adverse_media._MAX_SEARCHES
     assert result.former_names == ["Zenith Bay Engineering Pte. Ltd."]
@@ -456,3 +456,19 @@ async def test_an_unreadable_reply_logs_the_case_and_not_the_company(caplog) -> 
 
     assert "c1" in text
     assert "Acme" not in text
+
+
+async def test_a_reply_cut_off_in_its_sources_keeps_the_complete_ones() -> None:
+    # Seen live: a long list of sources, the reply stopping mid-way through the last one.
+    cut = ('{"status": "concerns", "summary": "Notices from MAS.", "sources": [{"title": "MAS notice", '
+           '"url": "https://www.mas.gov.sg/news/notice"}, {"title": "More", "url": "https://www.mas.gov.sg/ne')
+    result, _ = await _run(cut)
+    assert result.status == "concerns"
+    assert result.summary == "Notices from MAS."
+    assert [s.url for s in result.sources] == ["https://www.mas.gov.sg/news/notice"]
+
+
+async def test_a_reply_with_no_status_is_still_unreadable() -> None:
+    result, _ = await _run('{"summary": "Nothing", "sources": [')
+    assert result.status == "failed"
+    assert result.summary == adverse_media.UNREADABLE
