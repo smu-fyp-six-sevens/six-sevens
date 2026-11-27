@@ -65,23 +65,13 @@ A push to `main` runs CI, then `deploy.yml`: build and scan, sign, release throu
 - **An object the chart no longer renders stays on the cluster:** Cloud Deploy never deletes. Find leftovers with `kubectl get scaledobject,hpa,podmonitoring -A` and delete them by hand.
 - Sizes and env live in `roles.json` (then `.venv\Scripts\python.exe deploy\helm\gen_values.py`), never in the workflow.
 
-## Saving credits
+## Cost, and shutting down
 
-The cluster costs money while idle: about S$20–21 a day with everything on and every worker kept at 1 (measured), about S$9.6 rolled down (measured, 22–25 Nov), an estimated S$8 with every pod at 0.
+About S$20–21 a day with everything on and every worker kept at 1 (measured). Each push costs about S$1–2 more.
 
-### Rolling down, and back up
-
-Rolled down 2026-11-20 to 22; everything but the image clean-up brought back 2026-11-27 for the final presentation.
-
-| What | To roll down | To bring back |
-|---|---|---|
-| Workers at 1 | `roles.json`: `gke.min` 0 for doc-, detection- and case-worker, then `.venv\Scripts\python.exe deploy\helm\gen_values.py`; push | The same with 1 |
-| Grafana and the app's Prometheus scraping | `deploy/helm/six-sevens/values-prod.yaml`: `grafana.enabled: false`, `monitoring.podMonitoring: false`; in `deploy/clouddeploy/skaffold.yaml` remove the Grafana condition from the wait loop and the two Grafana `expect` lines; push | `true` for both, and the Grafana checks back; push |
-| Network Intelligence Center | `gcloud services disable networkmanagement.googleapis.com --project fyp-six-sevens` (saved almost nothing: its charges kept coming) | The same with `enable` |
-| GKE's own metric packages | `gcloud container clusters update six-sevens --region asia-southeast1 --monitoring=SYSTEM`, then the same with `--disable-dataplane-v2-metrics` | `--monitoring=SYSTEM,STORAGE,HPA,POD,DAEMONSET,DEPLOYMENT,STATEFULSET,CADVISOR,KUBELET,DCGM,JOBSET`, then `--enable-dataplane-v2-metrics` (each takes 10–20 minutes) |
-| Old images | `main.tf`: 3 newest versions per image, the rest deleted after 3 days (kept: it costs nothing) | `keep_count = 5` and `older_than = "604800s"`, then `terraform apply` |
-
-The two `gcloud` changes aren't in Terraform (it doesn't manage those settings), so `terraform apply` neither undoes nor restores them. After Grafana comes back, check its dashboards fill within a few minutes.
+- The registry keeps the 3 newest versions of each image and deletes older ones after 3 days (`main.tf`): the serving one and two rollback targets.
+- Container Scanning stays disabled (`gcloud services disable containerscanning.googleapis.com`): it cost S$6–33 a day, and Trivy scans in the deploy instead.
+- **Shutting it all down (after the final presentation):** set the repository variable `GKE_ENABLED` to false, then `gke_enabled = false` in `terraform.tfvars` and `terraform apply`. The KMS key ring stays (key rings can't be deleted).
 
 ## Argo CD (watch only)
 
@@ -100,19 +90,6 @@ Cloud Deploy releases and rolls back; Argo CD watches `main` and shows whether t
 
 - **Deploy log says "Couldn't commit the release for Argo CD":** `main` refuses pushes from `github-actions[bot]`; allow it in the branch rules.
 - **Removing it:** `helm uninstall argocd -n argocd`, then `kubectl delete namespace argocd`.
-
-- **Everything to 0** (site down, an estimated S$8 a day):
-  ```
-  for %n in (api audit-metrics) do kubectl -n %n scale deploy/%n --replicas=0
-  kubectl -n gateway scale deploy/kong --replicas=0
-  kubectl -n frontend scale deploy/frontend --replicas=0
-  for %n in (doc-worker detection-worker case-worker) do kubectl -n %n annotate scaledobject/%n autoscaling.keda.sh/paused-replicas=0 --overwrite
-  kubectl -n api delete hpa api
-  kubectl -n gateway delete hpa kong
-  ```
-  The next release puts it all back. Without a release: `gcloud deploy releases promote --release=<latest> --delivery-pipeline=six-sevens --region=asia-southeast1 --to-target=prod`, then remove each pause with `kubectl -n <worker> annotate scaledobject/<worker> autoscaling.keda.sh/paused-replicas-`.
-- **Turning it all off:** set `GKE_ENABLED` to false, then `gke_enabled = false` and apply. The KMS key ring stays (key rings can't be deleted).
-- Container Scanning stays disabled (`gcloud services disable containerscanning.googleapis.com`): it cost S$6–33 a day, and Trivy scans in the deploy instead.
 
 ## Failure tests
 

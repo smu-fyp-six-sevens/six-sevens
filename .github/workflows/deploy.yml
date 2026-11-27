@@ -68,7 +68,11 @@ jobs:
       # runtime token, which this exposes. Past the cache's 10 GB, old entries are evicted: a slower build, not a failure.
       - uses: crazy-max/ghaction-github-runtime@v3
 
+      # About 6 minutes with a warm cache. A cache upload throttled by GitHub once held this step for 15 minutes:
+      # each cache read or write now gives up after 2 (a slower next build, not a failure), and the step stops at 20,
+      # when the token above expires anyway. A rerun skips the images already pushed.
       - name: Build and push every image
+        timeout-minutes: 20
         env:
           # A build secret, so the key stays out of the image layers.
           DATA_GOV_SG_API_KEY: ${{ secrets.DATA_GOV_SG_API_KEY }}
@@ -85,8 +89,8 @@ jobs:
             # Registry's clean-up policy (deploy/terraform/main.tf) could delete. --load keeps a copy on the runner,
             # so the scan and the SBOM below read it here instead of pulling it back from the registry.
             docker buildx build -f "$file" "$@" --provenance=false \
-              --cache-from "type=gha,scope=$image" \
-              --cache-to "type=gha,scope=$image,mode=max" \
+              --cache-from "type=gha,scope=$image,timeout=2m" \
+              --cache-to "type=gha,scope=$image,mode=max,timeout=2m,ignore-error=true" \
               -t "$REGISTRY/$image:$GITHUB_SHA" --push --load .
             echo "$image" >> built.txt
           }
@@ -94,7 +98,7 @@ jobs:
           for role in $BACKEND_ROLES; do
             # Every role shares the dependency layers, so each may also start from api's cache.
             build "$role" backend/Dockerfile --target "$role" --build-arg GIT_COMMIT="$GITHUB_SHA" \
-              --cache-from "type=gha,scope=api" \
+              --cache-from "type=gha,scope=api,timeout=2m" \
               --secret id=data_gov_sg_api_key,env=DATA_GOV_SG_API_KEY
           done
           for entry in $OTHER_SERVICES; do

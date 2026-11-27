@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
 from app import corrections_repository
@@ -153,3 +154,48 @@ async def test_the_extractors_hint_goes_after_the_cached_prefix() -> None:
     blocks = model.ainvoke.call_args_list[0].args[0][0]["content"]
     assert "cache_control" in blocks[0] and "employer_address" not in blocks[0]["text"]
     assert "employer_address" in blocks[1]["text"]
+
+
+# --- the hints' cache -----------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _hint_cache(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(correction_hints.settings, "CORRECTION_HINTS_CACHE_SECONDS", 300)
+    correction_hints._cache.clear()
+    yield
+    correction_hints._cache.clear()
+
+
+async def test_two_type_lookups_inside_the_ttl_read_the_repository_once(_hint_cache) -> None:
+    with patch.object(corrections_repository, "type_corrections", return_value=[_pair()]) as read:
+        first = await correction_hints.load_type_corrections()
+        second = await correction_hints.load_type_corrections()
+    assert first == second == [_pair()]
+    assert read.call_count == 1
+
+
+async def test_field_edits_are_cached_per_document_type(_hint_cache) -> None:
+    edit = FieldEdit(document_type="payslip", field_name="employer", edit="added", cases=2)
+    with patch.object(corrections_repository, "field_edits", return_value=[edit]) as read:
+        await correction_hints.load_field_edits("payslip")
+        await correction_hints.load_field_edits("payslip")
+        await correction_hints.load_field_edits("nric")
+    assert [c.args for c in read.call_args_list] == [("payslip",), ("nric",)]
+
+
+async def test_a_read_that_raises_is_not_cached(_hint_cache) -> None:
+    with patch.object(corrections_repository, "type_corrections", side_effect=[RuntimeError("down"), [_pair()]]) as read:
+        assert await correction_hints.load_type_corrections() == []
+        assert await correction_hints.load_type_corrections() == [_pair()]
+    assert read.call_count == 2
+
+
+async def test_a_zero_ttl_reads_every_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(correction_hints.settings, "CORRECTION_HINTS_CACHE_SECONDS", 0)
+    correction_hints._cache.clear()
+    with patch.object(corrections_repository, "type_corrections", return_value=[]) as read:
+        await correction_hints.load_type_corrections()
+        await correction_hints.load_type_corrections()
+    assert read.call_count == 2
+    assert correction_hints._cache == {}

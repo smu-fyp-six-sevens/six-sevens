@@ -796,9 +796,11 @@ export class MockBackend {
     }
     if (path === '/audit/events' && method === 'GET') {
       const caseId = url.searchParams.get('case_id');
+      const type = url.searchParams.get('type');
       return json(
         this.auditEvents
           .filter((e) => caseId === null || e.case_id === caseId)
+          .filter((e) => type === null || e.type === type)
           .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)),
       );
     }

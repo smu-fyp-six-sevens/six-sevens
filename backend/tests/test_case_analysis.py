@@ -155,3 +155,19 @@ async def test_the_case_worker_reports_an_unsaved_run_as_failed(published_events
     assert end.type == types.CASE_ANALYSIS_COMPLETED
     assert end.outcome == "failed" and end.detail["status"] == "failed"
     assert "couldn't be saved" in end.detail["error"]
+
+
+async def test_the_case_workers_end_event_carries_the_case_agents_versions(published_events) -> None:
+    done = service.CaseAnalysis(run_id="run-1", case_id="case-1", status="complete", fingerprint="f", started_at=STARTED)
+    event = Event(type=types.CASE_ANALYSIS_REQUESTED, case_id="case-1",
+                  detail={"run_id": "run-1", "fingerprint": "f", "started_at": STARTED.isoformat()})
+    with (
+        patch.object(case_worker.analysis_repository, "claim_run", return_value=True),
+        patch.object(case_worker.analysis_service, "run_requested", AsyncMock(return_value=done)),
+        patch.object(case_worker.agent_versions, "for_run", return_value={"case_planner": "fp-3"}) as for_run,
+    ):
+        await case_worker.on_analysis_requested(event)
+
+    for_run.assert_called_once_with("case_analysis")
+    (end,) = published_events
+    assert end.detail["agent_versions"] == {"case_planner": "fp-3"}

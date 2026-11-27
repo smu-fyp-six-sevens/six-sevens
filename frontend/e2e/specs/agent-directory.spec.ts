@@ -31,4 +31,32 @@ test.describe('AI agents registry', () => {
     await expect(dialog).toBeHidden();
     await expect(node).toBeFocused();
   });
+
+  test('says "Anomaly detection" for the "Fraud detection" groups, on the graph and in the model card', async ({ page, backend }) => {
+    void backend;
+    await page.goto('/agents');
+
+    await expect(page.getByRole('button', { name: 'Detection lead, Anomaly detection', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Layout & Rendering Analyst, Anomaly detection specialists', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Fraud/ })).toHaveCount(0);
+
+    await page.getByRole('button', { name: /^Content Validation Analyst,/ }).click();
+    await expect(page.getByRole('dialog').locator('.agent-directory-role')).toHaveText('Anomaly detection specialists');
+  });
+
+  test('a model card lists each tool, opens its description on click, and the graph has no unversioned legend when all are versioned', async ({ page, backend }) => {
+    void backend;
+    await page.goto('/agents');
+    await expect(page.getByText('Prompt not versioned')).toHaveCount(0);
+
+    await page.getByRole('button', { name: /^Layout & Rendering Analyst,/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Layout & Rendering Analyst' });
+    await expect(dialog.getByRole('heading', { name: /^Tools/ })).toContainText('1');
+    const tool = dialog.locator('.agent-tool', { hasText: 'font_consistency_tool' });
+    await expect(tool).toBeVisible();
+    await expect(tool.getByText('What font_consistency_tool does.')).toBeHidden();
+
+    await tool.locator('summary').click();
+    await expect(tool.getByText('What font_consistency_tool does.')).toBeVisible();
+  });
 });

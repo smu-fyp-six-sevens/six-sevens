@@ -305,3 +305,29 @@ def test_a_run_with_nothing_to_check_records_nothing(monkeypatch: pytest.MonkeyP
 
     runner.record_case_run(_Trace())
     assert recorded == []
+
+
+@pytest.mark.parametrize(
+    ("record", "module", "kwargs"),
+    [
+        (runner.record_document_run, classifier, {}),
+        (runner.record_detection_run, detection, {"document_type": "payslip", "lead_summary": None}),
+    ],
+)
+def test_a_check_that_raises_never_breaks_a_document_or_detection_run(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, record, module, kwargs,
+):
+    from app.langgraph import trace
+
+    recorded: list = []
+
+    def boom(*args, **kw):
+        raise ValueError("broken check")
+
+    monkeypatch.setattr(module, "checks", boom)
+    monkeypatch.setattr(trace, "record", lambda *a, **kw: recorded.append(a))
+    monkeypatch.setattr(runner.telemetry, "current_step_id", lambda: ROOT)
+
+    assert record("doc-1", **kwargs) is None  # must not raise
+    assert recorded == []
+    assert "the run is unaffected" in caplog.text

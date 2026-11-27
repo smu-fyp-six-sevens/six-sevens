@@ -61,6 +61,38 @@ async def test_queued_document_is_claimed_then_run_then_announced(published_even
     assert published_events[0].duration_ms is not None
 
 
+async def test_the_end_event_carries_the_versions_of_the_agents_it_used(published_events) -> None:
+    with (
+        patch("app.workers.documents.document_repository") as mock_repo,
+        patch("app.workers.documents.langgraph_pipeline") as mock_pipeline,
+        patch("app.workers.recovery.agent_versions.for_run", return_value={"classifier": "fp-1"}) as for_run,
+    ):
+        mock_repo.get_document.side_effect = [_make_document(), _make_document(status=DocumentStatus.ANALYZED)]
+        mock_repo.update_status.return_value = True
+        mock_pipeline.process_document = AsyncMock()
+
+        await doc_worker.on_queued(_uploaded())
+
+    for_run.assert_called_once_with("document")
+    assert published_events[0].detail["agent_versions"] == {"classifier": "fp-1"}
+
+
+def test_a_metered_run_records_its_agent_versions_even_when_it_raises() -> None:
+    # Detection's end event reads the same meter, including after a failed run.
+    from app.workers import recovery
+
+    meter = recovery.Meter()
+    with patch.object(recovery.agent_versions, "for_run", return_value={"lead": "fp-2"}) as for_run:
+        try:
+            with recovery.metered("detection doc=doc-1", "detection", meter):
+                raise RuntimeError("boom")
+        except RuntimeError:
+            pass
+
+    for_run.assert_called_once_with("detection")
+    assert meter.usage["agent_versions"] == {"lead": "fp-2"}
+
+
 async def test_a_repeat_delivery_of_a_started_document_is_skipped(published_events) -> None:
     with (
         patch("app.workers.documents.document_repository") as mock_repo,

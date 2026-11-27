@@ -354,3 +354,60 @@ async def test_a_confident_type_flagged_for_review_is_extracted_with_its_own_sch
 async def test_a_low_confidence_type_is_still_extracted_with_the_generic_schema() -> None:
     classification = {"document_type": "bank_statement", "confidence": 0.5, "needs_manual_review": True}
     assert await _schema_used(classification) == "unrecognised"
+
+
+# --- the trace marks what the evals read -----------------------------------------------------------------------------
+
+
+async def test_the_classify_agent_refused_a_call_leaves_a_trace_step() -> None:
+    from langchain_core.messages import HumanMessage
+
+    from app.langgraph import classify_graph
+
+    call = AIMessage(content="", tool_calls=[{"name": "vision_llm", "args": {}, "id": "c1"}])
+    state = {"document_id": "d", "agent_messages": [HumanMessage(content="go"), call]}
+    with patch.object(classify_graph, "trace") as trace:
+        out = await classify_graph.tools_node(state, {})  # type: ignore[arg-type]
+
+    [step] = [c for c in trace.record.call_args_list if c.args[1] == "classify_tool_refused"]
+    assert step.args[0] == "d" and step.kwargs["tools"] == ["vision_llm"]
+    assert len(step.kwargs["reasons"]) == 1 and step.kwargs["reasons"][0].startswith(classify_graph._NOT_RUN)
+    assert out["agent_messages"][-1].status == "error"
+
+
+async def test_the_extraction_second_look_refused_a_call_leaves_a_trace_step() -> None:
+    from langchain_core.messages import HumanMessage
+
+    from app.langgraph import extract_graph
+
+    call = AIMessage(content="", tool_calls=[{"name": "vision_read", "args": {}, "id": "c1"}])
+    state = {"document_id": "d", "is_image": False, "agent_messages": [HumanMessage(content="go"), call]}
+    with patch.object(extract_graph, "trace") as trace:
+        await extract_graph.tools_node(state)  # type: ignore[arg-type]
+
+    trace.record.assert_called_once()
+    args, kwargs = trace.record.call_args
+    assert args == ("d", "extraction_tool_refused") and kwargs["tools"] == ["vision_read"]
+    assert kwargs["reasons"][0].startswith(extract_graph.NOT_RUN)
+
+
+async def test_the_extraction_step_carries_the_field_shape_by_name_only() -> None:
+    state = {"document_id": "d", "classification": {"document_type": "payslip", "confidence": 0.99}}
+    ok = {
+        "extracted_fields": {"net_pay": "-5000", "pay_date": "not a date"}, "field_confidences": {},
+        "confidence": 0.9, "escalation": None,
+    }
+    with (
+        patch.object(nodes, "set_status", AsyncMock()),
+        patch.object(nodes, "trace") as trace,
+        patch.object(nodes.text_cache, "get", return_value="text"),
+        patch.object(nodes.extract, "run_extraction", AsyncMock(return_value=ok)),
+        patch.object(nodes, "persist_extracted_fields", AsyncMock()),
+    ):
+        await nodes.extract_node(state)  # type: ignore[arg-type]
+
+    [step] = [c for c in trace.record.call_args_list if c.args[1] == "extraction"]
+    shape = step.kwargs["field_shape"]
+    assert set(shape) == {"missing_required", "bad_dates", "bad_numbers", "negative"}
+    assert "pay_date" in shape["bad_dates"]
+    assert "not a date" not in json.dumps(shape) and "-5000" not in json.dumps(shape)

@@ -38,6 +38,15 @@ test.describe('Dashboard', () => {
     await expect(page.getByText('Meridian Consulting Group')).toHaveCount(0);
   });
 
+  test('with no cases it shows no rows, says so, and has no cost to show', async ({ page, backend }) => {
+    void backend;
+    await openAllTime(page);
+
+    await expect(page.getByText('No cases yet. The dashboard fills in as cases are created.')).toBeVisible();
+    await expect(page.locator('.processing-metric', { hasText: 'Claude cost' })).toContainText('No cases in view');
+    await expect(page.getByText('Meridian Consulting Group')).toHaveCount(0);
+  });
+
   test('the refresh button reads the cases again, without the loading screen', async ({ page, backend }) => {
     backend.cases.push(makeCase({ id: 'case-a', greenlink_case_id: 'GLDB-7001', company_name: 'Acme Pte Ltd' }));
     await openAllTime(page);

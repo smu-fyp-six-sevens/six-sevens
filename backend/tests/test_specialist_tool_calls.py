@@ -210,3 +210,74 @@ async def test_the_plan_step_puts_the_reason_on_the_trace() -> None:
     kwargs = record.call_args.kwargs
     assert kwargs["fallback_reason"] == "The call failed: TimeoutError: "
     assert set(kwargs["fallback_briefs"]) == set(specialists.SPECIALISTS)
+
+
+# --- what a specialist's report records for the evals ---------------------------------------------------
+
+
+def _report(messages: list) -> dict:
+    state = {"messages": messages, "specialist": "content_validation", "document_type": "nric"}
+    return specialists._collect_node(cast(Any, state))["report"]
+
+
+def test_the_report_counts_tool_rounds_and_findings_nobody_assessed() -> None:
+    report = _report([
+        AIMessage(content="", tool_calls=[_call("c1", name="spelling_tool")]),
+        _result("c1", [{"id": "spelling_tool-1", "summary": "Misspelt"}], name="spelling_tool"),
+        AIMessage(content="", tool_calls=[_call("c2", name="date_consistency_tool")]),
+        _result("c2", name="date_consistency_tool"),
+        AIMessage(content=json.dumps({"summary": "done", "assessments": []})),
+    ])
+    assert (report["tool_rounds"], report["unassessed"], report["wrapped_up"]) == (2, 1, False)
+
+
+def test_the_report_says_when_the_wrap_up_turn_was_needed() -> None:
+    from langchain_core.messages import HumanMessage
+
+    report = _report([
+        AIMessage(content="", tool_calls=[_call("c1")]), _result("c1"),
+        HumanMessage(content=specialists._WRAP_UP),
+        AIMessage(content=json.dumps({"summary": "done", "assessments": []})),
+    ])
+    assert report["wrapped_up"] is True and report["tool_rounds"] == 1
+
+
+async def test_the_specialist_step_puts_those_fields_on_the_trace() -> None:
+    report = {
+        "tools_called": ["spelling_tool"], "findings": [], "dismissed": [], "uncertain": False, "tool_calls": [],
+        "tool_rounds": 3, "wrapped_up": True, "unassessed": 2, "output_status": "ok", "summary": "s",
+    }
+    state = {"document_id": "doc-1", "name": "content_validation", "document_type": "nric", "brief": "b"}
+    with (
+        patch.object(graph, "run_specialist", AsyncMock(return_value=report)),
+        patch.object(graph, "trace") as trace,
+    ):
+        await graph.specialist_node(cast(Any, state))
+
+    kwargs = trace.record.call_args_list[0].kwargs
+    assert (kwargs["tool_rounds"], kwargs["wrapped_up"], kwargs["unassessed"]) == (3, True, 2)
+
+
+# --- the lead's review leaves its own step ----------------------------------------------------------------
+
+
+async def test_the_lead_review_records_whether_a_second_look_was_asked_for_and_accepted() -> None:
+    from app.llm_contracts import LeadReview
+
+    reports = [
+        {"specialist": "layout_rendering", "findings": [{"id": "f1", "summary": "s", "severity": "low", "rationale": "r"}]},
+        {"specialist": "content_validation", "findings": []},
+    ]
+    review = LeadReview(summary="ok", second_look={"finding_id": "f1", "to": "content_validation"}, confidence=0.5)
+    state = {"document_id": "doc-1", "context": {"document_type": "payslip"}, "reports": reports,
+             "second_look_used": False}
+    with (
+        patch.object(graph, "_ask_lead", AsyncMock(return_value=review)),
+        patch.object(graph, "_compact_reports", return_value=[]),
+        patch.object(graph, "trace") as trace,
+    ):
+        await graph.lead_review_node(cast(Any, state))
+
+    args, kwargs = trace.record.call_args
+    assert args == ("doc-1", "detection_review")
+    assert kwargs == {"second_look_requested": True, "second_look_accepted": True, "second_look_already_used": False}

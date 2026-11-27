@@ -249,4 +249,32 @@ test.describe('Trace agent runs @SCRUM-59', () => {
     await page.getByRole('menuitem', { name: 'Agent trace' }).click();
     await expect(panel(page)).toContainText("No trace yet: this document hasn't been processed.");
   });
+
+  test('the checks show as a chip on the agent they mark, a section in its details, and a total in the header', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    const document = fixture.document('Credit_Bureau_Report');
+    backend.traces[document.id] = { document_id: document.id, started_at: 0, steps: [
+      { step: 'classification_finalised', at: 2, in_span: 'run', document_type: 'payslip', confidence: 0.97 },
+      {
+        step: 'evals', at: 4, in_span: 'run', passed: 1, warnings: 1, failures: 0,
+        results: [
+          { agent: 'classifier', check: 'type_in_list', kind: 'output', result: 'pass' },
+          { agent: 'classifier', check: 'confidence_matches_evidence', kind: 'output', result: 'warn', reason: 'Confidence is high for a weak rule match.' },
+        ],
+      },
+      { step: 'span', at: 5, name: 'langgraph.process_document', id: 'run', parent: null, duration_s: 5, kind: 'run', run: 'Classification and extraction' },
+    ] };
+    await page.goto(fixture.documentUrl(document));
+    await page.getByRole('button', { name: 'Document actions' }).click();
+    await page.getByRole('menuitem', { name: 'Agent trace' }).click();
+
+    await expect(panel(page).locator('.trace-drawer-head')).toContainText('Checks1 passed · 1 warning');
+    await expect(row(page, 'Classifier')).toContainText('⚠ 1 check');
+    await expect(row(page, 'Classifier')).toContainText('confidence 0.97');
+    await row(page, 'Classifier').click();
+    await expect(details(page).getByRole('button', { name: /Sensibility checks/ })).toHaveAttribute('aria-expanded', 'true');
+    await expect(details(page)).toContainText('Confidence is high for a weak rule match.');
+    // The checks step is no row of its own.
+    await expect(panel(page).locator('.trace-row-main', { hasText: 'Evals' })).toHaveCount(0);
+  });
 });

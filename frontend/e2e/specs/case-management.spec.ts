@@ -224,6 +224,82 @@ test.describe('View cases @sprint2 @SCRUM-78', () => {
   });
 });
 
+test.describe('Deleted cases in the queue', () => {
+  function seedDeleted(backend: MockBackend) {
+    const deleted = (id: string, caseId: string, company: string, documents: number, actor: string, at: string): AuditEvent => ({
+      event_id: id, type: 'case.deleted', occurred_at: at, actor_type: 'user', actor, case_id: null, document_id: null,
+      outcome: 'success', started_at: null, duration_ms: null,
+      detail: { greenlink_case_id: caseId, company_name: company, documents },
+    });
+    backend.auditEvents.push(
+      deleted('del-1', 'GLDB-3001', 'Gone Trading Pte Ltd', 2, 'officer.tan', '2026-11-10T03:00:00Z'),
+      deleted('del-2', 'GLDB-3002', 'Vanished Foods Pte Ltd', 1, 'officer.lim', '2026-11-11T03:00:00Z'),
+    );
+  }
+  const deletedRows = (page: Page) => page.getByTestId('deleted-case-row');
+
+  test('picking Deleted lists the deleted cases with their documents, who and when, and hides the risk filter, sort and pagination', async ({ page, backend }) => {
+    seedQueue(backend);
+    seedDeleted(backend);
+    await page.goto('/cases');
+    await expect(caseCards(page)).toHaveCount(3);
+
+    await pick(page, 'status', /^Deleted$/);
+
+    await expect(page.getByRole('heading', { name: 'Deleted cases (2)' })).toBeVisible();
+    await expect(deletedRows(page)).toHaveCount(2);
+    await expect(caseCards(page)).toHaveCount(0);
+    const vanished = deletedRows(page).filter({ hasText: 'GLDB-3002' });
+    await expect(vanished).toContainText('Vanished Foods Pte Ltd');
+    await expect(vanished).toContainText('1 document');
+    await expect(vanished).not.toContainText('1 documents');
+    await expect(vanished).toContainText('officer.lim');
+    await expect(vanished.locator('time')).toHaveAttribute('datetime', '2026-11-11T03:00:00Z');
+    await expect(deletedRows(page).filter({ hasText: 'GLDB-3001' })).toContainText('2 documents');
+
+    await expect(page.getByRole('button', { name: /^Filter by risk/ })).toHaveCount(0);
+    await expect(page.getByLabel('Sort cases')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Sort by/ })).toHaveCount(0);
+    await expect(page.getByRole('navigation', { name: 'Case pages' })).toHaveCount(0);
+  });
+
+  test('picking a status or Select all brings the live cases back', async ({ page, backend }) => {
+    seedQueue(backend);
+    seedDeleted(backend);
+    await page.goto('/cases');
+
+    await pick(page, 'status', /^Deleted$/);
+    await expect(deletedRows(page)).toHaveCount(2);
+    await pick(page, 'status', /Pending Review/);
+    await expect(deletedRows(page)).toHaveCount(0);
+    // Unticking Pending Review from the full set leaves the other two.
+    await expect(caseCards(page)).toHaveCount(2);
+
+    await pick(page, 'status', /^Deleted$/);
+    await expect(deletedRows(page)).toHaveCount(2);
+    await (await openFilter(page, 'status')).getByRole('button', { name: 'Select all' }).click();
+    await expect(deletedRows(page)).toHaveCount(0);
+    await expect(caseCards(page)).toHaveCount(3);
+  });
+
+  test('the header search narrows the deleted list', async ({ page, backend }) => {
+    seedQueue(backend);
+    seedDeleted(backend);
+    await page.goto('/cases');
+    await pick(page, 'status', /^Deleted$/);
+    await expect(deletedRows(page)).toHaveCount(2);
+
+    await searchQueue(page, 'vanished');
+
+    await expect(deletedRows(page)).toHaveCount(1);
+    await expect(deletedRows(page)).toContainText('GLDB-3002');
+    await expect(page.getByRole('heading', { name: 'Deleted cases (1)' })).toBeVisible();
+
+    await searchQueue(page, 'nothing like this');
+    await expect(page.getByText('No deleted case matches "nothing like this".')).toBeVisible();
+  });
+});
+
 test.describe('Case queue paging and filters @SCRUM-299', () => {
   // 45 cases, GLDB-2001 (the oldest) to GLDB-2045: 30 analysed, 10 failed, 5 processing documents.
   function seedMany(backend: MockBackend) {
@@ -495,6 +571,9 @@ test.describe('Case page layout @SCRUM-299', () => {
     await expect(stage('Case analysis')).toContainText('2m 05s');
     // Nothing recorded for detection yet.
     await expect(stage('Anomaly detection')).toContainText('—');
+    // The runs all ended together, so the whole case took as long as the longest of them, not their sum.
+    await expect(page.getByTestId('case-processing-total')).toContainText('Whole case');
+    await expect(page.getByTestId('case-processing-total')).toContainText('2m 05s');
     // The mock reports no spend, and the summary shows that rather than leaving the card blank.
     await expect(page.locator('.case-overview-cost')).toContainText('$0.0000');
   });
@@ -1445,6 +1524,27 @@ test.describe('View case overview @sprint5 @SCRUM-299', () => {
     await expect(severity.locator('.case-overview-risk-copy strong')).toHaveText('Not scored yet');
     await expect(severity).toContainText('Scored once documents are approved and scanned');
     await expect(severity.getByLabel(/^Risk score/)).toHaveCount(0);
+  });
+
+  test('the severity card’s legend and text stay inside the card on a phone', async ({ page, backend }) => {
+    const fixture = loadFixture(backend, 'anchorpoint');
+    Object.assign(fixture.case, { status: 'case_analysed', risk: CASE_VIEWS.scored.risk });
+    await page.setViewportSize({ width: 375, height: 800 });
+
+    await page.goto(fixture.caseUrl);
+
+    const card = page.locator('.case-overview-risk');
+    await expect(card.locator('.severity-legend-swatch').first()).toBeVisible();
+    const inside = await card.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return [...element.querySelectorAll('*')].every((child) => {
+        const box = child.getBoundingClientRect();
+        return box.width === 0 || (box.left >= bounds.left - 1 && box.right <= bounds.right + 1);
+      });
+    });
+    expect(inside).toBe(true);
+    expect(await card.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
   test('CM-040 a long company name is cut with an ellipsis, in full on hover, without widening the page @CM-040', async ({ page, backend }) => {

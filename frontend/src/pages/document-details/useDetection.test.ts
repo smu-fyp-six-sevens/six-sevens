@@ -117,4 +117,28 @@ describe('useDetection', () => {
 
     expect(result.current.isCancellingDetection).toBe(false);
   });
+
+  it('reads the report again when a run skips detecting (approved to detected)', async () => {
+    api.getDetectionReport.mockClear();
+    const { result, rerender } = detection('approved');
+    await waitFor(() => expect(api.getDetectionReport).toHaveBeenCalledOnce());
+    api.getDetectionReport.mockClear();
+
+    rerender({ status: 'detected' });
+
+    await waitFor(() => expect(api.getDetectionReport).toHaveBeenCalledOnce());
+    expect(result.current.detectionReport).toEqual(REPORT);
+  });
+
+  it('does not read the report again while the status stays approved', async () => {
+    api.getDetectionReport.mockClear();
+    const { rerender } = detection('approved');
+    await waitFor(() => expect(api.getDetectionReport).toHaveBeenCalledOnce());
+    api.getDetectionReport.mockClear();
+
+    rerender({ status: 'approved' });
+    await act(async () => {});
+
+    expect(api.getDetectionReport).not.toHaveBeenCalled();
+  });
 });

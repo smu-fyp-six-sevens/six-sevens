@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
 from app.case_pipeline.cross_document import agents
@@ -194,3 +195,70 @@ async def test_the_planner_gives_up_after_one_retry():
     _, args = await _ask(model)
     assert args is None
     assert model.ainvoke.await_count == 2
+
+
+# --- an agent loop caches its conversation (payload only, nothing is sent) ----------------------------------------
+
+
+def _cached_model(*, cache_history: bool):
+    _anthropic._models.clear()
+    with patch.object(_anthropic.settings, "ANTHROPIC_API_KEY", "test-key"):
+        built = _anthropic.build_chat_anthropic("claude-haiku-5-5", 1024, effort="low", cache_history=cache_history)
+    _anthropic._models.clear()
+    return built
+
+
+def test_cache_history_puts_a_top_level_cache_control_on_the_request():
+    payload = _cached_model(cache_history=True)._get_request_payload([HumanMessage(content="hi")])
+    assert payload["cache_control"] == {"type": "ephemeral"}
+
+
+def test_without_cache_history_the_request_has_no_top_level_cache_control():
+    payload = _cached_model(cache_history=False)._get_request_payload([HumanMessage(content="hi")])
+    assert "cache_control" not in payload
+
+
+def test_the_system_blocks_own_marker_is_kept_with_history_caching():
+    system = SystemMessage(content=[{"type": "text", "text": "rules", "cache_control": {"type": "ephemeral"}}])
+    payload = _cached_model(cache_history=True)._get_request_payload([system, HumanMessage(content="hi")])
+    assert payload["cache_control"] == {"type": "ephemeral"}
+    assert payload["system"][0]["cache_control"] == {"type": "ephemeral"}
+
+
+class _Stop(Exception):
+    pass
+
+
+def _builder_kwargs(call, where=_anthropic) -> dict:
+    """The kwargs a node passes to build_chat_anthropic; the stand-in raises so nothing goes further."""
+    seen: dict = {}
+
+    def build(*args, **kwargs):
+        seen.update(kwargs)
+        raise _Stop
+
+    with patch.object(where, "build_chat_anthropic", build), pytest.raises(_Stop):
+        call()
+    return seen
+
+
+
+def test_the_classifier_second_look_and_specialists_build_with_history_caching():
+    from app.langgraph import classify_graph, extract_graph
+
+    spec = next(iter(specialists.SPECIALISTS.values()))
+    node = specialists._make_agent_node(spec)
+    for call in (
+        lambda: asyncio.run(classify_graph.agent_node({"document_id": "d"})),  # type: ignore[arg-type]
+        lambda: asyncio.run(extract_graph.agent_node({})),  # type: ignore[arg-type]
+        lambda: asyncio.run(node({"document_id": "d", "messages": []})),  # type: ignore[arg-type]
+    ):
+        assert _builder_kwargs(call).get("cache_history") is True
+
+
+def test_the_case_agents_calls_do_not_cache_history():
+    context = CaseContext(case_id="c", docs={})
+    kwargs = _builder_kwargs(
+        lambda: asyncio.run(agents._ask_for_tool(context, [], {"name": "t"}, "k", 100, "span")), where=agents,
+    )
+    assert not kwargs.get("cache_history")
