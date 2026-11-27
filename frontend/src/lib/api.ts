@@ -57,7 +57,7 @@ export async function authFetch(path: string, options: RequestInit = {}): Promis
   // handed on as a failed response (status 0), so the caller's assertOk words it like a 5xx; an abort still throws.
   const response = await fetch(`${apiBaseUrl}${path}`, apiInit(options)).catch((error: unknown) => {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    console.error(`No response from ${path}:`, error);
+    console.error('No response from %s:', path, error);
     return Response.error();
   });
 

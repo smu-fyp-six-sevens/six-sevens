@@ -559,7 +559,7 @@ pymupdf==1.28.2
     # via
     #   -c requirements.lock
     #   fyp-backend (pyproject.toml)
-pypdf==6.21.4
+pypdf==7.2.0
     # via
     #   -c requirements.lock
     #   fyp-backend (pyproject.toml)

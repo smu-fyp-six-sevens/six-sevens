@@ -422,7 +422,7 @@ if __name__ == "__main__":
     else:
         out_dir = Path.cwd() / "output"
         out_dir.mkdir(parents=True, exist_ok=True)
-        print(generate_passport_page(
+        result = generate_passport_page(
             str(out_dir / "passport_template.pdf"),
             passport_no="K0419047N",
             surname="Tan",
@@ -434,4 +434,5 @@ if __name__ == "__main__":
             date_of_issue=date(2024, 1, 15),
             date_of_expiry=date(2034, 1, 14),
             national_id_no="S8012345A",
-        ))
+        )
+        print(f"wrote {result['output_path']}")

@@ -75,7 +75,7 @@ Production runs on GKE Autopilot at `sixsevens.me`: a green push to `main` build
 
 ## GitHub Actions
 
-- **`ci-cd.yml`** (PRs and pushes to `main`, not docs-only): backend (ruff, pyright, `openapi.json` up to date, tests with coverage); frontend (lint, `api.gen.ts` up to date, types, build, Playwright); security (Checkov, pip-audit, `npm audit` high, Terraform fmt/validate; Snyk only on lock-file changes or by hand, non-blocking until its quota resets). All must pass; a push to `main` then deploys.
+- **`ci-cd.yml`** (PRs and pushes to `main`, not docs-only): backend (ruff, pyright, `openapi.json` up to date, tests with coverage); frontend (lint, `api.gen.ts` up to date, types, build, Playwright); security (Checkov, pip-audit, `npm audit` high, Terraform fmt/validate; Snyk only on lock-file changes or by hand). All must pass; a push to `main` then deploys.
 - **`deploy.yml`**: builds and scans one image per service; with the repo variable `GKE_ENABLED=true` (and `SUPABASE_URL`), its `gke` job signs every image and releases the Helm chart to GKE through Cloud Deploy, which checks the gateway and rolls back a failed rollout (`deploy/terraform/README.md`, "GKE"). Signs in by Workload Identity Federation (repo variables `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`); the only repo secrets are `DATA_GOV_SG_API_KEY` and `SNYK_TOKEN`.
 - **`helm.yml`** (only changes to the chart, the role table, Kong, the event code or the backend Dockerfile; or by hand). Most pushes don't run it. Two jobs:
   - **Values, render and Checkov** (about 2 minutes): the chart's role values match `roles.json`, it lints and renders, and Checkov passes on the rendered chart.

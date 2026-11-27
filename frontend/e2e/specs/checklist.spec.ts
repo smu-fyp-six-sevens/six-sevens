@@ -50,7 +50,7 @@ const progress = (page: Page) => page.locator('.doc-checklist-head');
 const missing = (page: Page) => page.getByTestId('missing-document');
 const missingRow = (page: Page, label: string) =>
   missing(page).filter({
-    has: page.locator('.doc-checklist-name', { hasText: new RegExp(`^${label.replace(/[()/]/g, '\\$&')}$`) }),
+    has: page.locator('.doc-checklist-name', { hasText: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`) }),
   });
 // An optional document's line: its name, and "uploaded" or "not uploaded" (for screen readers).
 const optional = (page: Page, label: string) => page.getByTestId('optional-document').filter({ hasText: label });

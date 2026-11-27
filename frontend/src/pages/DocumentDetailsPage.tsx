@@ -186,7 +186,7 @@ export default function DocumentDetailsPage({
   // The page shows the plain sentence; the stored reason, which can carry an exception's text, goes to the console.
   const rawFailureReason = document?.status === 'failed' ? document.failure_reason : null;
   useEffect(() => {
-    if (rawFailureReason) console.error(`Document ${documentId} failed:`, rawFailureReason);
+    if (rawFailureReason) console.error('Document %s failed:', documentId, rawFailureReason);
   }, [documentId, rawFailureReason]);
 
   // The file itself couldn't be read: there are no fields to show or review, and a new type would fail the same way.

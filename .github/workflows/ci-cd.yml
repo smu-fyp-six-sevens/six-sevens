@@ -260,11 +260,8 @@ jobs:
             echo "Dependencies unchanged: Snyk skipped (pip-audit and npm audit ran)."
           fi
 
-      # Temporarily non-blocking (continue-on-error) while the monthly quota is used up; remove both
-      # continue-on-error lines once it resets, so Snyk blocks again when it runs.
       - name: Snyk (Python dependencies)
         if: ${{ !cancelled() && steps.deps.outputs.changed == 'true' }}
-        continue-on-error: true
         run: |
           # Snyk reads installed packages for a requirements file, so install them first.
           python -m pip install -r backend/requirements.lock
@@ -272,7 +269,6 @@ jobs:
 
       - name: Snyk (npm dependencies)
         if: ${{ !cancelled() && steps.deps.outputs.changed == 'true' }}
-        continue-on-error: true
         run: cd frontend && npm ci && npx --yes snyk@1 test --severity-threshold=high
 
       # Terraform format and validity only: no state, no credentials. `apply` stays a manual step

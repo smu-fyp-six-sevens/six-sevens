@@ -369,7 +369,7 @@ pyjwt==2.15.1
     # via supabase-auth
 pymupdf==1.28.2
     # via -r requirements.txt
-pypdf==6.21.4
+pypdf==7.2.0
     # via -r requirements.txt
 python-dateutil==3.0.0
     # via pandas
