@@ -1,0 +1,5 @@
+# Written by deploy.yml after each release, for Argo CD. Not secrets.
+projectId: fyp-six-sevens
+supabaseUrl: https://nbzfnmjedqchnfoglrrv.supabase.co
+gateway:
+  address: "136.69.64.10"
