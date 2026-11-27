@@ -205,7 +205,7 @@ def test_ws_ticket_is_signed_for_its_own_purpose():
     assert not auth.consume_ws_ticket(ticket)
 
 
-# --- A lost approval event is recovered (PENDING_TESTS row 7) ------------------------------------------------------
+# --- A lost approval event is recovered ------------------------------------------------------
 
 
 def _approved(doc_id: str, document_type: str | None = "payslip") -> DocumentRecord:
@@ -285,7 +285,7 @@ def test_past_the_attempt_limit_a_document_that_got_a_report_meanwhile_is_left_a
     report.assert_not_awaited()
 
 
-# --- One "stuck" limit (PENDING_TESTS row 45) ------------------------------------------------------------------
+# --- One "stuck" limit ------------------------------------------------------------------
 # monitoring.is_stuck (the case queue and an officer's retry) and sweeper.find_stuck (the recovery) must agree.
 
 
@@ -344,7 +344,7 @@ def test_the_queue_and_the_sweeper_agree_at_the_same_moment(status, seconds) -> 
     assert swept == monitoring.is_stuck(document)
 
 
-# --- The sweeper reads in one pass, and only status columns (PENDING_TESTS rows 17 and 46) --------------------------
+# --- The sweeper reads in one pass, and only status columns --------------------------
 
 
 def test_find_stuck_reads_detection_starts_once_and_documents_in_brief():

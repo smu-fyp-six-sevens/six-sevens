@@ -51,7 +51,7 @@ def test_the_dummy_hash_is_a_valid_hash():
     assert passwords.is_hash(passwords.DUMMY_HASH)
 
 
-# --- The password script (scripts/hash_password.py, PENDING_TESTS row 32) ------------------------------------------
+# --- The password script (scripts/hash_password.py) ------------------------------------------
 
 
 

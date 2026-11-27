@@ -255,7 +255,7 @@ async def test_the_second_of_two_approvals_is_refused_and_publishes_nothing(publ
     assert published_events == []  # no second detection run starts
 
 
-# --- A recovery can't start a second detection run (PENDING_TESTS row 52) -----------------------------------------
+# --- A recovery can't start a second detection run -----------------------------------------
 # The stamp-guarded status writes (mark_detected, end_unfinished_detection) are tested in test_document_repository.py.
 
 
@@ -381,7 +381,7 @@ async def test_a_superseded_run_ends_as_cancelled() -> None:
     assert outcome == "cancelled" and "Replaced by a newer run" in detail["error"]
 
 
-# --- a repeated approval after its run ended (PENDING_TESTS row 12) ----------------------------------------------
+# --- a repeated approval after its run ended ----------------------------------------------
 # A failed run puts the document back to approved, so a redelivery would find it claimable again: the run's end event,
 # which names the event that started it (trigger_event_id), is what says it already ran.
 
@@ -450,7 +450,7 @@ async def test_an_unreadable_trail_still_runs(published_events) -> None:
     run.assert_awaited_once()
 
 
-# --- "Cancel detection" ends a lost run (PENDING_TESTS row 53) -----------------------------------------------------
+# --- "Cancel detection" ends a lost run -----------------------------------------------------
 # A run that died mid-scan (a restart) leaves the document detecting with no run anywhere to hear the cancel. The
 # handler ends it as the officer's cancel would, unless with Pub/Sub the run may still be alive on another instance.
 

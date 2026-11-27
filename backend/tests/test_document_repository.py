@@ -565,7 +565,7 @@ def test_flushing_runs_the_requests_scheduled_refreshes_now_and_leaves_other_req
         document_repository.flush_syncs({"case-other"})
 
 
-# --- A detection run replaced by a recovery can't overwrite it (PENDING_TESTS row 4) -------------------------------
+# --- A detection run replaced by a recovery can't overwrite it -------------------------------
 # A recovery puts a lost run's document back (approved) or claims it again with a new stamp; the old run, still
 # going somewhere, must then write nothing when it ends.
 
@@ -624,7 +624,7 @@ def test_rejecting_writes_nothing_when_the_status_moved_on_since_it_was_read(db,
     assert synced == []
 
 
-# --- The sweeper reads only status columns (PENDING_TESTS row 46) --------------------------------------------------
+# --- The sweeper reads only status columns --------------------------------------------------
 
 
 def test_a_brief_read_leaves_out_evidence_and_the_other_wide_columns(db, extracted) -> None:
@@ -649,7 +649,7 @@ def test_a_brief_read_still_pages_past_one_page(db, extracted, monkeypatch) -> N
     assert sorted(r.id for r in results) == [f"doc-{n}" for n in range(5)]
 
 
-# --- A detection cancel travels through the document row (PENDING_TESTS row 34) ------------------------------------
+# --- A detection cancel travels through the document row ------------------------------------
 
 SINCE = datetime(2026, 8, 26, 12, 0, tzinfo=timezone.utc)
 

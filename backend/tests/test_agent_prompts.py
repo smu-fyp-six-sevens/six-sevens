@@ -1,5 +1,5 @@
 """
-Every registered agent's prompt renders, and every agent can be fingerprinted (PENDING_TESTS row 68).
+Every registered agent's prompt renders, and every agent can be fingerprinted.
 
 A registered agent with no prompt entry, or a prompt template with a placeholder its renderer doesn't fill, raises at
 runtime. Because every run's end event fingerprints the agents it used (agent_versions.for_run), one such agent once

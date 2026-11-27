@@ -157,7 +157,7 @@ async def test_only_the_newest_complete_run_updates_the_case(published: bool, st
         save_documents.assert_called_once_with("case-1", analysis.additional_documents)
 
 
-# --- Open questions reach the requests (PENDING_TESTS row 64) -------------------------------------------------------
+# --- Open questions reach the requests -------------------------------------------------------
 
 
 class ScriptedRequests:

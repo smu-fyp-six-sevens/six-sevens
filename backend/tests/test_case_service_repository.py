@@ -280,7 +280,7 @@ def test_delete_case_removes_its_documents_then_the_case() -> None:
         mock_case_repo.delete_case.assert_called_once_with("case-1")
 
 
-# --- A case can't be deleted mid-run (PENDING_TESTS row 42) -------------------------------------------------------
+# --- A case can't be deleted mid-run -------------------------------------------------------
 # A delete mid-run would leave the run spending Claude calls on rows that no longer exist. delete_case refuses on its
 # own, not only through the route, so no other caller can get round it.
 

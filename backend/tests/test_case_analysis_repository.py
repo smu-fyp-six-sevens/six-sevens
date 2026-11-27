@@ -114,7 +114,7 @@ def test_the_latest_complete_run_is_read_while_a_newer_one_runs(db) -> None:
     assert repository.get_latest_summary(CASE).run_id == "running"
 
 
-# --- A failed run stays failed (PENDING_TESTS row 54) ---------------------------------------------------------------
+# --- A failed run stays failed ---------------------------------------------------------------
 
 def test_a_run_the_sweeper_already_failed_is_not_overwritten_by_its_late_result(db) -> None:
     run(db, "run-1")
@@ -161,7 +161,7 @@ def test_a_published_result_carries_its_finding_count(db) -> None:
     assert stored(db, "run-1")["result"]["finding_count"] == 2
 
 
-# --- Counts past 1,000 rows (PENDING_TESTS row 15) and the runs list (row 55) ------------------------------------------
+# --- Counts past 1,000 rows and the runs list ------------------------------------------
 
 class _Capped(Query):
     def execute(self):

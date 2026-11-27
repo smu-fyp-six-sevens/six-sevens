@@ -155,7 +155,7 @@ async def test_lifespan_tolerates_realtime_listener_start_failure() -> None:
     mock_realtime.stop.assert_awaited_once_with()
 
 
-# --- API docs are hidden when deployed (PENDING_TESTS row 9) -----------------------------------------------------
+# --- API docs are hidden when deployed -----------------------------------------------------
 # Deployed, Kong's catch-all would serve /docs and the schema to anyone. The app reads EVENT_TRANSPORT at import, so
 # the deployed app is imported in a fresh process rather than reloaded here (a reload re-registers every handler).
 
@@ -189,7 +189,7 @@ def test_in_process_the_api_docs_and_schema_are_served() -> None:
 
 
 
-# --- Pull mode (PENDING_TESTS row 33) -----------------------------------------------------------------------------
+# --- Pull mode -----------------------------------------------------------------------------
 # PUSHES and PULLS are read at import, so the pull-mode app is imported in a fresh process.
 
 _PULL_PROBE = """
@@ -264,7 +264,7 @@ async def test_lifespan_does_not_start_the_puller_when_not_pulling() -> None:
     stop.assert_not_awaited()
 
 
-# --- Metrics on their own port (PENDING_TESTS row 36) -------------------------------------------------------------
+# --- Metrics on their own port -------------------------------------------------------------
 
 
 async def test_lifespan_serves_metrics_on_the_configured_port() -> None:

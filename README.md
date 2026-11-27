@@ -16,10 +16,6 @@ It automates the forgery-check stage of GLDB's loan workflow: officers upload a 
 |---|---|
 | `README.md` | Setup, running, tests and CI (this file) |
 | `HOW_IT_WORKS.md` | Everything as built: behaviour, how detection and the case analysis are wired and why, settings, cost logs, the cloud and its design, how it's tested |
-| `PENDING_WORK.md` | Open product and platform work |
-| `CLOUD_ARCHITECTURE_PLAN.md` | Open cloud work: next steps, to-dos, Stage 2, agent evaluation |
-| `CODEBASE_AUDIT.md` | Open bugs (detection included), performance, code structure and security findings |
-| `TEST_SUITE_AUDIT.md`, `PENDING_TESTS.md` | Test gaps, and tests owed for recent fixes |
 
 Cloud operations and every problem met: `deploy/terraform/README.md`.
 

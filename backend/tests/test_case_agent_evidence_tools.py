@@ -258,7 +258,7 @@ async def test_a_personal_attribute_is_never_compared() -> None:
     assert len(result["missing"]) == 2
 
 
-# --- No file names reach the case model (PENDING_TESTS row 24) -----------------------------------------------------
+# --- No file names reach the case model -----------------------------------------------------
 # A file name can carry a person's name or a protected word ("Tan Ah Kow Malay payslip.pdf"), so the model sees
 # document keys only: in the dossier, the document list and the consistency tools' summaries.
 
@@ -308,7 +308,7 @@ async def test_a_company_name_mismatch_summary_names_documents_by_key() -> None:
     _without_names(json.dumps(kit.calls, default=str), incorporation.filename, pay.filename)
 
 
-# --- The cross-document evidence tools (PENDING_TESTS row 62) -------------------------------------------------------
+# --- The cross-document evidence tools -------------------------------------------------------
 
 
 def evidence_tools(*documents: DocumentRecord) -> tuple[dict, list[dict], CaseContext]:

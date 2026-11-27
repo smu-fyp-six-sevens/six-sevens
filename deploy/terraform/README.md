@@ -85,7 +85,7 @@ Cloud Deploy releases and rolls back; Argo CD watches `main` and shows whether t
    helm install argocd argo/argo-cd --version <7.x> -n argocd --create-namespace -f deploy/argocd/values.yaml
    kubectl apply -n argocd -f deploy/argocd/application.yaml
    ```
-3. Open it: `kubectl -n argocd port-forward svc/argocd-server 8080:80`, then http://localhost:8080 as `admin`, with the password from `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}"` (base64; decode it).
+3. Open it: `kubectl -n argocd port-forward svc/argocd-server 8080:80`, then http://localhost:8080 as `admin`, with the password from `kubectl -n argocd get secret argocd-initial-admin-secret -o go-template="{{.data.password | base64decode}}"`.
 4. After the first push deploys, the app should read *Synced* with nothing to change. Sync by hand once if it only lacks Argo CD's tracking annotation. A pull before your next push: CI committed to `main`.
 
 - **Deploy log says "Couldn't commit the release for Argo CD":** `main` refuses pushes from `github-actions[bot]`; allow it in the branch rules.

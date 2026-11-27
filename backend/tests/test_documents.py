@@ -2036,7 +2036,7 @@ def test_rejecting_a_document_that_moved_on_since_it_was_read_is_a_conflict() ->
     mock_fields_repo.get_extracted_fields.assert_not_called()
 
 
-# --- A field write refuses once the document moved on (PENDING_TESTS row 48, the officer's side) ------------------
+# --- A field write refuses once the document moved on (the officer's side) ------------------
 # The officer's page read the document, then a run or another officer moved it on: the write matches nothing, and
 # the officer is told rather than having their edit half-applied.
 
@@ -2073,7 +2073,7 @@ async def test_a_field_edit_on_a_document_that_moved_on_is_refused_and_records_n
     audit.assert_not_called()
 
 
-# --- An approval re-checks the fields it approved (PENDING_TESTS row 49), and an untyped approval can finish the case
+# --- An approval re-checks the fields it approved, and an untyped approval can finish the case
 # (row 2, the approval part) ------------------------------------------------------------------------------------------
 
 _PAYSLIP_FIELDS = [
@@ -2129,7 +2129,7 @@ async def test_only_an_untyped_approval_checks_whether_the_case_is_now_finished(
     assert event.detail["skip_detection"] is starts_check
 
 
-# --- Retyping: the event's stamp, and a retype can't override another action (PENDING_TESTS rows 5 and 44) ------------
+# --- Retyping: the event's stamp, and a retype can't override another action ------------
 
 
 def _retype(document: DocumentRecord, mock_repo, type_: str = "nric"):
@@ -2201,7 +2201,7 @@ async def test_a_retype_whose_event_fails_to_publish_puts_the_status_and_type_ba
 
 
 
-# --- A failed upload event leaves no copy behind (PENDING_TESTS row 11) ----------------------------------------------
+# --- A failed upload event leaves no copy behind ----------------------------------------------
 
 
 def _upload_whose_event_fails(published_events, *, removal_fails: bool = False):

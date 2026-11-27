@@ -594,7 +594,7 @@ def test_only_a_finalised_case_is_locked() -> None:
             assert real_is_case_finalised("case-1") is locked
 
 
-# --- Approving an untyped document can finish a case (PENDING_TESTS row 2, the stage part) ------------------------
+# --- Approving an untyped document can finish a case (the stage part) ------------------------
 # A document with no type is never scanned (models.skips_detection), so once it's approved it is as done as a scanned
 # one: neither the stage nor the analysis may wait for a scan that will never come.
 

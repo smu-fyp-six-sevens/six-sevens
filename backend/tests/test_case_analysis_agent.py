@@ -276,7 +276,7 @@ async def test_a_check_that_fails_or_hangs_is_recorded_unavailable_and_the_rest_
     assert [c["available"] for c in calls_by_hypothesis["h1"]] == [False, False, True]
 
 
-# --- The scope rule and the evidence tools (PENDING_TESTS row 62) ---------------------------------------------------
+# --- The scope rule and the evidence tools ---------------------------------------------------
 
 
 @pytest.mark.parametrize("check", [

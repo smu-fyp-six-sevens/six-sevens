@@ -1,5 +1,5 @@
 """
-The Claude spend cap per case (app/spend_cap.py, PENDING_TESTS row 59): once a case's runs have cost
+The Claude spend cap per case (app/spend_cap.py): once a case's runs have cost
 CASE_SPEND_CAP_USD at list price, no detection run or case analysis starts on it. It fails open: a spend that can't
 be read never stops a run.
 """

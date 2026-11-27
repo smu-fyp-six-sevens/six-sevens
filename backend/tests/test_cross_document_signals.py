@@ -1,5 +1,5 @@
 """
-The cross-document measures (case_pipeline/cross_document/signals.py, PENDING_TESTS row 61): pure functions over the
+The cross-document measures (case_pipeline/cross_document/signals.py): pure functions over the
 documents' fields that the evidence tools, the planner's candidates and the supporting-document rules all read. Each is
 tested at its edges here, since a wrong measure misleads all three.
 """

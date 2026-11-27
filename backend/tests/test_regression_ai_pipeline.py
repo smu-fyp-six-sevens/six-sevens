@@ -577,7 +577,7 @@ async def test_a_low_confidence_named_type_is_extracted_with_the_generic_schema(
 
 
 
-# --- A late run can't overwrite an officer's action (PENDING_TESTS rows 3, 43 and the pipeline half of 48) --------
+# --- A late run can't overwrite an officer's action (43 and the pipeline half of 48) --------
 # The officer acts while extraction is waiting on Claude; the reply lands after. The run must stop quietly: no
 # fields written, no further status write, the officer's status kept, and the trace saying why.
 
@@ -668,7 +668,7 @@ async def test_a_cancel_after_the_fields_are_saved_still_keeps_the_final_status_
     assert _ended_stopped(document_id)
 
 
-# --- A recovered or retried document keeps the officer's type (PENDING_TESTS row 6) --------------------------------
+# --- A recovered or retried document keeps the officer's type --------------------------------
 # set_type stores the officer's type at confidence 1.0. When the sweeper requeues the document, or the officer
 # retries it, the full pipeline runs again: it must not classify it again and overwrite their decision.
 

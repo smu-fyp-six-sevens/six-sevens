@@ -88,7 +88,7 @@ def test_empty_reasons() -> None:
     assert _build(reducible, [], status="budget").reason == "budget"
 
 
-# --- Requests ranked by what they gain (PENDING_TESTS row 66) -------------------------------------------------------
+# --- Requests ranked by what they gain -------------------------------------------------------
 
 
 def test_requests_are_ranked_by_how_far_they_lower_the_score_then_the_rest_then_the_rules() -> None:

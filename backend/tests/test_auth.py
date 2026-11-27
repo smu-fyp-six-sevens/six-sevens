@@ -320,7 +320,7 @@ def test_logout_needs_no_csrf_header():
     assert response.status_code == 204
 
 
-# --- Only the cookie signs a request in (PENDING_TESTS row 69) ----------------------------------------------------
+# --- Only the cookie signs a request in ----------------------------------------------------
 
 def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}

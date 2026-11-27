@@ -399,7 +399,7 @@ def test_terraform_subscriptions_match_the_code() -> None:
 
 
 
-# --- check_push_verification (PENDING_TESTS row 20) ---------------------------------------------------------------
+# --- check_push_verification ---------------------------------------------------------------
 
 
 @pytest.mark.parametrize(

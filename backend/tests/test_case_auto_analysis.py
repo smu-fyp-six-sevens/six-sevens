@@ -161,7 +161,7 @@ async def test_rejecting_a_document_checks_whether_the_analysis_is_due() -> None
     start.assert_awaited_once_with("case-1")
 
 
-# --- A case analysis can't start twice (PENDING_TESTS rows 1 and 19) ----------------------------------------------
+# --- A case analysis can't start twice ----------------------------------------------
 # The database holds at most one running run per case and fingerprint (case_analysis_runs_one_running_idx in
 # sql/schema.sql); a second insert fails with Postgres's unique-violation code. The fake below enforces that same
 # rule, so these tests go through the real repository.insert_run, not a mock of it.

@@ -1,4 +1,4 @@
-"""OCR's lookalike characters in a passport's machine-readable zone are put back to plain ASCII (PENDING_TESTS row 73).
+"""OCR's lookalike characters in a passport's machine-readable zone are put back to plain ASCII.
 
 Seen live: RapidOCR read the MRZ's "U" as "∪" and its "<" fillers as lookalikes, so the MRZ checks (ID.MRZ_FORMAT,
 ID.MRZ_CHECKDIGITS) failed a genuine passport.

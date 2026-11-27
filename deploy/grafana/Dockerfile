@@ -2,6 +2,11 @@
 # at any time (HOW_IT_WORKS.md §8). Built from the repository root.
 FROM grafana/grafana:12.4.10
 
+# The base image's OS packages lag their fixes (Trivy in deploy.yml reports them).
+USER root
+RUN apk upgrade --no-cache
+USER grafana
+
 # Reads the Cloud Billing export (the Cost dashboard's "Billed" row). Installed at build, not at start, so a cold
 # start doesn't download it. Pinned: the CLI doesn't enforce a plugin's Grafana requirement, so an unpinned
 # install can pick a version this Grafana can't load (3.4.6 needs Grafana >= 12.2.5 or >= 11.6.11; bump them together).

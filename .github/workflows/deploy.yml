@@ -55,12 +55,6 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
-      # Every image is also loaded on the runner (below), so make room: the runner's preinstalled SDKs take ~20 GB.
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          df -h /
-
       - uses: docker/setup-buildx-action@v3
 
       # The build cache lives in GitHub's Actions cache, not Artifact Registry: pulling it from the registry to
@@ -149,13 +143,20 @@ jobs:
           fi
 
       # Each built image's SBOM, from the runner's copy; the gke job attests it. An image missing here (a rerun)
-      # gets its SBOM from the registry there.
+      # gets its SBOM from the registry there. Trivy reuses what the scan above cached (seconds); syft re-exports each
+      # image from Docker (minutes per backend image), so it's only the fallback.
       - uses: anchore/sbom-action/download-syft@v0
       - name: SBOM of every built image
+        timeout-minutes: 10
         run: |
           mkdir -p sboms
           while read -r image; do
-            syft scan "docker:$REGISTRY/$image:$GITHUB_SHA" -o spdx-json -q > "sboms/sbom-$image.json"
+            ref="$REGISTRY/$image:$GITHUB_SHA"
+            if command -v trivy >/dev/null && trivy image --quiet --image-src docker --format spdx-json \
+                --output "sboms/sbom-$image.json" "$ref"; then
+              continue
+            fi
+            syft scan "docker:$ref" -o spdx-json -q > "sboms/sbom-$image.json"
           done < built.txt
           ls -l sboms
       - uses: actions/upload-artifact@v4

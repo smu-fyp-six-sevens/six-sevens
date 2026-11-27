@@ -426,7 +426,7 @@ def test_related_party_balance_without_a_prior_year() -> None:
 
 
 
-# --- The newer rules: address, missing months, concentration, facility letter (PENDING_TESTS row 65) --------------
+# --- The newer rules: address, missing months, concentration, facility letter --------------
 
 
 def _address_finding(summary: str, document_ids: list[str], flags: list[str] | None = None) -> CrossDocFinding:

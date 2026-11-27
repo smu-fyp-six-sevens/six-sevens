@@ -245,7 +245,7 @@ async def test_socket_swallows_runtime_error_from_close_on_already_closed_connec
     mock_ws.close.assert_awaited_once()
 
 
-# --- A socket ticket opens one case (PENDING_TESTS row 21) --------------------------------------------------------
+# --- A socket ticket opens one case --------------------------------------------------------
 # The ticket travels in the socket URL, where it can leak into a proxy or browser log: it opens only the case it was
 # issued for, and names the officer it was issued to.
 

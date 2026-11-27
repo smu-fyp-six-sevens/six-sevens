@@ -1,5 +1,5 @@
 """
-Tool results and the lead's brief reach a specialist fenced as document data (PENDING_TESTS row 22): the prompt-injection
+Tool results and the lead's brief reach a specialist fenced as document data: the prompt-injection
 guard on the detection path. Text a document carries (and so a tool quotes, or the lead's brief repeats) sits inside a
 <document_data> block the static prompt says is never an instruction, and can't close that block early.
 """

@@ -195,7 +195,7 @@ async def test_an_officer_cancel_interrupts_the_run_here(published_events) -> No
     assert published_events == []
 
 
-# --- A repeated "type changed" event runs nothing (PENDING_TESTS row 5) -------------------------------------------
+# --- A repeated "type changed" event runs nothing -------------------------------------------
 # set_type moves the document to extracting with processing_started_at = requested_at; the worker claims the rerun
 # with that stamp (compare-and-swap), so only the first delivery gets it.
 
@@ -286,7 +286,7 @@ async def test_a_retype_with_no_requested_at_runs_and_claims_nothing(published_e
     assert document.claims == [] and published_events == []
 
 
-# --- A skipped repeat announces nothing (PENDING_TESTS row 16) ---------------------------------------------------
+# --- A skipped repeat announces nothing ---------------------------------------------------
 # Announcing an analyzed or failed event for a run that never happened would double the run in the audit trail, and
 # re-report a failure the first delivery already reported.
 

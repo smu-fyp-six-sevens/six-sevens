@@ -545,7 +545,7 @@ def test_a_document_with_only_a_subject_or_title_is_still_unable_to_assess() -> 
     assert result.unable_to_assess is True
 
 
-# --- A tool's name in Author is flagged (PENDING_TESTS row 75) ---------------------------------------------------
+# --- A tool's name in Author is flagged ---------------------------------------------------
 # Seen live: C008's forged credit report carried Author "Adobe Photoshop" and passed, because only Creator,
 # Producer and Software were read for tool names.
 

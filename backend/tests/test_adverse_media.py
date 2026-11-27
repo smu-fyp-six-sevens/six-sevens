@@ -409,7 +409,7 @@ async def test_the_case_name_is_searched_only_when_no_document_names_the_company
     assert searched == ["Acme Trading Pte. Ltd.", "Case 67"]
 
 
-# --- Logs name the case, not the company (PENDING_TESTS row 23) ----------------------------------------------------
+# --- Logs name the case, not the company ----------------------------------------------------
 # Application logs leave the case's records: a company name in them is customer data where it doesn't belong.
 
 COMPANY = "Acme Trading Pte Ltd"
