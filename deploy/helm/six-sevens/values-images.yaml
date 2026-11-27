@@ -1,11 +1,11 @@
 # Written by deploy.yml after each release: the signed images, by digest.
 images:
-  frontend: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/frontend@sha256:b828b2f5370def74ad2e70304e01b58994feff802ff58808a59422c23e725351
-  grafana: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/grafana@sha256:f4d42cbd3f63f24b5ed8780d7b44300773ca0400ce90a3937a68f8d0337151b5
+  frontend: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/frontend@sha256:6659cebff572819ce4b944adfe161678c4db8af62e9f852387ed14e8055f27a5
+  grafana: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/grafana@sha256:5ac69e83b6659c59868f7a9f57ec256ade7744dbd3fe9ba9a20e784b593f9ffc
   kong: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/kong@sha256:5ae5a7f194b89eba065f0144316029f998d5c50bd629cd32cb7f61f1724aed52
   backend:
-    api: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/api@sha256:b04e036432da44cd700ea74e32f33d60f5fc0e26806db011ff11309b16d90ed1
-    audit-metrics: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/audit-metrics@sha256:54b7796b23c5b969fa982827d04712b8f7cd03a01ed57669bc2bc6c354b2c5e7
-    case-worker: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/case-worker@sha256:be9041d707fb4b5ed97bdc8a650382012b444c5f67956fec2d85059c076e5d84
-    detection-worker: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/detection-worker@sha256:5e353f0b78bd16cf0b37169f1f946eea9dcacb2cb1621f6988ab13ceadf02b43
-    doc-worker: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/doc-worker@sha256:18a06dd799d388dd4a85153d3580c345813fe64269f6e4f2e9ba941fc7fcfe64
+    api: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/api@sha256:b0ff7e04777026522d16d0e2b234baca00a735c624956da34a410d20bbe1cf21
+    audit-metrics: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/audit-metrics@sha256:f473aa076c27b9de6e94b127f9a4749e680bcf82294b4197fe4976fb41eec485
+    case-worker: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/case-worker@sha256:c231ed124a3c4727ff1da02ed85ad266c906882dca82643e7258072aba644f5a
+    detection-worker: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/detection-worker@sha256:4bc6ff9123e27a880f936d19ca0dfb38a5d350fbae88976dbc7304c9c2351916
+    doc-worker: asia-southeast1-docker.pkg.dev/fyp-six-sevens/app/doc-worker@sha256:3a0cc9abf09d3b83d428a2a3c4b47ee43b7815b6f7df70a334320060c404b4e5
