@@ -1,10 +1,5 @@
-# Argo CD, the smallest install that does GitOps for one chart (CLOUD_ARCHITECTURE_PLAN.md, "Argo CD").
-# NOT INSTALLED: planned for after the demo (2026-11-21), once the workers scale from zero again and the free trial's
-# 8 vCPUs have room. About 0.85 vCPU and 1.4 GiB requested in all.
-#
-#   helm repo add argo https://argoproj.github.io/argo-helm
-#   helm search repo argo/argo-cd              # pin the newest 7.x it lists
-#   helm install argocd argo/argo-cd --version <that 7.x> -n argocd --create-namespace -f deploy/argocd/values.yaml
+# Argo CD, the smallest install that watches one chart (deploy/terraform/README.md, "Argo CD"). About 0.85 vCPU and
+# 1.4 GiB requested in all.
 #
 # Explicit requests throughout: on Autopilot a container without them is given 0.5 vCPU and 2 GiB.
 
@@ -20,6 +15,8 @@ configs:
     server.insecure: true   # reached only through kubectl port-forward, never exposed
   cm:
     timeout.reconciliation: 180s
+    # An annotation, not a label: Cloud Deploy's objects carry no Argo CD label, and labels can reach selectors.
+    application.resourceTrackingMethod: annotation
 
 controller:
   resources:

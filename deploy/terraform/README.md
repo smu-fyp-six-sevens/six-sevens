@@ -67,7 +67,39 @@ A push to `main` runs CI, then `deploy.yml`: build and scan, sign, release throu
 
 ## Saving credits
 
-The cluster costs money while idle: about S$21 a day measured with every worker kept running, an estimated S$13 with the workers scaling from zero (as now), and about S$10 with Grafana off too.
+The cluster costs money while idle: about S$20–21 a day with everything on and every worker kept at 1 (measured), about S$9.6 rolled down (measured, 22–25 Nov), an estimated S$8 with every pod at 0.
+
+### Rolling down, and back up
+
+Rolled down 2026-11-20 to 22; everything but the image clean-up brought back 2026-11-27 for the final presentation.
+
+| What | To roll down | To bring back |
+|---|---|---|
+| Workers at 1 | `roles.json`: `gke.min` 0 for doc-, detection- and case-worker, then `.venv\Scripts\python.exe deploy\helm\gen_values.py`; push | The same with 1 |
+| Grafana and the app's Prometheus scraping | `deploy/helm/six-sevens/values-prod.yaml`: `grafana.enabled: false`, `monitoring.podMonitoring: false`; in `deploy/clouddeploy/skaffold.yaml` remove the Grafana condition from the wait loop and the two Grafana `expect` lines; push | `true` for both, and the Grafana checks back; push |
+| Network Intelligence Center | `gcloud services disable networkmanagement.googleapis.com --project fyp-six-sevens` (saved almost nothing: its charges kept coming) | The same with `enable` |
+| GKE's own metric packages | `gcloud container clusters update six-sevens --region asia-southeast1 --monitoring=SYSTEM`, then the same with `--disable-dataplane-v2-metrics` | `--monitoring=SYSTEM,STORAGE,HPA,POD,DAEMONSET,DEPLOYMENT,STATEFULSET,CADVISOR,KUBELET,DCGM,JOBSET`, then `--enable-dataplane-v2-metrics` (each takes 10–20 minutes) |
+| Old images | `main.tf`: 3 newest versions per image, the rest deleted after 3 days (kept: it costs nothing) | `keep_count = 5` and `older_than = "604800s"`, then `terraform apply` |
+
+The two `gcloud` changes aren't in Terraform (it doesn't manage those settings), so `terraform apply` neither undoes nor restores them. After Grafana comes back, check its dashboards fill within a few minutes.
+
+## Argo CD (watch only)
+
+Cloud Deploy releases and rolls back; Argo CD watches `main` and shows whether the cluster matches it, and what drifted. After each successful release `deploy.yml` commits `values-gitops.yaml` and `values-images.yaml` (the images by digest) to `main` with `[skip ci]`, so git holds what runs. About 0.85 vCPU.
+
+1. Binary Authorization admits Argo CD's images (`supply_chain.tf`): `terraform apply`.
+2. Install (cmd, from the repo root; pin the newest 7.x the search lists):
+   ```
+   helm repo add argo https://argoproj.github.io/argo-helm
+   helm search repo argo/argo-cd --versions
+   helm install argocd argo/argo-cd --version <7.x> -n argocd --create-namespace -f deploy/argocd/values.yaml
+   kubectl apply -n argocd -f deploy/argocd/application.yaml
+   ```
+3. Open it: `kubectl -n argocd port-forward svc/argocd-server 8080:80`, then http://localhost:8080 as `admin`, with the password from `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}"` (base64; decode it).
+4. After the first push deploys, the app should read *Synced* with nothing to change. Sync by hand once if it only lacks Argo CD's tracking annotation. A pull before your next push: CI committed to `main`.
+
+- **Deploy log says "Couldn't commit the release for Argo CD":** `main` refuses pushes from `github-actions[bot]`; allow it in the branch rules.
+- **Removing it:** `helm uninstall argocd -n argocd`, then `kubectl delete namespace argocd`.
 
 - **Everything to 0** (site down, an estimated S$8 a day):
   ```

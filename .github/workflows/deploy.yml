@@ -170,6 +170,9 @@ jobs:
     if: vars.GKE_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 80
+    permissions:
+      contents: write # the release's values, committed for Argo CD
+      id-token: write
     env:
       # cosign's documented form for a Cloud KMS key version.
       KMS_KEY: projects/${{ vars.GCP_PROJECT_ID }}/locations/${{ vars.GCP_REGION || 'asia-southeast1' }}/keyRings/six-sevens/cryptoKeys/image-signing/versions/1
@@ -347,3 +350,35 @@ jobs:
             echo "::warning::No earlier release rolled out fine; nothing to roll back to"
           fi
           exit 1
+
+      # Argo CD watches main (deploy/argocd/application.yaml), so git records what was released. Never fails the deploy.
+      - name: Record the release for Argo CD
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+        run: |
+          C=deploy/helm/six-sevens
+          LB=$(gcloud compute addresses describe sixsevens-lb --global --format='value(address)')
+          {
+            echo "# Written by deploy.yml after each release, for Argo CD. Not secrets."
+            echo "projectId: $PROJECT_ID"
+            echo "supabaseUrl: $SUPABASE_URL"
+            echo "gateway:"
+            echo "  address: \"$LB\""
+          } > "$C/values-gitops.yaml"
+          {
+            echo "# Written by deploy.yml after each release: the signed images, by digest."
+            echo "images:"
+            grep -E '^(kong|frontend|grafana) ' images.txt | while read -r image ref; do echo "  $image: $ref"; done
+            echo "  backend:"
+            grep -vE '^(kong|frontend|grafana) ' images.txt | while read -r image ref; do echo "    $image: $ref"; done
+          } > "$C/values-images.yaml"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$C/values-gitops.yaml" "$C/values-images.yaml"
+          if git diff --cached --quiet; then echo "Nothing changed"; exit 0; fi
+          git commit -q -m "Release ${GITHUB_SHA::8} for Argo CD [skip ci]"
+          for _ in 1 2 3; do
+            git fetch -q --depth=50 origin main && git rebase -q origin/main && git push -q origin HEAD:main && exit 0
+            sleep 5
+          done
+          echo "::warning::Couldn't commit the release for Argo CD (is main protected?); it will show out of sync"

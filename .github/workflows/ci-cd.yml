@@ -329,7 +329,7 @@ jobs:
     needs: [backend-ci, frontend-ci, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
-      contents: read
+      contents: write # deploy.yml commits the release's values for Argo CD
       id-token: write # Workload Identity Federation, used inside deploy.yml
     uses: ./.github/workflows/deploy.yml
     secrets: inherit

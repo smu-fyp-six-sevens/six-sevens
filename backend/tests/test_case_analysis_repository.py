@@ -11,7 +11,7 @@ import pytest
 from app.case_pipeline import repository
 from app.case_pipeline.models import CaseAnalysis, CrossDocFinding, FindingCategory
 from app.models import CaseRisk
-from tests.support.fake_supabase import FakeSupabase
+from tests.support.fake_supabase import FakeSupabase, Query
 
 CASE = "case-1"
 NOW = datetime(2026, 11, 5, 4, 0, tzinfo=timezone.utc)
@@ -159,3 +159,79 @@ def test_a_published_result_carries_its_finding_count(db) -> None:
     assert repository.finish_run(analysis) is True
 
     assert stored(db, "run-1")["result"]["finding_count"] == 2
+
+
+# --- Counts past 1,000 rows (PENDING_TESTS row 15) and the runs list (row 55) ------------------------------------------
+
+class _Capped(Query):
+    def execute(self):
+        result = super().execute()
+        if isinstance(result.data, list):
+            result.data = result.data[:1000]  # PostgREST's cap on one read
+        return result
+
+
+class _CappedSupabase(FakeSupabase):
+    def table(self, name: str) -> Query:
+        return _Capped(self, name)
+
+
+@pytest.fixture
+def big_db(monkeypatch) -> FakeSupabase:
+    fake = _CappedSupabase(keys={"case_analysis_runs": ("run_id",)})
+    monkeypatch.setattr(repository, "supabase_client", fake)
+    return fake
+
+
+def test_runs_since_counts_past_the_thousand_row_cap(big_db) -> None:
+    for i in range(1200):
+        run(big_db, f"run-{i:04d}", status="complete")
+
+    assert repository.count_runs_since(CASE, NOW - timedelta(hours=1)) == 1200
+
+
+def test_stuck_runs_are_all_found_past_the_thousand_row_cap(big_db) -> None:
+    for i in range(1200):
+        run(big_db, f"run-{i:04d}", minutes_ago=30)
+
+    assert len(repository.running_started_before(NOW - timedelta(minutes=10))) == 1200
+
+
+def test_the_runs_list_pages_past_the_thousand_row_cap(big_db) -> None:
+    for i in range(1200):
+        run(big_db, f"run-{i:04d}", status="failed", minutes_ago=i)
+
+    runs = repository.list_runs(CASE)
+
+    assert len(runs) == 1200
+    assert runs[0]["run_id"] == "run-0000" and runs[-1]["run_id"] == "run-1199"
+
+
+def test_the_runs_list_reads_the_stored_finding_count(db) -> None:
+    run(db, "run-1", status="complete")
+    db.rows("case_analysis_runs")[0]["result"] = {"finding_count": 4, "findings": []}
+
+    [listed] = repository.list_runs(CASE)
+
+    assert listed["finding_count"] == 4
+
+
+def test_a_complete_run_stored_before_the_count_is_counted_from_its_findings(db, monkeypatch) -> None:
+    run(db, "old", status="complete", minutes_ago=10)
+    run(db, "new", status="complete")
+    run(db, "failed", status="failed", minutes_ago=5)
+    old, new, _ = db.rows("case_analysis_runs")
+    old["result"] = {"findings": [{"id": "a"}, {"id": "b"}, {"id": "c"}]}
+    new["result"] = {"finding_count": 1, "findings": [{"id": "a"}]}
+    reads: list[str] = []
+    real_in = Query.in_
+
+    def counting_in(self, column, values):
+        reads.append(column)
+        return real_in(self, column, values)
+
+    monkeypatch.setattr(Query, "in_", counting_in)
+    listed = {r["run_id"]: r["finding_count"] for r in repository.list_runs(CASE)}
+
+    assert listed == {"old": 3, "new": 1, "failed": None}
+    assert reads == ["run_id"]  # one extra read, for the uncounted run only

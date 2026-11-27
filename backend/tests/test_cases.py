@@ -395,6 +395,23 @@ def test_deleting_a_case_puts_each_of_its_documents_on_the_record_too(published_
     assert [e.detail["documents"] for e in published_events if e.type == "case.deleted"] == [2]
 
 
+def test_deleting_a_case_records_its_officer_case_number_company_and_document_count(published_events) -> None:
+    with (
+        patch("app.routers._dependencies.case_service") as mock_dep_case_service,
+        patch("app.routers.cases.case_service") as mock_case_service,
+    ):
+        mock_dep_case_service.get_case.return_value = _make_case("case-1", company_name="Acme Pte Ltd", greenlink_case_id="GLDB-0042")
+        mock_case_service.delete_case.return_value = []
+
+        assert client.delete("/cases/case-1").status_code == 204
+
+    [event] = [e for e in published_events if e.type == "case.deleted"]
+    assert event.case_id == "case-1"
+    assert (event.detail["greenlink_case_id"], event.detail["company_name"], event.detail["documents"]) == (
+        "GLDB-0042", "Acme Pte Ltd", 0,
+    )
+
+
 def test_delete_case_not_found() -> None:
     with (
         patch("app.routers._dependencies.case_service") as mock_dep_case_service,

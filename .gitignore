@@ -49,3 +49,4 @@ deploy/terraform/terraform.tfvars
 deploy/terraform/tfplan
 deploy/terraform/*.tfplan
 deploy/terraform/set-secrets.ps1
+ignore_mds/

@@ -10,7 +10,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.case_pipeline.cross_document.evidence import build_context, render_dossier
+from app.case_pipeline.cross_document.evidence import CaseContext, build_context, render_dossier
+from app.case_pipeline.cross_document.tools import build_tools
 from app.case_pipeline.cross_document.tools.common import ToolKit
 from app.case_pipeline.cross_document.tools.comparisons import build_comparison_tools
 from app.case_pipeline.cross_document.tools.consistency import build_consistency_tools
@@ -305,3 +306,206 @@ async def test_a_company_name_mismatch_summary_names_documents_by_key() -> None:
     assert "payslip_1" in discrepancy["summary"]
     _without_names(json.dumps(result), incorporation.filename, pay.filename)
     _without_names(json.dumps(kit.calls, default=str), incorporation.filename, pay.filename)
+
+
+# --- The cross-document evidence tools (PENDING_TESTS row 62) -------------------------------------------------------
+
+
+def evidence_tools(*documents: DocumentRecord) -> tuple[dict, list[dict], CaseContext]:
+    context = build_context("case-1", list(documents), {})
+    calls: list[dict] = []
+    return {t.name: t for t in build_tools(context, calls)}, calls, context
+
+
+def company_statement(document_id: str, rows: list[dict], **extra) -> DocumentRecord:
+    fields = {"entity_type": "corporate", "entity_name": "Brightwave Analytics Pte Ltd",
+              "statement_period_start": "01 Oct 2026", "statement_period_end": "31 Oct 2026", **extra}
+    return document("bank_statement", document_id, transactions=rows, **fields)
+
+
+def personal_statement(document_id: str, rows: list[dict]) -> DocumentRecord:
+    return document("bank_statement", document_id, entity_type="individual", individual_name="Tan Wei Ming",
+                    statement_period_start="01 Oct 2026", statement_period_end="31 Oct 2026", transactions=rows)
+
+
+def row(day: str, description: str, amount: float, counterparty: str | None = None) -> dict:
+    return {"date": day, "description": description, "amount": amount, **({"counterparty": counterparty} if counterparty else {})}
+
+
+def accounts(document_id: str = "doc-acc", **extra) -> DocumentRecord:
+    return document("source_of_wealth", document_id, revenue="120000", financial_year_end="31 Dec 2025", **extra)
+
+
+async def test_salary_credit_match_finds_the_credit_and_issues_a_ref_on_the_statement() -> None:
+    tools, calls, context = evidence_tools(
+        document("payslip", "doc-pay", net_pay="4160.00", pay_date="28 Oct 2026"),
+        personal_statement("doc-bs", [row("28 OCT", "SALARY", 4160, "Brightwave Analytics")]))
+
+    result = await call(tools, "salary_credit_match", payslip="payslip_1", statement="bank_statement_1")
+
+    assert len(result["matching_credits"]) == 1 and result["nearest_difference"] == 0
+    assert context.ledger.refs[result["ref"]]["doc_key"] == "bank_statement_1"
+    # Logged against the payslip, with two refs: the salary result and the net pay.
+    assert (calls[0]["tool"], calls[0]["document"], calls[0]["available"]) == ("salary_credit_match", "payslip_1", True)
+    assert calls[0]["args"] == {"payslip": "payslip_1", "statement": "bank_statement_1"} and len(calls[0]["refs"]) == 2
+
+
+async def test_salary_credit_match_reports_the_nearest_credit_when_none_matches() -> None:
+    tools, _, _ = evidence_tools(
+        document("payslip", "doc-pay", net_pay="4160.00", pay_date="28 Oct 2026"),
+        personal_statement("doc-bs", [row("29 OCT", "SALARY", 3100)]))
+
+    result = await call(tools, "salary_credit_match", payslip="payslip_1", statement="bank_statement_1")
+
+    assert (result["matching_credits"], result["nearest_difference"]) == ([], -1060.0)
+
+
+async def test_salary_credit_match_refuses_an_unknown_document_or_a_statement_without_transactions() -> None:
+    tools, calls, context = evidence_tools(
+        document("payslip", "doc-pay", net_pay="4160.00"), document("bank_statement", "doc-bs"))
+
+    unknown = await call(tools, "salary_credit_match", payslip="payslip_9", statement="bank_statement_1")
+    empty = await call(tools, "salary_credit_match", payslip="payslip_1", statement="bank_statement_1")
+
+    assert unknown["available"] is False and "payslip_9" in unknown["reason"]
+    assert (empty["available"], empty["reason"]) == (False, "The statement has no transactions.")
+    assert [c["available"] for c in calls] == [False, False] and context.ledger.refs == {}
+
+
+async def test_revenue_vs_bank_credits_annualises_the_credits_and_issues_a_ref() -> None:
+    tools, calls, context = evidence_tools(
+        accounts(), company_statement("doc-bs", [row("05 OCT", "RECEIPT", 10000, "Acme Pte Ltd")]))
+
+    result = await call(tools, "revenue_vs_bank_credits", financial_statement="source_of_wealth_1",
+                        statements=["bank_statement_1"])
+
+    # One month of 10,000 is 120,000 a year: the revenue.
+    assert (result["credits_annualised"], result["annualised_credits_to_revenue"]) == (120000.0, 1.0)
+    assert result["ref"] in context.ledger.refs
+    assert (calls[0]["tool"], calls[0]["document"], calls[0]["refs"]) == (
+        "revenue_vs_bank_credits", "source_of_wealth_1", [result["ref"]])
+
+
+async def test_revenue_vs_bank_credits_refuses_a_personal_statement_an_empty_list_and_an_unknown_name() -> None:
+    tools, calls, context = evidence_tools(accounts(), personal_statement("doc-bs", [row("05 OCT", "SALARY", 4000)]))
+
+    personal = await call(tools, "revenue_vs_bank_credits", financial_statement="source_of_wealth_1",
+                          statements=["bank_statement_1"])
+    none_named = await call(tools, "revenue_vs_bank_credits", financial_statement="source_of_wealth_1", statements=[])
+    unknown = await call(tools, "revenue_vs_bank_credits", financial_statement="source_of_wealth_1",
+                         statements=["bank_statement_7"])
+
+    assert personal["available"] is False and "personal statement" in personal["reason"]
+    assert (none_named["available"], none_named["reason"]) == (False, "Name at least one company bank statement.")
+    assert unknown["available"] is False and "bank_statement_7" in unknown["reason"]
+    assert [c["available"] for c in calls] == [False] * 3 and context.ledger.refs == {}
+
+
+async def test_revenue_vs_bank_credits_with_an_unknown_financial_statement_is_unavailable() -> None:
+    tools, calls, _ = evidence_tools(company_statement("doc-bs", [row("05 OCT", "RECEIPT", 10000)]))
+
+    result = await call(tools, "revenue_vs_bank_credits", financial_statement="source_of_wealth_1",
+                        statements=["bank_statement_1"])
+
+    assert result["available"] is False and calls[0]["document"] is None
+
+
+async def test_assessed_income_vs_profit_compares_the_eci_with_the_profit_and_issues_a_ref() -> None:
+    tools, calls, context = evidence_tools(
+        document("notice_of_assessment", "doc-noa", eci="90000", year_of_assessment="2026"),
+        accounts(net_profit="60000"))
+
+    result = await call(tools, "assessed_income_vs_profit", notice_of_assessment="notice_of_assessment_1",
+                        financial_statement="source_of_wealth_1")
+
+    assert (result["assessed_income"], result["profit_before_tax"], result["assessed_to_profit"]) == (90000.0, 60000.0, 1.5)
+    assert result["ref"] in context.ledger.refs
+    assert (calls[0]["document"], calls[0]["refs"]) == ("notice_of_assessment_1", [result["ref"]])
+
+
+async def test_assessed_income_vs_profit_is_unavailable_without_an_eci_or_for_an_unknown_document() -> None:
+    tools, calls, context = evidence_tools(document("notice_of_assessment", "doc-noa"), accounts(net_profit="60000"))
+
+    no_eci = await call(tools, "assessed_income_vs_profit", notice_of_assessment="notice_of_assessment_1",
+                        financial_statement="source_of_wealth_1")
+    unknown = await call(tools, "assessed_income_vs_profit", notice_of_assessment="notice_of_assessment_4",
+                         financial_statement="source_of_wealth_1")
+
+    assert no_eci["available"] is False and unknown["available"] is False
+    assert [c["available"] for c in calls] == [False, False] and context.ledger.refs == {}
+
+
+async def test_counterparty_round_trips_lists_the_circular_counterparty_and_issues_a_ref() -> None:
+    tools, calls, context = evidence_tools(company_statement("doc-bs", [
+        row("03 OCT", "RECEIPT", 20000, "Orbit Trading Pte Ltd"), row("10 OCT", "PAYMENT", -15000, "Orbit Trading Pte Ltd"),
+        row("12 OCT", "RECEIPT", 5000, "Solo Customer Pte Ltd")]))
+
+    result = await call(tools, "counterparty_round_trips", document="bank_statement_1")
+
+    [trip] = result["round_trips"]
+    assert (trip["counterparty"], trip["paid_in"], trip["paid_out"]) == ("Orbit Trading Pte Ltd", 20000.0, 15000.0)
+    assert result["ref"] in context.ledger.refs and calls[0]["refs"] == [result["ref"]]
+
+
+async def test_counterparty_round_trips_refuses_an_unknown_document_and_a_statement_without_transactions() -> None:
+    tools, calls, context = evidence_tools(document("bank_statement", "doc-bs"))
+
+    unknown = await call(tools, "counterparty_round_trips", document="bank_statement_5")
+    empty = await call(tools, "counterparty_round_trips", document="bank_statement_1")
+
+    assert unknown["available"] is False
+    assert (empty["available"], empty["reason"]) == (False, "This document has no transactions.")
+    assert [c["available"] for c in calls] == [False, False] and context.ledger.refs == {}
+
+
+async def test_customer_concentration_names_the_top_payer_share_and_issues_a_ref() -> None:
+    tools, calls, context = evidence_tools(company_statement("doc-bs", [
+        row("03 OCT", "RECEIPT", 9000, "Orbit Trading Pte Ltd"), row("10 OCT", "RECEIPT", 1000, "Other Pte Ltd")]))
+
+    result = await call(tools, "customer_concentration", document="bank_statement_1")
+
+    assert (result["top_counterparty"], result["top_share"]) == ("Orbit Trading Pte Ltd", 0.9)
+    assert result["ref"] in context.ledger.refs and calls[0]["refs"] == [result["ref"]]
+
+
+async def test_customer_concentration_is_unavailable_with_no_transactions_no_receipts_or_an_unknown_document() -> None:
+    tools, calls, context = evidence_tools(
+        document("bank_statement", "doc-a"), company_statement("doc-b", [row("03 OCT", "FEE", -50)]))
+
+    empty = await call(tools, "customer_concentration", document="bank_statement_1")
+    no_receipts = await call(tools, "customer_concentration", document="bank_statement_2")
+    unknown = await call(tools, "customer_concentration", document="payslip_1")
+
+    assert (empty["reason"], no_receipts["reason"]) == ("This document has no transactions.", "The statement has no receipts.")
+    assert unknown["available"] is False
+    assert [c["available"] for c in calls] == [False] * 3 and context.ledger.refs == {}
+
+
+async def test_statement_coverage_lists_months_per_statement_and_the_gap_between_them() -> None:
+    tools, calls, context = evidence_tools(
+        company_statement("doc-a", [row("05 AUG", "RECEIPT", 100)], statement_period_start="01 Aug 2026",
+                          statement_period_end="31 Aug 2026"),
+        company_statement("doc-b", [row("05 OCT", "RECEIPT", 100)]))
+
+    result = await call(tools, "statement_coverage")
+
+    assert result["months_by_statement"] == {"bank_statement_1": ["2026-08"], "bank_statement_2": ["2026-10"]}
+    assert result["missing_months"] == ["2026-09"]
+    assert result["ref"] in context.ledger.refs and calls[0]["document"] is None and calls[0]["refs"] == [result["ref"]]
+
+
+async def test_statement_coverage_without_bank_statements_is_unavailable() -> None:
+    tools, calls, context = evidence_tools(document("payslip", "doc-pay"))
+
+    result = await call(tools, "statement_coverage")
+
+    assert (result["available"], result["reason"]) == (False, "The case has no bank statements.")
+    assert calls[0]["available"] is False and context.ledger.refs == {}
+
+
+async def test_a_refutation_probe_is_logged_as_one() -> None:
+    tools, calls, _ = evidence_tools(company_statement("doc-bs", [row("03 OCT", "RECEIPT", 100, "Orbit Pte Ltd")]))
+
+    await call(tools, "customer_concentration", document="bank_statement_1", is_refutation_probe=True)
+
+    assert calls[0]["probe"] is True

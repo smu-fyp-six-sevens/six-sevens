@@ -786,3 +786,29 @@ def test_ai_generation_happy_path() -> None:
     mock_check.assert_called_once_with("doc-1", b"%PDF-1.4")
 
 
+
+
+def test_cancel_detection_502_and_publishes_nothing_when_the_flag_cannot_be_saved(published_events) -> None:
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.document_repository") as flag,
+    ):
+        mock_repo.get_document.return_value = _document(status=DocumentStatus.DETECTING)
+        flag.request_detection_cancel.side_effect = RuntimeError("supabase down")
+        response = client.post("/documents/doc-1/detection/cancel")
+
+    assert response.status_code == 502
+    assert published_events == []
+
+
+def test_cancel_detection_sets_the_flag_before_publishing(published_events) -> None:
+    order: list[str] = []
+    with (
+        patch("app.routers._dependencies.document_repository") as mock_repo,
+        patch("app.routers.detection.document_repository") as flag,
+    ):
+        mock_repo.get_document.return_value = _document(status=DocumentStatus.DETECTING)
+        flag.request_detection_cancel.side_effect = lambda _id: order.append(f"flag:{len(published_events)}")
+        client.post("/documents/doc-1/detection/cancel")
+
+    assert order == ["flag:0"] and len(published_events) == 1

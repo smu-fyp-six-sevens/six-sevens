@@ -184,6 +184,24 @@ def test_delete_extracted_field_scopes_delete_to_its_own_document() -> None:
     )
 
 
+def test_add_extracted_field_reports_a_refusal_and_sends_every_allowed_status() -> None:
+    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
+        mock_service.return_value.rpc.return_value.execute.return_value.data = False
+        added = extracted_fields_repository.add_extracted_field("doc-1", "net_pay", 5000, expected_statuses=_RUNNING)
+
+    assert added is False
+    assert mock_service.return_value.rpc.call_args.args[1]["p_expected_statuses"] == ["processing", "extracting"]
+
+
+def test_delete_extracted_field_sends_every_allowed_status_and_reports_success() -> None:
+    with patch("app.extracted_fields_repository.service_supabase_client") as mock_service:
+        mock_service.return_value.rpc.return_value.execute.return_value.data = True
+        deleted = extracted_fields_repository.delete_extracted_field("doc-1", "field-1", expected_statuses=_RUNNING)
+
+    assert deleted is True
+    assert mock_service.return_value.rpc.call_args.args[1]["p_expected_statuses"] == ["processing", "extracting"]
+
+
 def test_normalise_field_name_lowercases_and_joins_with_underscores() -> None:
     normalise = extracted_fields_repository.normalise_field_name
     assert normalise("Total Equity (SGD)") == "total_equity_sgd"

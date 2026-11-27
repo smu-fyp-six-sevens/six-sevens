@@ -6,12 +6,14 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from app import case_repository, case_service
 from app.case_pipeline import service
 from app.case_pipeline.models import CaseAnalysis
 from app.case_pipeline.repository import finish_run
-from app.models import AdditionalDocument, AdditionalDocuments, CaseListItem, CaseRecord
+from app.case_pipeline.risk import outlook
+from app.models import AdditionalDocument, AdditionalDocuments, CaseListItem, CaseRecord, CaseRisk
 
 NOW = datetime(2026, 10, 20, tzinfo=timezone.utc)
 
@@ -153,3 +155,81 @@ async def test_only_the_newest_complete_run_updates_the_case(published: bool, st
     assert save_risk.called is writes
     if writes:
         save_documents.assert_called_once_with("case-1", analysis.additional_documents)
+
+
+# --- Open questions reach the requests (PENDING_TESTS row 64) -------------------------------------------------------
+
+
+class ScriptedRequests:
+    """build_chat_anthropic(...).bind_tools(...): answers once, and keeps the prompt it was sent."""
+
+    def __init__(self, reply: AIMessage) -> None:
+        self.reply = reply
+        self.prompts: list[list] = []
+
+    def bind_tools(self, tools, tool_choice=None) -> ScriptedRequests:
+        return self
+
+    async def ainvoke(self, messages):
+        self.prompts.append(list(messages))
+        return self.reply
+
+
+def _reply(*requests: dict) -> AIMessage:
+    return AIMessage(content="", tool_calls=[{"name": "submit_requests", "args": {"requests": list(requests)}, "id": "c1"}])
+
+
+@pytest.fixture
+def requests_model(monkeypatch):
+    def script(reply: AIMessage) -> ScriptedRequests:
+        model = ScriptedRequests(reply)
+        monkeypatch.setattr(outlook, "build_chat_anthropic", lambda *args, **kwargs: model)
+        return model
+    return script
+
+
+NO_FINDINGS = CaseRisk(state="scored", level="Low", score=5, points=1.0)
+QUESTION = {"question": "Net pay does not arrive on the statement", "would_settle_with": "The October payroll register"}
+
+
+async def test_open_questions_alone_are_enough_to_ask_for_documents(requests_model) -> None:
+    model = requests_model(_reply({"title": "October payroll register", "what_it_shows": "The pay run", "addresses": []}))
+
+    requests, status = await outlook.propose_requests_with_status(
+        NO_FINDINGS, overview="- payslip_1: payslip (pay date 28 Oct 2026)", open_questions=[QUESTION])
+
+    assert (status, [r.title for r in requests]) == ("ok", ["October payroll register"])
+    [prompt] = model.prompts[0]
+    assert ('<document_data source="open_questions">\n- Net pay does not arrive on the statement '
+            'Would settle it: The October payroll register\n</document_data>') in prompt.content
+    assert '<document_data source="case_documents">\n- payslip_1: payslip (pay date 28 Oct 2026)\n</document_data>' in prompt.content
+    assert '<document_data source="findings">\n- none\n</document_data>' in prompt.content
+
+
+@pytest.mark.parametrize("questions", [None, [], [{"question": "Unsettled", "would_settle_with": ""}]],
+                         ids=["none", "empty", "no document named"])
+async def test_with_no_finding_and_no_usable_question_nothing_is_asked(requests_model, questions) -> None:
+    model = requests_model(_reply())
+
+    assert await outlook.propose_requests_with_status(NO_FINDINGS, open_questions=questions) == ([], "not_asked")
+    assert model.prompts == []
+
+
+async def test_a_question_touching_a_protected_attribute_is_withheld_from_the_prompt(requests_model) -> None:
+    model = requests_model(_reply())
+
+    await outlook.propose_requests_with_status(NO_FINDINGS, open_questions=[
+        {"question": "The director's name suggests he is foreign", "would_settle_with": "Payroll register"}])
+
+    sent = model.prompts[0][0].content
+    assert "foreign" not in sent and outlook.withhold_if_protected("foreign") in sent
+
+
+async def test_no_more_questions_are_sent_than_requests_may_be_made(requests_model) -> None:
+    model = requests_model(_reply())
+
+    await outlook.propose_requests_with_status(NO_FINDINGS, open_questions=[
+        {"question": f"Question number {n}", "would_settle_with": "A document"} for n in range(outlook.MAX_REQUESTS + 3)])
+
+    sent = model.prompts[0][0].content
+    assert f"Question number {outlook.MAX_REQUESTS - 1}" in sent and f"Question number {outlook.MAX_REQUESTS}" not in sent

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -299,3 +300,28 @@ def test_the_ticket_the_route_issues_names_the_signed_in_officer_and_the_case() 
     payload = auth._unsigned(ticket)
     assert payload is not None and payload["case_id"] == "case-1" and payload["sub"]
     assert auth.consume_ws_ticket(ticket, "case-2") is None
+
+
+def test_two_refresh_frames_in_a_row_are_pushed_at_least_an_interval_apart(monkeypatch: pytest.MonkeyPatch) -> None:
+    interval = 0.3
+    monkeypatch.setattr("app.routers.ws._REFRESH_INTERVAL_SECONDS", interval)
+    built: list[float] = []
+
+    def snapshot(case_id: str) -> dict:
+        built.append(time.monotonic())
+        return {"type": "snapshot", "case": {}, "documents": []}
+
+    ticket = auth.create_ws_ticket()
+    with (
+        patch("app.routers.ws.case_stage.sync_case_stage"),
+        patch("app.routers.ws.case_service.build_case_snapshot", side_effect=snapshot),
+    ):
+        with client.websocket_connect(f"/ws/cases/case-1?ticket={ticket}") as ws:
+            ws.receive_json()
+            ws.send_text("refresh")
+            ws.receive_json()
+            ws.send_text("refresh")
+            ws.receive_json()
+
+    # built[0] is the connect snapshot; the two refreshes follow.
+    assert len(built) == 3 and built[2] - built[1] >= interval - 0.02

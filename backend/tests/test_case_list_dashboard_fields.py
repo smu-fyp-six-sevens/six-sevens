@@ -36,6 +36,28 @@ def test_a_case_total_is_the_time_its_runs_had_it_in_work() -> None:
     assert totals == {"case-1": 80_000 + 120_000 + 20_000}
 
 
+def _run(end_s: int, ms: int) -> tuple[datetime, int]:
+    return datetime(2026, 10, 1, tzinfo=timezone.utc) + timedelta(seconds=end_s), ms
+
+
+def test_busy_ms_counts_overlapping_runs_once() -> None:
+    # 0-60 s and 20-80 s overlap: one 80 s stretch.
+    assert audit.busy_ms([_run(60, 60_000), _run(80, 60_000)]) == 80_000
+
+
+def test_busy_ms_joins_runs_that_touch() -> None:
+    assert audit.busy_ms([_run(30, 30_000), _run(90, 60_000)]) == 90_000
+
+
+def test_busy_ms_does_not_count_the_gap_between_runs() -> None:
+    assert audit.busy_ms([_run(10, 10_000), _run(100, 10_000)]) == 20_000
+
+
+def test_busy_ms_of_one_run_is_its_duration_and_of_none_is_zero() -> None:
+    assert audit.busy_ms([_run(50, 12_345)]) == 12_345
+    assert audit.busy_ms([]) == 0
+
+
 def test_the_case_list_carries_the_processing_time_and_creator_stored_on_the_case() -> None:
     case = CaseRecord(
         id="case-1", greenlink_case_id="GLDB-1", created_at="2026-10-01T00:00:00Z", updated_at="2026-10-01T00:00:00Z",

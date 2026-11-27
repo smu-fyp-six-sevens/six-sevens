@@ -756,6 +756,35 @@ def test_case_snapshot_includes_case_match_computed_from_plain_fields() -> None:
     assert passport_match["case_mismatch"] is True
 
 
+def test_snapshot_gives_each_detected_document_its_anomaly_counts() -> None:
+    docs = [_incumbency(), _doc("payslip", None, "full"), _doc("payslip", None, "slim"), _doc("payslip", None, "old"), _doc("payslip", None, "none")]
+    findings = [{"severity": "high"}, {"severity": "high"}, {"severity": "low"}, {"severity": "odd"}, {}]
+    stored = {"info": 0, "low": 1, "medium": 0, "high": 3}
+    reports = {
+        "full": {"verdict": "flagged", "findings": findings},  # the full report was read: counted from its findings
+        "slim": {"verdict": "flagged", "severity_counts": stored},  # a light read: the stored counts
+        "old": {"verdict": "flagged"},  # a report saved before counts, read lightly: none
+    }
+    with (
+        patch("app.case_service.case_repository") as case_repo,
+        patch("app.case_service.document_repository") as doc_repo,
+        patch("app.case_service.extracted_fields_repository") as fields_repo,
+        patch("app.case_service.detection_results") as trace,
+        patch("app.case_service.analysis_repository") as analyses,
+    ):
+        case_repo.get_case.return_value = _case()
+        doc_repo.list_documents.return_value = docs
+        trace.get_states.return_value = (reports, set())
+        analyses.get_latest_summary.return_value = None
+        fields_repo.get_extracted_fields_for_documents.return_value = {}
+        snapshot = case_service.build_case_snapshot("case-1")
+
+    counts = {d["id"]: d["detection_counts"] for d in snapshot["documents"]}
+    assert counts["full"] == {"info": 0, "low": 1, "medium": 2, "high": 2}  # unknown and missing severity count as medium
+    assert counts["slim"] == stored
+    assert counts["old"] is None and counts["none"] is None
+
+
 def test_rejected_incumbency_is_not_used_as_the_reference() -> None:
     wrong = _incumbency({**INCUMBENCY_FIELDS, "uen": OTHER_UEN}, "wrong-inc").model_copy(
         update={"status": DocumentStatus.REJECTED}

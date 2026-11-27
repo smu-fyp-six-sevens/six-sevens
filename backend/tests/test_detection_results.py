@@ -90,3 +90,12 @@ def test_a_report_stored_before_the_counts_reads_back_with_the_verdict_only(db) 
     reports, _ = detection_results.get_states(["old"], slim=True)
 
     assert reports["old"] == {"verdict": "flagged"}
+
+
+def test_a_saved_report_stores_its_severity_counts_with_an_unknown_severity_as_medium(db) -> None:
+    findings = [{"severity": "high"}, {"severity": "low"}, {"severity": "info"}, {"severity": "critical"}, {}]
+
+    detection_results.save_report("doc-1", {**REPORT, "findings": findings})
+
+    [row] = db.rows("detection_results", document_id="doc-1")
+    assert row["report"]["severity_counts"] == {"info": 1, "low": 1, "medium": 2, "high": 1}

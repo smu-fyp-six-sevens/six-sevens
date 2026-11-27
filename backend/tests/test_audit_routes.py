@@ -77,3 +77,29 @@ def test_a_trail_that_cannot_be_read_is_a_502_that_says_so() -> None:
         responses = [client.get("/audit/events"), client.get("/audit/costs"), client.get("/audit/cases/case-1/cost")]
 
     assert [(r.status_code, r.json()["detail"]) for r in responses] == [(502, UNREADABLE)] * 3
+
+
+def test_the_trail_pages_back_from_the_time_asked_for() -> None:
+    with patch("app.routers.audit.audit.list_events", return_value=[]) as list_events:
+        response = client.get("/audit/events", params={"before": "2026-11-01T10:00:00+00:00"})
+
+    assert response.status_code == 200
+    assert list_events.call_args.kwargs["before"] == datetime(2026, 11, 1, 10, 0, tzinfo=timezone.utc)
+
+
+def test_list_events_before_returns_only_older_events_newest_first() -> None:
+    from tests.support.fake_supabase import FakeSupabase
+
+    fake = FakeSupabase()
+    for n, stamp in enumerate(("2026-11-01T09:00:00+00:00", "2026-11-01T10:00:00+00:00", "2026-11-01T11:00:00+00:00")):
+        fake.add("audit_events", {
+            "id": f"event-{n}", "action": types.CASE_CREATED, "occurred_at": stamp, "actor_type": "user", "actor": "demo",
+            "case_id": None, "document_id": None, "outcome": "success", "detail": {},
+        })
+    before = datetime(2026, 11, 1, 11, 0, tzinfo=timezone.utc)
+    with patch("app.audit.service_supabase_client", return_value=fake):
+        older = audit.list_events(before=before)
+        everything = audit.list_events()
+
+    assert [e.event_id for e in older] == ["event-1", "event-0"]
+    assert len(everything) == 3

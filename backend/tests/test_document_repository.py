@@ -622,3 +622,75 @@ def test_rejecting_writes_nothing_when_the_status_moved_on_since_it_was_read(db,
 
     assert _stored(db)["status"] == "approved"
     assert synced == []
+
+
+# --- The sweeper reads only status columns (PENDING_TESTS row 46) --------------------------------------------------
+
+
+def test_a_brief_read_leaves_out_evidence_and_the_other_wide_columns(db, extracted) -> None:
+    db.add("documents", _row(id="doc-1", status="queued", evidence=["a line"], failure_reason="boom",
+                             metadata={"k": "v"}, document_type="payslip"))
+
+    [brief] = document_repository.get_documents_in_status([DocumentStatus.QUEUED], include_fields=False, brief=True)
+    [full] = document_repository.get_documents_in_status([DocumentStatus.QUEUED], include_fields=False)
+
+    assert (brief.id, brief.case_id, brief.document_type, brief.status) == ("doc-1", "case-1", "payslip", DocumentStatus.QUEUED)
+    assert brief.evidence == [] and brief.failure_reason is None and brief.metadata is None
+    assert full.evidence == ["a line"] and full.failure_reason == "boom"
+
+
+def test_a_brief_read_still_pages_past_one_page(db, extracted, monkeypatch) -> None:
+    monkeypatch.setattr("app.supabase_rows.PAGE", 2)
+    for n in range(5):
+        db.add("documents", _row(id=f"doc-{n}", status="processing"))
+
+    results = document_repository.get_documents_in_status([DocumentStatus.PROCESSING], include_fields=False, brief=True)
+
+    assert sorted(r.id for r in results) == [f"doc-{n}" for n in range(5)]
+
+
+# --- A detection cancel travels through the document row (PENDING_TESTS row 34) ------------------------------------
+
+SINCE = datetime(2026, 8, 26, 12, 0, tzinfo=timezone.utc)
+
+
+def test_requesting_a_detection_cancel_stamps_the_document(db) -> None:
+    db.add("documents", _row(status="detecting", cancel_requested_at=None))
+    before = datetime.now(timezone.utc)
+
+    document_repository.request_detection_cancel("doc-1")
+
+    assert datetime.fromisoformat(_stored(db)["cancel_requested_at"]) >= before
+
+
+def test_requesting_a_detection_cancel_raises_when_it_cannot_write(monkeypatch) -> None:
+    class Broken:
+        def table(self, name):
+            raise RuntimeError("supabase down")
+
+    monkeypatch.setattr(document_repository, "supabase_client", Broken())
+
+    with pytest.raises(RuntimeError):
+        document_repository.request_detection_cancel("doc-1")
+
+
+@pytest.mark.parametrize("flag, expected", [
+    ("2026-08-26T12:00:00+00:00", True),   # at since
+    ("2026-08-26T12:05:00+00:00", True),
+    ("2026-08-26T11:59:59+00:00", False),
+    (None, False),
+])
+def test_a_cancel_flag_counts_only_from_since_on(db, flag, expected) -> None:
+    db.add("documents", _row(status="detecting", cancel_requested_at=flag))
+
+    assert document_repository.detection_cancel_requested_since("doc-1", SINCE) is expected
+
+
+def test_an_unreadable_cancel_flag_is_none_not_false(monkeypatch) -> None:
+    class Broken:
+        def table(self, name):
+            raise RuntimeError("supabase down")
+
+    monkeypatch.setattr(document_repository, "supabase_client", Broken())
+
+    assert document_repository.detection_cancel_requested_since("doc-1", SINCE) is None

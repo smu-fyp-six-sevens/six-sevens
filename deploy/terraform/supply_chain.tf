@@ -67,6 +67,13 @@ resource "google_binary_authorization_policy" "project" {
   admission_whitelist_patterns {
     name_pattern = "gke.gcr.io/prometheus-engine/**"
   }
+  # Argo CD and its Redis, installed by hand (deploy/argocd/values.yaml).
+  admission_whitelist_patterns {
+    name_pattern = "quay.io/argoproj/**"
+  }
+  admission_whitelist_patterns {
+    name_pattern = "public.ecr.aws/docker/library/redis*"
+  }
 
   default_admission_rule {
     evaluation_mode         = "REQUIRE_ATTESTATION"

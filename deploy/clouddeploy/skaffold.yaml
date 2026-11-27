@@ -23,13 +23,13 @@ verify:
         - |
           set -eu
           # A new or changed Gateway takes several minutes to serve, and a pod swap can leave a host briefly without a
-          # healthy backend: wait up to 15 minutes until both hosts answer. Grafana is off since 2026-11-20 (values-prod.yaml);
-          # with it back on, add its checks here: 200 on grafana.sixsevens.me/api/health, 401 on a dashboard.
+          # healthy backend: wait up to 15 minutes until every host answers.
           code() { curl -s -m 10 -o /dev/null -w '%{http_code}' "$1"; }
           ready=""
           for _ in $(seq 1 60); do
             if curl -s -m 10 https://api.sixsevens.me/health | grep -q '"status":"ok"' \
-              && [ "$(code https://sixsevens.me/)" = 200 ]; then
+              && [ "$(code https://sixsevens.me/)" = 200 ] \
+              && [ "$(code https://grafana.sixsevens.me/api/health)" = 200 ]; then
               ready=yes; break
             fi
             echo "waiting for the hosts ..."
@@ -53,6 +53,8 @@ verify:
           expect 404 POST https://api.sixsevens.me/push/doc-worker
           expect 200 GET https://sixsevens.me/
           expect 301 GET http://sixsevens.me/
+          expect 200 GET https://grafana.sixsevens.me/api/health
+          expect 401 GET https://grafana.sixsevens.me/api/dashboards/uid/six-services
           curl -s -m 20 -o /dev/null -D - -X OPTIONS https://api.sixsevens.me/cases -H "Origin: https://sixsevens.me" \
             -H "Access-Control-Request-Method: GET" | grep -qi "access-control-allow-origin: https://sixsevens.me"
           echo "Gateway checks passed."

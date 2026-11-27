@@ -186,3 +186,106 @@ def test_deployed_the_api_docs_and_schema_are_not_served() -> None:
 
 def test_in_process_the_api_docs_and_schema_are_served() -> None:
     assert {path: client.get(path).status_code for path in _DOC_PATHS} == {path: 200 for path in _DOC_PATHS}
+
+
+
+# --- Pull mode (PENDING_TESTS row 33) -----------------------------------------------------------------------------
+# PUSHES and PULLS are read at import, so the pull-mode app is imported in a fresh process.
+
+_PULL_PROBE = """
+import json
+from fastapi.testclient import TestClient
+from app import main
+client = TestClient(main.app)
+print(json.dumps({
+    "push_route": any(getattr(r, "path", "") == "/push" for r in main.app.routes),
+    "pushes": main.PUSHES, "pulls": main.PULLS,
+    "push_status": client.post("/push", json={}).status_code,
+}))
+try:
+    main.check_push_verification()
+    print(json.dumps({"verified": True}))
+except RuntimeError as e:
+    print(json.dumps({"verified": False, "error": str(e)}))
+"""
+
+
+def _pull_mode_probe() -> tuple[dict, dict]:
+    backend = Path(__file__).resolve().parents[1]
+    env = {k: v for k, v in os.environ.items() if k not in ("PUSH_AUDIENCE", "PUSH_SERVICE_ACCOUNT", "PUBSUB_EMULATOR_HOST")}
+    env.update(EVENT_TRANSPORT="pubsub", GOOGLE_CLOUD_PROJECT="test-project", EVENT_DELIVERY="pull", ROLE="doc-worker")
+    result = subprocess.run(
+        [sys.executable, "-c", _PULL_PROBE], cwd=backend, env=env,
+        capture_output=True, text=True, timeout=120, check=True,
+    )
+    lines = result.stdout.strip().splitlines()
+    return json.loads(lines[-2]), json.loads(lines[-1])
+
+
+def test_pull_mode_has_no_push_route_and_needs_no_push_audience() -> None:
+    wiring, verification = _pull_mode_probe()
+
+    assert wiring == {"push_route": False, "pushes": False, "pulls": True, "push_status": 404}
+    assert verification == {"verified": True}
+
+
+async def test_lifespan_starts_and_stops_the_puller_in_pull_mode() -> None:
+    calls: list[str] = []
+
+    async def _start() -> None:
+        calls.append("start")
+
+    async def _stop() -> None:
+        calls.append("stop")
+
+    with (
+        patch("app.main.check_db_connection"),
+        patch("app.main.PULLS", True),
+        patch("app.main.event_pull.start", _start),
+        patch("app.main.event_pull.stop", _stop),
+    ):
+        async with lifespan(app):
+            assert calls == ["start"]
+
+    assert calls == ["start", "stop"]
+
+
+async def test_lifespan_does_not_start_the_puller_when_not_pulling() -> None:
+    with (
+        patch("app.main.check_db_connection"),
+        patch("app.main.PULLS", False),
+        patch("app.main.event_pull.start", new_callable=AsyncMock) as start,
+        patch("app.main.event_pull.stop", new_callable=AsyncMock) as stop,
+    ):
+        async with lifespan(app):
+            pass
+
+    start.assert_not_awaited()
+    stop.assert_not_awaited()
+
+
+# --- Metrics on their own port (PENDING_TESTS row 36) -------------------------------------------------------------
+
+
+async def test_lifespan_serves_metrics_on_the_configured_port() -> None:
+    with (
+        patch("app.main.check_db_connection"),
+        patch("app.main.settings.METRICS_PORT", 9464),
+        patch("app.main.metrics.serve_on") as serve_on,
+    ):
+        async with lifespan(app):
+            pass
+
+    serve_on.assert_called_once_with(9464)
+
+
+async def test_lifespan_serves_no_metrics_port_when_unset() -> None:
+    with (
+        patch("app.main.check_db_connection"),
+        patch("app.main.settings.METRICS_PORT", 0),
+        patch("app.main.metrics.serve_on") as serve_on,
+    ):
+        async with lifespan(app):
+            pass
+
+    serve_on.assert_not_called()

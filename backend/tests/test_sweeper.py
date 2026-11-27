@@ -342,3 +342,51 @@ def test_the_queue_and_the_sweeper_agree_at_the_same_moment(status, seconds) -> 
         swept = bool(sweeper.find_stuck(datetime.now(timezone.utc)))
 
     assert swept == monitoring.is_stuck(document)
+
+
+# --- The sweeper reads in one pass, and only status columns (PENDING_TESTS rows 17 and 46) --------------------------
+
+
+def test_find_stuck_reads_detection_starts_once_and_documents_in_brief():
+    documents = [_approved(f"d{i}") for i in range(5)] + [_doc("det", DocumentStatus.DETECTING, 60)]
+    with (
+        patch("app.document_repository.get_documents_in_status", return_value=documents) as get_docs,
+        patch("app.detection_results.get_states", return_value=({}, set())),
+        patch("app.audit.latest_times", return_value={}) as latest,
+        patch("app.case_pipeline.repository.running_started_before", return_value=[]),
+    ):
+        sweeper.find_stuck(NOW)
+
+    latest.assert_called_once()
+    assert set(latest.call_args.args[1]) == {"d0", "d1", "d2", "d3", "d4", "det"}
+    get_docs.assert_called_once()
+    assert get_docs.call_args.kwargs["brief"] is True and get_docs.call_args.kwargs["include_fields"] is False
+
+
+def test_earlier_attempts_reads_at_most_twice_and_splits_per_item_and_owner():
+    docs = [sweeper.Stuck("processing", "doc-worker", NOW, 600, "case-1", document_id=f"doc-{i}") for i in range(30)]
+    other_owner = sweeper.Stuck("approved", "detection-worker", NOW, 600, "case-1", document_id="doc-0")
+    run = sweeper.Stuck(sweeper.CASE_ANALYSIS, "case-worker", NOW, 600, "case-1", run_id="run-1")
+    other_run = sweeper.Stuck(sweeper.CASE_ANALYSIS, "case-worker", NOW, 600, "case-2", run_id="run-2")
+
+    def _event(document_id, owner, **detail):
+        return Event(type=types.RECOVERY_REQUESTED, document_id=document_id, case_id="case-1",
+                     detail={types.OWNER_ATTRIBUTE: owner, **detail})
+
+    by_document = [_event("doc-0", "doc-worker"), _event("doc-0", "detection-worker"), _event("doc-7", "doc-worker")]
+    by_case = [_event(None, "case-worker", run_id="run-1"), _event(None, "case-worker", run_id="run-2")]
+    with patch("app.audit.find_many", side_effect=[by_document, by_case]) as find_many:
+        attempts = sweeper._earlier_attempts([*docs, other_owner, run, other_run], NOW)
+
+    assert find_many.call_count == 2
+    assert find_many.call_args_list[0].kwargs["document_ids"] == sorted(f"doc-{i}" for i in range(30))
+    assert find_many.call_args_list[1].kwargs["case_ids"] == ["case-1", "case-2"]
+    assert attempts[docs[0]] == [by_document[0]] and attempts[other_owner] == [by_document[1]]
+    assert attempts[docs[7]] == [by_document[2]] and attempts[docs[1]] == []
+    assert attempts[run] == [by_case[0]] and attempts[other_run] == [by_case[1]]
+
+
+def test_earlier_attempts_reads_nothing_for_no_items():
+    with patch("app.audit.find_many") as find_many:
+        assert sweeper._earlier_attempts([], NOW) == {}
+    find_many.assert_not_called()

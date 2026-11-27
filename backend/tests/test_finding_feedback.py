@@ -100,6 +100,69 @@ def test_a_dismissed_word_is_kept_under_its_own_code_unless_it_names_a_party_to_
     assert [row["check_code"] for row in fake.rows("finding_feedback")] == ["SPELLING.shenton", "META.CONTENT_EDITOR"]
 
 
+def _item_args(key: str, **overrides) -> dict:
+    return {
+        "source_key": key, "case_id": "case-1", "document_id": "doc-1", "scope": "document", "kind": "verdict",
+        "check_name": "numerical_checks_tool", "check_code": "PAY.NET", "document_type": "payslip", "verdict": "wrong",
+        "reason": "other", "summary": "Net pay is off", "note": None, "reviewer": "officer", "names": [], **overrides,
+    }
+
+
+def _record_writes(fake: FakeSupabase) -> list[str]:
+    """The write actions the fake receives, in order."""
+    actions: list[str] = []
+    real = fake.table
+
+    def table(name: str):
+        query = real(name)
+        real_execute = query.execute
+
+        def execute():
+            if query._action != "select":
+                actions.append(query._action)
+            return real_execute()
+
+        query.execute = execute  # type: ignore[method-assign]
+        return query
+
+    fake.table = table  # type: ignore[method-assign]
+    return actions
+
+
+def test_many_items_are_upserted_once_and_the_protected_ones_withdrawn_in_one_delete() -> None:
+    fake = _fake([])
+    with patch.object(feedback_repository, "service_supabase_client", return_value=fake):
+        feedback_repository.save_many([_item_args("v:old", note="old note")])
+        actions = _record_writes(fake)
+        kept = feedback_repository.save_many([
+            _item_args("v:a"), _item_args("v:b"), _item_args("v:old", note="Normal for a foreign applicant"),
+            _item_args("v:c", note="Also a foreign applicant"),
+        ])
+
+    assert kept == 2
+    assert actions == ["delete", "upsert"]
+    assert sorted(row["source_key"] for row in fake.rows("finding_feedback")) == ["v:a", "v:b"]
+
+
+def test_a_key_given_twice_keeps_its_last_item() -> None:
+    fake = _fake([])
+    actions = _record_writes(fake)
+    with patch.object(feedback_repository, "service_supabase_client", return_value=fake):
+        kept = feedback_repository.save_many([_item_args("v:a", summary="first"), _item_args("v:a", summary="last")])
+
+    assert kept == 1 and actions == ["upsert"]
+    [row] = fake.rows("finding_feedback")
+    assert row["summary"] == "last"
+
+
+def test_saving_nothing_writes_nothing() -> None:
+    fake = _fake([])
+    actions = _record_writes(fake)
+    with patch.object(feedback_repository, "service_supabase_client", return_value=fake):
+        assert feedback_repository.save_many([]) == 0
+    assert actions == []
+
+
 # --- counting -------------------------------------------------------------------------------------------------------
 
 

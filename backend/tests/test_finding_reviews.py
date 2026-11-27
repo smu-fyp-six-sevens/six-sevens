@@ -196,6 +196,46 @@ def test_a_group_with_the_same_verdict_on_every_finding_is_one_write(repos) -> N
     )
 
 
+def test_ten_findings_on_one_document_save_in_few_queries(repos) -> None:
+    findings_repo, document_repo = repos
+    document_repo.get_document.return_value = _document().model_copy(update={"document_type": "payslip"})
+    fingerprints = [f"spelling_tool:{n}" for n in range(10)]
+    false_alarm = {"verdict": "wrong", "reason": "tool_misread"}
+    verdicts = [
+        {**_VERDICT, "fingerprint": fp, **(false_alarm if n >= 6 else {})}
+        for n, fp in enumerate(fingerprints)
+    ]
+    verdicts[9] = {**verdicts[9], "reason": "other", "note": "Stamp is a watermark"}
+
+    with patch("app.routers.finding_reviews.feedback_repository") as feedback_repo:
+        feedback_repo.verdict_key.side_effect = lambda case_id, document_id, fingerprint: f"v:{fingerprint}"
+        response = client.put(_VERDICTS, json={"verdicts": verdicts})
+
+    assert response.status_code == 200
+    document_repo.get_document.assert_called_once()
+    findings_repo.find_current_many.assert_called_once()
+    # Three distinct (verdict, reason, note): real, false alarm by misread, false alarm by note.
+    assert findings_repo.set_verdicts.call_count == 3
+    feedback_repo.save_many.assert_called_once()
+    [saved] = feedback_repo.save_many.call_args.args
+    assert len(saved) == 10 and {item["document_type"] for item in saved} == {"payslip"}
+    feedback_repo.withdraw_many.assert_not_called()
+
+
+def test_a_group_with_a_replaced_finding_writes_nothing(repos) -> None:
+    findings_repo, _ = repos
+    findings_repo.find_current_many.side_effect = _rows(lambda fingerprint: None if fingerprint == "gone:1" else {
+        "id": f"row:{fingerprint}", "check_name": "spelling_tool", "summary": "A finding",
+    })
+    with patch("app.routers.finding_reviews.feedback_repository") as feedback_repo:
+        response = client.put(_VERDICTS, json={"verdicts": [_VERDICT, {**_VERDICT, "fingerprint": "gone:1"}]})
+
+    assert response.status_code == 409
+    findings_repo.set_verdicts.assert_not_called()
+    feedback_repo.save_many.assert_not_called()
+    feedback_repo.withdraw_many.assert_not_called()
+
+
 def test_a_review_must_name_a_document_in_the_case(repos) -> None:
     findings_repo, document_repo = repos
     # A document review without its document, or a case review with one, is malformed.

@@ -1,7 +1,7 @@
-# The one Application: the Helm chart at main, with the image digests CI writes to values-images.yaml.
-# NOT APPLIED: planned for after the demo (CLOUD_ARCHITECTURE_PLAN.md, "Argo CD"). Apply with
+# The one Application: the Helm chart at main, with the values CI commits after each signed release
+# (values-gitops.yaml, values-images.yaml). Watch only: Cloud Deploy releases and rolls back; Argo CD shows whether
+# the cluster matches main, and what drifted. Apply with
 #   kubectl apply -n argocd -f deploy/argocd/application.yaml
-# Starts with automated sync off: compare it against what Cloud Deploy released, then turn sync on.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -14,14 +14,23 @@ spec:
     targetRevision: main
     path: deploy/helm/six-sevens
     helm:
+      releaseName: six      # the name deploy.yml renders with
+      ignoreMissingValueFiles: true   # until the first deploy has written the last two
       valueFiles:
         - values-roles.yaml
         - values-prod.yaml
-        - values-gitops.yaml   # projectId, supabaseUrl, gateway.address: what CI passes as --set today (not secrets)
-        - values-images.yaml   # images by digest, rewritten by CI after it signs them
+        - values-gitops.yaml   # projectId, supabaseUrl, gateway.address (not secrets)
+        - values-images.yaml   # images by digest
   destination:
     server: https://kubernetes.default.svc
+  # KEDA and the HPAs own the replica counts.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
   syncPolicy:
-    # automated: { prune: true, selfHeal: true }   # on once a manual sync matches Cloud Deploy's release
+    # No automated sync: Cloud Deploy releases. Replacing it: turn this on, and see deploy/terraform/README.md.
     syncOptions:
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true

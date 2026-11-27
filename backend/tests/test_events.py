@@ -396,3 +396,36 @@ def test_terraform_subscriptions_match_the_code() -> None:
 
     exported = Path(__file__).resolve().parents[2] / "deploy" / "terraform" / "subscriptions.json"
     assert exported.read_text() == types.subscriptions_export(), "run: python -m app.events.types"
+
+
+
+# --- check_push_verification (PENDING_TESTS row 20) ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("pushes", "emulator", "audience", "account", "refused"),
+    [
+        (True, False, "", "sa@x", True),
+        (True, False, "aud", "", True),
+        (True, False, "", "", True),
+        (True, False, "aud", "sa@x", False),
+        (True, True, "", "", False),
+        (False, False, "", "", False),
+    ],
+)
+def test_a_deployed_push_service_needs_both_push_settings(monkeypatch, pushes, emulator, audience, account, refused) -> None:
+    from app import main
+
+    monkeypatch.setattr(main, "PUSHES", pushes)
+    monkeypatch.setattr(settings, "PUSH_AUDIENCE", audience)
+    monkeypatch.setattr(settings, "PUSH_SERVICE_ACCOUNT", account)
+    if emulator:
+        monkeypatch.setenv("PUBSUB_EMULATOR_HOST", "localhost:8085")
+    else:
+        monkeypatch.delenv("PUBSUB_EMULATOR_HOST", raising=False)
+
+    if refused:
+        with pytest.raises(RuntimeError, match="PUSH_AUDIENCE and PUSH_SERVICE_ACCOUNT"):
+            main.check_push_verification()
+    else:
+        main.check_push_verification()
