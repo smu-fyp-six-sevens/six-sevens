@@ -75,20 +75,21 @@ About S$20–21 a day with everything on and every worker kept at 1 (measured). 
 
 ## Argo CD (watch only)
 
-Cloud Deploy releases and rolls back; Argo CD watches `main` and shows whether the cluster matches it, and what drifted. After each successful release `deploy.yml` commits `values-gitops.yaml` and `values-images.yaml` (the images by digest) to `main` with `[skip ci]`, so git holds what runs. About 0.85 vCPU.
+Cloud Deploy releases and rolls back; Argo CD watches `main` and shows whether the cluster matches it, and what drifted. After each successful release `deploy.yml` commits `values-gitops.yaml` and `values-images.yaml` (the images by digest) to `main` with `[skip ci]`, so git holds what runs. About 1.1 vCPU. The first clone of the repository (about 1.2 GB of history) takes a few minutes; later fetches only bring new commits.
 
 1. Binary Authorization admits Argo CD's images (`supply_chain.tf`): `terraform apply`.
-2. Install (cmd, from the repo root; pin the newest 7.x the search lists):
+2. Install (cmd, from the repo root; 7.9.1 installed 2026-11-27):
    ```
    helm repo add argo https://argoproj.github.io/argo-helm
-   helm search repo argo/argo-cd --versions
-   helm install argocd argo/argo-cd --version <7.x> -n argocd --create-namespace -f deploy/argocd/values.yaml
+   helm install argocd argo/argo-cd --version 7.9.1 -n argocd --create-namespace -f deploy/argocd/values.yaml
    kubectl apply -n argocd -f deploy/argocd/application.yaml
    ```
 3. Open it: `kubectl -n argocd port-forward svc/argocd-server 8080:80`, then http://localhost:8080 as `admin`, with the password from `kubectl -n argocd get secret argocd-initial-admin-secret -o go-template="{{.data.password | base64decode}}"`.
-4. After the first push deploys, the app should read *Synced* with nothing to change. Sync by hand once if it only lacks Argo CD's tracking annotation. A pull before your next push: CI committed to `main`.
+4. The first time, every object reads *OutOfSync*: Cloud Deploy's objects lack Argo CD's tracking annotation. Check the diff shows only that, then sync once (no prune, not server-side apply). From then on `deploy.yml` stamps the annotation on what it renders, so each release stays *Synced*. Pull before your next push: CI committed to `main`.
 
 - **Deploy log says "Couldn't commit the release for Argo CD":** `main` refuses pushes from `github-actions[bot]`; allow it in the branch rules.
+- **Met on install (2026-11-27), fixed in `deploy/argocd/`:** the repo-server killed mid-clone (now 1 GiB memory, 6 GiB disk), the first `git fetch` timing out at 90 s (now 10 minutes), and server-side diff failing on `.status.terminatingReplicas` (off; Argo CD 2.14 predates the field).
+- **After a change to `deploy/argocd/values.yaml`:** `helm upgrade argocd argo/argo-cd --version 7.9.1 -n argocd -f deploy/argocd/values.yaml`.
 - **Removing it:** `helm uninstall argocd -n argocd`, then `kubectl delete namespace argocd`.
 
 ## Failure tests

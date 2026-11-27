@@ -304,6 +304,14 @@ jobs:
           helm template six "$C" -f "$C/values-roles.yaml" -f "$C/values-prod.yaml" \
             --set projectId="$PROJECT_ID" --set supabaseUrl="$SUPABASE_URL" --set gateway.address="$LB" \
             "${args[@]}" > release/manifest.yaml
+          # Argo CD (watch only) knows its objects by this annotation; without it in what Cloud Deploy applies,
+          # kubectl apply strips the one Argo CD wrote and every release shows out of sync.
+          # Its format: <app>:<API group>/<kind>:<namespace>/<name>, the group and namespace blank where there are none.
+          yq -i 'with(select(.kind != null); .metadata.annotations["argocd.argoproj.io/tracking-id"] =
+            "six-sevens:" + (.apiVersion | sub("/?[^/]*$"; "")) + "/" + .kind + ":" +
+            (.metadata.namespace // "") + "/" + .metadata.name)' release/manifest.yaml \
+            || echo "::warning::Couldn't add Argo CD's tracking annotations; Argo CD will show this release out of sync"
+          grep -c 'argocd.argoproj.io/tracking-id' release/manifest.yaml || true
           grep -c '^kind:' release/manifest.yaml
 
       # A fresh token: signing, the rollout (up to 15 minutes) and verify (up to 15) can outlast the first one.

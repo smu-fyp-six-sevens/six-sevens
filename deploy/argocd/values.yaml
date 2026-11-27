@@ -1,5 +1,5 @@
-# Argo CD, the smallest install that watches one chart (deploy/terraform/README.md, "Argo CD"). About 0.85 vCPU and
-# 1.4 GiB requested in all.
+# Argo CD, the smallest install that watches one chart (deploy/terraform/README.md, "Argo CD"). About 1.1 vCPU and
+# 2 GiB requested in all.
 #
 # Explicit requests throughout: on Autopilot a container without them is given 0.5 vCPU and 2 GiB.
 
@@ -8,11 +8,14 @@ dex:
 notifications:
   enabled: false
 applicationSet:
-  enabled: false            # one Application, written by hand (application.yaml)
+  replicas: 0               # one Application, written by hand (application.yaml); 7.x has no `enabled`
 
 configs:
   params:
     server.insecure: true   # reached only through kubectl port-forward, never exposed
+    # The first clone takes minutes (see repoServer): wait for it.
+    controller.repo.server.timeout.seconds: "600"
+    server.repo.server.timeout.seconds: "600"
   cm:
     timeout.reconciliation: 180s
     # An annotation, not a label: Cloud Deploy's objects carry no Argo CD label, and labels can reach selectors.
@@ -23,10 +26,15 @@ controller:
     requests: { cpu: 250m, memory: 512Mi }
     limits: { cpu: 250m, memory: 512Mi }
 
+# It clones the whole repository (about 1.2 GB of history, mostly test documents) before rendering the chart:
+# Autopilot's default 1 GiB of disk and 384 MiB of memory got it killed mid-clone.
 repoServer:
+  env:
+    - name: ARGOCD_EXEC_TIMEOUT   # git commands; the default 90 s timed out on the first fetch
+      value: "10m"
   resources:
-    requests: { cpu: 250m, memory: 384Mi }
-    limits: { cpu: 250m, memory: 384Mi }
+    requests: { cpu: 500m, memory: 1Gi, ephemeral-storage: 6Gi }
+    limits: { cpu: 500m, memory: 1Gi, ephemeral-storage: 6Gi }
 
 server:
   service:

@@ -31,6 +31,7 @@ spec:
         - /spec/replicas
   syncPolicy:
     # No automated sync: Cloud Deploy releases. Replacing it: turn this on, and see deploy/terraform/README.md.
+    # Not ServerSideApply: Argo CD 2.14's server-side diff fails on fields newer Kubernetes adds
+    # (.status.terminatingReplicas), and Cloud Deploy's kubectl apply leaves the record the default diff reads.
     syncOptions:
-      - ServerSideApply=true
       - RespectIgnoreDifferences=true
